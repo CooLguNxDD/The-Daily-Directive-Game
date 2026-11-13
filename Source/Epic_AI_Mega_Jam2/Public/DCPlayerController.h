@@ -69,6 +69,9 @@ public:
 	void RequestSubmitFinalCut() { ServerSubmitFinalCut(LocalPicks); Confirm(); }
 	void RequestVote(int32 PhotoId) { ServerVote(PhotoId); Confirm(); }
 	const TArray<int32>& GetLocalPicks() const { return LocalPicks; }
+	class ADCReelDirector* GetReelDirector() const { return Director; }
+	/** R16: send a second take to the host for grading (the image stays here until the reel uploads it). */
+	void RequestSecondTake(int32 PhotoId, const FDCShotView& View, int32 ClipIndex) { ServerSecondTake(PhotoId, View.Location, View.Rotation, View.FOV, ClipIndex); }
 
 	// Menu (local).
 	void MenuSolo();
@@ -101,6 +104,10 @@ private:
 	UFUNCTION(Server, Reliable) void ServerPickUpgrade(FName Id);
 	UFUNCTION(Server, Reliable) void ServerSubmitFinalCut(const TArray<int32>& PhotoIds);
 	UFUNCTION(Server, Reliable) void ServerVote(int32 PhotoId);
+	UFUNCTION(Server, Reliable) void ServerSecondTake(int32 PhotoId, FVector_NetQuantize10 CamLoc, FRotator CamRot, float FOV, int32 ClipIndex);
+	UFUNCTION(Client, Reliable) void ClientSecondTakeGraded(int32 PhotoId, FDCPhotoGrade Grade);
+	/** Clips this player already took a second take of (host side). */
+	TSet<int32> SecondTakeClips;
 	UFUNCTION(Server, Reliable) void ServerPhotoChunk(int32 PhotoId, int32 Index, int32 Count, const TArray<uint8>& Bytes);
 	UFUNCTION(Client, Reliable) void ClientPhotoChunk(int32 PhotoId, int32 Index, int32 Count, const TArray<uint8>& Bytes);
 

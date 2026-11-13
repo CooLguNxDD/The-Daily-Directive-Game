@@ -59,6 +59,8 @@ struct FDCPhotoRecord
 	UPROPERTY() FDCPhotoGrade Grade;
 	/** Blast the photo framed (0 = none), for the reel's re-staging. */
 	UPROPERTY() int32 BlastId = 0;
+	/** Taken during the reel from a free angle on the re-staged moment (R16). */
+	UPROPERTY() bool bSecondTake = false;
 };
 
 /** A building the host collapsed: the reel rebuilds the sector from its seed and replays these. */

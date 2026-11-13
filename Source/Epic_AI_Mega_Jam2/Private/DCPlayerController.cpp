@@ -6,7 +6,9 @@
 #include "DCInput.h"
 #include "DCMenu.h"
 #include "DCPlayerState.h"
+#include "Rules/DCPhotoRules.h"
 #include "DCReelDirector.h"
+#include "DCDemoPilot.h"
 #include "DCTuning.h"
 #include "Engine/GameViewportClient.h"
 #include "Engine/LocalPlayer.h"
@@ -74,6 +76,10 @@ void ADCPlayerController::BeginPlay()
 		Sub->AddMappingContext(GetInputSet()->GetContext(), 0);
 	}
 	SetInputMode(FInputModeGameOnly());
+	if (ADCDemoPilot::IsMedicRequested() && !ADCDemoPilot::IsRequested())
+	{
+		GetWorld()->SpawnActor<ADCDemoPilot>();
+	}
 	if (UDCAudioSubsystem* Audio = GetGameInstance()->GetSubsystem<UDCAudioSubsystem>())
 	{
 		Audio->StartMusic(this, TEXT("Music"), 0.35f);
@@ -135,17 +141,30 @@ void ADCPlayerController::UpdateAutoVote()
 	{
 		return;
 	}
+	// Vote the runner-up among the other players' picks: within 600 of the leader, the vote flips the headline.
+	TArray<TPair<int32, const ADCPlayerState*>> Picks;
 	for (const APlayerState* P : GS->PlayerArray)
 	{
 		const ADCPlayerState* Other = Cast<ADCPlayerState>(P);
-		if (Other && Other != Mine && Other->FinalCut.Num() > 0)
+		for (int32 Id : (Other && Other != Mine) ? Other->FinalCut : TArray<int32>())
 		{
-			bAutoVoted = true;
-			UE_LOG(LogTemp, Display, TEXT("DCVOTE %s votes for photo %d by %s"), *Mine->GetPlayerName(), Other->FinalCut.Last(), *Other->GetPlayerName());
-			RequestVote(Other->FinalCut.Last()); // the critic's lowest pick, so the vote visibly changes the order
-			return;
+			Picks.Add(TPair<int32, const ADCPlayerState*>(Id, Other));
 		}
 	}
+	if (Picks.Num() == 0)
+	{
+		return;
+	}
+	Picks.Sort([](const TPair<int32, const ADCPlayerState*>& A, const TPair<int32, const ADCPlayerState*>& B)
+	{
+		const FDCPhotoRecord* PA = A.Value->FindPhoto(A.Key);
+		const FDCPhotoRecord* PB = B.Value->FindPhoto(B.Key);
+		return (PA ? PA->Grade.Score : 0) > (PB ? PB->Grade.Score : 0);
+	});
+	const TPair<int32, const ADCPlayerState*>& Choice = Picks[FMath::Min(1, Picks.Num() - 1)];
+	bAutoVoted = true;
+	UE_LOG(LogTemp, Display, TEXT("DCVOTE %s votes for photo %d by %s"), *Mine->GetPlayerName(), Choice.Key, *Choice.Value->GetPlayerName());
+	RequestVote(Choice.Key);
 }
 
 void ADCPlayerController::UpdateEvidenceShots()
@@ -289,6 +308,48 @@ void ADCPlayerController::ServerPickUpgrade_Implementation(FName Id)
 	{
 		GM->PickUpgrade(GetPlayerState<ADCPlayerState>(), Id);
 	}
+}
+
+void ADCPlayerController::ServerSecondTake_Implementation(int32 PhotoId, FVector_NetQuantize10 CamLoc, FRotator CamRot, float FOV, int32 ClipIndex)
+{
+	ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>();
+	ADCPlayerState* PS = GetPlayerState<ADCPlayerState>();
+	const FDCCameraTuning& C = UDCTuning::Get().Camera;
+	// One second take per clip per player, only while that clip plays, from near the replayed scene; graded by
+	// the host on its own re-staged scene at the host's replay clock.
+	if (!GS || !PS || GS->Phase != EDCRunPhase::Reel || GS->ReelIndex != ClipIndex || GS->ReelStage > 1 || SecondTakeClips.Contains(ClipIndex) || PS->FindPhoto(PhotoId)
+		|| !GS->ReelClips.IsValidIndex(ClipIndex) || FVector::Dist(CamLoc, GS->ReelClips[ClipIndex].Photo.CameraLocation) > 3000.f)
+	{
+		return;
+	}
+	SecondTakeClips.Add(ClipIndex);
+	const FDCReelClip& Clip = GS->ReelClips[ClipIndex];
+	const float WindowStart = Clip.Photo.ShotTime - UDCTuning::Get().Run.ClipSeconds;
+	const float When = FMath::Clamp(WindowStart + (GS->Now() - GS->ReelClipStart), WindowStart, Clip.Photo.ShotTime);
+	FDCShotView View;
+	View.Location = CamLoc;
+	View.Rotation = CamRot;
+	View.FOV = FMath::Clamp(FOV, C.ViewfinderFOVTight, C.ViewfinderFOVWide + PS->ExtraFOV);
+	FDCPhotoRecord Record;
+	Record.PhotoId = PhotoId;
+	Record.OwnerPlayerId = PS->GetPlayerId();
+	Record.Sector = Clip.Photo.Sector;
+	Record.ShotTime = When;
+	Record.CameraLocation = CamLoc;
+	Record.CameraRotation = CamRot;
+	Record.FOV = View.FOV;
+	Record.bSecondTake = true;
+	Record.Grade = DCPhotoRules::GradePhoto(DCPhotoProbe::Measure(GetWorld(), View, When, nullptr, false, Record.BlastId), UDCTuning::Get().Photo);
+	PS->AddPhoto(Record);
+	PS->FinalCutChoices.Add(PhotoId); // second takes can enter the ranking
+	UE_LOG(LogTemp, Display, TEXT("DCTAKE %s second take photo=%d clip=%d score=%d timing=%s"), *PS->GetPlayerName(), PhotoId, ClipIndex, Record.Grade.Score, *Record.Grade.TimingLabel.ToString());
+	ClientSecondTakeGraded(PhotoId, Record.Grade);
+}
+
+void ADCPlayerController::ClientSecondTakeGraded_Implementation(int32 PhotoId, FDCPhotoGrade Grade)
+{
+	ConfirmLocalPhoto(PhotoId, Grade);
+	ClientUploadPhotos_Implementation({PhotoId}); // every machine gets the image for the final cut and vote
 }
 
 void ADCPlayerController::ToggleFinalCutPick(int32 PhotoId)

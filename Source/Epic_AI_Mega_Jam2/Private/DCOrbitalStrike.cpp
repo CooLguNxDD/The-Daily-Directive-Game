@@ -232,7 +232,7 @@ void ADCOrbitalStrike::TickBlast(float Now, const FDCStratagemDef& Def)
 	Beam->SetRelativeScale3D(FVector(3.f * BeamFade + 0.01f, 3.f * BeamFade + 0.01f, BeamHeightCm / 100.f));
 	DCAssets::SetFlat(BeamMat, FLinearColor::White, 200.f * BeamFade);
 	Beam->SetVisibility(BeamFade > 0.f);
-	Light->SetIntensity(4.0e7f * Fade * Fade);
+	Light->SetIntensity(UDCTuning::Get().Look.BlastLightIntensity * Fade * Fade);
 }
 
 void ADCOrbitalStrike::TickBehaviour(const FDCStratagemDef& Def, float U, float DeltaSeconds)

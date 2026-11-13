@@ -93,6 +93,7 @@ private:
 	int32 RequestedSeed = 0;
 	bool bAutoStart = false;
 	int32 AutoStartPlayers = 1;
+	bool bScriptedDownDone = false;
 	double HitstopEndReal = 0.0;
 	float SectorStartTime = 0.f;
 	TArray<int32> WaveSpawned;

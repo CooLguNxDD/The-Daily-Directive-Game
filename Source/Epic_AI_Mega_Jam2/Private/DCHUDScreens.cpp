@@ -8,6 +8,7 @@
 #include "DCGameState.h"
 #include "DCPlayerController.h"
 #include "DCPlayerState.h"
+#include "DCReelDirector.h"
 #include "DCTuning.h"
 #include "Engine/Canvas.h"
 #include "Engine/Texture.h"
@@ -199,6 +200,10 @@ void ADCHUD::DrawReel(ADCGameState& GS, ADCCharacter* Me)
 		{
 			DrawToast(*Me); // e.g. the last sector's quota verdict, said as the reel starts
 		}
+		if (ADCPlayerController* StampPC = Cast<ADCPlayerController>(PlayerOwner))
+		{
+			DrawStamp(*StampPC); // a second take's stamp slides in like any photo
+		}
 	};
 	const float W = Canvas->ClipX, H = Canvas->ClipY;
 	ADCPlayerController* PC = Cast<ADCPlayerController>(PlayerOwner);
@@ -219,6 +224,23 @@ void ADCHUD::DrawReel(ADCGameState& GS, ADCCharacter* Me)
 	if (GS.bRunFailed)
 	{
 		Text(TEXT("UNIT LOST - FOOTAGE RECOVERED"), W - Sx(40.f) - Sx(330.f), H - Bar * 0.7f, Red, 0.7f);
+	}
+	// Second take (R16): the hint while the clip replays, and the viewfinder frame while it is raised.
+	if (const ADCReelDirector* Director = PC->GetReelDirector())
+	{
+		if (Director->IsTakeRaised())
+		{
+			const float M = Sx(60.f), L = Sx(70.f), Tk = Sx(5.f);
+			for (const FVector2D& Corner : {FVector2D(M, Bar + M), FVector2D(W - M - L, Bar + M), FVector2D(M, H - Bar - M - Tk), FVector2D(W - M - L, H - Bar - M - Tk)})
+			{
+				Box(Corner.X, Corner.Y, L, Tk, FLinearColor::White);
+			}
+			Text(TEXT("SECOND TAKE  -  LMB SNAP"), W * 0.5f, Bar + Sx(20.f), Gold, 0.7f, true);
+		}
+		else if (Director->CanTakeThisClip())
+		{
+			Text(TEXT("HOLD RMB: SECOND TAKE FROM ANY ANGLE"), W * 0.5f, H - Bar * 0.4f, Gold, 0.6f, true);
+		}
 	}
 	if (GS.ReelStage == 0)
 	{

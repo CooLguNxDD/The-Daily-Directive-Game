@@ -249,13 +249,14 @@ bool ADCBuilding::LateJoinAnimates() const
 	return !GS || GS->Now() - CollapseTime < 3.f;
 }
 
-void ADCBuilding::RestageCollapse(const FVector& InEpicenter, bool bAnimate)
+void ADCBuilding::RestageCollapse(const FVector& InEpicenter, bool bAnimate, float InCollapseTime)
 {
 	if (bCollapsed)
 	{
 		return;
 	}
 	bCollapsed = true;
+	CollapseTime = InCollapseTime;
 	Epicenter = InEpicenter;
 	BuildBlocks();
 	SimulateCollapse(bAnimate);

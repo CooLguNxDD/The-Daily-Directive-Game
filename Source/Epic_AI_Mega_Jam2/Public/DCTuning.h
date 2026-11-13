@@ -165,7 +165,9 @@ struct FDCLookTuning
 	UPROPERTY(EditAnywhere, Config, Category = "Look") FLinearColor ColorGain = FLinearColor(1.08f, 1.0f, 0.86f);
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float FilmGrain = 0.35f;
 	/** Emissive of the fireball core and the ground shock ring at their peak (the bloom spike itself is BloomPeak). */
-	UPROPERTY(EditAnywhere, Config, Category = "Look") float FireballGlow = 45.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float FireballGlow = 20.f;
+	/** Peak intensity of the blast's point light (it lights the street and the debris). */
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float BlastLightIntensity = 1.5e7f;
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float ShockGlow = 18.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float HitstopSeconds = 0.12f;
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float HitstopDilation = 0.05f;
@@ -231,6 +233,8 @@ struct FDCWaveDef
 	UPROPERTY(EditAnywhere, Config, Category = "Sector") FName EnemyId;
 	UPROPERTY(EditAnywhere, Config, Category = "Sector") int32 Count = 1;
 	UPROPERTY(EditAnywhere, Config, Category = "Sector") float Interval = 2.f;
+	/** Special units (spotlights, walkers) spawn even when the swarm has filled the sector's MaxAlive cap. */
+	UPROPERTY(EditAnywhere, Config, Category = "Sector") bool bIgnoresCap = false;
 };
 
 USTRUCT(BlueprintType)
@@ -261,6 +265,9 @@ struct FDCAssetTuning
 	UPROPERTY(EditAnywhere, Config, Category = "Assets") FSoftClassPath PlayerAnimClass = FSoftClassPath(TEXT("/Game/Characters/Mannequins/Anims/Unarmed/ABP_Unarmed.ABP_Unarmed_C"));
 	UPROPERTY(EditAnywhere, Config, Category = "Assets") FSoftObjectPath ReelRunAnim = FSoftObjectPath(TEXT("/Game/Characters/Mannequins/Anims/Rifle/Jog/MF_Rifle_Jog_Fwd.MF_Rifle_Jog_Fwd"));
 	UPROPERTY(EditAnywhere, Config, Category = "Assets") FSoftObjectPath ReelIdleAnim = FSoftObjectPath(TEXT("/Game/Characters/Mannequins/Anims/Rifle/MF_Rifle_Idle_ADS.MF_Rifle_Idle_ADS"));
+	UPROPERTY(EditAnywhere, Config, Category = "Assets") FSoftObjectPath DownedAnim = FSoftObjectPath(TEXT("/Game/Characters/Mannequins/Anims/Death/MM_Death_Back_01.MM_Death_Back_01"));
+	UPROPERTY(EditAnywhere, Config, Category = "Assets") FSoftObjectPath DrawAnim = FSoftObjectPath(TEXT("/Game/Characters/Mannequins/Anims/Rifle/MM_Rifle_Equip.MM_Rifle_Equip"));
+	UPROPERTY(EditAnywhere, Config, Category = "Assets") FName DrawSlot = TEXT("DefaultSlot");
 	UPROPERTY(EditAnywhere, Config, Category = "Assets") FName HandSocket = TEXT("hand_r");
 	UPROPERTY(EditAnywhere, Config, Category = "Assets") FName HeadSocket = TEXT("head");
 };

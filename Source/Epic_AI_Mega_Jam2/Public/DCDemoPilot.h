@@ -25,6 +25,8 @@ public:
 	virtual void Tick(float DeltaSeconds) override;
 
 	static bool IsRequested();
+	/** -dcmedic on a joined client: this machine runs a pilot that only revives downed teammates (E, real input). */
+	static bool IsMedicRequested();
 
 private:
 	/** One script step: wait Delay real seconds after the previous step, then run Do. A step whose Do returns
@@ -67,7 +69,12 @@ private:
 	bool bAutoReviving = false;
 	/** While waiting for the sector to end, the pilot shoots the nearest enemy (rifle, real input). */
 	bool bDefend = false;
+	bool bSpotlitFramed = false;
 	TSet<TObjectKey<class ADCSupplyPod>> FramedPods;
 	bool bDefendFiring = false;
 	void TickDefend();
+	void TickMedic();
+	bool bMedic = false;
+	bool bMedicHolding = false;
+	TWeakObjectPtr<class ADCCharacter> Patient;
 };

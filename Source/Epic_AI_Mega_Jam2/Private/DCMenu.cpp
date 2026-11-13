@@ -28,7 +28,7 @@ namespace DCMenuStyle
 
 	TSharedRef<SWidget> Label(const FString& Text, int32 Size, const FLinearColor& Color)
 	{
-		return SNew(STextBlock).Text(FText::FromString(Text)).Font(Font(Size)).ColorAndOpacity(Color).Justification(ETextJustify::Center).AutoWrapText(true);
+		return SNew(STextBlock).Text(FText::FromString(Text)).Font(Font(Size)).ColorAndOpacity(Color).Justification(ETextJustify::Center).AutoWrapText(false);
 	}
 
 	TSharedRef<SWidget> Button(const FString& Text, TFunction<void()> OnClick, const FLinearColor& Fill = Red)

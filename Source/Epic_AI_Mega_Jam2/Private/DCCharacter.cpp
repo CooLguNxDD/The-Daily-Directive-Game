@@ -1,5 +1,6 @@
 #include "DCCharacter.h"
 
+#include "Animation/AnimSequence.h"
 #include "Camera/CameraComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/SceneCaptureComponent2D.h"
@@ -15,6 +16,7 @@
 #include "DCOrbitalStrike.h"
 #include "DCPlayerController.h"
 #include "DCPlayerState.h"
+#include "DCReelDirector.h"
 #include "DCTuning.h"
 #include "Engine/TextureRenderTarget2D.h"
 #include "EnhancedInputComponent.h"
@@ -310,7 +312,11 @@ void ADCCharacter::OnSprintEnd(const FInputActionInstance&)
 	ServerSetSprint(false);
 }
 
-void ADCCharacter::OnCrouch(const FInputActionInstance&) { Crouch(); }
+void ADCCharacter::OnCrouch(const FInputActionInstance&)
+{
+	DCAudio::PlayAt(this, TEXT("Footstep"), GetActorLocation() - FVector(0, 0, 80.f), 0.25f, 0.7f); // gear rustle
+	Crouch();
+}
 void ADCCharacter::OnCrouchEnd(const FInputActionInstance&) { UnCrouch(); }
 
 float ADCCharacter::SelfReviveSecondsLeft() const
@@ -335,9 +341,21 @@ bool ADCCharacter::InSector() const
 	return GS && GS->Phase == EDCRunPhase::Sector;
 }
 
+ADCReelDirector* ADCCharacter::ReelDirector() const
+{
+	const ADCPlayerController* PC = Cast<ADCPlayerController>(GetController());
+	const ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>();
+	return PC && GS && GS->Phase == EDCRunPhase::Reel ? PC->GetReelDirector() : nullptr;
+}
+
 void ADCCharacter::OnFire(const FInputActionInstance&)
 {
 	bTriggerHeld = true;
+	if (ADCReelDirector* Director = ReelDirector())
+	{
+		Director->SnapSecondTake(); // R16: second take during the reel
+		return;
+	}
 	if (bDowned || IsDrawing() || !InSector())
 	{
 		return;
@@ -359,6 +377,11 @@ void ADCCharacter::OnFireEnd(const FInputActionInstance&) { bTriggerHeld = false
 void ADCCharacter::OnAim(const FInputActionInstance&)
 {
 	bAimHeld = true;
+	if (ADCReelDirector* Director = ReelDirector())
+	{
+		Director->SetTakeRaised(true);
+		return;
+	}
 	if (Slot != EDCSlot::Camera || bDowned || !InSector())
 	{
 		return;
@@ -372,6 +395,10 @@ void ADCCharacter::OnAim(const FInputActionInstance&)
 void ADCCharacter::OnAimEnd(const FInputActionInstance&)
 {
 	bAimHeld = false;
+	if (ADCReelDirector* Director = ReelDirector())
+	{
+		Director->SetTakeRaised(false);
+	}
 	if (!bCameraRaised)
 	{
 		return;
@@ -410,7 +437,12 @@ void ADCCharacter::OnZoom(const FInputActionInstance& I)
 	const FDCCameraTuning& C = UDCTuning::Get().Camera;
 	const ADCPlayerState* PS = GetPlayerState<ADCPlayerState>();
 	const float Wide = C.ViewfinderFOVWide + (PS ? PS->ExtraFOV : 0.f);
+	const float Before = ZoomFOV;
 	ZoomFOV = FMath::Clamp(ZoomFOV - Wheel * C.ZoomStep, C.ViewfinderFOVTight, Wide);
+	if (!FMath::IsNearlyEqual(Before, ZoomFOV))
+	{
+		DCAudio::Play2D(this, TEXT("UIClick"), 0.25f, ZoomFOV < Before ? 1.3f : 0.9f); // lens ring tick
+	}
 }
 
 void ADCCharacter::OnCycle(const FInputActionInstance&)
@@ -472,6 +504,15 @@ void ADCCharacter::OnRep_Slot()
 	{
 		DrawEndTime = Now() + UDCTuning::Get().Camera.DrawSeconds;
 	}
+	// The draw: the mannequin plays its equip motion over DrawSeconds while the prop swings in (R1).
+	const UDCTuning& T = UDCTuning::Get();
+	UAnimSequence* Equip = Cast<UAnimSequence>(T.Assets.DrawAnim.TryLoad());
+	UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance();
+	if (Equip && AnimInstance && HasActorBegunPlay() && !bDowned)
+	{
+		const float PlayRate = Equip->GetPlayLength() / FMath::Max(T.Camera.DrawSeconds, 0.05f);
+		AnimInstance->PlaySlotAnimationAsDynamicMontage(Equip, T.Assets.DrawSlot, 0.05f, 0.1f, PlayRate);
+	}
 }
 
 void ADCCharacter::ServerSetSlot_Implementation(EDCSlot NewSlot)
@@ -500,7 +541,7 @@ void ADCCharacter::UpdateMoveSpeed()
 	const FDCMoveTuning& M = UDCTuning::Get().Move;
 	float Speed = bSprinting && !bCameraRaised ? M.SprintSpeed : M.WalkSpeed;
 	Speed = bCameraRaised ? M.CameraAimSpeed : Speed;
-	Speed = bDowned ? 90.f : Speed;
+	Speed = bDowned ? 0.f : Speed; // down on the ground in the fall pose: no sliding
 	GetCharacterMovement()->MaxWalkSpeed = Speed;
 }
 
@@ -954,13 +995,24 @@ void ADCCharacter::HostResupply(int32 Film, int32 AmmoAdd, float Heal)
 void ADCCharacter::OnRep_Downed()
 {
 	UpdateMoveSpeed();
+	const UDCTuning& T = UDCTuning::Get();
 	if (bDowned)
 	{
 		DCAudio::PlayAt(this, TEXT("Down"), GetActorLocation());
 		bCameraRaised = false;
+		// Down on the ground: the mannequin plays its fall and holds the last frame until revived.
+		if (UAnimSequence* Fall = Cast<UAnimSequence>(T.Assets.DownedAnim.TryLoad()))
+		{
+			GetMesh()->PlayAnimation(Fall, false);
+		}
 		return;
 	}
 	DCAudio::PlayAt(this, TEXT("Revive"), GetActorLocation());
+	if (UClass* Anim = T.Assets.PlayerAnimClass.TryLoadClass<UAnimInstance>())
+	{
+		GetMesh()->SetAnimationMode(EAnimationMode::AnimationBlueprint);
+		GetMesh()->SetAnimInstanceClass(Anim);
+	}
 }
 
 void ADCCharacter::ServerSetReviving_Implementation(bool bHolding) { bHostReviveHeld = bHolding; }

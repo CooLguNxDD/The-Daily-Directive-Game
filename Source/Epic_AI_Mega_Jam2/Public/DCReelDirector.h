@@ -26,12 +26,22 @@ public:
 	virtual void EndPlay(const EEndPlayReason::Type Reason) override;
 	virtual void Tick(float DeltaSeconds) override;
 
+	// Second take (R16): while a clip replays, the local player raises a camera from a free angle and snaps.
+	void SetTakeRaised(bool bRaised);
+	void SnapSecondTake();
+	bool IsTakeRaised() const { return bTakeRaised; }
+	bool CanTakeThisClip() const;
+	/** The moment of the run being replayed now, on the original server clock. */
+	float ContentTime() const;
+	int32 GetStagedIndex() const { return StagedIndex; }
+
 private:
 	struct FPendingCollapse
 	{
 		float At = 0.f;
 		TWeakObjectPtr<ADCBuilding> Building;
 		FVector Epicenter = FVector::ZeroVector;
+		float ContentTime = 0.f;
 	};
 
 	void Restage(int32 ClipIndex);
@@ -41,6 +51,7 @@ private:
 	void SetPawnsHidden(bool bHide);
 
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UCameraComponent> Camera;
+	UPROPERTY(VisibleAnywhere) TObjectPtr<class USceneCaptureComponent2D> TakeCapture;
 	UPROPERTY(VisibleAnywhere) TObjectPtr<USkeletalMeshComponent> Puppet;
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UStaticMeshComponent> PuppetCamera;
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UStaticMeshComponent> PuppetFlash;
@@ -54,4 +65,7 @@ private:
 	float ShotTime = 0.f;
 	bool bRunning = false;
 	bool bAnimSet = false;
+	bool bTakeRaised = false;
+	int32 TakenClip = -1;
+	int32 TakeCounter = 0;
 };
