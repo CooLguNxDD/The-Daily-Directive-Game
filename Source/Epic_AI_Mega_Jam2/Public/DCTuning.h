@@ -243,6 +243,71 @@ struct FDCAssetTuning
 	UPROPERTY(EditAnywhere, Config, Category = "Assets") FName HeadSocket = TEXT("head");
 };
 
+/** A draft option (R10). Pool groups it; Effect is resolved by id in the upgrade registry (DCUpgrades.cpp). */
+USTRUCT(BlueprintType)
+struct FDCUpgradeDef
+{
+	GENERATED_BODY()
+	UPROPERTY(EditAnywhere, Config, Category = "Run") FName Id;
+	/** Stratagem, Gear or Mutator. */
+	UPROPERTY(EditAnywhere, Config, Category = "Run") FName Pool;
+	UPROPERTY(EditAnywhere, Config, Category = "Run") FText DisplayName;
+	UPROPERTY(EditAnywhere, Config, Category = "Run") FText Description;
+	UPROPERTY(EditAnywhere, Config, Category = "Run") FName Effect;
+	/** Stratagem id an UnlockStratagem effect grants. */
+	UPROPERTY(EditAnywhere, Config, Category = "Run") FName Unlock;
+	UPROPERTY(EditAnywhere, Config, Category = "Run") float Param = 0.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Run") float Param2 = 0.f;
+};
+
+/** An HQ Scoop template (R8): a photo condition with a time limit. */
+USTRUCT(BlueprintType)
+struct FDCScoopDef
+{
+	GENERATED_BODY()
+	UPROPERTY(EditAnywhere, Config, Category = "Run") FName Id;
+	UPROPERTY(EditAnywhere, Config, Category = "Run") FText Text;
+	/** Key into FDCPhotoInputs::Metrics; None = no metric condition. */
+	UPROPERTY(EditAnywhere, Config, Category = "Run") FName Metric;
+	UPROPERTY(EditAnywhere, Config, Category = "Run") float Threshold = 1.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Run") bool bAtMost = false;
+	/** Timing label the photo must earn; None = any. */
+	UPROPERTY(EditAnywhere, Config, Category = "Run") FName Timing;
+	UPROPERTY(EditAnywhere, Config, Category = "Run") float Seconds = 60.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Run") int32 RewardPoints = 300;
+};
+
+USTRUCT(BlueprintType)
+struct FDCRunTuning
+{
+	GENERATED_BODY()
+	UPROPERTY(EditAnywhere, Config, Category = "Run") float DraftSeconds = 25.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Run") int32 ReelClipsPerPlayer = 2;
+	/** Seconds of recorded pose before the shutter (the clip length in game time). */
+	UPROPERTY(EditAnywhere, Config, Category = "Run") float ClipSeconds = 2.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Run") float PoseSampleHz = 12.f;
+	/** Playback speed of the clip (0.4 = slow motion). */
+	UPROPERTY(EditAnywhere, Config, Category = "Run") float ReelSlowMo = 0.4f;
+	UPROPERTY(EditAnywhere, Config, Category = "Run") float ReelFreezeSeconds = 0.7f;
+	UPROPERTY(EditAnywhere, Config, Category = "Run") float ReelPhotoSeconds = 2.5f;
+	UPROPERTY(EditAnywhere, Config, Category = "Run") float FinalCutSeconds = 45.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Run") int32 FinalCutPicks = 3;
+	/** How many of their best shots each player brings to the final cut. */
+	UPROPERTY(EditAnywhere, Config, Category = "Run") int32 FinalCutChoices = 8;
+	UPROPERTY(EditAnywhere, Config, Category = "Run") float VoteSeconds = 30.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Run") int32 VoteBonus = 600;
+	UPROPERTY(EditAnywhere, Config, Category = "Run") float ScoopFirstSeconds = 35.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Run") float ScoopGapSeconds = 20.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Run") int32 PodFilm = 4;
+	UPROPERTY(EditAnywhere, Config, Category = "Run") int32 PodAmmo = 90;
+	UPROPERTY(EditAnywhere, Config, Category = "Run") float PodHealth = 50.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Run") int32 Port = 7777;
+	/** Headline templates: {SUBJECT} {SECTOR} {PLAYER} {TIMING} are filled from the headline photo. */
+	UPROPERTY(EditAnywhere, Config, Category = "Run") TArray<FString> Headlines;
+	/** Category tag -> headline subject words. */
+	UPROPERTY(EditAnywhere, Config, Category = "Run") TMap<FName, FString> Subjects;
+};
+
 UCLASS(Config = Game, DefaultConfig, meta = (DisplayName = "Director's Cut Tuning"))
 class EPIC_AI_MEGA_JAM2_API UDCTuning : public UDeveloperSettings
 {
@@ -264,10 +329,17 @@ public:
 	UPROPERTY(EditAnywhere, Config, Category = "Sector") TArray<FDCSectorDef> Sectors;
 	UPROPERTY(EditAnywhere, Config, Category = "Input") TArray<FDCActionDef> Actions;
 	UPROPERTY(EditAnywhere, Config, Category = "Input") TArray<FDCKeyBinding> Bindings;
+	UPROPERTY(EditAnywhere, Config, Category = "Run") FDCRunTuning Run;
+	UPROPERTY(EditAnywhere, Config, Category = "Run") TArray<FDCUpgradeDef> Upgrades;
+	UPROPERTY(EditAnywhere, Config, Category = "Run") TArray<FDCScoopDef> Scoops;
 
 	const FDCStratagemDef* FindStratagem(FName Id) const
 	{
 		return Stratagems.FindByPredicate([Id](const FDCStratagemDef& D) { return D.Id == Id; });
+	}
+	const FDCUpgradeDef* FindUpgrade(FName Id) const
+	{
+		return Upgrades.FindByPredicate([Id](const FDCUpgradeDef& D) { return D.Id == Id; });
 	}
 	const FDCEnemyDef* FindEnemy(FName Id) const
 	{

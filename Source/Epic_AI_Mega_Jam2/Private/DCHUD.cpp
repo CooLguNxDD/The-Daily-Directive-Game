@@ -21,6 +21,8 @@ namespace
 	const FLinearColor Red(0.9f, 0.08f, 0.05f, 1.f);
 	const FLinearColor Gold(1.f, 0.78f, 0.2f, 1.f);
 	const FLinearColor Shade(0.f, 0.f, 0.f, 0.55f);
+	/** The engine's large font draws at about 16 px at 1080p; layout scales are written against twice that. */
+	constexpr float TextBoost = 2.f;
 
 	FString Upper(const FName& N) { return N.ToString().ToUpper(); }
 
@@ -40,6 +42,7 @@ void ADCHUD::BeginPlay()
 void ADCHUD::Text(const FString& S, float X, float Y, const FLinearColor& C, float Scale, bool bCentre, UFont* Font)
 {
 	UFont* F = Font ? Font : BigFont.Get();
+	Scale *= TextBoost;
 	float W = 0.f, H = 0.f;
 	if (bCentre)
 	{
@@ -240,7 +243,7 @@ void ADCHUD::DrawViewfinder(ADCCharacter& Me)
 		const float Pulse = 0.75f + 0.25f * FMath::Sin(RealNow * (6.f + 10.f * Tag.Heat));
 		const FString Label = Upper(Tag.Tag);
 		float Tw = 0.f, Th = 0.f;
-		Canvas->TextSize(BigFont, Label, Tw, Th, 0.7f * UiScale, 0.7f * UiScale);
+		Canvas->TextSize(BigFont, Label, Tw, Th, 0.7f * TextBoost * UiScale, 0.7f * TextBoost * UiScale);
 		Box(S.X - Tw * 0.5f - 6.f, S.Y - Th - 4.f, Tw + 12.f, Th + 4.f, FLinearColor(Red.R, Red.G, Red.B, 0.85f * Pulse));
 		Text(Label, S.X, S.Y - Th - 3.f, Paper, 0.7f, true);
 		DrawLine(S.X, S.Y, S.X, S.Y + Sx(18.f), Red, 2.f);
@@ -349,7 +352,7 @@ void ADCHUD::DrawPhotoCard(UTexture* Image, const FDCPhotoGrade& Grade, float X,
 	const FString Score = FString::Printf(TEXT("+%s"), *FormatPoints(Grade.Score));
 	const FString Timing = FString::Printf(TEXT("%s  %.1fx"), *Upper(Grade.TimingLabel), Grade.Multiplier);
 	float Tw = 0.f, Th = 0.f;
-	Canvas->TextSize(BigFont, Score, Tw, Th, 1.6f * S * UiScale, 1.6f * S * UiScale);
+	Canvas->TextSize(BigFont, Score, Tw, Th, 1.6f * S * TextBoost * UiScale, 1.6f * S * TextBoost * UiScale);
 	Box(Cx - Tw * 0.5f - Sx(10.f), Cy - Sx(8.f), Tw + Sx(20.f), Th * 1.9f + Sx(10.f), FLinearColor(Red.R, Red.G, Red.B, 0.92f));
 	Text(Score, Cx, Cy, Paper, 1.6f * S, true);
 	Text(Timing, Cx, Cy + Th * 1.05f, Gold, 0.8f * S, true);

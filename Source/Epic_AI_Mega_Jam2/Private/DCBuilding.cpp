@@ -12,6 +12,9 @@
 
 namespace
 {
+	/** A few fixed shades so debris shares a handful of materials instead of one per piece. */
+	constexpr float DebrisShades[] = {0.55f, 0.75f, 1.f};
+
 	UInstancedStaticMeshComponent* MakeIsm(AActor* Owner, const TCHAR* Name, USceneComponent* Parent)
 	{
 		UInstancedStaticMeshComponent* Ism = Owner->CreateDefaultSubobject<UInstancedStaticMeshComponent>(Name);
@@ -41,6 +44,8 @@ ADCBuilding::ADCBuilding()
 	Windows = MakeIsm(this, TEXT("Windows"), RootComponent);
 	Trim = MakeIsm(this, TEXT("Trim"), RootComponent);
 	Rubble = MakeIsm(this, TEXT("Rubble"), RootComponent);
+	// Rubble appears where players may be standing after they ran in: it never traps a pawn.
+	Rubble->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
 }
 
 void ADCBuilding::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -210,7 +215,7 @@ void ADCBuilding::SimulateCollapse()
 			D.LinearVelocity = Away * Push + FVector(Rng.FRandRange(-150, 150), Rng.FRandRange(-150, 150), Rng.FRandRange(0.f, 500.f));
 			D.AngularVelocityDeg = FVector(Rng.FRandRange(-200, 200), Rng.FRandRange(-200, 200), Rng.FRandRange(-200, 200));
 			const bool bFire = Rng.FRand() < City.FireFraction;
-			D.Color = bFire ? Look.Fire : PaletteColor(Spec.ColorIndex) * Rng.FRandRange(0.5f, 1.f);
+			D.Color = bFire ? Look.Fire : PaletteColor(Spec.ColorIndex) * DebrisShades[Rng.RandRange(0, UE_ARRAY_COUNT(DebrisShades) - 1)];
 			D.Glow = bFire ? 25.f : 0.f;
 			D.LifeSeconds = City.DebrisLifeSeconds * Rng.FRandRange(0.7f, 1.2f);
 			Pool->Spawn(D);

@@ -19,6 +19,17 @@ void ADCPlayerState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLi
 	DOREPLIFETIME(ADCPlayerState, CooldownIds);
 	DOREPLIFETIME(ADCPlayerState, CooldownTimes);
 	DOREPLIFETIME(ADCPlayerState, Kills);
+	DOREPLIFETIME(ADCPlayerState, DraftOffer);
+	DOREPLIFETIME(ADCPlayerState, Upgrades);
+	DOREPLIFETIME(ADCPlayerState, bDraftDone);
+	DOREPLIFETIME(ADCPlayerState, Gear);
+	DOREPLIFETIME(ADCPlayerState, PhotoMultiplier);
+	DOREPLIFETIME(ADCPlayerState, DangerMultiplier);
+	DOREPLIFETIME(ADCPlayerState, ExtraFOV);
+	DOREPLIFETIME(ADCPlayerState, FinalCutChoices);
+	DOREPLIFETIME(ADCPlayerState, FinalCut);
+	DOREPLIFETIME(ADCPlayerState, bFinalCutDone);
+	DOREPLIFETIME(ADCPlayerState, VotedFor);
 }
 
 void ADCPlayerState::BeginPlay()

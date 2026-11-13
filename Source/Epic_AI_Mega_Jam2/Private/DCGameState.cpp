@@ -31,6 +31,19 @@ void ADCGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLife
 	DOREPLIFETIME(ADCGameState, SectorIndex);
 	DOREPLIFETIME(ADCGameState, SectorEndTime);
 	DOREPLIFETIME(ADCGameState, RunSeed);
+	DOREPLIFETIME(ADCGameState, PhaseEndTime);
+	DOREPLIFETIME(ADCGameState, bRunFailed);
+	DOREPLIFETIME(ADCGameState, Collapses);
+	DOREPLIFETIME(ADCGameState, Scoop);
+	DOREPLIFETIME(ADCGameState, Mutators);
+	DOREPLIFETIME(ADCGameState, ReelClips);
+	DOREPLIFETIME(ADCGameState, ReelIndex);
+	DOREPLIFETIME(ADCGameState, ReelStage);
+	DOREPLIFETIME(ADCGameState, ReelClipStart);
+	DOREPLIFETIME(ADCGameState, PagePicks);
+	DOREPLIFETIME(ADCGameState, HeadlineIndex);
+	DOREPLIFETIME(ADCGameState, Headline);
+	DOREPLIFETIME(ADCGameState, Subhead);
 }
 
 int32 ADCGameState::AddBlast(const FVector& Location, float Radius, FName StratagemId)
@@ -52,4 +65,14 @@ int32 ADCGameState::AddBlast(const FVector& Location, float Radius, FName Strata
 const FDCBlastRecord* ADCGameState::FindBlast(int32 Id) const
 {
 	return Blasts.FindByPredicate([Id](const FDCBlastRecord& B) { return B.Id == Id; });
+}
+
+void ADCGameState::AddCollapse(int32 Sector, int32 Lot, const FVector& Epicenter)
+{
+	check(HasAuthority());
+	FDCCollapseRecord& Rec = Collapses.AddDefaulted_GetRef();
+	Rec.Sector = Sector;
+	Rec.LotIndex = Lot;
+	Rec.Time = Now();
+	Rec.Epicenter = Epicenter;
 }

@@ -57,6 +57,16 @@ UMaterialInstanceDynamic* ADCDebrisPool::MaterialFor(const FLinearColor& Color, 
 
 bool ADCDebrisPool::Spawn(const FDCDebrisSpawn& Spec)
 {
+	if (Free.Num() == 0 && Active.Num() > 0)
+	{
+		// Recycle the piece closest to dying, so a second collapse inside the debris lifetime still shows.
+		int32 Oldest = 0;
+		for (int32 i = 1; i < Active.Num(); ++i)
+		{
+			Oldest = Active[i].DieTime < Active[Oldest].DieTime ? i : Oldest;
+		}
+		Release(Oldest);
+	}
 	if (Free.Num() == 0)
 	{
 		return false;

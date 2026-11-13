@@ -70,6 +70,10 @@ struct FDCPhotoInputs
 	/** Metres from the photographer to the nearest danger (blast, collapse, enemy). */
 	UPROPERTY() float DangerMeters = 1000.f;
 	UPROPERTY() bool bSpotlit = false;
+	/** Gear and mutator multiplier on the whole score (Cursed Disposable, Solar Eclipse...). */
+	UPROPERTY() float ExtraMultiplier = 1.f;
+	/** Scales the danger bonus (Fisheye Danger Lens). */
+	UPROPERTY() float DangerScale = 1.f;
 	/** Named counts for category rules: Collapses, Debris, Enemies, Blasts, Walkers... */
 	UPROPERTY() TMap<FName, float> Metrics;
 };

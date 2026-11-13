@@ -22,7 +22,7 @@ namespace DCPhotoRules
 		Raw += Tuning.FramingPoints * FMath::Clamp(In.Centering, 0.f, 1.f) * FMath::Clamp(In.Visibility, 0.f, 1.f);
 
 		const float Falloff = FMath::Max(Tuning.DangerFalloffMeters, 1.f);
-		Raw += Tuning.DangerPoints * FMath::Clamp(1.f - In.DangerMeters / Falloff, 0.f, 1.f);
+		Raw += Tuning.DangerPoints * In.DangerScale * FMath::Clamp(1.f - In.DangerMeters / Falloff, 0.f, 1.f);
 
 		for (const FDCCategoryRule& Rule : Tuning.Categories)
 		{
@@ -42,7 +42,7 @@ namespace DCPhotoRules
 
 		Grade.bSpotlit = In.bSpotlit;
 		const float SpotlitScale = In.bSpotlit ? Tuning.SpotlitMultiplier : 1.f;
-		Grade.Multiplier *= SpotlitScale;
+		Grade.Multiplier *= SpotlitScale * FMath::Max(In.ExtraMultiplier, 0.f);
 		if (In.bSpotlit)
 		{
 			Grade.Categories.Insert(Tuning.SpotlitLabel, 0);

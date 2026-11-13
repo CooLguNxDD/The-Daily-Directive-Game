@@ -53,8 +53,7 @@ d = json.load(open(sys.argv[1], encoding="utf-8-sig"))
 print(d.get("succeeded", 0) + d.get("succeededWithWarnings", 0), d.get("failed", 0) + d.get("notRun", 0))
 PY
   )
-  ok="${ok//[!0-9]/}"; failed="${failed//[!0-9]/}"  # Windows python prints CRLF: "0
-" is not a number to (( ))
+  ok="${ok//[!0-9]/}"; failed="${failed//[!0-9]/}"  # Windows python prints CRLF; "0<CR>" is not a number to (( ))
   echo "gate: tests passed=$ok failed=$failed"
   (( ok > 0 && failed == 0 )) || { echo "gate: tier B FAIL (no test ran, or one failed)"; exit 1; }
 else
