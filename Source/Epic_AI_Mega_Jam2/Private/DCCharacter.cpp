@@ -488,8 +488,8 @@ void ADCCharacter::OnRep_Slot()
 	UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance();
 	if (Equip && AnimInstance && HasActorBegunPlay() && !bDowned)
 	{
-		const float Rate = Equip->GetPlayLength() / FMath::Max(T.Camera.DrawSeconds, 0.05f);
-		AnimInstance->PlaySlotAnimationAsDynamicMontage(Equip, T.Assets.DrawSlot, 0.05f, 0.1f, Rate);
+		const float PlayRate = Equip->GetPlayLength() / FMath::Max(T.Camera.DrawSeconds, 0.05f);
+		AnimInstance->PlaySlotAnimationAsDynamicMontage(Equip, T.Assets.DrawSlot, 0.05f, 0.1f, PlayRate);
 	}
 }
 
