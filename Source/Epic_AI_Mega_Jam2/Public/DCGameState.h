@@ -20,6 +20,8 @@ public:
 
 	/** Host only: records a detonation every machine can read for scoring and tags. */
 	int32 AddBlast(const FVector& Location, float Radius, FName StratagemId);
+	/** Host only: records an event that peaks at PeakTime (server clock), telegraphed from now. */
+	int32 AddEvent(FName Kind, const FVector& Location, float Radius, float PeakTime, int32 LotIndex);
 
 	const FDCBlastRecord* FindBlast(int32 Id) const;
 
@@ -36,6 +38,10 @@ public:
 	/** Server time the current timed phase (draft, final cut, vote) ends. */
 	UPROPERTY(Replicated) float PhaseEndTime = 0.f;
 	UPROPERTY(Replicated) bool bRunFailed = false;
+	/** Photo score filed by the whole crew this sector, against the sector quota. */
+	UPROPERTY(Replicated) int32 SectorPhotoPoints = 0;
+	/** One entry per finished sector: was the quota met. */
+	UPROPERTY(Replicated) TArray<bool> QuotaResults;
 	UPROPERTY(Replicated) TArray<FDCCollapseRecord> Collapses;
 	UPROPERTY(Replicated) FDCScoopState Scoop;
 	/** City Mutators drafted this run (apply to everyone). */
@@ -59,6 +65,8 @@ public:
 	TArray<TPair<FVector, float>> Lures;
 
 	bool HasMutator(FName Id) const { return Mutators.Contains(Id); }
+	/** The active mutators' definitions (data drives their effects; code never names a mutator). */
+	TArray<const struct FDCUpgradeDef*> ActiveMutators() const;
 	void AddCollapse(int32 Sector, int32 Lot, const FVector& Epicenter);
 
 private:

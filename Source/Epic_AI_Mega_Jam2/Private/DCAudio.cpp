@@ -154,6 +154,7 @@ namespace
 			{TEXT("Flash"), [] { FSynth S(0.5f); S.Tone(0.f, 0.45f, 3000, 6000, EWave::Sine, 0.2f, 4.f); S.Noise(0.f, 0.05f, 0.7f, 10000, 8000, 40.f); return S.Finish(); }},
 			{TEXT("Press"), [] { FSynth S(1.6f); for (int32 i = 0; i < 4; ++i) { S.Noise(i * 0.35f, 0.2f, 1.f, 1500, 300, 15.f); S.Tone(i * 0.35f, 0.15f, 90, 60, EWave::Sine, 0.8f, 15.f); } return S.Finish(1.3f); }},
 			{TEXT("Draw"), [] { FSynth S(0.3f); S.Noise(0.f, 0.25f, 0.5f, 1500, 5000, 6.f, 0.05f); S.Noise(0.22f, 0.04f, 0.6f, 6000, 3000, 60.f); return S.Finish(); }},
+			{TEXT("Creak"), [] { FSynth S(1.6f, 7); S.Tone(0.f, 1.5f, 55, 38, EWave::Saw, 0.6f, 1.2f, 0.2f, 0.08f); for (int32 i = 0; i < 6; ++i) { S.Noise(S.Rng.FRandRange(0.1f, 1.4f), 0.12f, 0.6f, 900, 300, 20.f); } return S.Finish(1.3f); }},
 			{TEXT("Down"), [] { FSynth S(1.2f); S.Tone(0.f, 1.1f, 400, 80, EWave::Saw, 0.4f, 1.5f); return S.Finish(); }},
 			{TEXT("Revive"), [] { FSynth S(0.7f); for (int32 i = 0; i < 4; ++i) { S.Tone(i * 0.12f, 0.2f, Note(i * 4), Note(i * 4), EWave::Tri, 0.35f, 6.f); } return S.Finish(); }},
 			{TEXT("Music"), &MarchLoop},

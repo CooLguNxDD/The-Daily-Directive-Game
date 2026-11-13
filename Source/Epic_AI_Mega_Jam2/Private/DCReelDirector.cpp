@@ -182,7 +182,7 @@ void ADCReelDirector::Restage(int32 ClipIndex)
 	}
 	for (const FDCBlastRecord& Blast : GS->Blasts)
 	{
-		if (Blast.Sector != Sector || Blast.Time < WindowStart - BlastLeadSeconds || Blast.Time > ShotTime + 0.3f)
+		if (Blast.Kind != TEXT("Strike") || Blast.Sector != Sector || Blast.Time < WindowStart - BlastLeadSeconds || Blast.Time > ShotTime + 0.3f)
 		{
 			continue;
 		}

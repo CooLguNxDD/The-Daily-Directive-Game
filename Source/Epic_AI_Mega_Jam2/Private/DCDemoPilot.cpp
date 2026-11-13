@@ -1,6 +1,7 @@
 #include "DCDemoPilot.h"
 
 #include "DCBuilding.h"
+#include "DCEnemy.h"
 #include "DCCharacter.h"
 #include "DCGameState.h"
 #include "DCInput.h"
@@ -93,7 +94,7 @@ void ADCDemoPilot::Tap(FName Name)
 	GetWorldTimerManager().SetTimer(H, FTimerDelegate::CreateWeakLambda(this, [this, Name] { Release(Name); }), 0.08f, false);
 }
 
-void ADCDemoPilot::AimAt(const FVector& Target)
+void ADCDemoPilot::AimAt(const FVector& LookTarget)
 {
 	APlayerController* PC = GetWorld()->GetFirstPlayerController();
 	if (!PC || !PC->PlayerCameraManager)
@@ -101,7 +102,7 @@ void ADCDemoPilot::AimAt(const FVector& Target)
 		return;
 	}
 	const FVector From = PC->PlayerCameraManager->GetCameraLocation();
-	PC->SetControlRotation((Target - From).Rotation());
+	PC->SetControlRotation((LookTarget - From).Rotation());
 }
 
 void ADCDemoPilot::Shot(const FString& Name)
@@ -189,9 +190,30 @@ void ADCDemoPilot::AddCycle(const FString& C)
 		return !PS || !GS || PS->CooldownReadyTime(TEXT("OrbitalLaser")) <= GS->Now();
 	}, 20.f);
 	Add(0.f, [this] { Tap(TEXT("Slot2")); return true; });
+	if (C.Contains(TEXT("_c1")) && !C.StartsWith(TEXT("s0")))
+	{
+		// Spend Propaganda Points: Q cycles to the 600-point Barrage (R6).
+		Add(0.5f, [this] { Tap(TEXT("Cycle")); return true; });
+		Add(0.3f, [this, C]
+		{
+			const APlayerController* PC = GetWorld()->GetFirstPlayerController();
+			const ADCPlayerState* PS = PC ? PC->GetPlayerState<ADCPlayerState>() : nullptr;
+			const ADCCharacter* Me = PC ? Cast<ADCCharacter>(PC->GetPawn()) : nullptr;
+			UE_LOG(LogDCDemo, Display, TEXT("DEMO stratagem selected=%s points=%d"), Me ? *Me->GetSelectedStratagem().ToString() : TEXT("?"), PS ? PS->Points : -1);
+			Shot(C + TEXT("_stratagem_selected"));
+			return true;
+		});
+	}
 	Add(0.6f, [this] { if (Tower.IsValid()) { AimAt(Tower->GetActorLocation()); } return true; });
 	Add(0.3f, [this, C] { Shot(C + TEXT("_strike_aim")); return true; });
 	Add(0.2f, [this] { Tap(TEXT("Fire")); return true; });
+	Add(0.3f, [this]
+	{
+		const APlayerController* PC = GetWorld()->GetFirstPlayerController();
+		const ADCPlayerState* PS = PC ? PC->GetPlayerState<ADCPlayerState>() : nullptr;
+		UE_LOG(LogDCDemo, Display, TEXT("DEMO strike called: points now=%d"), PS ? PS->Points : -1);
+		return true;
+	});
 	// Run toward it instead of away.
 	Add(0.4f, [this, C] { Shot(C + TEXT("_telegraph")); Press(TEXT("Move"), FVector(0, 1, 0)); Press(TEXT("Sprint")); return true; });
 	Add(1.0f, [this] { Release(TEXT("Sprint")); Release(TEXT("Move")); return true; });
@@ -214,13 +236,108 @@ void ADCDemoPilot::AddCycle(const FString& C)
 	Add(0.5f, [this] { Tap(TEXT("Slot1")); return true; });
 }
 
+void ADCDemoPilot::AddEnemyFight(const FString& S)
+{
+	// Wait for an enemy, then hold the rifle on it: frames of the enemy, the tracer and the hit marker.
+	Add(0.f, [this] { Tap(TEXT("Slot1")); return true; });
+	Add(0.6f, [this]
+	{
+		const APawn* Me = GetWorld()->GetFirstPlayerController() ? GetWorld()->GetFirstPlayerController()->GetPawn() : nullptr;
+		const ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>();
+		if (!Me || !GS || GS->Phase != EDCRunPhase::Sector)
+		{
+			return true; // the sector ended first
+		}
+		float Best = TNumericLimits<float>::Max();
+		for (ADCEnemy* E : TActorRange<ADCEnemy>(GetWorld()))
+		{
+			const float D = E->IsAlive() ? FVector::Dist(E->GetActorLocation(), Me->GetActorLocation()) : Best;
+			if (D < Best)
+			{
+				Best = D;
+				Target = E;
+			}
+		}
+		return Target.IsValid();
+	}, 40.f);
+	for (int32 i = 0; i < 4; ++i)
+	{
+		Add(i == 0 ? 0.f : 0.5f, [this, S, i]
+		{
+			if (Target.IsValid())
+			{
+				AimAt(Target->GetActorLocation());
+				Press(TEXT("Fire"));
+			}
+			Shot(FString::Printf(TEXT("%s_enemy%d"), *S, i));
+			return true;
+		});
+	}
+	Add(0.3f, [this] { Release(TEXT("Fire")); Target.Reset(); return true; });
+	// Downed: hold E through the real input path to self-revive (solo), with frames before and after.
+	Add(0.2f, [this, S]
+	{
+		const ADCCharacter* Me = Cast<ADCCharacter>(GetWorld()->GetFirstPlayerController() ? GetWorld()->GetFirstPlayerController()->GetPawn() : nullptr);
+		if (Me && Me->IsDowned())
+		{
+			Shot(S + TEXT("_downed"));
+			Press(TEXT("Interact"));
+		}
+		return true;
+	});
+	Add(0.f, [this]
+	{
+		const ADCCharacter* Me = Cast<ADCCharacter>(GetWorld()->GetFirstPlayerController() ? GetWorld()->GetFirstPlayerController()->GetPawn() : nullptr);
+		return !Me || !Me->IsDowned();
+	}, 8.f);
+	Add(0.3f, [this, S]
+	{
+		Release(TEXT("Interact"));
+		const ADCCharacter* Me = Cast<ADCCharacter>(GetWorld()->GetFirstPlayerController() ? GetWorld()->GetFirstPlayerController()->GetPawn() : nullptr);
+		UE_LOG(LogDCDemo, Display, TEXT("DEMO revive check: downed=%d"), Me && Me->IsDowned() ? 1 : 0);
+		Shot(S + TEXT("_after_revive_check"));
+		return true;
+	});
+}
+
 void ADCDemoPilot::AddWaitPhase(EDCRunPhase Phase, float Timeout)
 {
 	Add(0.f, [this, Phase]
 	{
 		const ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>();
-		return GS && GS->Phase == Phase;
+		bDefend = !(GS && GS->Phase == Phase);
+		return !bDefend;
 	}, Timeout);
+}
+
+void ADCDemoPilot::TickDefend()
+{
+	const ADCCharacter* Me = Cast<ADCCharacter>(GetWorld()->GetFirstPlayerController() ? GetWorld()->GetFirstPlayerController()->GetPawn() : nullptr);
+	const ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>();
+	ADCEnemy* Nearest = nullptr;
+	float Best = 2500.f;
+	if (bDefend && Me && !Me->IsDowned() && GS && GS->Phase == EDCRunPhase::Sector)
+	{
+		for (ADCEnemy* E : TActorRange<ADCEnemy>(GetWorld()))
+		{
+			const float D = E->IsAlive() ? FVector::Dist(E->GetActorLocation(), Me->GetActorLocation()) : Best;
+			Nearest = D < Best ? E : Nearest;
+			Best = FMath::Min(Best, D);
+		}
+	}
+	if (Nearest)
+	{
+		if (Me->GetSlot() != EDCSlot::Rifle)
+		{
+			Tap(TEXT("Slot1"));
+		}
+		AimAt(Nearest->GetActorLocation());
+	}
+	if ((Nearest != nullptr) != bDefendFiring)
+	{
+		bDefendFiring = Nearest != nullptr;
+		(bDefendFiring ? Press(TEXT("Fire")) : Release(TEXT("Fire")));
+	}
 }
 
 void ADCDemoPilot::BuildScript()
@@ -247,10 +364,17 @@ void ADCDemoPilot::BuildScript()
 		{
 			AddCycle(FString::Printf(TEXT("%s_c%d"), *S, Cycle));
 		}
+		AddEnemyFight(S);
 		if (Sector + 1 < Sectors)
 		{
 			// Draft: shot the offer, then click the second card (the camera gear) through the HUD intent.
-			AddWaitPhase(EDCRunPhase::Draft, 400.f);
+			// Draft, or straight into the next sector when the crew missed HQ's quota.
+			Add(0.f, [this, Sector]
+			{
+				const ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>();
+				bDefend = !(GS && (GS->Phase == EDCRunPhase::Draft || GS->Phase == EDCRunPhase::Reel || GS->SectorIndex > Sector));
+				return !bDefend;
+			}, 400.f);
 			Add(1.f, [this, S] { Shot(S + TEXT("_draft")); return true; });
 			Add(0.5f, [this, Sector]
 			{
@@ -258,7 +382,15 @@ void ADCDemoPilot::BuildScript()
 				const ADCPlayerState* PS = PC ? PC->GetPlayerState<ADCPlayerState>() : nullptr;
 				if (PC && PS && PS->DraftOffer.Num() > 0)
 				{
-					PC->RequestPickUpgrade(PS->DraftOffer[(Sector + 1) % PS->DraftOffer.Num()]);
+					// -dcdraft=A,B picks the first listed upgrade on offer; otherwise a fixed card per sector.
+					FString Wanted;
+					TArray<FString> Prefs;
+					if (FParse::Value(FCommandLine::Get(), TEXT("dcdraft="), Wanted, false))
+					{
+						Wanted.ParseIntoArray(Prefs, TEXT(","));
+					}
+					const FString* Hit = Prefs.FindByPredicate([PS](const FString& P) { return PS->DraftOffer.Contains(FName(*P)); });
+					PC->RequestPickUpgrade(Hit ? FName(**Hit) : PS->DraftOffer[(Sector + 1) % PS->DraftOffer.Num()]);
 				}
 				return true;
 			});
@@ -325,6 +457,17 @@ void ADCDemoPilot::Tick(float DeltaSeconds)
 		return;
 	}
 	const double Real = GetWorld()->GetRealTimeSeconds();
+	// Whenever the pilot is downed, it holds E (the real Interact action) to self-revive, framing both ends.
+	const ADCCharacter* Me = Cast<ADCCharacter>(GetWorld()->GetFirstPlayerController() ? GetWorld()->GetFirstPlayerController()->GetPawn() : nullptr);
+	const bool bDown = Me && Me->IsDowned();
+	if (bDown != bAutoReviving)
+	{
+		bAutoReviving = bDown;
+		Shot(bDown ? TEXT("downed_holding_E") : TEXT("revived"));
+		UE_LOG(LogDCDemo, Display, TEXT("DEMO %s"), bDown ? TEXT("downed: holding E") : TEXT("revived"));
+		(bDown ? Press(TEXT("Interact")) : Release(TEXT("Interact")));
+	}
+	TickDefend();
 	if (Real < StepReadyReal)
 	{
 		return;

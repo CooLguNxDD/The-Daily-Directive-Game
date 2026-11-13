@@ -288,6 +288,16 @@ void ADCHUD::DrawStatus(ADCGameState& GS, ADCCharacter& Me)
 	Text(FString::Printf(TEXT("SECTOR %d/%d  %s"), GS.SectorIndex + 1, FMath::Max(T.Sectors.Num(), 1), *Name), W * 0.5f, Sx(20.f), FLinearColor::White, 0.7f, true);
 	Text(FString::Printf(TEXT("%d:%02d"), FMath::FloorToInt(Left) / 60, FMath::FloorToInt(Left) % 60), W * 0.5f, Sx(46.f), Left < 30.f ? Red : FLinearColor::White, 1.3f, true);
 
+	// HQ quota (R6): the crew's photo score against this sector's target.
+	if (Sector && Sector->QuotaPoints > 0)
+	{
+		const float Q = FMath::Clamp(static_cast<float>(GS.SectorPhotoPoints) / Sector->QuotaPoints, 0.f, 1.f);
+		const float Bw = Sx(360.f), Bx = W * 0.5f - Bw * 0.5f, By = Sx(96.f);
+		Box(Bx, By, Bw, Sx(14.f), Shade);
+		Box(Bx + Sx(2.f), By + Sx(2.f), (Bw - Sx(4.f)) * Q, Sx(10.f), Q >= 1.f ? Gold : Red);
+		Text(FString::Printf(TEXT("HQ QUOTA %s / %s"), *FormatPoints(GS.SectorPhotoPoints), *FormatPoints(Sector->QuotaPoints)), W * 0.5f, By + Sx(14.f), Q >= 1.f ? Gold : FLinearColor::White, 0.5f, true);
+	}
+
 	// Film counter is always visible (R7).
 	const int32 Shots = PS ? PS->ShotsLeft : 0;
 	const int32 Film = PS ? PS->FilmPerSector : 0;
@@ -471,7 +481,9 @@ void ADCHUD::DrawDowned(ADCCharacter& Me)
 	const float W = Canvas->ClipX, H = Canvas->ClipY;
 	Box(0, 0, W, H, FLinearColor(0.3f, 0.f, 0.f, 0.35f));
 	Text(TEXT("DOWNED"), W * 0.5f, H * 0.4f, Red, 2.f, true);
-	Text(TEXT("HOLD E TO SELF-REVIVE (SOLO, ONCE PER SECTOR) OR WAIT FOR A COMRADE"), W * 0.5f, H * 0.4f + Sx(70.f), FLinearColor::White, 0.7f, true);
+	const float Left = Me.SelfReviveSecondsLeft();
+	Text(Left > 0.f ? FString::Printf(TEXT("HOLD E TO PATCH YOURSELF UP  -  %.0fs"), Left) : FString(TEXT("HOLD ON - A COMRADE CAN REVIVE YOU (THEY HOLD E BESIDE YOU)")),
+		W * 0.5f, H * 0.4f + Sx(70.f), FLinearColor::White, 0.7f, true);
 	Box(W * 0.5f - Sx(200.f), H * 0.4f + Sx(110.f), Sx(400.f) * Me.GetReviveProgress(), Sx(12.f), FLinearColor::White);
 }
 

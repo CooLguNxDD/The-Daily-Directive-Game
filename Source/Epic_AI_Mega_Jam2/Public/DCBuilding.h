@@ -19,6 +19,7 @@ public:
 
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 	virtual void BeginPlay() override;
+	virtual void Tick(float DeltaSeconds) override;
 
 	/** Host: set before FinishSpawning. */
 	void InitSpec(const FDCBuildingSpec& InSpec, int32 InLot) { Spec = InSpec; LotIndex = InLot; }
@@ -46,6 +47,7 @@ private:
 	UFUNCTION() void OnRep_Spec();
 	UFUNCTION() void OnRep_Collapsed();
 	void BuildBlocks();
+	void BuildBanners();
 	void SimulateCollapse(bool bAnimate);
 	bool LateJoinAnimates() const;
 
@@ -59,7 +61,12 @@ private:
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UInstancedStaticMeshComponent> Windows;
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UInstancedStaticMeshComponent> Trim;
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UInstancedStaticMeshComponent> Rubble;
+	UPROPERTY(VisibleAnywhere) TObjectPtr<UInstancedStaticMeshComponent> Banners;
+	UPROPERTY(VisibleAnywhere) TObjectPtr<UInstancedStaticMeshComponent> Emblems;
 
 	bool bBuilt = false;
+	bool bCreakPlayed = false;
+	bool bWindowsAlarmed = false;
+	UPROPERTY() TObjectPtr<class UMaterialInstanceDynamic> WindowMat;
 	bool bSimulated = false;
 };

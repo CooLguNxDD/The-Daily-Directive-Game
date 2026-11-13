@@ -60,6 +60,10 @@ public:
 	bool GetStrikeAim(FVector& Out) const { Out = StrikeAimPoint; return bStrikeAimValid; }
 	FDCShotView GetShotView() const;
 	float GetReviveProgress() const { return ReviveProgress; }
+	/** Solo self-revive still possible (one left this sector and the window has not closed). */
+	bool CanSelfRevive() const;
+	/** Seconds left in the solo self-revive window (0 when none). */
+	float SelfReviveSecondsLeft() const;
 	const FDCLocalFeedback& Feedback() const { return LocalFeedback; }
 	void Toast(const FString& Text);
 
@@ -160,6 +164,8 @@ private:
 	UPROPERTY(Replicated) float SpotlitUntil = -10.f;
 	UPROPERTY(Replicated) float ReviveProgress = 0.f;
 	UPROPERTY(Replicated) int32 SelfRevivesLeft = 1;
+	/** Server time this player went down. */
+	UPROPERTY(Replicated) float DownedAt = 0.f;
 
 	// Owner-local weapon and camera state (the host keeps its own counters for validation).
 	int32 Ammo = 30;

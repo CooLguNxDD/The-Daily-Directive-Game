@@ -34,11 +34,12 @@ bool FDCDraftOfferTest::RunTest(const FString&)
 {
 	const TArray<FDCUpgradeDef> Ups = {Up(TEXT("A1"), TEXT("A")), Up(TEXT("A2"), TEXT("A")), Up(TEXT("B1"), TEXT("B")), Up(TEXT("C1"), TEXT("C")), Up(TEXT("C2"), TEXT("C"))};
 	const TArray<FName> Offer = DCRunRules::DraftOffer(42, Ups, {});
-	TestEqual(TEXT("one option per pool"), Offer.Num(), 3);
+	TestEqual(TEXT("every open option of every pool"), Offer, TArray<FName>({TEXT("A1"), TEXT("A2"), TEXT("B1"), TEXT("C1"), TEXT("C2")}));
 	TestEqual(TEXT("same seed, same offer"), DCRunRules::DraftOffer(42, Ups, {}), Offer);
 	const TArray<FName> Taken = DCRunRules::DraftOffer(7, Ups, {TEXT("B1"), TEXT("A1")});
-	TestEqual(TEXT("a fully taken pool offers nothing"), Taken.Num(), 2);
+	TestEqual(TEXT("a fully taken pool offers nothing"), Taken.Num(), 3);
 	TestTrue(TEXT("taken options never come back"), !Taken.Contains(TEXT("A1")) && Taken.Contains(TEXT("A2")));
+	TestEqual(TEXT("a pool larger than PerPool is cut to PerPool"), DCRunRules::DraftOffer(1, Ups, {}, 1).Num(), 3);
 	return true;
 }
 
@@ -123,6 +124,10 @@ bool FDCRunDataTest::RunTest(const FString&)
 	}
 	TestTrue(TEXT("R8: about five scoop templates"), T.Scoops.Num() >= 5);
 	TestEqual(TEXT("R9: three sectors"), T.Sectors.Num(), 3);
+	for (const FDCSectorDef& Sector : T.Sectors)
+	{
+		TestTrue(FString::Printf(TEXT("R6: sector %s has an HQ photo quota"), *Sector.Name.ToString()), Sector.QuotaPoints > 0);
+	}
 	TestEqual(TEXT("R7: 15 shots per sector"), T.Camera.ShotsPerSector, 15);
 	const FDCTimingWindow* Over = DCPhotoRules::FindWindow(T.Photo, 0.f);
 	const FDCTimingWindow* Peak = DCPhotoRules::FindWindow(T.Photo, 0.5f);

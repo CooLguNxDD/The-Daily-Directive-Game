@@ -122,6 +122,7 @@ void ADCCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLife
 	DOREPLIFETIME(ADCCharacter, SpotlitUntil);
 	DOREPLIFETIME(ADCCharacter, ReviveProgress);
 	DOREPLIFETIME(ADCCharacter, SelfRevivesLeft);
+	DOREPLIFETIME(ADCCharacter, DownedAt);
 }
 
 void ADCCharacter::BeginPlay()
@@ -301,6 +302,22 @@ void ADCCharacter::OnSprintEnd(const FInputActionInstance&)
 
 void ADCCharacter::OnCrouch(const FInputActionInstance&) { Crouch(); }
 void ADCCharacter::OnCrouchEnd(const FInputActionInstance&) { UnCrouch(); }
+
+float ADCCharacter::SelfReviveSecondsLeft() const
+{
+	const AGameStateBase* GS = GetWorld()->GetGameState();
+	const bool bSolo = GS && GS->PlayerArray.Num() <= 1;
+	if (!bDowned || !bSolo || SelfRevivesLeft <= 0)
+	{
+		return 0.f;
+	}
+	return FMath::Max(0.f, DownedAt + UDCTuning::Get().Run.SelfReviveWindowSeconds - Now());
+}
+
+bool ADCCharacter::CanSelfRevive() const
+{
+	return SelfReviveSecondsLeft() > 0.f;
+}
 
 bool ADCCharacter::InSector() const
 {
@@ -698,7 +715,14 @@ void ADCCharacter::TakePhoto()
 	const ADCGameState* PhotoGS = GetWorld()->GetGameState<ADCGameState>();
 	const ADCEnvironment* Env = PhotoGS ? PhotoGS->GetEnvironment() : nullptr;
 	PhotoLook.BloomIntensity = Env ? Env->GetPhotoBloom(C.PhotoBloomFraction) : UDCTuning::Get().Look.BaseBloom;
-	PhotoLook.AutoExposureBias = UDCTuning::Get().Look.ExposureBias + C.PhotoExposureBias;
+	// Stop down while the blast is still blinding: the frame keeps the fire's colour and the debris edges.
+	PhotoLook.AutoExposureBias = UDCTuning::Get().Look.ExposureBias + C.PhotoExposureBias - (Env ? Env->GetFlashAlpha() * C.PhotoFlashStopDown : 0.f);
+	if (IsSpotlit())
+	{
+		// A spotlight in the lens blows the frame out: the photo shows it, not just the score.
+		PhotoLook.AutoExposureBias += C.SpotlitPhotoStops;
+		PhotoLook.BloomIntensity += 8.f;
+	}
 	Capture->PostProcessBlendWeight = 1.f;
 	Capture->CaptureScene();
 
@@ -797,6 +821,7 @@ void ADCCharacter::HostApplyHurt(float Amount, const FVector& From)
 	if (Health <= 0.f)
 	{
 		bDowned = true;
+		DownedAt = Now();
 		bCameraRaised = false;
 		ReviveProgress = 0.f;
 		UpdateMoveSpeed();
@@ -833,30 +858,32 @@ FDCPhotoInputs ADCCharacter::MeasureShot(const FDCShotView& View, float ShotTime
 	const ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>();
 	In.ExtraMultiplier = PS ? PS->PhotoMultiplier : 1.f;
 	In.DangerScale = PS ? PS->DangerMultiplier : 1.f;
-	// Solar Eclipse: blasts blaze against the dark sky, so blast photos pay more.
-	const FDCUpgradeDef* Eclipse = UDCTuning::Get().FindUpgrade(TEXT("Eclipse"));
-	if (GS && Eclipse && GS->HasMutator(Eclipse->Id) && In.bHasBlast)
+	// Mutators that make blast photos pay more (Solar Eclipse: blasts blaze against the dark sky).
+	for (const FDCUpgradeDef* Mutator : GS ? GS->ActiveMutators() : TArray<const FDCUpgradeDef*>())
 	{
-		In.ExtraMultiplier *= Eclipse->Param;
+		In.ExtraMultiplier *= In.bHasBlast ? Mutator->BlastPhotoMultiplier : 1.f;
 	}
 	return In;
 }
 
 void ADCCharacter::ApplyStrobe(const FDCShotView& View)
 {
-	// Strobe Flash gear: the shutter stuns every enemy in frame within range.
+	// Gear with a stun (Strobe Flash): the shutter stuns every enemy in frame within range.
 	const ADCPlayerState* PS = GetPlayerState<ADCPlayerState>();
-	const FDCUpgradeDef* Strobe = UDCTuning::Get().FindUpgrade(TEXT("StrobeFlash"));
-	if (!PS || !Strobe || !PS->HasGear(Strobe->Id))
+	for (const FName& GearId : PS ? PS->Gear : TArray<FName>())
 	{
-		return;
-	}
-	const float Until = Now() + Strobe->Param2;
-	for (ADCEnemy* E : TActorRange<ADCEnemy>(GetWorld()))
-	{
-		if (E->IsAlive() && FVector::Dist(E->GetActorLocation(), View.Location) < Strobe->Param && DCPhotoProbe::InFrame(View, E->GetActorLocation()))
+		const FDCUpgradeDef* Gear = UDCTuning::Get().FindUpgrade(GearId);
+		if (!Gear || Gear->StunSeconds <= 0.f)
 		{
-			E->HostStun(Until);
+			continue;
+		}
+		const float Until = Now() + Gear->StunSeconds;
+		for (ADCEnemy* E : TActorRange<ADCEnemy>(GetWorld()))
+		{
+			if (E->IsAlive() && FVector::Dist(E->GetActorLocation(), View.Location) < Gear->StunRangeCm && DCPhotoProbe::InFrame(View, E->GetActorLocation()))
+			{
+				E->HostStun(Until);
+			}
 		}
 	}
 }
@@ -967,7 +994,7 @@ void ADCCharacter::UpdateRevive(float DeltaSeconds)
 	}
 	const AGameStateBase* GS = GetWorld()->GetGameState();
 	const bool bSolo = GS && GS->PlayerArray.Num() <= 1;
-	if (ReviveRate <= 0.f && bSolo && bHostReviveHeld && SelfRevivesLeft > 0)
+	if (ReviveRate <= 0.f && bSolo && bHostReviveHeld && CanSelfRevive())
 	{
 		ReviveRate = 1.f / SelfReviveSeconds;
 	}

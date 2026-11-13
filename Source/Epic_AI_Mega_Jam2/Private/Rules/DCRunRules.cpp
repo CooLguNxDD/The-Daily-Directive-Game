@@ -4,7 +4,7 @@
 
 namespace DCRunRules
 {
-	TArray<FName> DraftOffer(int32 Seed, const TArray<FDCUpgradeDef>& Upgrades, const TArray<FName>& Taken)
+	TArray<FName> DraftOffer(int32 Seed, const TArray<FDCUpgradeDef>& Upgrades, const TArray<FName>& Taken, int32 PerPool)
 	{
 		TArray<FName> Pools;
 		for (const FDCUpgradeDef& U : Upgrades)
@@ -23,10 +23,11 @@ namespace DCRunRules
 					Open.Add(U.Id);
 				}
 			}
-			if (Open.Num() > 0)
+			while (Open.Num() > PerPool)
 			{
-				Offer.Add(Open[Rng.RandRange(0, Open.Num() - 1)]);
+				Open.RemoveAt(Rng.RandRange(0, Open.Num() - 1));
 			}
+			Offer.Append(Open);
 		}
 		return Offer;
 	}

@@ -38,6 +38,7 @@ public:
 
 private:
 	void ApplyLook(float Bloom, float ExposureBias);
+	void BuildStreets();
 
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UDirectionalLightComponent> Sun;
 	UPROPERTY(VisibleAnywhere) TObjectPtr<USkyLightComponent> SkyLight;
@@ -45,10 +46,14 @@ private:
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UExponentialHeightFogComponent> Fog;
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UPostProcessComponent> Post;
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UStaticMeshComponent> Ground;
+	/** The street grid read from the city tuning (same on every machine and every sector): kerbed blocks and lane dashes. */
+	UPROPERTY(VisibleAnywhere) TObjectPtr<class UInstancedStaticMeshComponent> Sidewalks;
+	UPROPERTY(VisibleAnywhere) TObjectPtr<class UInstancedStaticMeshComponent> Dashes;
 	UPROPERTY() TObjectPtr<ADCDebrisPool> DebrisPool;
 
 	float FlashPeak = 0.f;
 	float FlashKick = 0.f;
 	double FlashStartReal = -100.0;
 	float FlashAlpha = 0.f;
+	int32 AppliedMutatorCount = 0;
 };

@@ -31,7 +31,12 @@ public:
 	void CallStrike(const FDCStratagemDef& Def, const FVector& Target, AController* Caller);
 	void OnPhotoGraded(ADCCharacter* Photographer, const FDCPhotoRecord& Record, const FDCPhotoInputs& Inputs, TArray<FDCPoseSample>&& Poses);
 	void OnPlayerDowned(ADCCharacter* Player);
+	/** Fails the run when every player is down and nobody can still get up (R12). */
+	void CheckWipe();
 	void OnBuildingCollapsed(ADCBuilding* Building);
+	/** Every collapse goes through here. Delay > 0 writes a telegraphed event record (Kind) now and collapses the
+	 *  tower at its peak on the server clock; Delay 0 collapses at once (a strike's own record covers it). */
+	void ScheduleCollapse(ADCBuilding* Building, const FVector& Epicenter, FName Kind, float Delay);
 	void RequestHitstop();
 	bool IsCombatLive() const;
 
@@ -44,6 +49,8 @@ public:
 
 	const FDCCityPlan& GetCityPlan() const { return CityPlan; }
 	float FindUpgradeParam(FName UpgradeId, bool bSecond = false) const;
+	/** Seconds between rogue strikes from the active mutators (0 = none). */
+	float RogueInterval() const;
 
 private:
 	using FPhaseFn = void (ADCGameMode::*)(float Now);
@@ -77,6 +84,7 @@ private:
 	void TickWaves(float Now);
 	void TickScoop(float Now);
 	void TickRogueStrikes(float Now);
+	void TickPendingCollapses(float Now);
 	void BeginReelClip(int32 Index);
 	void SetDilation(float Value);
 	FTransform SpawnTransformFor(int32 PlayerIndex) const;
@@ -100,4 +108,11 @@ private:
 	TMap<int32, TArray<FDCPoseSample>> PhotoPoses;
 	/** Domino Condemnation: chain generation per collapsed building. */
 	TMap<TObjectKey<ADCBuilding>, int32> DominoGeneration;
+	struct FPendingCollapse
+	{
+		TWeakObjectPtr<ADCBuilding> Building;
+		FVector Epicenter = FVector::ZeroVector;
+		float At = 0.f;
+	};
+	TArray<FPendingCollapse> PendingCollapses;
 };

@@ -98,6 +98,10 @@ struct FDCCameraTuning
 	 *  as fire and debris instead of a white frame. */
 	UPROPERTY(EditAnywhere, Config, Category = "Camera") float PhotoBloomFraction = 0.15f;
 	UPROPERTY(EditAnywhere, Config, Category = "Camera") float PhotoExposureBias = -0.6f;
+	/** Extra stops the photo closes down at the full flash (scaled by the flash still on screen). */
+	UPROPERTY(EditAnywhere, Config, Category = "Camera") float PhotoFlashStopDown = 2.f;
+	/** Stops a spotlit photo is pushed over (R11: spotlight units blow out exposure). */
+	UPROPERTY(EditAnywhere, Config, Category = "Camera") float SpotlitPhotoStops = 3.5f;
 };
 
 USTRUCT(BlueprintType)
@@ -132,6 +136,12 @@ struct FDCCityTuning
 	UPROPERTY(EditAnywhere, Config, Category = "City") float DebrisLifeSeconds = 7.f;
 	UPROPERTY(EditAnywhere, Config, Category = "City") float FireFraction = 0.25f;
 	UPROPERTY(EditAnywhere, Config, Category = "City") int32 DebrisPoolSize = 600;
+	/** Chance a tower hangs a propaganda banner (red cloth, cream emblem) down one face. */
+	UPROPERTY(EditAnywhere, Config, Category = "City") float BannerChance = 0.65f;
+	/** A tower a walker shoulders into shakes this long before it gives way (photographable warning). */
+	UPROPERTY(EditAnywhere, Config, Category = "City") float ToppleTelegraphSeconds = 1.5f;
+	/** Shake amplitude (cm) of a condemned tower at the end of its telegraph. */
+	UPROPERTY(EditAnywhere, Config, Category = "City") float CondemnedShakeCm = 18.f;
 };
 
 /** Flat propaganda palette and post-process look. */
@@ -153,6 +163,9 @@ struct FDCLookTuning
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float Contrast = 1.25f;
 	UPROPERTY(EditAnywhere, Config, Category = "Look") FLinearColor ColorGain = FLinearColor(1.08f, 1.0f, 0.86f);
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float FilmGrain = 0.35f;
+	/** Emissive of the fireball core and the ground shock ring at their peak (the bloom spike itself is BloomPeak). */
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float FireballGlow = 45.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float ShockGlow = 18.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float HitstopSeconds = 0.12f;
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float HitstopDilation = 0.05f;
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float FlashDecaySeconds = 0.9f;
@@ -228,6 +241,8 @@ struct FDCSectorDef
 	UPROPERTY(EditAnywhere, Config, Category = "Sector") TArray<FDCWaveDef> Waves;
 	/** Enemy cap alive at once (host spawner waits when reached). */
 	UPROPERTY(EditAnywhere, Config, Category = "Sector") int32 MaxAlive = 24;
+	/** HQ propaganda quota (R6): photo score the crew must file this sector, or HQ withholds the draft. */
+	UPROPERTY(EditAnywhere, Config, Category = "Sector") int32 QuotaPoints = 1500;
 };
 
 /** Soft references to the few binary assets the game uses; each has an engine fallback. */
@@ -264,6 +279,22 @@ struct FDCUpgradeDef
 	UPROPERTY(EditAnywhere, Config, Category = "Run") FName Unlock;
 	UPROPERTY(EditAnywhere, Config, Category = "Run") float Param = 0.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Run") float Param2 = 0.f;
+
+	// What an owned upgrade (gear) or an active mutator does, as data. Zero / one means "no effect".
+	/** Photos with a blast in frame score this much more (mutators). */
+	UPROPERTY(EditAnywhere, Config, Category = "Run") float BlastPhotoMultiplier = 1.f;
+	/** Sun and sky light scale while active (mutators; 1 = unchanged). */
+	UPROPERTY(EditAnywhere, Config, Category = "Run") float LightScale = 1.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Run") bool bOverrideFog = false;
+	UPROPERTY(EditAnywhere, Config, Category = "Run") FLinearColor FogColor = FLinearColor::Black;
+	/** The shutter stuns enemies in frame within this range for this long (gear). */
+	UPROPERTY(EditAnywhere, Config, Category = "Run") float StunRangeCm = 0.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Run") float StunSeconds = 0.f;
+	/** A collapse drags towers within this reach down after this delay (mutators). */
+	UPROPERTY(EditAnywhere, Config, Category = "Run") float DominoReachCm = 0.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Run") float DominoDelaySeconds = 0.f;
+	/** HQ fires a free strike on a random standing tower this often (mutators). */
+	UPROPERTY(EditAnywhere, Config, Category = "Run") float RogueStrikeSeconds = 0.f;
 };
 
 /** An HQ Scoop template (R8): a photo condition with a time limit. */
@@ -288,6 +319,8 @@ struct FDCRunTuning
 {
 	GENERATED_BODY()
 	UPROPERTY(EditAnywhere, Config, Category = "Run") float DraftSeconds = 25.f;
+	/** Solo (R12): how long a downed player has to finish the self-revive hold before the run fails. */
+	UPROPERTY(EditAnywhere, Config, Category = "Run") float SelfReviveWindowSeconds = 12.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Run") int32 ReelClipsPerPlayer = 2;
 	/** Seconds of recorded pose before the shutter (the clip length in game time). */
 	UPROPERTY(EditAnywhere, Config, Category = "Run") float ClipSeconds = 2.f;

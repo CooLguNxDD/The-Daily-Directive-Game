@@ -21,9 +21,6 @@
 
 namespace
 {
-	const FName DominoId(TEXT("Domino"));
-	const FName EclipseId(TEXT("Eclipse"));
-	const FName RogueId(TEXT("RogueStrikes"));
 	constexpr int32 MaxDominoGenerations = 2;
 	constexpr float FreezeDilation = 0.01f;
 }
@@ -132,6 +129,16 @@ void ADCGameMode::RestartPlayer(AController* NewPlayer)
 	RestartPlayerAtTransform(NewPlayer, SpawnTransformFor(FMath::Max(Index, 0)));
 }
 
+float ADCGameMode::RogueInterval() const
+{
+	float Interval = 0.f;
+	for (const FDCUpgradeDef* Mutator : GetGameState<ADCGameState>()->ActiveMutators())
+	{
+		Interval = Mutator->RogueStrikeSeconds > 0.f ? Mutator->RogueStrikeSeconds : Interval;
+	}
+	return Interval;
+}
+
 float ADCGameMode::FindUpgradeParam(FName UpgradeId, bool bSecond) const
 {
 	const FDCUpgradeDef* Def = UDCTuning::Get().FindUpgrade(UpgradeId);
@@ -188,6 +195,7 @@ void ADCGameMode::ClearCity()
 		B->Destroy();
 	}
 	DominoGeneration.Reset();
+	PendingCollapses.Reset();
 }
 
 void ADCGameMode::BuildCity(int32 SectorIndex)
@@ -231,8 +239,9 @@ void ADCGameMode::EnterSector(float Now)
 		WaveNextTime[W] = SectorStartTime + Sector->Waves[W].StartSeconds;
 	}
 	GS->Scoop = FDCScoopState();
+	GS->SectorPhotoPoints = 0;
 	NextScoopTime = Now + T.Run.ScoopFirstSeconds;
-	NextRogueTime = Now + FindUpgradeParam(RogueId);
+	NextRogueTime = Now + RogueInterval();
 
 	int32 PlayerIndex = 0;
 	for (ADCPlayerState* PS : Players())
@@ -249,7 +258,13 @@ void ADCGameMode::EnterSector(float Now)
 
 void ADCGameMode::TickSectorPhase(float Now)
 {
+	CheckWipe();
+	if (GetGameState<ADCGameState>()->Phase != EDCRunPhase::Sector)
+	{
+		return;
+	}
 	TickWaves(Now);
+	TickPendingCollapses(Now);
 	TickScoop(Now);
 	TickRogueStrikes(Now);
 	ADCGameState* GS = GetGameState<ADCGameState>();
@@ -258,8 +273,32 @@ void ADCGameMode::TickSectorPhase(float Now)
 		return;
 	}
 	ClearCombat();
-	const bool bMore = UDCTuning::Get().Sectors.IsValidIndex(GS->SectorIndex + 1);
-	EnterPhase(bMore ? EDCRunPhase::Draft : EDCRunPhase::Reel);
+	const UDCTuning& T = UDCTuning::Get();
+	const bool bMore = T.Sectors.IsValidIndex(GS->SectorIndex + 1);
+	const int32 Quota = T.Sectors.IsValidIndex(GS->SectorIndex) ? T.Sectors[GS->SectorIndex].QuotaPoints : 0;
+	const bool bQuotaMet = GS->SectorPhotoPoints >= Quota;
+	GS->QuotaResults.Add(bQuotaMet);
+	for (ADCPlayerState* PS : Players())
+	{
+		if (ADCCharacter* C = PS->GetPawn<ADCCharacter>())
+		{
+			C->HostToast(bQuotaMet ? FString::Printf(TEXT("QUOTA MET: %d / %d. HQ IS PLEASED."), GS->SectorPhotoPoints, Quota)
+				: FString::Printf(TEXT("QUOTA MISSED: %d / %d. HQ WITHHOLDS YOUR REQUISITION."), GS->SectorPhotoPoints, Quota));
+		}
+	}
+	if (!bMore)
+	{
+		EnterPhase(EDCRunPhase::Reel);
+		return;
+	}
+	if (bQuotaMet)
+	{
+		EnterPhase(EDCRunPhase::Draft);
+		return;
+	}
+	// Quota missed (R6): no draft, straight into the next sector.
+	GS->SectorIndex += 1;
+	EnterPhase(EDCRunPhase::Sector);
 }
 
 void ADCGameMode::TickWaves(float Now)
@@ -338,8 +377,8 @@ void ADCGameMode::TickScoop(float Now)
 void ADCGameMode::TickRogueStrikes(float Now)
 {
 	const ADCGameState* GS = GetGameState<ADCGameState>();
-	const float Interval = FindUpgradeParam(RogueId);
-	if (!GS->HasMutator(RogueId) || Interval <= 0.f || Now < NextRogueTime)
+	const float Interval = RogueInterval();
+	if (Interval <= 0.f || Now < NextRogueTime)
 	{
 		return;
 	}
@@ -425,6 +464,7 @@ void ADCGameMode::OnPhotoGraded(ADCCharacter* Photographer, const FDCPhotoRecord
 	Booked.Sector = GS->SectorIndex;
 	PS->AddPhoto(Booked);
 	PhotoPoses.Add(Record.PhotoId, MoveTemp(Poses));
+	GS->SectorPhotoPoints += Record.Grade.Score;
 
 	// HQ Scoop (R8): the first photo that meets it drops a supply pod on the photographer at once.
 	const UDCTuning& T = UDCTuning::Get();
@@ -455,7 +495,9 @@ void ADCGameMode::OnBuildingCollapsed(ADCBuilding* Building)
 {
 	ADCGameState* GS = GetGameState<ADCGameState>();
 	GS->AddCollapse(GS->SectorIndex, Building->GetLotIndex(), Building->GetEpicenter());
-	if (!GS->HasMutator(DominoId))
+	const TArray<const FDCUpgradeDef*> Active = GS->ActiveMutators();
+	const FDCUpgradeDef* const* Domino = Active.FindByPredicate([](const FDCUpgradeDef* D) { return D->DominoReachCm > 0.f; });
+	if (!Domino)
 	{
 		return;
 	}
@@ -465,8 +507,8 @@ void ADCGameMode::OnBuildingCollapsed(ADCBuilding* Building)
 	{
 		return;
 	}
-	const float Reach = FindUpgradeParam(DominoId);
-	const float Delay = FMath::Max(FindUpgradeParam(DominoId, true), 0.1f);
+	const float Reach = (*Domino)->DominoReachCm;
+	const float Delay = FMath::Max((*Domino)->DominoDelaySeconds, 0.1f);
 	for (ADCBuilding* Other : TActorRange<ADCBuilding>(GetWorld()))
 	{
 		if (Other == Building || Other->IsCollapsed() || FVector::Dist2D(Other->GetActorLocation(), Building->GetActorLocation()) > Reach)
@@ -474,19 +516,64 @@ void ADCGameMode::OnBuildingCollapsed(ADCBuilding* Building)
 			continue;
 		}
 		DominoGeneration.Add(Other, Generation + 1);
-		const FVector From = Building->GetActorLocation();
-		FTimerHandle H;
-		GetWorldTimerManager().SetTimer(H, FTimerDelegate::CreateWeakLambda(Other, [Other, From] { Other->Collapse(From); }), Delay, false);
+		ScheduleCollapse(Other, Building->GetActorLocation(), TEXT("Domino"), Delay);
+	}
+}
+
+void ADCGameMode::ScheduleCollapse(ADCBuilding* Building, const FVector& Epicenter, FName Kind, float Delay)
+{
+	ADCGameState* GS = GetGameState<ADCGameState>();
+	if (!Building || Building->IsCollapsed() || PendingCollapses.ContainsByPredicate([Building](const FPendingCollapse& P) { return P.Building == Building; }))
+	{
+		return;
+	}
+	if (Delay <= 0.f)
+	{
+		Building->Collapse(Epicenter);
+		return;
+	}
+	const FDCBuildingSpec& Spec = Building->GetSpec();
+	const float Radius = FMath::Max(Spec.SizeX, Spec.SizeY) * Spec.BlockSize;
+	const float Peak = GS->Now() + Delay;
+	const int32 EventId = GS->AddEvent(Kind, Building->GetActorLocation(), Radius, Peak, Building->GetLotIndex());
+	PendingCollapses.Add({Building, Epicenter, Peak});
+	UE_LOG(LogTemp, Display, TEXT("DCEVENT %d kind=%s lot=%d telegraph=%.2f peak=%.2f"), EventId, *Kind.ToString(), Building->GetLotIndex(), GS->Now(), Peak);
+}
+
+void ADCGameMode::TickPendingCollapses(float Now)
+{
+	for (int32 i = PendingCollapses.Num() - 1; i >= 0; --i)
+	{
+		if (Now < PendingCollapses[i].At)
+		{
+			continue;
+		}
+		const FPendingCollapse Due = PendingCollapses[i];
+		PendingCollapses.RemoveAtSwap(i);
+		if (ADCBuilding* B = Due.Building.Get())
+		{
+			B->Collapse(Due.Epicenter);
+		}
 	}
 }
 
 void ADCGameMode::OnPlayerDowned(ADCCharacter* Player)
 {
+	CheckWipe();
+}
+
+void ADCGameMode::CheckWipe()
+{
 	ADCGameState* GS = GetGameState<ADCGameState>();
+	if (GS->Phase != EDCRunPhase::Sector)
+	{
+		return;
+	}
 	for (ADCPlayerState* PS : Players())
 	{
 		const ADCCharacter* C = PS->GetPawn<ADCCharacter>();
-		if (C && !C->IsDowned())
+		// Anyone standing, or a solo player still inside the self-revive window, keeps the run alive.
+		if (C && (!C->IsDowned() || C->CanSelfRevive()))
 		{
 			return;
 		}
@@ -760,9 +847,10 @@ void ADCGameMode::EnterFrontPage(float Now)
 	{
 		GS->Headline = TEXT("CAMERAS SILENT AS CITY STANDS: NO PHOTOS FILED");
 	}
-	GS->Subhead = FString::Printf(TEXT("%s  |  %d PHOTOGRAPHER%s  |  %s PROPAGANDA POINTS RAISED  |  RUN SEED %d"),
+	const int32 QuotasMet = GS->QuotaResults.FilterByPredicate([](bool b) { return b; }).Num();
+	GS->Subhead = FString::Printf(TEXT("%s  |  %d PHOTOGRAPHER%s  |  %s PROPAGANDA POINTS RAISED  |  QUOTAS MET %d/%d  |  RUN SEED %d"),
 		GS->bRunFailed ? TEXT("UNIT LOST IN ACTION, REEL RECOVERED") : TEXT("ALL SECTORS LIBERATED"),
-		All.Num(), All.Num() == 1 ? TEXT("") : TEXT("S"), *FText::AsNumber(Total).ToString(), GS->RunSeed);
+		All.Num(), All.Num() == 1 ? TEXT("") : TEXT("S"), *FText::AsNumber(Total).ToString(), QuotasMet, GS->QuotaResults.Num(), GS->RunSeed);
 	GS->ForceNetUpdate();
 }
 
