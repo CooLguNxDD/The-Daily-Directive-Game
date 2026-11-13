@@ -3,9 +3,11 @@
 #include "CoreMinimal.h"
 #include "GameFramework/GameStateBase.h"
 #include "DCTypes.h"
+#include "Voxel/DCVoxelTypes.h"
 #include "DCGameState.generated.h"
 
 class ADCEnvironment;
+class ADCVoxelCity;
 
 UCLASS()
 class EPIC_AI_MEGA_JAM2_API ADCGameState : public AGameStateBase
@@ -29,6 +31,16 @@ public:
 	float Now() const { return static_cast<float>(GetServerWorldTimeSeconds()); }
 
 	ADCEnvironment* GetEnvironment() const { return Environment; }
+	ADCVoxelCity* GetVoxelCity() const { return VoxelCity; }
+
+	/** Host: appends a voxel op for the current city build (Seq and Build filled in) and returns it. */
+	FDCVoxelOp& AddVoxelOp(const FDCVoxelOp& Op);
+
+	/** Voxel city (R1-R3): which sector is built (-1 = none) and the build serial; every machine crafts from these. */
+	UPROPERTY(Replicated) int32 CitySector = -1;
+	UPROPERTY(Replicated) int32 CityBuildId = 0;
+	/** The host's voxel ops for the whole run, applied in Seq order by every machine (and replayed by the reel). */
+	UPROPERTY(Replicated) TArray<FDCVoxelOp> VoxelOps;
 
 	UPROPERTY(Replicated) TArray<FDCBlastRecord> Blasts;
 	UPROPERTY(Replicated) EDCRunPhase Phase = EDCRunPhase::Lobby;
@@ -71,5 +83,7 @@ public:
 
 private:
 	UPROPERTY() TObjectPtr<ADCEnvironment> Environment;
+	UPROPERTY() TObjectPtr<ADCVoxelCity> VoxelCity;
+	int32 NextVoxelSeq = 1;
 	int32 NextBlastId = 1;
 };

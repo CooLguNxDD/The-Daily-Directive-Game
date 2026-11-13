@@ -1,0 +1,14 @@
+# Sandbag and plank barricade: cover in the street.
+grid 5
+size 60 14 22
+slot bag Paving
+slot plank InkBrown
+ellipsoid 8 7 4 7 6 4 bag
+ellipsoid 22 7 4 7 6 4 bag
+ellipsoid 36 7 4 7 6 4 bag
+ellipsoid 50 7 4 7 6 4 bag
+ellipsoid 15 7 11 7 6 4 bag
+ellipsoid 29 7 11 7 6 4 bag
+ellipsoid 43 7 11 7 6 4 bag
+beam 2 3 2 58 3 20 1.2 plank
+noise 0.15 7 bag

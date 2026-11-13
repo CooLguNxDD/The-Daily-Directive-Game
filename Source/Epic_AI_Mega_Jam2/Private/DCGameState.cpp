@@ -1,6 +1,7 @@
 #include "DCGameState.h"
 
 #include "DCEnvironment.h"
+#include "DCVoxelCity.h"
 #include "DCTuning.h"
 #include "Engine/World.h"
 #include "Net/UnrealNetwork.h"
@@ -22,6 +23,21 @@ void ADCGameState::BeginPlay()
 	FActorSpawnParameters Params;
 	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 	Environment = GetWorld()->SpawnActor<ADCEnvironment>(ADCEnvironment::StaticClass(), FTransform::Identity, Params);
+	if (ADCVoxelCity::IsEnabled())
+	{
+		VoxelCity = GetWorld()->SpawnActor<ADCVoxelCity>(ADCVoxelCity::StaticClass(), FTransform::Identity, Params);
+	}
+}
+
+FDCVoxelOp& ADCGameState::AddVoxelOp(const FDCVoxelOp& Op)
+{
+	check(HasAuthority());
+	FDCVoxelOp& Rec = VoxelOps.Add_GetRef(Op);
+	Rec.Seq = NextVoxelSeq++;
+	Rec.Build = CityBuildId;
+	Rec.Sector = CitySector;
+	Rec.Time = Now();
+	return Rec;
 }
 
 void ADCGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -47,6 +63,9 @@ void ADCGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLife
 	DOREPLIFETIME(ADCGameState, HeadlineIndex);
 	DOREPLIFETIME(ADCGameState, Headline);
 	DOREPLIFETIME(ADCGameState, Subhead);
+	DOREPLIFETIME(ADCGameState, CitySector);
+	DOREPLIFETIME(ADCGameState, CityBuildId);
+	DOREPLIFETIME(ADCGameState, VoxelOps);
 }
 
 int32 ADCGameState::AddBlast(const FVector& Location, float Radius, FName StratagemId)

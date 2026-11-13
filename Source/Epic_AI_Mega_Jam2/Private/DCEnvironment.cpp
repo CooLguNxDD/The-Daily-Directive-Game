@@ -1,5 +1,11 @@
 #include "DCEnvironment.h"
 
+#include "DCVoxelCity.h"
+#include "DCCharacter.h"
+#include "HAL/IConsoleManager.h"
+#include "Rules/DCPostStack.h"
+#include "Voxel/DCVoxelSettings.h"
+
 #include "Components/DirectionalLightComponent.h"
 #include "Components/ExponentialHeightFogComponent.h"
 #include "Components/PostProcessComponent.h"
@@ -107,9 +113,18 @@ void ADCEnvironment::BeginPlay()
 	Ground->SetStaticMesh(DCAssets::Cube());
 	const float Size = Look.GroundSizeCm / 100.f;
 	Ground->SetWorldScale3D(FVector(Size, Size, 1.f));
+	// Voxel city: the terrain grid carries streets, lots and kerbs from z = 0 down; the slab sinks below it and only
+	// catches anything that falls through a crater.
+	// Voxel city: the slab stays as an invisible floor at z = 0 (the terrain's collision cooks asynchronously, so a pawn
+	// spawned on the first frame must not fall the ground layers' depth); the voxel terrain draws the street.
+	const bool bVoxel = ADCVoxelCity::IsEnabled();
 	Ground->SetWorldLocation(FVector(0.f, 0.f, -50.f));
+	Ground->SetVisibility(!bVoxel);
 	Ground->SetMaterial(0, DCAssets::MakeFlat(this, Look.Street));
-	BuildStreets();
+	if (!bVoxel)
+	{
+		BuildStreets();
+	}
 	UE_LOG(LogTemp, Display, TEXT("DCENV streets: sidewalks=%d dashes=%d registered=%d visible=%d"), Sidewalks->GetInstanceCount(), Dashes->GetInstanceCount(),
 		Sidewalks->IsRegistered() ? 1 : 0, Sidewalks->IsVisible() ? 1 : 0);
 
@@ -118,30 +133,97 @@ void ADCEnvironment::BeginPlay()
 	S.AutoExposureMethod = EAutoExposureMethod::AEM_Manual;
 	S.bOverride_AutoExposureApplyPhysicalCameraExposure = true;
 	S.AutoExposureApplyPhysicalCameraExposure = false;
-	S.bOverride_ColorSaturation = true;
-	S.ColorSaturation = FVector4(1.f, 1.f, 1.f, Look.Saturation);
-	S.bOverride_ColorContrast = true;
-	S.ColorContrast = FVector4(1.f, 1.f, 1.f, Look.Contrast);
-	S.bOverride_ColorGain = true;
-	S.ColorGain = FVector4(Look.ColorGain.R, Look.ColorGain.G, Look.ColorGain.B, 1.f);
-	S.bOverride_FilmGrainIntensity = true;
-	S.FilmGrainIntensity = Look.FilmGrain;
-	S.bOverride_VignetteIntensity = true;
-	S.VignetteIntensity = 0.45f;
-	ApplyLook(Look.BaseBloom, Look.ExposureBias);
+	ApplyPreset();
+	ApplyPost(ComposeLook(false, false), S);
 
 	FActorSpawnParameters Params;
 	Params.Owner = this;
 	DebrisPool = GetWorld()->SpawnActor<ADCDebrisPool>(ADCDebrisPool::StaticClass(), FTransform::Identity, Params);
 }
 
-void ADCEnvironment::ApplyLook(float Bloom, float ExposureBias)
+void ADCEnvironment::ApplyPreset()
 {
-	FPostProcessSettings& S = Post->Settings;
+	const UDCTuning& T = UDCTuning::Get();
+	FString Wanted = T.PostPreset.ToString();
+	FParse::Value(FCommandLine::Get(), TEXT("dcpost="), Wanted);
+	const FDCPostPreset* Preset = T.PostPresets.FindByPredicate([&Wanted](const FDCPostPreset& P) { return P.Id.ToString() == Wanted; });
+	if (!Preset)
+	{
+		return;
+	}
+	PostQuality = Preset->Quality;
+	for (const FString& Var : Preset->ConsoleVariables)
+	{
+		FString Name, Value;
+		if (Var.Split(TEXT("="), &Name, &Value))
+		{
+			if (IConsoleVariable* Cvar = IConsoleManager::Get().FindConsoleVariable(*Name))
+			{
+				Cvar->Set(*Value, ECVF_SetByGameSetting);
+			}
+		}
+	}
+	if (IConsoleVariable* Sp = IConsoleManager::Get().FindConsoleVariable(TEXT("r.ScreenPercentage")))
+	{
+		Sp->Set(Preset->ScreenPercentage, ECVF_SetByGameSetting);
+	}
+	UE_LOG(LogTemp, Display, TEXT("DCPOST preset %s quality=%d screen=%.0f%%"), *Preset->Id.ToString(), PostQuality, Preset->ScreenPercentage);
+}
+
+FDCPostResult ADCEnvironment::ComposeLook(bool bPhoto, bool bSpotlit) const
+{
+	const UDCTuning& T = UDCTuning::Get();
+	if (!bPhoto)
+	{
+		return DCPostStack::Compose(T.PostLayers, PostWeights, PostQuality);
+	}
+	// The photo keeps the scene's grade and sector look, none of the screen-only layers, a fraction of the bloom
+	// spike and a stop-down while the flash is on screen: the target stays readable at the peak (R5).
+	const FDCCameraTuning& C = T.Camera;
+	TMap<FName, float> W = PostWeights;
+	W.Add(TEXT("Viewfinder"), 0.f);
+	W.Add(TEXT("Damage"), 0.f);
+	W.Add(TEXT("FlashKick"), 0.f);
+	W.Add(TEXT("Flash"), FlashPeak * FlashAlpha * C.PhotoBloomFraction);
+	W.Add(TEXT("Photo"), 1.f);
+	W.Add(TEXT("PhotoFlash"), FlashAlpha * C.PhotoFlashStopDown);
+	W.Add(TEXT("Spotlit"), bSpotlit ? 1.f : 0.f);
+	return DCPostStack::Compose(T.PostLayers, W, PostQuality);
+}
+
+void ADCEnvironment::ApplyPost(const FDCPostResult& L, FPostProcessSettings& S)
+{
 	S.bOverride_BloomIntensity = true;
-	S.BloomIntensity = Bloom;
+	S.BloomIntensity = L.Bloom;
 	S.bOverride_AutoExposureBias = true;
-	S.AutoExposureBias = ExposureBias;
+	S.AutoExposureBias = L.Exposure;
+	S.bOverride_ColorSaturation = true;
+	S.ColorSaturation = FVector4(1.f, 1.f, 1.f, L.Saturation);
+	S.bOverride_ColorContrast = true;
+	S.ColorContrast = FVector4(1.f, 1.f, 1.f, L.Contrast);
+	S.bOverride_ColorGain = true;
+	S.ColorGain = FVector4(L.Gain.R, L.Gain.G, L.Gain.B, 1.f);
+	S.bOverride_VignetteIntensity = true;
+	S.VignetteIntensity = L.Vignette;
+	S.bOverride_FilmGrainIntensity = true;
+	S.FilmGrainIntensity = L.Grain;
+}
+
+void ADCEnvironment::UpdatePostWeights()
+{
+	// Code sets weights by id; what each layer does is data.
+	const ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>();
+	SetPostWeight(TEXT("Flash"), FlashPeak * FlashAlpha);
+	SetPostWeight(TEXT("FlashKick"), FlashKick * FlashAlpha);
+	for (int32 i = 0; i < 3; ++i)
+	{
+		SetPostWeight(*FString::Printf(TEXT("Sector%d"), i), GS && GS->SectorIndex == i ? 1.f : 0.f);
+	}
+	const APlayerController* PC = GetWorld()->GetFirstPlayerController();
+	const ADCCharacter* Me = PC ? Cast<ADCCharacter>(PC->GetPawn()) : nullptr;
+	SetPostWeight(TEXT("Viewfinder"), Me && Me->IsCameraRaised() && Me->GetSlot() == EDCSlot::Camera ? 1.f : 0.f);
+	const float SinceHurt = Me ? GetWorld()->GetRealTimeSeconds() - Me->Feedback().HurtTime : 100.f;
+	SetPostWeight(TEXT("Damage"), FMath::Clamp(1.f - SinceHurt / 0.6f, 0.f, 1.f));
 }
 
 void ADCEnvironment::Flash(float BloomPeak, float ExposureKick)
@@ -153,7 +235,7 @@ void ADCEnvironment::Flash(float BloomPeak, float ExposureKick)
 
 float ADCEnvironment::GetPhotoBloom(float Fraction) const
 {
-	return UDCTuning::Get().Look.BaseBloom + FlashPeak * FlashAlpha * Fraction;
+	return ComposeLook(true, false).Bloom;
 }
 
 void ADCEnvironment::Tick(float DeltaSeconds)
@@ -182,5 +264,6 @@ void ADCEnvironment::Tick(float DeltaSeconds)
 		SkyLight->SetIntensity(Light);
 		Fog->SetFogInscatteringColor(FogColor);
 	}
-	ApplyLook(Look.BaseBloom + FlashPeak * FlashAlpha, Look.ExposureBias + FlashKick * FlashAlpha);
+	UpdatePostWeights();
+	ApplyPost(ComposeLook(false, false), Post->Settings);
 }

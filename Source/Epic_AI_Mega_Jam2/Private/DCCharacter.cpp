@@ -159,12 +159,8 @@ void ADCCharacter::BeginPlay()
 	ZoomFOV = (T.Camera.ViewfinderFOVWide + T.Camera.ViewfinderFOVTight) * 0.5f;
 
 	// Viewfinder tunnel: heavy vignette and a slight contrast push only while looking through the camera.
-	FPostProcessSettings& PP = FirstCam->PostProcessSettings;
-	PP.bOverride_VignetteIntensity = true;
-	PP.VignetteIntensity = T.Camera.VignetteIntensity;
-	PP.bOverride_ColorContrast = true;
-	PP.ColorContrast = FVector4(1.1f, 1.1f, 1.1f, 1.15f);
-	FirstCam->PostProcessBlendWeight = 1.f;
+	// The viewfinder tunnel is the post stack's Viewfinder layer (R19), weighted while the camera is raised.
+	FirstCam->PostProcessBlendWeight = 0.f;
 
 	const FDCLookTuning& Look = T.Look;
 	const FName Hand = T.Assets.HandSocket;
@@ -540,20 +536,13 @@ void ADCCharacter::OnRep_Slot()
 
 void ADCCharacter::ApplyPhotoLook(const UWorld* World, FPostProcessSettings& PhotoLook, bool bSpotlit)
 {
-	// The photo is exposed for the fire, not the flash. One look for live shots and second takes.
-	const FDCCameraTuning& C = UDCTuning::Get().Camera;
-	PhotoLook.bOverride_BloomIntensity = true;
-	PhotoLook.bOverride_AutoExposureBias = true;
+	// The photo's look is the post stack composed for a photo (R5, R19): the scene grade, a fraction of the bloom
+	// spike, a stop-down while the flash is on screen, and the spotlight blow-out. One look for live shots and takes.
 	const ADCGameState* PhotoGS = World ? World->GetGameState<ADCGameState>() : nullptr;
 	const ADCEnvironment* Env = PhotoGS ? PhotoGS->GetEnvironment() : nullptr;
-	PhotoLook.BloomIntensity = Env ? Env->GetPhotoBloom(C.PhotoBloomFraction) : UDCTuning::Get().Look.BaseBloom;
-	// Stop down while the blast is still blinding: the frame keeps the fire's colour and the debris edges.
-	PhotoLook.AutoExposureBias = UDCTuning::Get().Look.ExposureBias + C.PhotoExposureBias - (Env ? Env->GetFlashAlpha() * C.PhotoFlashStopDown : 0.f);
-	if (bSpotlit)
+	if (Env)
 	{
-		// A spotlight in the lens blows the frame out: the photo shows it, not just the score.
-		PhotoLook.AutoExposureBias += C.SpotlitPhotoStops;
-		PhotoLook.BloomIntensity += C.SpotlitPhotoBloom;
+		ADCEnvironment::ApplyPost(Env->ComposeLook(true, bSpotlit), PhotoLook);
 	}
 }
 

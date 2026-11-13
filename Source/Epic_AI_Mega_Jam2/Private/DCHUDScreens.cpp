@@ -54,9 +54,14 @@ using namespace DCHudScreens;
 
 bool ADCHUD::Button(const FString& Label, FName Id, float X, float Y, float W, float H, bool bEnabled, bool bSelected)
 {
-	const FLinearColor Fill = !bEnabled ? FLinearColor(0.3f, 0.3f, 0.3f, 0.8f) : (bSelected ? Gold : Red);
+	// Buttons are usable: signal yellow, or paper with an ink frame when picked (red stays for danger, R6).
+	const FLinearColor Fill = !bEnabled ? FLinearColor(0.3f, 0.3f, 0.3f, 0.8f) : (bSelected ? Paper : Gold);
+	if (bSelected)
+	{
+		Box(X - Sx(3.f), Y - Sx(3.f), W + Sx(6.f), H + Sx(6.f), Ink);
+	}
 	Box(X, Y, W, H, Fill);
-	Text(Label, X + W * 0.5f, Y + H * 0.5f - Sx(14.f), bSelected ? Ink : Paper, 0.7f, true);
+	Text(Label, X + W * 0.5f, Y + H * 0.5f - Sx(14.f), bEnabled ? Ink : Paper, 0.7f, true);
 	if (bEnabled)
 	{
 		AddHitBox(FVector2D(X, Y), FVector2D(W, H), Id, true);
@@ -134,7 +139,7 @@ void ADCHUD::DrawDraft(ADCGameState& GS, ADCCharacter* Me)
 	for (int32 Col = 0; Col < Pools.Num(); ++Col)
 	{
 		const float X = X0 + Col * (ColW + Gap);
-		Box(X, Sx(230.f), ColW, Sx(44.f), Red);
+		Box(X, Sx(230.f), ColW, Sx(44.f), Ink);
 		Text(PoolLabel(Pools[Col]), X + ColW * 0.5f, Sx(236.f), Paper, 0.7f, true);
 		int32 Row = 0;
 		for (const FName& Id : PS->DraftOffer)
@@ -318,7 +323,7 @@ void ADCHUD::DrawFinalCut(ADCGameState& GS, ADCCharacter* Me)
 		if (Order != INDEX_NONE)
 		{
 			Frame(X - Sx(10.f), Y - Sx(10.f), CardW + Sx(20.f), CardW * 9.f / 16.f + Sx(50.f), Sx(8.f), Gold);
-			Text(FString::Printf(TEXT("PICK %d"), Order + 1), X + CardW - Sx(90.f), Y + CardW * 9.f / 16.f + Sx(2.f), Red, 0.6f);
+			Text(FString::Printf(TEXT("PICK %d"), Order + 1), X + CardW - Sx(90.f), Y + CardW * 9.f / 16.f + Sx(2.f), Gold, 0.6f);
 		}
 		if (!PS->bFinalCutDone)
 		{

@@ -20,6 +20,8 @@
 #include "EngineUtils.h"
 #include "EnhancedInputSubsystems.h"
 #include "IImageWrapper.h"
+#include "Rules/DCNewsprint.h"
+#include "Engine/Texture2D.h"
 #include "IImageWrapperModule.h"
 #include "ImageUtils.h"
 #include "Kismet/GameplayStatics.h"
@@ -434,6 +436,25 @@ void ADCPlayerController::AddLocalPhoto(int32 PhotoId, UTextureRenderTarget2D* I
 	FDCLocalPhoto& Photo = Album.AddDefaulted_GetRef();
 	Photo.PhotoId = PhotoId;
 	Photo.Image = Image;
+	// Print it (R5): read the capture back once at the shutter, levels + halftone + grain + border on the CPU, and
+	// show and upload the print from then on.
+	FTextureRenderTargetResource* Resource = Image ? Image->GameThread_GetRenderTargetResource() : nullptr;
+	if (Resource && Resource->ReadPixels(Photo.Pixels) && Photo.Pixels.Num() == Image->SizeX * Image->SizeY)
+	{
+		Photo.Width = Image->SizeX;
+		Photo.Height = Image->SizeY;
+		DCNewsprint::Print(Photo.Pixels, Photo.Width, Photo.Height, UDCTuning::Get().Camera.Print, static_cast<uint32>(PhotoId));
+		UTexture2D* Print = UTexture2D::CreateTransient(Photo.Width, Photo.Height, PF_B8G8R8A8);
+		if (Print)
+		{
+			void* Mip = Print->GetPlatformData()->Mips[0].BulkData.Lock(LOCK_READ_WRITE);
+			FMemory::Memcpy(Mip, Photo.Pixels.GetData(), Photo.Pixels.Num() * sizeof(FColor));
+			Print->GetPlatformData()->Mips[0].BulkData.Unlock();
+			Print->SRGB = true;
+			Print->UpdateResource();
+			Photo.Image = Print;
+		}
+	}
 	Photo.Grade = Preview;
 	Photo.View = View;
 	Photo.ShotTime = ShotTime;
@@ -475,22 +496,17 @@ void ADCPlayerController::ClientUploadPhotos_Implementation(const TArray<int32>&
 	for (int32 Id : PhotoIds)
 	{
 		const FDCLocalPhoto* Photo = FindLocalPhoto(Id);
-		FTextureRenderTargetResource* Resource = Photo && Photo->Image ? Photo->Image->GameThread_GetRenderTargetResource() : nullptr;
-		if (!Resource)
+		if (!Photo || Photo->Pixels.Num() == 0)
 		{
 			continue;
 		}
-		TArray<FColor> Pixels;
-		if (!Resource->ReadPixels(Pixels) || Pixels.Num() == 0)
-		{
-			continue;
-		}
+		TArray<FColor> Pixels = Photo->Pixels;
 		for (FColor& C : Pixels)
 		{
 			C.A = 255;
 		}
 		TSharedPtr<IImageWrapper> Jpeg = Wrappers.CreateImageWrapper(EImageFormat::JPEG);
-		const int32 W = Photo->Image->SizeX, H = Photo->Image->SizeY;
+		const int32 W = Photo->Width, H = Photo->Height;
 		if (!Jpeg.IsValid() || !Jpeg->SetRaw(Pixels.GetData(), Pixels.Num() * sizeof(FColor), W, H, ERGBFormat::BGRA, 8))
 		{
 			continue;

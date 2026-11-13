@@ -17,8 +17,13 @@ struct FDCLocalPhoto
 {
 	GENERATED_BODY()
 	UPROPERTY() int32 PhotoId = 0;
-	UPROPERTY() TObjectPtr<UTextureRenderTarget2D> Image;
+	/** The printed photo (newsprint treatment, R5) every screen shows. */
+	UPROPERTY() TObjectPtr<UTexture> Image;
 	UPROPERTY() FDCPhotoGrade Grade;
+	/** The print's pixels (BGRA), uploaded as JPEG when the shot makes the final cut. */
+	TArray<FColor> Pixels;
+	int32 Width = 0;
+	int32 Height = 0;
 	UPROPERTY() bool bConfirmed = false;
 	FDCShotView View;
 	float ShotTime = 0.f;

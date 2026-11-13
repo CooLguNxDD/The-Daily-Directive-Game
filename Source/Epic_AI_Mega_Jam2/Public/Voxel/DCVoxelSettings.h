@@ -1,0 +1,43 @@
+// Voxel city data (R1, R2): palette, recipes, sector layouts, carves and engine tuning, all from
+// Config/DefaultGame.ini [/Script/Epic_AI_Mega_Jam2.DCVoxelSettings]. Code reads it; nothing here holds logic.
+#pragma once
+
+#include "CoreMinimal.h"
+#include "Engine/DeveloperSettings.h"
+#include "Voxel/DCVoxelTypes.h"
+#include "DCVoxelSettings.generated.h"
+
+struct FDCVoxelCraftContext;
+struct FDCVoxelOpContext;
+
+UCLASS(Config = Game, DefaultConfig, meta = (DisplayName = "Director's Cut Voxel City"))
+class EPIC_AI_MEGA_JAM2_API UDCVoxelSettings : public UDeveloperSettings
+{
+	GENERATED_BODY()
+
+public:
+	static const UDCVoxelSettings& Get() { return *GetDefault<UDCVoxelSettings>(); }
+
+	/** The city switch: Voxel builds the voxel city, Blocks keeps the first run's block towers. */
+	UPROPERTY(EditAnywhere, Config, Category = "City") FName Mode = TEXT("Voxel");
+	UPROPERTY(EditAnywhere, Config, Category = "City") FDCVoxelTuning Tuning;
+	UPROPERTY(EditAnywhere, Config, Category = "City") TArray<FDCVoxelMaterial> Palette;
+	UPROPERTY(EditAnywhere, Config, Category = "City") TArray<FDCVoxelRecipe> Recipes;
+	/** One row per sector (the last row repeats for later sectors). */
+	UPROPERTY(EditAnywhere, Config, Category = "City") TArray<FDCVoxelSectorLayout> Sectors;
+	UPROPERTY(EditAnywhere, Config, Category = "City") TArray<FDCVoxelCarveDef> Carves;
+	/** Decay effects (R4): puff kinds and the emitters the city plays at a crater, a landing and burning rubble. */
+	UPROPERTY(EditAnywhere, Config, Category = "Fx") TArray<FDCFxKind> FxKinds;
+	UPROPERTY(EditAnywhere, Config, Category = "Fx") TArray<FDCFxEmitter> FxEmitters;
+	/** Vertex-colour material for voxel meshes (BaseColor = sRGB vertex colour, Emissive = alpha glow). */
+	UPROPERTY(EditAnywhere, Config, Category = "City") FSoftObjectPath VoxelMaterial = FSoftObjectPath(TEXT("/Game/DC/Materials/M_DCVoxel.M_DCVoxel"));
+
+	bool IsVoxelCity() const { return Mode == TEXT("Voxel") && Recipes.Num() > 0 && Palette.Num() > 0; }
+	const FDCVoxelSectorLayout& SectorLayout(int32 Sector) const;
+	/** Mesher colours: index = material id (0 = air). */
+	TArray<FColor> MeshColors() const;
+	FDCVoxelCraftContext CraftContext(float BlockSizeCm) const;
+	FDCVoxelOpContext OpContext(float BlockSizeCm) const;
+	/** Voxels per bay (one floor) in a tower grid. */
+	int32 TowerBayVoxels(float BlockSizeCm) const { return FMath::Max(6, FMath::RoundToInt32(BlockSizeCm) / FMath::Max(Tuning.TowerVoxelCm, 1)); }
+};

@@ -16,6 +16,8 @@ struct FDCBuildingSpec
 	UPROPERTY() int32 Floors = 8;
 	UPROPERTY() float BlockSize = 300.f;
 	UPROPERTY() uint8 ColorIndex = 0;
+	/** Voxel city: index of the building recipe (DCVoxelSettings Recipes) this lot is crafted from. */
+	UPROPERTY() uint8 Recipe = 0;
 };
 
 USTRUCT()

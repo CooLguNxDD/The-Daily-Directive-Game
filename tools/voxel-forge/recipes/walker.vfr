@@ -1,0 +1,24 @@
+# Walker: towers on thin legs, a slab body with a red eye slit. Marches on towers.
+grid 10
+size 50 40 96
+slot body Ink
+slot trim Steel
+slot eye Danger
+# body slab high up
+poly 70 86 body 5,8 45,4 48,20 45,36 5,32
+box 10 12 86 40 28 90 trim
+box 44 14 76 49 26 79 eye
+# thin legs with knees
+beam 15 10 72 10 4 40 2.2 body
+beam 10 4 40 14 6 0 2 body
+beam 15 30 72 10 36 40 2.2 body
+beam 10 36 40 14 34 0 2 body
+beam 35 10 72 42 6 38 2.2 body
+beam 42 6 38 36 4 0 2 body
+beam 35 30 72 42 34 38 2.2 body
+beam 42 34 38 36 36 0 2 body
+# feet
+box 10 2 0 18 10 2 trim
+box 10 30 0 18 38 2 trim
+box 32 0 0 40 8 2 trim
+box 32 32 0 40 40 2 trim

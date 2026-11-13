@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
+#include "Rules/DCPostStack.h"
 #include "DCEnvironment.generated.h"
 
 class UDirectionalLightComponent;
@@ -36,8 +37,16 @@ public:
 
 	ADCDebrisPool* GetDebrisPool() const { return DebrisPool; }
 
+	/** Post stack (R19): the weight of a layer by id this frame (layers are Look rows in the ini). */
+	void SetPostWeight(FName Layer, float Weight) { PostWeights.Add(Layer, Weight); }
+	/** The scene's composed look, or the photo's: the scene layers plus the photo layers (exposure kept for photos). */
+	FDCPostResult ComposeLook(bool bPhoto, bool bSpotlit) const;
+	static void ApplyPost(const FDCPostResult& Look, FPostProcessSettings& Out);
+	int32 GetPostQuality() const { return PostQuality; }
+
 private:
-	void ApplyLook(float Bloom, float ExposureBias);
+	void ApplyPreset();
+	void UpdatePostWeights();
 	void BuildStreets();
 
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UDirectionalLightComponent> Sun;
@@ -56,4 +65,6 @@ private:
 	double FlashStartReal = -100.0;
 	float FlashAlpha = 0.f;
 	int32 AppliedMutatorCount = 0;
+	TMap<FName, float> PostWeights;
+	int32 PostQuality = 2;
 };

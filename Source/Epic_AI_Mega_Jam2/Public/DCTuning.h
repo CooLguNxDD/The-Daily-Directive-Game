@@ -8,6 +8,8 @@
 #include "DCTypes.h"
 #include "Rules/DCPhotoRules.h"
 #include "Rules/DCPressureRules.h"
+#include "Rules/DCNewsprint.h"
+#include "Rules/DCPostStack.h"
 #include "DCTuning.generated.h"
 
 USTRUCT(BlueprintType)
@@ -105,6 +107,8 @@ struct FDCCameraTuning
 	/** Stops a spotlit photo is pushed over (R11: spotlight units blow out exposure). */
 	UPROPERTY(EditAnywhere, Config, Category = "Camera") float SpotlitPhotoStops = 3.5f;
 	UPROPERTY(EditAnywhere, Config, Category = "Camera") float SpotlitPhotoBloom = 8.f;
+	/** Newsprint treatment of every photo (R5). */
+	UPROPERTY(EditAnywhere, Config, Category = "Camera") FDCPrintTuning Print;
 };
 
 USTRUCT(BlueprintType)
@@ -227,6 +231,11 @@ struct FDCEnemyDef
 	/** Spotlight: cone range (cm) and half-angle (deg) that blows out a photographer's exposure. */
 	UPROPERTY(EditAnywhere, Config, Category = "Enemy") float LightRange = 4500.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Enemy") float LightHalfAngle = 14.f;
+	/** voxel-forge model (Content/DC/Voxel/<Model>.dcvox) worn instead of the basic shapes (R10, R17); None keeps the shapes. */
+	UPROPERTY(EditAnywhere, Config, Category = "Enemy") FName Model;
+	UPROPERTY(EditAnywhere, Config, Category = "Enemy") float ModelScale = 1.f;
+	/** Model pivot (its bottom centre) relative to the actor, which flies at HoverHeight. */
+	UPROPERTY(EditAnywhere, Config, Category = "Enemy") FVector ModelOffset = FVector::ZeroVector;
 };
 
 /** One wave inside a sector: Count enemies of EnemyId, one every Interval seconds from StartSeconds. */
@@ -411,6 +420,11 @@ public:
 	UPROPERTY(EditAnywhere, Config, Category = "Run") FDCRunTuning Run;
 	UPROPERTY(EditAnywhere, Config, Category = "Run") TArray<FDCUpgradeDef> Upgrades;
 	UPROPERTY(EditAnywhere, Config, Category = "Run") TArray<FDCScoopDef> Scoops;
+	/** Post-process layer stack (R19): every layer of the scene and the photo look; code only sets weights by id. */
+	UPROPERTY(EditAnywhere, Config, Category = "Post") TArray<FDCPostLayer> PostLayers;
+	UPROPERTY(EditAnywhere, Config, Category = "Post") TArray<FDCPostPreset> PostPresets;
+	/** Preset applied at start (-dcpost=<Id> on the command line wins). */
+	UPROPERTY(EditAnywhere, Config, Category = "Post") FName PostPreset = TEXT("High");
 
 	const FDCStratagemDef* FindStratagem(FName Id) const
 	{

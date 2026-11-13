@@ -71,6 +71,7 @@ private:
 	UFUNCTION(NetMulticast, Unreliable) void MulticastCue(FName Cue);
 	void Die(AController* Killer);
 	void BuildVisual();
+	bool BuildModel(const struct FDCEnemyDef& Def);
 	void PlayDeathFx();
 
 	UPROPERTY(Replicated) FName Kind;

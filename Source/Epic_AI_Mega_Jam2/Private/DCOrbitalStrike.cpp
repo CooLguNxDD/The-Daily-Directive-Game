@@ -5,6 +5,8 @@
 #include "DCAssets.h"
 #include "DCAudio.h"
 #include "DCBuilding.h"
+#include "DCVoxelCity.h"
+#include "Voxel/DCVoxelGrid.h"
 #include "DCCharacter.h"
 #include "DCEnemy.h"
 #include "DCEnvironment.h"
@@ -219,7 +221,9 @@ void ADCOrbitalStrike::TickBlast(float Now, const FDCStratagemDef& Def)
 	const float Scale = Def.FireballScale * FMath::Sqrt(Grow) * (0.6f + 0.4f * Fade);
 	Fireball->SetRelativeScale3D(FVector(Scale));
 	Fireball->SetRelativeLocation(FVector(0, 0, Scale * 35.f + T * 300.f));
-	DCAssets::SetFlat(FireMat, FMath::Lerp(FLinearColor(0.25f, 0.05f, 0.02f), FLinearColor(1.f, 0.85f, 0.6f), Fade * Fade), 2.f + UDCTuning::Get().Look.FireballGlow * Fade * Fade);
+	// Blast white-orange only at the first instant, then orange to ember red: the peak reads as fire, not a white dome.
+	const FLinearColor Hot = FMath::Lerp(FLinearColor(1.f, 0.48f, 0.1f), FLinearColor(1.f, 0.95f, 0.76f), FMath::Clamp(1.f - T / 0.25f, 0.f, 1.f));
+	DCAssets::SetFlat(FireMat, FMath::Lerp(FLinearColor(0.25f, 0.05f, 0.02f), Hot, Fade * Fade), 1.f + UDCTuning::Get().Look.FireballGlow * Fade * Fade * Fade);
 	Fireball->SetVisibility(Fade > 0.02f);
 
 	const float ShockR = Def.BlastRadius * 2.4f * FMath::Clamp(T / 0.6f, 0.f, 1.f) / 100.f;
@@ -266,8 +270,34 @@ void ADCOrbitalStrike::DetonateHost(const FDCStratagemDef& Def)
 	const FVector Here = GetActorLocation();
 	GS->AddBlast(Here, Def.BlastRadius, Def.Id);
 
+	if (ADCVoxelCity* City = ADCVoxelCity::IsEnabled() ? GS->GetVoxelCity() : nullptr)
+	{
+		// Voxel city (R3): the strike is one op every machine applies; the structure pass decides which towers fall,
+		// and those become the usual collapse records (scoring, domino, reel).
+		FDCVoxelOp Op;
+		Op.Kind = TEXT("Strike");
+		Op.Stratagem = Def.Id;
+		Op.CenterCm = DCVoxelMath::ToCm(FVector(Here.X, Here.Y, 0.f));
+		Op.BlastRadiusCm = FMath::RoundToInt32(Def.BlastRadius);
+		const int32 Index = GS->VoxelOps.Num();
+		GS->AddVoxelOp(Op);
+		const FDCVoxelOpResult Result = City->ApplyOp(GS->VoxelOps[Index], true);
+		GS->VoxelOps[Index].ResultHash = City->GetHash();
+		for (ADCBuilding* Building : TActorRange<ADCBuilding>(World))
+		{
+			ADCGameMode* GM = World->GetAuthGameMode<ADCGameMode>();
+			if (GM && Result.FallenLots.Contains(Building->GetLotIndex()))
+			{
+				GM->ScheduleCollapse(Building, Here, TEXT("Strike"), 0.f);
+			}
+		}
+	}
 	for (ADCBuilding* Building : TActorRange<ADCBuilding>(World))
 	{
+		if (ADCVoxelCity::IsEnabled())
+		{
+			break; // block city only: every tower near the blast collapses whole
+		}
 		const FDCBuildingSpec& Spec = Building->GetSpec();
 		const float HalfFootprint = FMath::Max(Spec.SizeX, Spec.SizeY) * Spec.BlockSize * 0.5f;
 		if (FVector::Dist2D(Building->GetActorLocation(), Here) <= Def.BlastRadius + HalfFootprint)
