@@ -891,6 +891,16 @@ void ADCDemoPilot::Tick(float DeltaSeconds)
 		Shot(bDown ? TEXT("downed_holding_E") : TEXT("revived"));
 		UE_LOG(LogDCDemo, Display, TEXT("DEMO %s"), bDown ? TEXT("downed: holding E") : TEXT("revived"));
 		(bDown ? Press(TEXT("Interact")) : Release(TEXT("Interact")));
+		LastFrameAtReal = bDown ? Real + 0.6 : -1.0;
+	}
+	// R21 evidence: the downed pilot takes its last frame from the ground (the real Fire action), then frames it.
+	if (bDown && Me->HasLastFrame() && LastFrameAtReal > 0.0 && Real >= LastFrameAtReal)
+	{
+		LastFrameAtReal = -1.0;
+		Tap(TEXT("Fire"));
+		UE_LOG(LogDCDemo, Display, TEXT("DEMO last frame snapped"));
+		FTimerHandle Later;
+		GetWorldTimerManager().SetTimer(Later, FTimerDelegate::CreateWeakLambda(this, [this] { Shot(TEXT("last_frame")); }), 0.4f, false);
 	}
 	TickDefend();
 	// The first time a spotlight unit lights the pilot, frame the blow-out (R11 evidence).
