@@ -559,7 +559,7 @@ void ADCHUD::DrawDowned(ADCCharacter& Me)
 		return;
 	}
 	const float W = Canvas->ClipX, H = Canvas->ClipY;
-	Box(0, 0, W, H, FLinearColor(0.3f, 0.f, 0.f, 0.35f));
+	Box(0, 0, W, H, FLinearColor(0.3f, 0.f, 0.f, 0.12f)); // a light wash: the HUD and the last frame stay readable
 	Text(TEXT("DOWNED"), W * 0.5f, H * 0.4f, Red, 2.f, true);
 	const float Left = Me.SelfReviveSecondsLeft();
 	Text(Left > 0.f ? FString::Printf(TEXT("HOLD E TO PATCH YOURSELF UP  -  %.0fs"), Left) : FString(TEXT("HOLD ON - A COMRADE CAN REVIVE YOU (THEY HOLD E BESIDE YOU)")),

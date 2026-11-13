@@ -397,16 +397,34 @@ namespace DCVoxelOps
 			}
 		}
 
-		// 2. Islands: anything not 6-connected to the ground (inside the scan box) drops straight down.
-		TBitArray<> Reached(false, Box.V.Num());
-		TArray<FIntVector> Stack;
-		for (int32 Y = 0; Y < Size.Y; ++Y)
+		// 2. Islands: anything not connected to the ground drops straight down. Connectivity runs on coarse blocks (K^3
+		//    voxels, solid only above a fill count), so a floor never hangs on a single 10 cm voxel (critic: floating
+		//    slabs). Cells in blocks that are not reached from the ground fall.
+		const int32 K = FMath::Max(1, Ctx.Tuning->IslandBlockVoxels);
+		const int32 MinFill = FMath::Max(1, Ctx.Tuning->IslandBlockFill);
+		const FIntVector BSize(FMath::DivideAndRoundUp(Size.X, K), FMath::DivideAndRoundUp(Size.Y, K), FMath::DivideAndRoundUp(Size.Z, K));
+		auto BIndex = [&BSize](int32 X, int32 Y, int32 Z) { return X + BSize.X * (Y + BSize.Y * Z); };
+		TArray<int32> Fill;
+		Fill.SetNumZeroed(BSize.X * BSize.Y * BSize.Z);
+		for (int32 Z = 0; Z < Size.Z; ++Z)
 		{
-			for (int32 X = 0; X < Size.X; ++X)
+			for (int32 Y = 0; Y < Size.Y; ++Y)
 			{
-				if (Box.V[Box.Index(X, Y, 0)] != 0)
+				for (int32 X = 0; X < Size.X; ++X)
 				{
-					Reached[Box.Index(X, Y, 0)] = true;
+					Fill[BIndex(X / K, Y / K, Z / K)] += Box.V[Box.Index(X, Y, Z)] != 0 ? 1 : 0;
+				}
+			}
+		}
+		TBitArray<> Reached(false, Fill.Num());
+		TArray<FIntVector> Stack;
+		for (int32 Y = 0; Y < BSize.Y; ++Y)
+		{
+			for (int32 X = 0; X < BSize.X; ++X)
+			{
+				if (Fill[BIndex(X, Y, 0)] >= MinFill)
+				{
+					Reached[BIndex(X, Y, 0)] = true;
 					Stack.Add(FIntVector(X, Y, 0));
 				}
 			}
@@ -418,12 +436,12 @@ namespace DCVoxelOps
 			for (const FIntVector& S : Steps)
 			{
 				const FIntVector Q = P + S;
-				if (!Box.Inside(Q.X, Q.Y, Q.Z))
+				if (Q.X < 0 || Q.Y < 0 || Q.Z < 0 || Q.X >= BSize.X || Q.Y >= BSize.Y || Q.Z >= BSize.Z)
 				{
 					continue;
 				}
-				const int32 I = Box.Index(Q.X, Q.Y, Q.Z);
-				if (Box.V[I] != 0 && !Reached[I])
+				const int32 I = BIndex(Q.X, Q.Y, Q.Z);
+				if (Fill[I] >= MinFill && !Reached[I])
 				{
 					Reached[I] = true;
 					Stack.Add(Q);
@@ -433,7 +451,7 @@ namespace DCVoxelOps
 		FDCVoxelPiece Drop;
 		Drop.Lot = T.Lot;
 		Drop.Dir = Dir;
-		TakePiece(Drop, [&Box, &Reached](int32 X, int32 Y, int32 Z) { return !Reached[Box.Index(X, Y, Z)]; });
+		TakePiece(Drop, [&Reached, &BIndex, K](int32 X, int32 Y, int32 Z) { return !Reached[BIndex(X / K, Y / K, Z / K)]; });
 		if (Drop.Cells.Num() > 0)
 		{
 			Drop.Pivot = Drop.Cells[0];

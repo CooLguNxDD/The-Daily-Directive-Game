@@ -115,6 +115,30 @@ float ADCVoxelCity::SurfaceZCm(const FVector& Where) const
 	return 0.f;
 }
 
+bool ADCVoxelCity::IsSolidAt(const FVector& Where) const
+{
+	if (BuiltSector == INDEX_NONE)
+	{
+		return false;
+	}
+	const FIntVector Cm = DCVoxelMath::ToCm(Where);
+	if (Sector.Terrain.Data.IsSolid(Sector.Terrain.ToLocal(Cm)) || Sector.Props.Data.IsSolid(Sector.Props.ToLocal(Cm)))
+	{
+		return true;
+	}
+	for (const FDCVoxelTower& T : Sector.Towers)
+	{
+		const FIntVector L = T.Grid.ToLocal(Cm);
+		const bool bInBox = L.X >= T.ScanMin.X && L.Y >= T.ScanMin.Y && L.Z >= 0 && L.X < T.ScanMax.X && L.Y < T.ScanMax.Y && L.Z < T.ScanMax.Z;
+		// Inside the shell counts as inside: the hollow interior photographs as a dark box.
+		if (bInBox && (T.Grid.Data.IsSolid(L) || (!T.bFallen && L.X >= T.Min.X && L.Y >= T.Min.Y && L.X < T.Max.X && L.Y < T.Max.Y && L.Z < T.Max.Z)))
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
 const FDCSeasonDef* ADCVoxelCity::SeasonFor(int32 RunSeed, int32 SectorIndex)
 {
 	const UDCVoxelSettings& V = UDCVoxelSettings::Get();
@@ -148,10 +172,13 @@ namespace
 			for (int32 X = 0; X < N; ++X)
 			{
 				const FIntVector P(Lo.X + X, Lo.Y + Y, Top);
-				// Drifts in 2 m patches with ragged edges, not a per-cell checkerboard.
-				const bool bPatch = DCPcg::Hash(Seed, 0x5A0Du, (X / 4) * 4099 + Y / 4) % 1000 < Threshold;
-				const bool bEdge = DCPcg::Hash(Seed, 0x5A0Fu, X * 4099 + Y) % 1000 < Threshold / 4;
-				if (T.Data.IsSolid(P) && !T.Data.IsSolid(P + FIntVector(0, 0, 1)) && (bPatch || bEdge))
+				// Organic drifts: smooth value noise over 3 m cells (bilinear between hashed corners), not a checkerboard.
+				constexpr int32 Cell = 6;
+				auto Corner = [Seed](int32 Cx, int32 Cy) { return static_cast<float>(DCPcg::Hash(Seed, 0x5A0Du, Cx * 4099 + Cy) % 1000) / 1000.f; };
+				const int32 Cx = X / Cell, Cy = Y / Cell;
+				const float Fx = FMath::SmoothStep(0.f, 1.f, static_cast<float>(X % Cell) / Cell), Fy = FMath::SmoothStep(0.f, 1.f, static_cast<float>(Y % Cell) / Cell);
+				const float Noise = FMath::Lerp(FMath::Lerp(Corner(Cx, Cy), Corner(Cx + 1, Cy), Fx), FMath::Lerp(Corner(Cx, Cy + 1), Corner(Cx + 1, Cy + 1), Fx), Fy);
+				if (T.Data.IsSolid(P) && !T.Data.IsSolid(P + FIntVector(0, 0, 1)) && Noise * 1000.f < Threshold)
 				{
 					T.Data.Set(P, Snow); // the street top whitens (50 cm cells stay flush)
 				}

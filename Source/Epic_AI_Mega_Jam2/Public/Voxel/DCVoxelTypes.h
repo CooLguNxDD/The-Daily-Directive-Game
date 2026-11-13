@@ -106,6 +106,10 @@ struct FDCVoxelTuning
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") FName KerbMaterial = TEXT("Kerb");
 	/** A layer of a tower stands while it keeps this percent of its intact solid voxels; below it everything above falls. */
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 SupportPercent = 45;
+	/** Island connectivity runs on blocks of this many voxels per edge; a block holds weight only with at least
+	 *  IslandBlockFill solid voxels (thin links break). */
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 IslandBlockVoxels = 5;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 IslandBlockFill = 18;
 	/** Percent of a fallen piece's voxels that land as rubble (the rest is dust). */
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 RubbleKeepPercent = 35;
 	/** How far a toppling piece is thrown: voxels of drift per 100 voxels of height above the break. */

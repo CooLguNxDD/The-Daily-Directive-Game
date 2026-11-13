@@ -50,6 +50,8 @@ public:
 
 	/** Top of the street, rubble included, at a point (cm): what walkers stand on and players are lifted onto. */
 	float SurfaceZCm(const FVector& Where) const;
+	/** Is this world point inside a solid voxel (towers, terrain, props)? Photos never shoot from inside one. */
+	bool IsSolidAt(const FVector& Where) const;
 
 	/** The sector's season (rolled from the run seed by the district's weather rules) and its arc (R18). */
 	static const struct FDCSeasonDef* SeasonFor(int32 RunSeed, int32 Sector);

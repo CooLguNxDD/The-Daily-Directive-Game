@@ -1,5 +1,7 @@
 #include "DCCharacter.h"
 
+#include "DCVoxelCity.h"
+
 #include "Animation/AnimSequence.h"
 #include "Camera/CameraComponent.h"
 #include "Components/CapsuleComponent.h"
@@ -806,7 +808,20 @@ void ADCCharacter::TakePhoto()
 	Capture->FOVAngle = LensFOV();
 	ApplyPhotoLook(GetWorld(), Capture->PostProcessSettings, IsSpotlit());
 	Capture->PostProcessBlendWeight = 1.f;
+	// Never shoot from inside a voxel (a tower's hollow, rubble, a prop): back the lens out along the view, then up.
+	const FVector Lens = Capture->GetComponentLocation();
+	if (const ADCVoxelCity* City = ADCVoxelCity::Get(this))
+	{
+		FVector Free = Lens;
+		const FVector Back = -Capture->GetForwardVector();
+		for (int32 Step = 1; Step <= 24 && City->IsSolidAt(Free); ++Step)
+		{
+			Free = Lens + Back * (Step * 25.f) + FVector(0, 0, Step * 10.f);
+		}
+		Capture->SetWorldLocation(Free);
+	}
 	Capture->CaptureScene();
+	Capture->SetWorldLocation(Lens);
 
 	// Instant preview grade from the same rules; the host's grade replaces it when it arrives.
 	const FDCShotView View = GetShotView();

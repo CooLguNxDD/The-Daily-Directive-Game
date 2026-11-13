@@ -232,7 +232,9 @@ namespace DCVoxelCraft
 				}
 			}
 		}
-		Plan.Props.RemoveAll([](const FDCPropPlan& P) { return P.Model.IsNone(); });
+		// Keep the spawn street clear: nothing stands in the players' faces on the first frame (critic).
+		const FVector Spawn = Plan.SightFrom;
+		Plan.Props.RemoveAll([&Spawn](const FDCPropPlan& P) { return P.Model.IsNone() || FVector::Dist2D(P.Location, Spawn) < 1500.f; });
 		return Plan;
 	}
 
