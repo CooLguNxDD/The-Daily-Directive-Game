@@ -1,0 +1,19 @@
+# Unreal generated and local
+Binaries/
+Intermediate/
+Saved/
+DerivedDataCache/
+Build/
+*.sln
+*.suo
+*.sdf
+*.VC.db
+*.opensdf
+.vs/
+.idea/
+
+# Cat Fleet scratch (lead notes, frames, jobs): never committed
+.fleet-task/
+
+# Store asset packs stay local-only (root CLAUDE.md asset pack policy)
+Content/_LocalPacks/
