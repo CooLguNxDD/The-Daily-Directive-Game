@@ -121,6 +121,7 @@ void ADCCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLife
 	DOREPLIFETIME(ADCCharacter, bSprinting);
 	DOREPLIFETIME(ADCCharacter, Health);
 	DOREPLIFETIME(ADCCharacter, bDowned);
+	DOREPLIFETIME(ADCCharacter, bLastFrameReady);
 	DOREPLIFETIME(ADCCharacter, SpotlitUntil);
 	DOREPLIFETIME(ADCCharacter, ReviveProgress);
 	DOREPLIFETIME(ADCCharacter, SelfRevivesLeft);
@@ -362,6 +363,11 @@ void ADCCharacter::OnFire(const FInputActionInstance&)
 	if (ADCReelDirector* Director = ReelDirector())
 	{
 		Director->SnapSecondTake(); // R16: second take during the reel
+		return;
+	}
+	if (HasLastFrame() && InSector())
+	{
+		TakePhoto(); // R21: one last shutter from the ground, whatever was in hand
 		return;
 	}
 	if (bDowned || IsDrawing() || !InSector())
@@ -823,10 +829,12 @@ void ADCCharacter::ServerSubmitPhoto_Implementation(int32 PhotoId, FVector_NetQu
 	ADCPlayerState* PS = GetPlayerState<ADCPlayerState>();
 	const FDCCameraTuning& C = UDCTuning::Get().Camera;
 	const float T = Now();
-	if (!PS || bDowned || !InSector() || Slot != EDCSlot::Camera || T < HostNextShutterTime || FVector::Dist(CamLoc, GetActorLocation()) > 400.f)
+	const bool bLast = HasLastFrame();
+	if (!PS || (bDowned && !bLast) || !InSector() || (Slot != EDCSlot::Camera && !bLast) || T < HostNextShutterTime || FVector::Dist(CamLoc, GetActorLocation()) > 400.f)
 	{
 		return;
 	}
+	bLastFrameReady = bLastFrameReady && !bLast; // spent
 	if (!PS->ConsumeShot())
 	{
 		return;
@@ -845,7 +853,23 @@ void ADCCharacter::ServerSubmitPhoto_Implementation(int32 PhotoId, FVector_NetQu
 	Record.CameraLocation = CamLoc;
 	Record.CameraRotation = CamRot;
 	Record.FOV = View.FOV;
-	const FDCPhotoInputs Inputs = MeasureShot(View, When, Record.BlastId);
+	FDCPhotoInputs Inputs = MeasureShot(View, When, Record.BlastId);
+	if (bLast)
+	{
+		// Capped at the best living shot of this sector, every photographer's (R21).
+		Inputs.bLastFrame = true;
+		const ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>();
+		for (const APlayerState* Other : GS ? GS->PlayerArray : TArray<TObjectPtr<APlayerState>>())
+		{
+			if (const ADCPlayerState* OtherPS = Cast<ADCPlayerState>(Other))
+			{
+				for (const FDCPhotoRecord& P : OtherPS->Photos)
+				{
+					Inputs.LastFrameCap = P.Sector == GS->SectorIndex && !P.Grade.bLastFrame ? FMath::Max(Inputs.LastFrameCap, P.Grade.Score) : Inputs.LastFrameCap;
+				}
+			}
+		}
+	}
 	Record.Grade = DCPhotoRules::GradePhoto(Inputs, UDCTuning::Get().Photo);
 	ApplyStrobe(View);
 	if (ADCGameMode* GM = GetWorld()->GetAuthGameMode<ADCGameMode>())
@@ -897,6 +921,7 @@ void ADCCharacter::HostApplyHurt(float Amount, const FVector& From)
 	if (Health <= 0.f)
 	{
 		bDowned = true;
+		bLastFrameReady = true; // R21
 		DownedAt = Now();
 		bCameraRaised = false;
 		ReviveProgress = 0.f;
@@ -1048,6 +1073,7 @@ void ADCCharacter::ServerSetReviving_Implementation(bool bHolding) { bHostRevive
 void ADCCharacter::HostRevive()
 {
 	bDowned = false;
+	bLastFrameReady = false;
 	Health = UDCTuning::Get().Move.MaxHealth * 0.6f;
 	ReviveProgress = 0.f;
 	OnRep_Downed();

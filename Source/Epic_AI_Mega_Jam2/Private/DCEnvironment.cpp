@@ -236,6 +236,7 @@ void ADCEnvironment::UpdatePostWeights()
 	SetPostWeight(TEXT("Viewfinder"), Me && Me->IsCameraRaised() && Me->GetSlot() == EDCSlot::Camera ? 1.f : 0.f);
 	const float SinceHurt = Me ? GetWorld()->GetRealTimeSeconds() - Me->Feedback().HurtTime : 100.f;
 	SetPostWeight(TEXT("Damage"), FMath::Clamp(1.f - SinceHurt / 0.6f, 0.f, 1.f));
+	SetPostWeight(TEXT("LastFrame"), Me && Me->HasLastFrame() ? 1.f : 0.f); // the dying player's own view only
 }
 
 void ADCEnvironment::Flash(float BloomPeak, float ExposureKick)

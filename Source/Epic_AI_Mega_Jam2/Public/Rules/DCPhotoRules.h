@@ -62,6 +62,12 @@ struct FDCPhotoTuning
 	UPROPERTY(EditAnywhere, Config, Category = "Photo") float CoStarBlastMeters = 40.f;
 	/** Share of the photo's score paid to the co-star as Propaganda Points. */
 	UPROPERTY(EditAnywhere, Config, Category = "Photo") float CoStarShare = 0.25f;
+	/** Last Frame (R21): the downed player's one shutter from the ground. Capped at the sector's best living shot. */
+	UPROPERTY(EditAnywhere, Config, Category = "Photo") FName LastFrameTag = TEXT("LAST FRAME");
+	UPROPERTY(EditAnywhere, Config, Category = "Photo") float LastFrameMultiplier = 1.6f;
+	/** Solo only: world slow motion while the dying player frames the shot (co-op: a local look, no world slow-mo). */
+	UPROPERTY(EditAnywhere, Config, Category = "Photo") float LastFrameSlowMo = 0.35f;
+	UPROPERTY(EditAnywhere, Config, Category = "Photo") float LastFrameSlowMoSeconds = 2.f;
 };
 
 /** What the gameplay layer measured at the shutter moment. Metric keys are named in the tuning. */
@@ -84,6 +90,10 @@ struct FDCPhotoInputs
 	UPROPERTY() float ExtraMultiplier = 1.f;
 	/** Scales the danger bonus (Fisheye Danger Lens). */
 	UPROPERTY() float DangerScale = 1.f;
+	/** Last Frame (R21): taken from the ground while downed; its score never beats LastFrameCap (the sector's best
+	 *  living shot; with none yet, the raw points before multipliers). */
+	UPROPERTY() bool bLastFrame = false;
+	UPROPERTY() int32 LastFrameCap = 0;
 	/** Co-star (R20): fraction of the frame the best qualifying teammate fills (0 = none). */
 	UPROPERTY() float CoStarFill = 0.f;
 	/** Who that teammate is (for the credit and their share); empty when none. */
@@ -104,6 +114,7 @@ struct FDCPhotoGrade
 	UPROPERTY(BlueprintReadOnly, Category = "Photo") FName TimingLabel;
 	UPROPERTY(BlueprintReadOnly, Category = "Photo") TArray<FName> Categories;
 	UPROPERTY(BlueprintReadOnly, Category = "Photo") bool bSpotlit = false;
+	UPROPERTY(BlueprintReadOnly, Category = "Photo") bool bLastFrame = false;
 	/** Co-star multiplier applied (1 = none). */
 	UPROPERTY(BlueprintReadOnly, Category = "Photo") float CoStarMultiplier = 1.f;
 };

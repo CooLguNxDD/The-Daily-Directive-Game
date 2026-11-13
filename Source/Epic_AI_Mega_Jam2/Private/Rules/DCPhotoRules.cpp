@@ -65,8 +65,21 @@ namespace DCPhotoRules
 			Grade.Categories.AddUnique(Tuning.CoStarTag);
 		}
 
+		if (In.bLastFrame)
+		{
+			Grade.bLastFrame = true;
+			Grade.Multiplier *= Tuning.LastFrameMultiplier;
+			Grade.Categories.Insert(Tuning.LastFrameTag, 0);
+		}
+
 		Grade.RawPoints = FMath::RoundToInt(Raw);
 		Grade.Score = FMath::Max(0, FMath::RoundToInt(Raw * Grade.Multiplier));
+		if (In.bLastFrame)
+		{
+			// It can match the best living shot of the sector, never beat it: dying is never the best strategy.
+			const int32 Cap = In.LastFrameCap > 0 ? In.LastFrameCap : Grade.RawPoints;
+			Grade.Score = FMath::Min(Grade.Score, Cap);
+		}
 		return Grade;
 	}
 }

@@ -173,4 +173,25 @@ bool FDCCoStarTest::RunTest(const FString&)
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDCLastFrameTest, "Epic_AI_Mega_Jam2.Photo.LastFrame", LookFlags)
+bool FDCLastFrameTest::RunTest(const FString&)
+{
+	// R21: tagged, multiplied, and capped so it can match but never beat the sector's best living shot.
+	const FDCPhotoTuning& P = UDCTuning::Get().Photo;
+	FDCPhotoInputs In;
+	In.Visibility = 1.f;
+	In.Centering = 1.f;
+	In.DangerMeters = 0.f;
+	const FDCPhotoGrade Living = DCPhotoRules::GradePhoto(In, P);
+	In.bLastFrame = true;
+	In.LastFrameCap = 1000000;
+	const FDCPhotoGrade Uncapped = DCPhotoRules::GradePhoto(In, P);
+	TestTrue(TEXT("LAST FRAME tag and multiplier"), Uncapped.bLastFrame && Uncapped.Categories.Contains(P.LastFrameTag) && Uncapped.Score > Living.Score);
+	In.LastFrameCap = Living.Score - 10;
+	TestEqual(TEXT("capped at the best living shot"), DCPhotoRules::GradePhoto(In, P).Score, Living.Score - 10);
+	In.LastFrameCap = 0;
+	TestTrue(TEXT("no living shot yet: no gain over the raw points"), DCPhotoRules::GradePhoto(In, P).Score <= DCPhotoRules::GradePhoto(In, P).RawPoints);
+	return true;
+}
+
 #endif

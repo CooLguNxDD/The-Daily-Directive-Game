@@ -811,6 +811,13 @@ void ADCGameMode::TickPendingCollapses(float Now)
 void ADCGameMode::OnPlayerDowned(ADCCharacter* Player)
 {
 	LastDownTime = GetGameState<ADCGameState>()->Now(); // pressure relief: no pack right after a down
+	// Last Frame (R21): slow motion only for the dying player, so only when they are the only player.
+	const FDCPhotoTuning& P = UDCTuning::Get().Photo;
+	if (GetNumPlayers() == 1 && P.LastFrameSlowMo > 0.f)
+	{
+		SetDilation(P.LastFrameSlowMo);
+		HitstopEndReal = GetWorld()->GetRealTimeSeconds() + P.LastFrameSlowMoSeconds;
+	}
 	CheckWipe();
 }
 

@@ -565,6 +565,13 @@ void ADCHUD::DrawDowned(ADCCharacter& Me)
 	Text(Left > 0.f ? FString::Printf(TEXT("HOLD E TO PATCH YOURSELF UP  -  %.0fs"), Left) : FString(TEXT("HOLD ON - A COMRADE CAN REVIVE YOU (THEY HOLD E BESIDE YOU)")),
 		W * 0.5f, H * 0.4f + Sx(70.f), FLinearColor::White, 0.7f, true);
 	Box(W * 0.5f - Sx(200.f), H * 0.4f + Sx(110.f), Sx(400.f) * Me.GetReviveProgress(), Sx(12.f), FLinearColor::White);
+	if (Me.HasLastFrame())
+	{
+		// R21: one last shutter from where they fell.
+		const float Pulse = 0.75f + 0.25f * FMath::Sin(RealNow * 6.f);
+		Box(W * 0.5f - Sx(230.f), H * 0.62f, Sx(460.f), Sx(56.f), FLinearColor(Gold.R, Gold.G, Gold.B, 0.95f * Pulse));
+		Text(TEXT("LAST FRAME  -  LMB"), W * 0.5f, H * 0.62f + Sx(8.f), Ink, 1.f, true);
+	}
 }
 
 void ADCHUD::DrawToast(ADCCharacter& Me)
