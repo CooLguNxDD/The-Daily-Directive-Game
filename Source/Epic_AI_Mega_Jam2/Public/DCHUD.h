@@ -30,10 +30,22 @@ public:
 	void Box(float X, float Y, float W, float H, const FLinearColor& C);
 	void Frame(float X, float Y, float W, float H, float T, const FLinearColor& C);
 	float Sx(float X) const { return X * UiScale; }
+	/** Draws a clickable button (a HUD hit box named Id); returns bEnabled. */
+	bool Button(const FString& Label, FName Id, float X, float Y, float W, float H, bool bEnabled, bool bSelected = false);
+	virtual void NotifyHitBoxClick(FName BoxName) override;
+
+	/** The engine large font draws at about 16 px at 1080p; layout scales are written against twice that. */
+	static constexpr float TextBoost = 2.f;
 
 private:
 	void DrawSector(ADCGameState& GS, ADCCharacter* Me);
-	void DrawRunOver(ADCGameState& GS, ADCCharacter* Me);
+	void DrawLobby(ADCGameState& GS, ADCCharacter* Me);
+	void DrawDraft(ADCGameState& GS, ADCCharacter* Me);
+	void DrawReel(ADCGameState& GS, ADCCharacter* Me);
+	void DrawFinalCut(ADCGameState& GS, ADCCharacter* Me);
+	void DrawVote(ADCGameState& GS, ADCCharacter* Me);
+	void DrawFrontPage(ADCGameState& GS, ADCCharacter* Me);
+	void DrawScoop(ADCGameState& GS);
 	void DrawCrosshair(ADCCharacter& Me);
 	void DrawViewfinder(ADCCharacter& Me);
 	void DrawStrikeInfo(ADCCharacter& Me);
@@ -47,6 +59,10 @@ private:
 	void TrackOnboarding(ADCCharacter& Me);
 
 	float UiScale = 1.f;
+	uint8 ReelStageSeen = 255;
+	int32 ReelIndexSeen = -1;
+	double ReelStageReal = 0.0;
+	bool bPressPlayed = false;
 	double RealNow = 0.0;
 
 	// First-minute onboarding: which verbs this player has done.

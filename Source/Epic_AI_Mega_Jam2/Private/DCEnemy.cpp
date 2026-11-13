@@ -37,6 +37,14 @@ namespace
 	void TickSwarmer(ADCEnemy& E, const FDCEnemyDef& Def, float Dt, float Now)
 	{
 		const float Aggro = UDCTuning::Get().Camera.AggroRadiusCm;
+		FVector Lure;
+		if (E.FindLure(Def.SenseRange * 2.f, Lure))
+		{
+			// Decoy Paparazzi: the swarm mobs the beacon instead of the players.
+			E.bRushing = true;
+			E.SteerTowards(Lure + FVector(0, 0, 60.f), Def.Speed * Def.RushMultiplier, Dt, Def.HoverHeight);
+			return;
+		}
 		ADCCharacter* Target = E.FindTarget(FMath::Max(Def.SenseRange, Aggro), true);
 		if (!Target)
 		{
@@ -254,6 +262,25 @@ void ADCEnemy::BuildVisual()
 	LegA->SetRelativeScale3D(FVector(0.5f, 0.5f, 0.6f) * S);
 }
 
+bool ADCEnemy::FindLure(float Range, FVector& Out) const
+{
+	const ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>();
+	if (!GS)
+	{
+		return false;
+	}
+	const float Now = GS->Now();
+	for (const TPair<FVector, float>& Lure : GS->Lures)
+	{
+		if (Lure.Value > Now && FVector::Dist2D(Lure.Key, GetActorLocation()) < Range)
+		{
+			Out = Lure.Key;
+			return true;
+		}
+	}
+	return false;
+}
+
 ADCCharacter* ADCEnemy::FindTarget(float Range, bool bPreferPhotographers) const
 {
 	ADCCharacter* Best = nullptr;
@@ -341,6 +368,13 @@ void ADCEnemy::Tick(float DeltaSeconds)
 		return;
 	}
 	const ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>();
+	const float Now = GS ? GS->Now() : GetWorld()->GetTimeSeconds();
+	if (Now < StunnedUntil)
+	{
+		// Stunned by a strobe: drift and spin in place, easy prey for a photo or a rifle.
+		AddActorWorldRotation(FRotator(0, 400.f * DeltaSeconds, 0));
+		return;
+	}
 	if (const FBehaviour* Behaviour = Behaviours().Find(Def->Behaviour))
 	{
 		(*Behaviour)(*this, *Def, DeltaSeconds, GS ? GS->Now() : GetWorld()->GetTimeSeconds());

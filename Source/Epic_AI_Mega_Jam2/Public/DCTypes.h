@@ -34,6 +34,7 @@ struct FDCBlastRecord
 	UPROPERTY() float Time = 0.f;
 	UPROPERTY() float Radius = 0.f;
 	UPROPERTY() FName StratagemId;
+	UPROPERTY() int32 Sector = 0;
 };
 
 /** A graded photo. The image itself stays local to the photographer's machine. */

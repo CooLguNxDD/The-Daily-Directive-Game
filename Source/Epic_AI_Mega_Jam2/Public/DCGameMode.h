@@ -1,17 +1,18 @@
 // Host-only run director: seeds the run, builds each sector's city, spawns waves, calls strikes, books photo
-// scores and moves the run through its phases (sector -> draft -> ... -> reel -> final cut -> vote -> front page).
+// scores and moves the run through its phases: lobby -> sector -> draft -> sector -> draft -> sector -> reel ->
+// final cut -> vote (co-op) -> front page. Each phase has an enter and a tick handler, looked up in a table.
 #pragma once
 
 #include "CoreMinimal.h"
 #include "GameFramework/GameModeBase.h"
+#include "DCTypes.h"
 #include "Rules/DCCityPlan.h"
 #include "DCGameMode.generated.h"
 
 class ADCCharacter;
 class ADCBuilding;
+class ADCPlayerState;
 struct FDCStratagemDef;
-struct FDCPhotoRecord;
-struct FDCPhotoInputs;
 
 UCLASS()
 class EPIC_AI_MEGA_JAM2_API ADCGameMode : public AGameModeBase
@@ -27,25 +28,74 @@ public:
 	virtual void RestartPlayer(AController* NewPlayer) override;
 
 	void CallStrike(const FDCStratagemDef& Def, const FVector& Target, AController* Caller);
-	void OnPhotoGraded(ADCCharacter* Photographer, const FDCPhotoRecord& Record, const FDCPhotoInputs& Inputs);
+	void OnPhotoGraded(ADCCharacter* Photographer, const FDCPhotoRecord& Record, const FDCPhotoInputs& Inputs, TArray<FDCPoseSample>&& Poses);
 	void OnPlayerDowned(ADCCharacter* Player);
+	void OnBuildingCollapsed(ADCBuilding* Building);
 	void RequestHitstop();
 	bool IsCombatLive() const;
 
+	// Player intent, validated here (called from ADCPlayerController server RPCs).
+	void StartRun();
+	void RestartRun();
+	void PickUpgrade(ADCPlayerState* PS, FName UpgradeId);
+	void SubmitFinalCut(ADCPlayerState* PS, const TArray<int32>& PhotoIds);
+	void CastVote(ADCPlayerState* PS, int32 PhotoId);
+
 	const FDCCityPlan& GetCityPlan() const { return CityPlan; }
+	float FindUpgradeParam(FName UpgradeId, bool bSecond = false) const;
 
 private:
-	void StartSector(int32 Index);
-	void ClearSector();
+	using FPhaseFn = void (ADCGameMode::*)(float Now);
+	struct FPhaseHandlers
+	{
+		FPhaseFn Enter = nullptr;
+		FPhaseFn Tick = nullptr;
+	};
+	static const TMap<EDCRunPhase, FPhaseHandlers>& PhaseTable();
+	void EnterPhase(EDCRunPhase Phase);
+
+	void EnterSector(float Now);
+	void TickSectorPhase(float Now);
+	void EnterDraft(float Now);
+	void TickDraft(float Now);
+	void EnterReel(float Now);
+	void TickReel(float Now);
+	void TickReelPlay(float Now);
+	void TickReelFreeze(float Now);
+	void TickReelPhoto(float Now);
+	void SetReelStage(uint8 Stage, float Dilation);
+	void EnterFinalCut(float Now);
+	void TickFinalCut(float Now);
+	void EnterVote(float Now);
+	void TickVote(float Now);
+	void EnterFrontPage(float Now);
+
+	void BuildCity(int32 SectorIndex);
+	void ClearCombat();
+	void ClearCity();
 	void TickWaves(float Now);
-	void TickSector(float Now);
+	void TickScoop(float Now);
+	void TickRogueStrikes(float Now);
+	void BeginReelClip(int32 Index);
+	void SetDilation(float Value);
 	FTransform SpawnTransformFor(int32 PlayerIndex) const;
+	TArray<ADCPlayerState*> Players() const;
 
 	FDCCityPlan CityPlan;
 	int32 RequestedSeed = 0;
+	bool bAutoStart = false;
 	double HitstopEndReal = 0.0;
 	float SectorStartTime = 0.f;
 	TArray<int32> WaveSpawned;
 	TArray<float> WaveNextTime;
 	FRandomStream SectorRng;
+	float NextScoopTime = 0.f;
+	int32 LastScoop = -1;
+	float NextRogueTime = 0.f;
+	double ReelStageReal = 0.0;
+	double NextHeartbeatReal = 0.0;
+	/** Host-only pose buffers per photo (never replicated until the reel picks the shot). */
+	TMap<int32, TArray<FDCPoseSample>> PhotoPoses;
+	/** Domino Condemnation: chain generation per collapsed building. */
+	TMap<TObjectKey<ADCBuilding>, int32> DominoGeneration;
 };

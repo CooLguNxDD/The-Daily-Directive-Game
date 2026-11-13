@@ -68,6 +68,11 @@ public:
 	void HostSetSpotlit(float Until) { SpotlitUntil = Until; }
 	void HostRevive();
 	void HostRefill();
+	void HostResupply(int32 Film, int32 Ammo, float Heal);
+	void HostToast(const FString& Text) { ClientToast(Text); }
+	void HostCue(FName Cue) { ClientCue(Cue); }
+	/** Host: the recorded poses between From and To (server time), for the reel. */
+	void CopyPoses(float From, float To, TArray<FDCPoseSample>& Out) const;
 
 	/** Camera shake from blasts (local). */
 	void AddTrauma(float Amount) { Trauma = FMath::Min(Trauma + Amount, 1.5f); }
@@ -111,6 +116,11 @@ private:
 	void UpdateHeldItems(float DeltaSeconds);
 	void UpdateFootsteps(float DeltaSeconds);
 	void UpdateRevive(float DeltaSeconds);
+	void RecordPose();
+	bool InSector() const;
+	/** Measures the shot and applies the photographer gear and the city mutators to the inputs. */
+	FDCPhotoInputs MeasureShot(const FDCShotView& View, float ShotTime, int32& OutBlastId) const;
+	void ApplyStrobe(const FDCShotView& View);
 	float Now() const;
 
 	UFUNCTION(Server, Reliable) void ServerSetSlot(EDCSlot NewSlot);
@@ -125,6 +135,8 @@ private:
 	UFUNCTION(Client, Reliable) void ClientHurt(FVector_NetQuantize From);
 	UFUNCTION(Client, Reliable) void ClientPhotoGraded(int32 PhotoId, FDCPhotoGrade Grade);
 	UFUNCTION(Client, Reliable) void ClientToast(const FString& Text);
+	UFUNCTION(Client, Reliable) void ClientCue(FName Cue);
+	UFUNCTION(Client, Reliable) void ClientSyncAmmo(int32 NewAmmo, int32 NewReserve);
 	UFUNCTION(NetMulticast, Unreliable) void MulticastRifleFx(FVector_NetQuantize Start, FVector_NetQuantize End);
 	UFUNCTION(NetMulticast, Unreliable) void MulticastShutterFx();
 	UFUNCTION() void OnRep_Slot();
@@ -176,4 +188,7 @@ private:
 	FName SelectedStratagem;
 	int32 PhotoCounter = 0;
 	FDCLocalFeedback LocalFeedback;
+	/** Host-only ring of recent poses (a few seconds) for the reel re-staging. */
+	TArray<FDCPoseSample> PoseRing;
+	float NextPoseTime = 0.f;
 };

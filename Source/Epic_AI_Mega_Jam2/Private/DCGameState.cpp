@@ -6,7 +6,7 @@
 
 namespace
 {
-	constexpr int32 MaxBlastRecords = 32;
+	constexpr int32 MaxBlastRecords = 400; // the reel re-stages any blast of the run
 }
 
 ADCGameState::ADCGameState()
@@ -55,6 +55,7 @@ int32 ADCGameState::AddBlast(const FVector& Location, float Radius, FName Strata
 	Rec.Time = Now();
 	Rec.Radius = Radius;
 	Rec.StratagemId = StratagemId;
+	Rec.Sector = SectorIndex;
 	if (Blasts.Num() > MaxBlastRecords)
 	{
 		Blasts.RemoveAt(0, Blasts.Num() - MaxBlastRecords);

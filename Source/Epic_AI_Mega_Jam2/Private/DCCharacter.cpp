@@ -301,10 +301,16 @@ void ADCCharacter::OnSprintEnd(const FInputActionInstance&)
 void ADCCharacter::OnCrouch(const FInputActionInstance&) { Crouch(); }
 void ADCCharacter::OnCrouchEnd(const FInputActionInstance&) { UnCrouch(); }
 
+bool ADCCharacter::InSector() const
+{
+	const ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>();
+	return GS && GS->Phase == EDCRunPhase::Sector;
+}
+
 void ADCCharacter::OnFire(const FInputActionInstance&)
 {
 	bTriggerHeld = true;
-	if (bDowned || IsDrawing())
+	if (bDowned || IsDrawing() || !InSector())
 	{
 		return;
 	}
@@ -325,7 +331,7 @@ void ADCCharacter::OnFireEnd(const FInputActionInstance&) { bTriggerHeld = false
 void ADCCharacter::OnAim(const FInputActionInstance&)
 {
 	bAimHeld = true;
-	if (Slot != EDCSlot::Camera || bDowned)
+	if (Slot != EDCSlot::Camera || bDowned || !InSector())
 	{
 		return;
 	}
@@ -374,7 +380,9 @@ void ADCCharacter::OnZoom(const FInputActionInstance& I)
 		return;
 	}
 	const FDCCameraTuning& C = UDCTuning::Get().Camera;
-	ZoomFOV = FMath::Clamp(ZoomFOV - Wheel * C.ZoomStep, C.ViewfinderFOVTight, C.ViewfinderFOVWide);
+	const ADCPlayerState* PS = GetPlayerState<ADCPlayerState>();
+	const float Wide = C.ViewfinderFOVWide + (PS ? PS->ExtraFOV : 0.f);
+	ZoomFOV = FMath::Clamp(ZoomFOV - Wheel * C.ZoomStep, C.ViewfinderFOVTight, Wide);
 }
 
 void ADCCharacter::OnCycle(const FInputActionInstance&)
@@ -637,7 +645,7 @@ void ADCCharacter::ServerCallStrike_Implementation(FName StratagemId, FVector_Ne
 	ADCPlayerState* PS = GetPlayerState<ADCPlayerState>();
 	const FDCStratagemDef* Def = UDCTuning::Get().FindStratagem(StratagemId);
 	ADCGameMode* GM = GetWorld()->GetAuthGameMode<ADCGameMode>();
-	if (!PS || !Def || !GM || bDowned || Slot != EDCSlot::Stratagem || !PS->OwnsStratagem(StratagemId))
+	if (!PS || !Def || !GM || !GM->IsCombatLive() || bDowned || Slot != EDCSlot::Stratagem || !PS->OwnsStratagem(StratagemId))
 	{
 		return;
 	}
@@ -688,7 +696,7 @@ void ADCCharacter::TakePhoto()
 	const FDCShotView View = GetShotView();
 	const float ShotTime = Now();
 	int32 BlastId = 0;
-	const FDCPhotoInputs Inputs = DCPhotoProbe::Measure(GetWorld(), View, ShotTime, this, IsSpotlit(), BlastId);
+	const FDCPhotoInputs Inputs = MeasureShot(View, ShotTime, BlastId);
 	const FDCPhotoGrade Preview = DCPhotoRules::GradePhoto(Inputs, UDCTuning::Get().Photo);
 	const int32 PhotoId = (PS->GetPlayerId() & 0xffff) * 1000 + (++PhotoCounter);
 	PC->AddLocalPhoto(PhotoId, Photo, Preview, View, ShotTime);
@@ -705,7 +713,7 @@ void ADCCharacter::ServerSubmitPhoto_Implementation(int32 PhotoId, FVector_NetQu
 	ADCPlayerState* PS = GetPlayerState<ADCPlayerState>();
 	const FDCCameraTuning& C = UDCTuning::Get().Camera;
 	const float T = Now();
-	if (!PS || bDowned || Slot != EDCSlot::Camera || T < HostNextShutterTime || FVector::Dist(CamLoc, GetActorLocation()) > 400.f)
+	if (!PS || bDowned || !InSector() || Slot != EDCSlot::Camera || T < HostNextShutterTime || FVector::Dist(CamLoc, GetActorLocation()) > 400.f)
 	{
 		return;
 	}
@@ -717,7 +725,7 @@ void ADCCharacter::ServerSubmitPhoto_Implementation(int32 PhotoId, FVector_NetQu
 	FDCShotView View;
 	View.Location = CamLoc;
 	View.Rotation = CamRot;
-	View.FOV = FMath::Clamp(FOV, C.ViewfinderFOVTight, C.ViewfinderFOVWide);
+	View.FOV = FMath::Clamp(FOV, C.ViewfinderFOVTight, C.ViewfinderFOVWide + PS->ExtraFOV);
 	const float When = FMath::Clamp(ShotTime, T - ShotClockToleranceSeconds, T);
 
 	FDCPhotoRecord Record;
@@ -727,11 +735,14 @@ void ADCCharacter::ServerSubmitPhoto_Implementation(int32 PhotoId, FVector_NetQu
 	Record.CameraLocation = CamLoc;
 	Record.CameraRotation = CamRot;
 	Record.FOV = View.FOV;
-	const FDCPhotoInputs Inputs = DCPhotoProbe::Measure(GetWorld(), View, When, this, IsSpotlit(), Record.BlastId);
+	const FDCPhotoInputs Inputs = MeasureShot(View, When, Record.BlastId);
 	Record.Grade = DCPhotoRules::GradePhoto(Inputs, UDCTuning::Get().Photo);
+	ApplyStrobe(View);
 	if (ADCGameMode* GM = GetWorld()->GetAuthGameMode<ADCGameMode>())
 	{
-		GM->OnPhotoGraded(this, Record, Inputs);
+		TArray<FDCPoseSample> Poses;
+		CopyPoses(When - UDCTuning::Get().Run.ClipSeconds - 0.2f, When + 0.1f, Poses);
+		GM->OnPhotoGraded(this, Record, Inputs, MoveTemp(Poses));
 	}
 	ClientPhotoGraded(PhotoId, Record.Grade);
 	MulticastShutterFx();
@@ -796,6 +807,102 @@ void ADCCharacter::ClientHurt_Implementation(FVector_NetQuantize From)
 }
 
 void ADCCharacter::ClientToast_Implementation(const FString& Text) { Toast(Text); }
+void ADCCharacter::ClientCue_Implementation(FName Cue) { DCAudio::Play2D(this, Cue, 0.9f); }
+
+void ADCCharacter::ClientSyncAmmo_Implementation(int32 NewAmmo, int32 NewReserve)
+{
+	Ammo = NewAmmo;
+	Reserve = NewReserve;
+	ReloadEndTime = -1.f;
+}
+
+FDCPhotoInputs ADCCharacter::MeasureShot(const FDCShotView& View, float ShotTime, int32& OutBlastId) const
+{
+	FDCPhotoInputs In = DCPhotoProbe::Measure(GetWorld(), View, ShotTime, this, IsSpotlit(), OutBlastId);
+	const ADCPlayerState* PS = GetPlayerState<ADCPlayerState>();
+	const ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>();
+	In.ExtraMultiplier = PS ? PS->PhotoMultiplier : 1.f;
+	In.DangerScale = PS ? PS->DangerMultiplier : 1.f;
+	// Solar Eclipse: blasts blaze against the dark sky, so blast photos pay more.
+	const FDCUpgradeDef* Eclipse = UDCTuning::Get().FindUpgrade(TEXT("Eclipse"));
+	if (GS && Eclipse && GS->HasMutator(Eclipse->Id) && In.bHasBlast)
+	{
+		In.ExtraMultiplier *= Eclipse->Param;
+	}
+	return In;
+}
+
+void ADCCharacter::ApplyStrobe(const FDCShotView& View)
+{
+	// Strobe Flash gear: the shutter stuns every enemy in frame within range.
+	const ADCPlayerState* PS = GetPlayerState<ADCPlayerState>();
+	const FDCUpgradeDef* Strobe = UDCTuning::Get().FindUpgrade(TEXT("StrobeFlash"));
+	if (!PS || !Strobe || !PS->HasGear(Strobe->Id))
+	{
+		return;
+	}
+	const float Until = Now() + Strobe->Param2;
+	for (ADCEnemy* E : TActorRange<ADCEnemy>(GetWorld()))
+	{
+		if (E->IsAlive() && FVector::Dist(E->GetActorLocation(), View.Location) < Strobe->Param && DCPhotoProbe::InFrame(View, E->GetActorLocation()))
+		{
+			E->HostStun(Until);
+		}
+	}
+}
+
+void ADCCharacter::RecordPose()
+{
+	const float T = Now();
+	if (T < NextPoseTime)
+	{
+		return;
+	}
+	const FDCRunTuning& Run = UDCTuning::Get().Run;
+	NextPoseTime = T + 1.f / FMath::Max(Run.PoseSampleHz, 1.f);
+	FDCPoseSample& S = PoseRing.AddDefaulted_GetRef();
+	S.Time = T;
+	S.Location = GetActorLocation();
+	const FRotator Aim = GetControlRotation();
+	S.Yaw = Aim.Yaw;
+	S.Pitch = FRotator::NormalizeAxis(Aim.Pitch);
+	S.Speed = GetVelocity().Size2D();
+	S.bCamera = bCameraRaised;
+	const int32 Keep = FMath::CeilToInt((Run.ClipSeconds + 1.f) * Run.PoseSampleHz);
+	if (PoseRing.Num() > Keep)
+	{
+		PoseRing.RemoveAt(0, PoseRing.Num() - Keep, EAllowShrinking::No);
+	}
+}
+
+void ADCCharacter::CopyPoses(float From, float To, TArray<FDCPoseSample>& Out) const
+{
+	for (const FDCPoseSample& S : PoseRing)
+	{
+		if (S.Time >= From && S.Time <= To)
+		{
+			Out.Add(S);
+		}
+	}
+}
+
+void ADCCharacter::HostResupply(int32 Film, int32 AmmoAdd, float Heal)
+{
+	if (!HasAuthority())
+	{
+		return;
+	}
+	HostReserve += AmmoAdd;
+	Health = FMath::Min(UDCTuning::Get().Move.MaxHealth, Health + Heal);
+	if (ADCPlayerState* PS = GetPlayerState<ADCPlayerState>())
+	{
+		PS->ShotsLeft += Film;
+	}
+	ClientSyncAmmo(HostAmmo, HostReserve);
+	ClientToast(FString::Printf(TEXT("SUPPLY POD: +%d FILM  +%d AMMO  +%.0f HEALTH"), Film, AmmoAdd, Heal));
+	ClientCue(TEXT("Pickup"));
+}
+
 
 void ADCCharacter::OnRep_Downed()
 {
@@ -824,7 +931,9 @@ void ADCCharacter::HostRefill()
 	const UDCTuning& T = UDCTuning::Get();
 	Health = T.Move.MaxHealth;
 	HostReserve = T.Rifle.StartReserve;
+	HostAmmo = T.Rifle.MagazineSize;
 	SelfRevivesLeft = 1;
+	ClientSyncAmmo(HostAmmo, HostReserve);
 	if (ADCPlayerState* PS = GetPlayerState<ADCPlayerState>())
 	{
 		PS->ResetFilm(PS->FilmPerSector);
@@ -950,6 +1059,7 @@ void ADCCharacter::Tick(float DeltaSeconds)
 	if (HasAuthority())
 	{
 		UpdateRevive(DeltaSeconds);
+		RecordPose();
 	}
 	if (!IsLocallyControlled() || !GetController())
 	{

@@ -6,6 +6,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
+#include "DCTypes.h"
 #include "DCDemoPilot.generated.h"
 
 class ADCBuilding;
@@ -36,6 +37,8 @@ private:
 	};
 
 	void BuildScript();
+	void AddCycle(const FString& Name);
+	void AddWaitPhase(EDCRunPhase Phase, float Timeout);
 	void Add(float Delay, TFunction<bool()> Do, float Timeout = 12.f);
 	void Press(FName Action, const FVector& Value = FVector(1, 0, 0));
 	void Release(FName Action);

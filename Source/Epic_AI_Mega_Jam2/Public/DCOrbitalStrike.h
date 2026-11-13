@@ -26,6 +26,8 @@ public:
 
 	/** Host: set before FinishSpawning. */
 	void Init(FName InStratagemId, float InDetonateTime, AController* InInstigator);
+	/** Reel re-staging: a local, effects-only copy (no damage, no records, no hitstop). Set before FinishSpawning. */
+	void InitRestage(FName InStratagemId, float InDetonateTime) { StratagemId = InStratagemId; DetonateTime = InDetonateTime; bRestage = true; }
 
 	float GetDetonateTime() const { return DetonateTime; }
 	bool HasDetonated() const { return bLocalDetonated; }
@@ -52,6 +54,10 @@ private:
 	UPROPERTY() TObjectPtr<UMaterialInstanceDynamic> ShockMat;
 	UPROPERTY() TObjectPtr<AController> InstigatorController;
 
+	/** Host behaviour during the telegraph, by the stratagem's Behaviour id (Singularity pulls, Decoy lures). */
+	void TickBehaviour(const FDCStratagemDef& Def, float U, float DeltaSeconds);
+
+	bool bRestage = false;
 	bool bLocalDetonated = false;
 	bool bChargePlayed = false;
 	float NextBeepTime = 0.f;

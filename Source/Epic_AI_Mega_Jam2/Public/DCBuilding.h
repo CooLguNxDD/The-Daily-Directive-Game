@@ -21,7 +21,13 @@ public:
 	virtual void BeginPlay() override;
 
 	/** Host: set before FinishSpawning. */
-	void InitSpec(const FDCBuildingSpec& InSpec) { Spec = InSpec; }
+	void InitSpec(const FDCBuildingSpec& InSpec, int32 InLot) { Spec = InSpec; LotIndex = InLot; }
+
+	/** Reel re-staging (local actor, any machine): collapse now with the debris effect, or go straight to rubble. */
+	void RestageCollapse(const FVector& InEpicenter, bool bAnimate);
+
+	int32 GetLotIndex() const { return LotIndex; }
+	FVector GetEpicenter() const { return Epicenter; }
 
 	/** Host only: collapse now, pushed away from Epicenter. Idempotent. */
 	void Collapse(const FVector& Epicenter);
@@ -40,12 +46,14 @@ private:
 	UFUNCTION() void OnRep_Spec();
 	UFUNCTION() void OnRep_Collapsed();
 	void BuildBlocks();
-	void SimulateCollapse();
+	void SimulateCollapse(bool bAnimate);
+	bool LateJoinAnimates() const;
 
 	UPROPERTY(ReplicatedUsing = OnRep_Spec) FDCBuildingSpec Spec;
 	UPROPERTY(ReplicatedUsing = OnRep_Collapsed) bool bCollapsed = false;
 	UPROPERTY(Replicated) float CollapseTime = 0.f;
 	UPROPERTY(Replicated) FVector_NetQuantize Epicenter;
+	UPROPERTY(Replicated) int32 LotIndex = 0;
 
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UInstancedStaticMeshComponent> Walls;
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UInstancedStaticMeshComponent> Windows;

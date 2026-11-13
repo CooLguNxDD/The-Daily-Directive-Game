@@ -21,8 +21,6 @@ namespace
 	const FLinearColor Red(0.9f, 0.08f, 0.05f, 1.f);
 	const FLinearColor Gold(1.f, 0.78f, 0.2f, 1.f);
 	const FLinearColor Shade(0.f, 0.f, 0.f, 0.55f);
-	/** The engine's large font draws at about 16 px at 1080p; layout scales are written against twice that. */
-	constexpr float TextBoost = 2.f;
 
 	FString Upper(const FName& N) { return N.ToString().ToUpper(); }
 
@@ -48,9 +46,12 @@ void ADCHUD::Text(const FString& S, float X, float Y, const FLinearColor& C, flo
 	{
 		Canvas->TextSize(F, S, W, H, Scale * UiScale, Scale * UiScale);
 	}
-	// Drop shadow keeps text readable over a bloom flash.
-	Canvas->SetDrawColor(FColor(0, 0, 0, static_cast<uint8>(C.A * 200)));
-	Canvas->DrawText(F, S, X - W * 0.5f + 2.f, Y + 2.f, Scale * UiScale, Scale * UiScale);
+	// Drop shadow keeps light text readable over a bloom flash; dark ink on paper needs none.
+	if (C.GetLuminance() > 0.35f)
+	{
+		Canvas->SetDrawColor(FColor(0, 0, 0, static_cast<uint8>(C.A * 200)));
+		Canvas->DrawText(F, S, X - W * 0.5f + 2.f, Y + 2.f, Scale * UiScale, Scale * UiScale);
+	}
 	Canvas->SetDrawColor(C.ToFColor(true));
 	Canvas->DrawText(F, S, X - W * 0.5f, Y, Scale * UiScale, Scale * UiScale);
 }
@@ -85,8 +86,13 @@ void ADCHUD::DrawHUD()
 	}
 	using FDraw = void (ADCHUD::*)(ADCGameState&, ADCCharacter*);
 	static const TMap<EDCRunPhase, FDraw> Phases = {
+		{EDCRunPhase::Lobby, &ADCHUD::DrawLobby},
 		{EDCRunPhase::Sector, &ADCHUD::DrawSector},
-		{EDCRunPhase::FrontPage, &ADCHUD::DrawRunOver},
+		{EDCRunPhase::Draft, &ADCHUD::DrawDraft},
+		{EDCRunPhase::Reel, &ADCHUD::DrawReel},
+		{EDCRunPhase::FinalCut, &ADCHUD::DrawFinalCut},
+		{EDCRunPhase::Vote, &ADCHUD::DrawVote},
+		{EDCRunPhase::FrontPage, &ADCHUD::DrawFrontPage},
 	};
 	if (const FDraw* Draw = Phases.Find(GS->Phase))
 	{
@@ -112,6 +118,7 @@ void ADCHUD::DrawSector(ADCGameState& GS, ADCCharacter* Me)
 		DrawStrikeInfo(*Me);
 	}
 	DrawStatus(GS, *Me);
+	DrawScoop(GS);
 	DrawHurt(*Me);
 	if (ADCPlayerController* PC = Cast<ADCPlayerController>(PlayerOwner))
 	{
@@ -480,28 +487,27 @@ void ADCHUD::DrawToast(ADCCharacter& Me)
 	Text(Me.Feedback().Toast, Canvas->ClipX * 0.5f, Canvas->ClipY * 0.62f, FLinearColor(1.f, 0.85f, 0.3f, FMath::Clamp((2.2f - Age) * 2.f, 0.f, 1.f)), 0.85f, true);
 }
 
-void ADCHUD::DrawRunOver(ADCGameState& GS, ADCCharacter* Me)
+void ADCHUD::DrawScoop(ADCGameState& GS)
 {
-	const float W = Canvas->ClipX, H = Canvas->ClipY;
-	Box(0, 0, W, H, Paper);
-	Text(TEXT("THE DAILY DIRECTIVE"), W * 0.5f, Sx(40.f), Ink, 2.5f, true);
-	Text(FString::Printf(TEXT("RUN SEED %d"), GS.RunSeed), W * 0.5f, H - Sx(60.f), Ink, 0.7f, true);
-	ADCPlayerController* PC = Cast<ADCPlayerController>(PlayerOwner);
-	if (!PC)
+	const TArray<FDCScoopDef>& Scoops = UDCTuning::Get().Scoops;
+	const FDCScoopState& Scoop = GS.Scoop;
+	if (!Scoops.IsValidIndex(Scoop.Index))
 	{
 		return;
 	}
-	TArray<const FDCLocalPhoto*> Best;
-	for (const FDCLocalPhoto& P : PC->GetAlbum())
+	const float W = Canvas->ClipX;
+	const float Left = Scoop.EndTime - GS.Now();
+	if (Scoop.bDone)
 	{
-		Best.Add(&P);
+		Text(FString::Printf(TEXT("SCOOP FILED BY %s"), *Scoop.CompletedBy.ToUpper()), W * 0.5f, Sx(196.f), Gold, 0.7f, true);
+		return;
 	}
-	Best.Sort([](const FDCLocalPhoto& A, const FDCLocalPhoto& B) { return A.Grade.Score > B.Grade.Score; });
-	for (int32 i = 0; i < FMath::Min(3, Best.Num()); ++i)
+	if (Left <= 0.f)
 	{
-		const float CardW = i == 0 ? Sx(820.f) : Sx(400.f);
-		const float X = i == 0 ? Sx(80.f) : Sx(960.f);
-		const float Y = i == 0 ? Sx(180.f) : Sx(180.f) + (i - 1) * Sx(300.f);
-		DrawPhotoCard(Best[i]->Image, Best[i]->Grade, X, Y, CardW, 1.f, true);
+		return;
 	}
+	const float Pulse = 0.75f + 0.25f * FMath::Sin(RealNow * 6.f);
+	Box(W * 0.5f - Sx(420.f), Sx(150.f), Sx(840.f), Sx(80.f), FLinearColor(Red.R, Red.G, Red.B, 0.85f * Pulse));
+	Text(Scoops[Scoop.Index].Text.ToString().ToUpper(), W * 0.5f, Sx(156.f), Paper, 0.75f, true);
+	Text(FString::Printf(TEXT("%.0fs  |  REWARD: %d POINTS + SUPPLY POD"), Left, Scoops[Scoop.Index].RewardPoints), W * 0.5f, Sx(194.f), Gold, 0.6f, true);
 }

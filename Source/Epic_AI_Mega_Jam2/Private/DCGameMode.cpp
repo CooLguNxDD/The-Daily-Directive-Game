@@ -9,10 +9,24 @@
 #include "DCOrbitalStrike.h"
 #include "DCPlayerController.h"
 #include "DCPlayerState.h"
+#include "DCSupplyPod.h"
 #include "DCTuning.h"
+#include "DCUpgrades.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
+#include "GameFramework/WorldSettings.h"
 #include "Kismet/GameplayStatics.h"
+#include "Rules/DCRunRules.h"
+#include "TimerManager.h"
+
+namespace
+{
+	const FName DominoId(TEXT("Domino"));
+	const FName EclipseId(TEXT("Eclipse"));
+	const FName RogueId(TEXT("RogueStrikes"));
+	constexpr int32 MaxDominoGenerations = 2;
+	constexpr float FreezeDilation = 0.01f;
+}
 
 ADCGameMode::ADCGameMode()
 {
@@ -30,6 +44,35 @@ void ADCGameMode::InitGame(const FString& MapName, const FString& Options, FStri
 {
 	Super::InitGame(MapName, Options, ErrorMessage);
 	RequestedSeed = UGameplayStatics::GetIntOption(Options, TEXT("seed"), 0);
+	FParse::Value(FCommandLine::Get(), TEXT("dcseed="), RequestedSeed);
+	// Solo from the menu (?solo) and the scripted demo start at once; a listen host waits in the lobby.
+	bAutoStart = UGameplayStatics::HasOption(Options, TEXT("solo")) || ADCDemoPilot::IsRequested() || FParse::Param(FCommandLine::Get(), TEXT("dcsolo"));
+}
+
+const TMap<EDCRunPhase, ADCGameMode::FPhaseHandlers>& ADCGameMode::PhaseTable()
+{
+	static const TMap<EDCRunPhase, FPhaseHandlers> Table = {
+		{EDCRunPhase::Lobby, {nullptr, nullptr}},
+		{EDCRunPhase::Sector, {&ADCGameMode::EnterSector, &ADCGameMode::TickSectorPhase}},
+		{EDCRunPhase::Draft, {&ADCGameMode::EnterDraft, &ADCGameMode::TickDraft}},
+		{EDCRunPhase::Reel, {&ADCGameMode::EnterReel, &ADCGameMode::TickReel}},
+		{EDCRunPhase::FinalCut, {&ADCGameMode::EnterFinalCut, &ADCGameMode::TickFinalCut}},
+		{EDCRunPhase::Vote, {&ADCGameMode::EnterVote, &ADCGameMode::TickVote}},
+		{EDCRunPhase::FrontPage, {&ADCGameMode::EnterFrontPage, nullptr}},
+	};
+	return Table;
+}
+
+void ADCGameMode::EnterPhase(EDCRunPhase Phase)
+{
+	ADCGameState* GS = GetGameState<ADCGameState>();
+	GS->Phase = Phase;
+	GS->ForceNetUpdate();
+	const FPhaseHandlers* H = PhaseTable().Find(Phase);
+	if (H && H->Enter)
+	{
+		(this->*H->Enter)(GS->Now());
+	}
 }
 
 void ADCGameMode::BeginPlay()
@@ -37,11 +80,28 @@ void ADCGameMode::BeginPlay()
 	Super::BeginPlay();
 	ADCGameState* GS = GetGameState<ADCGameState>();
 	GS->RunSeed = RequestedSeed != 0 ? RequestedSeed : FMath::RandRange(1000, 999999);
-	StartSector(0);
+	BuildCity(0); // the lobby's backdrop is the first sector
+	if (bAutoStart)
+	{
+		StartRun();
+	}
 	if (ADCDemoPilot::IsRequested())
 	{
 		GetWorld()->SpawnActor<ADCDemoPilot>();
 	}
+}
+
+TArray<ADCPlayerState*> ADCGameMode::Players() const
+{
+	TArray<ADCPlayerState*> Out;
+	for (APlayerState* PS : GameState->PlayerArray)
+	{
+		if (ADCPlayerState* DC = Cast<ADCPlayerState>(PS))
+		{
+			Out.Add(DC);
+		}
+	}
+	return Out;
 }
 
 FTransform ADCGameMode::SpawnTransformFor(int32 PlayerIndex) const
@@ -61,12 +121,40 @@ void ADCGameMode::RestartPlayer(AController* NewPlayer)
 	RestartPlayerAtTransform(NewPlayer, SpawnTransformFor(FMath::Max(Index, 0)));
 }
 
-void ADCGameMode::ClearSector()
+float ADCGameMode::FindUpgradeParam(FName UpgradeId, bool bSecond) const
 {
-	for (ADCBuilding* B : TActorRange<ADCBuilding>(GetWorld()))
+	const FDCUpgradeDef* Def = UDCTuning::Get().FindUpgrade(UpgradeId);
+	return Def ? (bSecond ? Def->Param2 : Def->Param) : 0.f;
+}
+
+// ---------------------------------------------------------------- run start / restart
+
+void ADCGameMode::StartRun()
+{
+	ADCGameState* GS = GetGameState<ADCGameState>();
+	if (GS->Phase != EDCRunPhase::Lobby)
 	{
-		B->Destroy();
+		return;
 	}
+	GS->SectorIndex = 0;
+	EnterPhase(EDCRunPhase::Sector);
+}
+
+void ADCGameMode::RestartRun()
+{
+	const FString Map = GetWorld()->GetMapName().Replace(*GetWorld()->StreamingLevelsPrefix, TEXT(""));
+	if (GetNetMode() == NM_ListenServer)
+	{
+		GetWorld()->ServerTravel(Map + TEXT("?listen"), true);
+		return;
+	}
+	UGameplayStatics::OpenLevel(this, FName(*Map), true, TEXT("solo"));
+}
+
+// ---------------------------------------------------------------- city
+
+void ADCGameMode::ClearCombat()
+{
 	for (ADCEnemy* E : TActorRange<ADCEnemy>(GetWorld()))
 	{
 		E->Destroy();
@@ -75,28 +163,55 @@ void ADCGameMode::ClearSector()
 	{
 		S->Destroy();
 	}
+	for (ADCSupplyPod* P : TActorRange<ADCSupplyPod>(GetWorld()))
+	{
+		P->Destroy();
+	}
+	GetGameState<ADCGameState>()->Lures.Reset();
 }
 
-void ADCGameMode::StartSector(int32 Index)
+void ADCGameMode::ClearCity()
 {
-	ClearSector();
-	ADCGameState* GS = GetGameState<ADCGameState>();
+	for (ADCBuilding* B : TActorRange<ADCBuilding>(GetWorld()))
+	{
+		B->Destroy();
+	}
+	DominoGeneration.Reset();
+}
+
+void ADCGameMode::BuildCity(int32 SectorIndex)
+{
+	ClearCity();
+	const ADCGameState* GS = GetGameState<ADCGameState>();
 	const UDCTuning& T = UDCTuning::Get();
-	const int32 Seed = DCCityRules::SectorSeed(GS->RunSeed, Index);
+	const int32 Seed = DCCityRules::SectorSeed(GS->RunSeed, SectorIndex);
 	SectorRng.Initialize(Seed);
 	CityPlan = DCCityRules::PlanCity(Seed, T.City, T.Look.BuildingColors.Num());
-	for (const FDCLotPlan& Lot : CityPlan.Buildings)
+	for (int32 Lot = 0; Lot < CityPlan.Buildings.Num(); ++Lot)
 	{
-		ADCBuilding* B = GetWorld()->SpawnActorDeferred<ADCBuilding>(ADCBuilding::StaticClass(), FTransform(Lot.Location));
-		B->InitSpec(Lot.Spec);
-		B->FinishSpawning(FTransform(Lot.Location));
+		const FDCLotPlan& Plan = CityPlan.Buildings[Lot];
+		ADCBuilding* B = GetWorld()->SpawnActorDeferred<ADCBuilding>(ADCBuilding::StaticClass(), FTransform(Plan.Location));
+		B->InitSpec(Plan.Spec, Lot);
+		B->FinishSpawning(FTransform(Plan.Location));
 	}
+}
 
-	GS->SectorIndex = Index;
-	GS->Phase = EDCRunPhase::Sector;
-	SectorStartTime = GS->Now();
-	const FDCSectorDef* Sector = T.Sectors.IsValidIndex(Index) ? &T.Sectors[Index] : nullptr;
-	GS->SectorEndTime = SectorStartTime + (Sector ? Sector->DurationSeconds : 240.f);
+// ---------------------------------------------------------------- sector
+
+void ADCGameMode::EnterSector(float Now)
+{
+	ADCGameState* GS = GetGameState<ADCGameState>();
+	const UDCTuning& T = UDCTuning::Get();
+	SetDilation(1.f);
+	HitstopEndReal = 0.0;
+	ClearCombat();
+	BuildCity(GS->SectorIndex);
+
+	SectorStartTime = Now;
+	const FDCSectorDef* Sector = T.Sectors.IsValidIndex(GS->SectorIndex) ? &T.Sectors[GS->SectorIndex] : nullptr;
+	float Duration = Sector ? Sector->DurationSeconds : 240.f;
+	FParse::Value(FCommandLine::Get(), TEXT("dcsectorseconds="), Duration); // short sectors for scripted test runs
+	GS->SectorEndTime = SectorStartTime + Duration;
 	const int32 Waves = Sector ? Sector->Waves.Num() : 0;
 	WaveSpawned.Init(0, Waves);
 	WaveNextTime.Init(0.f, Waves);
@@ -104,12 +219,14 @@ void ADCGameMode::StartSector(int32 Index)
 	{
 		WaveNextTime[W] = SectorStartTime + Sector->Waves[W].StartSeconds;
 	}
+	GS->Scoop = FDCScoopState();
+	NextScoopTime = Now + T.Run.ScoopFirstSeconds;
+	NextRogueTime = Now + FindUpgradeParam(RogueId);
 
 	int32 PlayerIndex = 0;
-	for (APlayerState* PS : GS->PlayerArray)
+	for (ADCPlayerState* PS : Players())
 	{
-		ADCCharacter* C = PS ? PS->GetPawn<ADCCharacter>() : nullptr;
-		if (C)
+		if (ADCCharacter* C = PS->GetPawn<ADCCharacter>())
 		{
 			C->TeleportTo(SpawnTransformFor(PlayerIndex).GetLocation(), FRotator::ZeroRotator);
 			C->HostRevive();
@@ -117,6 +234,21 @@ void ADCGameMode::StartSector(int32 Index)
 		}
 		++PlayerIndex;
 	}
+}
+
+void ADCGameMode::TickSectorPhase(float Now)
+{
+	TickWaves(Now);
+	TickScoop(Now);
+	TickRogueStrikes(Now);
+	ADCGameState* GS = GetGameState<ADCGameState>();
+	if (Now < GS->SectorEndTime)
+	{
+		return;
+	}
+	ClearCombat();
+	const bool bMore = UDCTuning::Get().Sectors.IsValidIndex(GS->SectorIndex + 1);
+	EnterPhase(bMore ? EDCRunPhase::Draft : EDCRunPhase::Reel);
 }
 
 void ADCGameMode::TickWaves(float Now)
@@ -158,48 +290,507 @@ void ADCGameMode::TickWaves(float Now)
 	}
 }
 
-void ADCGameMode::TickSector(float Now)
+void ADCGameMode::TickScoop(float Now)
 {
 	ADCGameState* GS = GetGameState<ADCGameState>();
-	if (GS->Phase != EDCRunPhase::Sector || Now < GS->SectorEndTime)
+	const UDCTuning& T = UDCTuning::Get();
+	FDCScoopState& Scoop = GS->Scoop;
+	const bool bLive = Scoop.Index >= 0 && !Scoop.bDone && Now < Scoop.EndTime;
+	if (bLive)
 	{
 		return;
 	}
-	const int32 Next = GS->SectorIndex + 1;
-	if (UDCTuning::Get().Sectors.IsValidIndex(Next))
+	if (Scoop.Index >= 0 && !Scoop.bDone && Now >= Scoop.EndTime)
 	{
-		StartSector(Next);
+		Scoop.Index = -1; // expired unclaimed
+		NextScoopTime = Now + T.Run.ScoopGapSeconds;
+	}
+	if (Now < NextScoopTime || Now > GS->SectorEndTime - 20.f || T.Scoops.Num() == 0)
+	{
 		return;
 	}
-	ClearSector();
-	GS->Phase = EDCRunPhase::FrontPage;
+	Scoop.Index = DCRunRules::PickScoop(SectorRng, T.Scoops.Num(), LastScoop);
+	LastScoop = Scoop.Index;
+	Scoop.bDone = false;
+	Scoop.CompletedBy.Reset();
+	Scoop.EndTime = Now + T.Scoops[Scoop.Index].Seconds;
+	NextScoopTime = Scoop.EndTime + T.Run.ScoopGapSeconds;
+	for (ADCPlayerState* PS : Players())
+	{
+		if (ADCCharacter* C = PS->GetPawn<ADCCharacter>())
+		{
+			C->HostCue(TEXT("Scoop"));
+		}
+	}
 }
+
+void ADCGameMode::TickRogueStrikes(float Now)
+{
+	const ADCGameState* GS = GetGameState<ADCGameState>();
+	const float Interval = FindUpgradeParam(RogueId);
+	if (!GS->HasMutator(RogueId) || Interval <= 0.f || Now < NextRogueTime)
+	{
+		return;
+	}
+	NextRogueTime = Now + Interval;
+	TArray<ADCBuilding*> Standing;
+	for (ADCBuilding* B : TActorRange<ADCBuilding>(GetWorld()))
+	{
+		if (!B->IsCollapsed())
+		{
+			Standing.Add(B);
+		}
+	}
+	const FDCStratagemDef* Def = UDCTuning::Get().FindStratagem(TEXT("OrbitalLaser"));
+	if (Standing.Num() > 0 && Def)
+	{
+		CallStrike(*Def, Standing[SectorRng.RandRange(0, Standing.Num() - 1)]->GetActorLocation(), nullptr);
+	}
+}
+
+// ---------------------------------------------------------------- draft (R10)
+
+void ADCGameMode::EnterDraft(float Now)
+{
+	ADCGameState* GS = GetGameState<ADCGameState>();
+	SetDilation(1.f);
+	HitstopEndReal = 0.0;
+	const UDCTuning& T = UDCTuning::Get();
+	GS->PhaseEndTime = Now + T.Run.DraftSeconds;
+	int32 Index = 0;
+	for (ADCPlayerState* PS : Players())
+	{
+		TArray<FName> Taken = PS->Upgrades;
+		Taken.Append(GS->Mutators);
+		PS->DraftOffer = DCRunRules::DraftOffer(DCCityRules::SectorSeed(GS->RunSeed, GS->SectorIndex) ^ (++Index * 7919), T.Upgrades, Taken);
+		PS->bDraftDone = PS->DraftOffer.Num() == 0;
+	}
+}
+
+void ADCGameMode::PickUpgrade(ADCPlayerState* PS, FName UpgradeId)
+{
+	ADCGameState* GS = GetGameState<ADCGameState>();
+	const FDCUpgradeDef* Def = UDCTuning::Get().FindUpgrade(UpgradeId);
+	if (!PS || !Def || GS->Phase != EDCRunPhase::Draft || PS->bDraftDone || !PS->DraftOffer.Contains(UpgradeId))
+	{
+		return;
+	}
+	PS->bDraftDone = true;
+	PS->Upgrades.AddUnique(UpgradeId);
+	DCUpgrades::Apply(*GS, *PS, *Def);
+}
+
+void ADCGameMode::TickDraft(float Now)
+{
+	ADCGameState* GS = GetGameState<ADCGameState>();
+	TArray<ADCPlayerState*> All = Players();
+	const bool bAllDone = !All.ContainsByPredicate([](const ADCPlayerState* PS) { return !PS->bDraftDone; });
+	if (!bAllDone && Now < GS->PhaseEndTime)
+	{
+		return;
+	}
+	for (ADCPlayerState* PS : All)
+	{
+		if (!PS->bDraftDone && PS->DraftOffer.Num() > 0)
+		{
+			PickUpgrade(PS, PS->DraftOffer[0]); // the clock ran out: HQ picks for you
+		}
+	}
+	GS->SectorIndex += 1;
+	EnterPhase(EDCRunPhase::Sector);
+}
+
+// ---------------------------------------------------------------- photos, collapses, downs
+
+void ADCGameMode::OnPhotoGraded(ADCCharacter* Photographer, const FDCPhotoRecord& Record, const FDCPhotoInputs& Inputs, TArray<FDCPoseSample>&& Poses)
+{
+	ADCPlayerState* PS = Photographer ? Photographer->GetPlayerState<ADCPlayerState>() : nullptr;
+	ADCGameState* GS = GetGameState<ADCGameState>();
+	if (!PS)
+	{
+		return;
+	}
+	FDCPhotoRecord Booked = Record;
+	Booked.Sector = GS->SectorIndex;
+	PS->AddPhoto(Booked);
+	PhotoPoses.Add(Record.PhotoId, MoveTemp(Poses));
+
+	// HQ Scoop (R8): the first photo that meets it drops a supply pod on the photographer at once.
+	const UDCTuning& T = UDCTuning::Get();
+	FDCScoopState& Scoop = GS->Scoop;
+	if (Scoop.Index < 0 || Scoop.bDone || GS->Now() > Scoop.EndTime || !T.Scoops.IsValidIndex(Scoop.Index))
+	{
+		return;
+	}
+	const FDCScoopDef& Def = T.Scoops[Scoop.Index];
+	if (!DCRunRules::ScoopMet(Def, Inputs, Record.Grade))
+	{
+		return;
+	}
+	Scoop.bDone = true;
+	Scoop.CompletedBy = PS->GetPlayerName();
+	PS->AddPoints(Def.RewardPoints);
+	ADCSupplyPod::Drop(GetWorld(), Photographer->GetActorLocation() + Photographer->GetActorForwardVector() * 250.f);
+	for (ADCPlayerState* Other : Players())
+	{
+		if (ADCCharacter* C = Other->GetPawn<ADCCharacter>())
+		{
+			C->HostToast(FString::Printf(TEXT("HQ SCOOP FILED BY %s! +%d  SUPPLY POD INBOUND"), *Scoop.CompletedBy.ToUpper(), Def.RewardPoints));
+		}
+	}
+}
+
+void ADCGameMode::OnBuildingCollapsed(ADCBuilding* Building)
+{
+	ADCGameState* GS = GetGameState<ADCGameState>();
+	GS->AddCollapse(GS->SectorIndex, Building->GetLotIndex(), Building->GetEpicenter());
+	if (!GS->HasMutator(DominoId))
+	{
+		return;
+	}
+	// Domino Condemnation: a falling tower drags its neighbours down a beat later, two generations deep.
+	const int32 Generation = DominoGeneration.FindRef(Building);
+	if (Generation >= MaxDominoGenerations)
+	{
+		return;
+	}
+	const float Reach = FindUpgradeParam(DominoId);
+	const float Delay = FMath::Max(FindUpgradeParam(DominoId, true), 0.1f);
+	for (ADCBuilding* Other : TActorRange<ADCBuilding>(GetWorld()))
+	{
+		if (Other == Building || Other->IsCollapsed() || FVector::Dist2D(Other->GetActorLocation(), Building->GetActorLocation()) > Reach)
+		{
+			continue;
+		}
+		DominoGeneration.Add(Other, Generation + 1);
+		const FVector From = Building->GetActorLocation();
+		FTimerHandle H;
+		GetWorldTimerManager().SetTimer(H, FTimerDelegate::CreateWeakLambda(Other, [Other, From] { Other->Collapse(From); }), Delay, false);
+	}
+}
+
+void ADCGameMode::OnPlayerDowned(ADCCharacter* Player)
+{
+	ADCGameState* GS = GetGameState<ADCGameState>();
+	for (ADCPlayerState* PS : Players())
+	{
+		const ADCCharacter* C = PS->GetPawn<ADCCharacter>();
+		if (C && !C->IsDowned())
+		{
+			return;
+		}
+	}
+	// Everyone is down: the run fails, but the reel still plays (R12).
+	GS->bRunFailed = true;
+	ClearCombat();
+	EnterPhase(EDCRunPhase::Reel);
+}
+
+// ---------------------------------------------------------------- reel (R13)
+
+void ADCGameMode::EnterReel(float Now)
+{
+	ADCGameState* GS = GetGameState<ADCGameState>();
+	const FDCRunTuning& Run = UDCTuning::Get().Run;
+	ClearCombat();
+	ClearCity();
+
+	// Each player's best shots, by the critic; the reel interleaves them rank by rank.
+	TArray<TArray<int32>> Ranked;
+	for (ADCPlayerState* PS : Players())
+	{
+		const TArray<int32> Order = DCRunRules::CriticOrder(PS->Photos);
+		PS->FinalCutChoices.Reset();
+		for (int32 i = 0; i < Order.Num() && i < Run.FinalCutChoices; ++i)
+		{
+			PS->FinalCutChoices.Add(PS->Photos[Order[i]].PhotoId);
+		}
+		Ranked.Add(Order);
+		if (ADCPlayerController* PC = Cast<ADCPlayerController>(PS->GetOwningController()))
+		{
+			PC->ClientUploadPhotos(PS->FinalCutChoices);
+		}
+	}
+	GS->ReelClips.Reset();
+	const TArray<ADCPlayerState*> All = Players();
+	for (int32 Rank = 0; Rank < Run.ReelClipsPerPlayer; ++Rank)
+	{
+		for (int32 P = 0; P < All.Num(); ++P)
+		{
+			if (!Ranked[P].IsValidIndex(Rank))
+			{
+				continue;
+			}
+			FDCReelClip& Clip = GS->ReelClips.AddDefaulted_GetRef();
+			Clip.Photo = All[P]->Photos[Ranked[P][Rank]];
+			Clip.PlayerName = All[P]->GetPlayerName();
+			if (const TArray<FDCPoseSample>* Poses = PhotoPoses.Find(Clip.Photo.PhotoId))
+			{
+				Clip.Poses = *Poses;
+			}
+		}
+	}
+	if (GS->ReelClips.Num() == 0)
+	{
+		EnterPhase(EDCRunPhase::FinalCut);
+		return;
+	}
+	BeginReelClip(0);
+}
+
+void ADCGameMode::SetDilation(float Value)
+{
+	GetWorldSettings()->SetTimeDilation(Value);
+	GetWorldSettings()->ForceNetUpdate();
+}
+
+void ADCGameMode::BeginReelClip(int32 Index)
+{
+	ADCGameState* GS = GetGameState<ADCGameState>();
+	GS->ReelIndex = Index;
+	GS->ReelStage = 0;
+	GS->ReelClipStart = GS->Now() + 0.3f; // a beat for every machine to re-stage the scene
+	ReelStageReal = GetWorld()->GetRealTimeSeconds();
+	SetDilation(UDCTuning::Get().Run.ReelSlowMo);
+	GS->ForceNetUpdate();
+}
+
+void ADCGameMode::TickReel(float Now)
+{
+	// One handler per reel stage: playing (slow motion) -> frozen at the shutter -> the photo with its stamp.
+	using FStageFn = void (ADCGameMode::*)(float);
+	static const FStageFn Stages[] = {&ADCGameMode::TickReelPlay, &ADCGameMode::TickReelFreeze, &ADCGameMode::TickReelPhoto};
+	const uint8 Stage = GetGameState<ADCGameState>()->ReelStage;
+	(this->*Stages[FMath::Min<int32>(Stage, UE_ARRAY_COUNT(Stages) - 1)])(Now);
+}
+
+void ADCGameMode::SetReelStage(uint8 Stage, float Dilation)
+{
+	ADCGameState* GS = GetGameState<ADCGameState>();
+	GS->ReelStage = Stage;
+	ReelStageReal = GetWorld()->GetRealTimeSeconds();
+	SetDilation(Dilation);
+	GS->ForceNetUpdate();
+}
+
+void ADCGameMode::TickReelPlay(float Now)
+{
+	if (Now >= GetGameState<ADCGameState>()->ReelClipStart + UDCTuning::Get().Run.ClipSeconds)
+	{
+		SetReelStage(1, FreezeDilation);
+	}
+}
+
+void ADCGameMode::TickReelFreeze(float Now)
+{
+	if (GetWorld()->GetRealTimeSeconds() >= ReelStageReal + UDCTuning::Get().Run.ReelFreezeSeconds)
+	{
+		SetReelStage(2, 1.f);
+	}
+}
+
+void ADCGameMode::TickReelPhoto(float Now)
+{
+	ADCGameState* GS = GetGameState<ADCGameState>();
+	if (GetWorld()->GetRealTimeSeconds() < ReelStageReal + UDCTuning::Get().Run.ReelPhotoSeconds)
+	{
+		return;
+	}
+	if (GS->ReelClips.IsValidIndex(GS->ReelIndex + 1))
+	{
+		BeginReelClip(GS->ReelIndex + 1);
+		return;
+	}
+	GS->ReelIndex = -1;
+	EnterPhase(EDCRunPhase::FinalCut);
+}
+
+// ---------------------------------------------------------------- final cut (R14) and vote (R15)
+
+void ADCGameMode::EnterFinalCut(float Now)
+{
+	ADCGameState* GS = GetGameState<ADCGameState>();
+	SetDilation(1.f);
+	GS->PhaseEndTime = Now + UDCTuning::Get().Run.FinalCutSeconds;
+	for (ADCPlayerState* PS : Players())
+	{
+		PS->FinalCut.Reset();
+		PS->bFinalCutDone = PS->FinalCutChoices.Num() == 0;
+	}
+}
+
+void ADCGameMode::SubmitFinalCut(ADCPlayerState* PS, const TArray<int32>& PhotoIds)
+{
+	const ADCGameState* GS = GetGameState<ADCGameState>();
+	if (!PS || GS->Phase != EDCRunPhase::FinalCut || PS->bFinalCutDone)
+	{
+		return;
+	}
+	const int32 Want = FMath::Min(UDCTuning::Get().Run.FinalCutPicks, PS->FinalCutChoices.Num());
+	TArray<int32> Unique;
+	for (int32 Id : PhotoIds)
+	{
+		if (PS->FinalCutChoices.Contains(Id))
+		{
+			Unique.AddUnique(Id);
+		}
+	}
+	if (Unique.Num() != Want)
+	{
+		return;
+	}
+	PS->FinalCut = Unique;
+	PS->bFinalCutDone = true;
+}
+
+void ADCGameMode::TickFinalCut(float Now)
+{
+	ADCGameState* GS = GetGameState<ADCGameState>();
+	TArray<ADCPlayerState*> All = Players();
+	const bool bAllDone = !All.ContainsByPredicate([](const ADCPlayerState* PS) { return !PS->bFinalCutDone; });
+	if (!bAllDone && Now < GS->PhaseEndTime)
+	{
+		return;
+	}
+	const int32 Picks = UDCTuning::Get().Run.FinalCutPicks;
+	for (ADCPlayerState* PS : All)
+	{
+		if (!PS->bFinalCutDone)
+		{
+			// The clock ran out: the critic's order stands.
+			PS->FinalCut.Reset();
+			for (int32 i = 0; i < PS->FinalCutChoices.Num() && i < Picks; ++i)
+			{
+				PS->FinalCut.Add(PS->FinalCutChoices[i]);
+			}
+			PS->bFinalCutDone = true;
+		}
+	}
+	EnterPhase(All.Num() > 1 ? EDCRunPhase::Vote : EDCRunPhase::FrontPage);
+}
+
+void ADCGameMode::EnterVote(float Now)
+{
+	ADCGameState* GS = GetGameState<ADCGameState>();
+	GS->PhaseEndTime = Now + UDCTuning::Get().Run.VoteSeconds;
+	for (ADCPlayerState* PS : Players())
+	{
+		PS->VotedFor = 0;
+	}
+}
+
+void ADCGameMode::CastVote(ADCPlayerState* PS, int32 PhotoId)
+{
+	const ADCGameState* GS = GetGameState<ADCGameState>();
+	if (!PS || GS->Phase != EDCRunPhase::Vote || PS->VotedFor != 0 || PS->FinalCut.Contains(PhotoId))
+	{
+		return;
+	}
+	for (ADCPlayerState* Other : Players())
+	{
+		if (Other != PS && Other->FinalCut.Contains(PhotoId))
+		{
+			PS->VotedFor = PhotoId;
+			return;
+		}
+	}
+}
+
+void ADCGameMode::TickVote(float Now)
+{
+	const ADCGameState* GS = GetGameState<ADCGameState>();
+	const TArray<ADCPlayerState*> All = Players();
+	const bool bAllVoted = !All.ContainsByPredicate([](const ADCPlayerState* PS) { return PS->VotedFor == 0; });
+	if (bAllVoted || Now >= GS->PhaseEndTime)
+	{
+		EnterPhase(EDCRunPhase::FrontPage);
+	}
+}
+
+void ADCGameMode::EnterFrontPage(float Now)
+{
+	ADCGameState* GS = GetGameState<ADCGameState>();
+	const UDCTuning& T = UDCTuning::Get();
+	SetDilation(1.f);
+	GS->PagePicks.Reset();
+	const TArray<ADCPlayerState*> All = Players();
+	int32 Total = 0;
+	for (ADCPlayerState* PS : All)
+	{
+		for (const FDCPhotoRecord& P : PS->Photos)
+		{
+			Total += P.Grade.Score;
+		}
+		for (int32 Id : PS->FinalCut)
+		{
+			const FDCPhotoRecord* Photo = PS->FindPhoto(Id);
+			if (!Photo)
+			{
+				continue;
+			}
+			FDCPagePick& Pick = GS->PagePicks.AddDefaulted_GetRef();
+			Pick.Photo = *Photo;
+			Pick.PlayerName = PS->GetPlayerName();
+			for (const ADCPlayerState* Voter : All)
+			{
+				Pick.Votes += Voter->VotedFor == Id ? 1 : 0;
+			}
+			Pick.PageScore = DCRunRules::PageScore(Photo->Grade.Score, Pick.Votes, T.Run.VoteBonus);
+		}
+	}
+	GS->HeadlineIndex = DCRunRules::HeadlineIndex(GS->PagePicks);
+	if (GS->PagePicks.IsValidIndex(GS->HeadlineIndex))
+	{
+		const FDCPagePick& Top = GS->PagePicks[GS->HeadlineIndex];
+		const FString SectorName = T.Sectors.IsValidIndex(Top.Photo.Sector) ? T.Sectors[Top.Photo.Sector].Name.ToString() : TEXT("THE FRONT");
+		GS->Headline = DCRunRules::MakeHeadline(GS->RunSeed ^ Top.Photo.PhotoId, T.Run.Headlines, T.Run.Subjects, Top.Photo.Grade, SectorName, Top.PlayerName);
+	}
+	else
+	{
+		GS->Headline = TEXT("CAMERAS SILENT AS CITY STANDS: NO PHOTOS FILED");
+	}
+	GS->Subhead = FString::Printf(TEXT("%s  |  %d PHOTOGRAPHER%s  |  %s PROPAGANDA POINTS RAISED  |  RUN SEED %d"),
+		GS->bRunFailed ? TEXT("UNIT LOST IN ACTION, REEL RECOVERED") : TEXT("ALL SECTORS LIBERATED"),
+		All.Num(), All.Num() == 1 ? TEXT("") : TEXT("S"), *FText::AsNumber(Total).ToString(), GS->RunSeed);
+	GS->ForceNetUpdate();
+}
+
+// ---------------------------------------------------------------- strikes, hitstop
 
 void ADCGameMode::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
-	if (HitstopEndReal > 0.0 && GetWorld()->GetRealTimeSeconds() >= HitstopEndReal)
-	{
-		HitstopEndReal = 0.0;
-		UGameplayStatics::SetGlobalTimeDilation(this, 1.f);
-	}
-	const ADCGameState* GS = GetGameState<ADCGameState>();
+	ADCGameState* GS = GetGameState<ADCGameState>();
 	if (!GS)
 	{
 		return;
 	}
-	const float Now = GS->Now();
-	if (GS->Phase == EDCRunPhase::Sector)
+	if (HitstopEndReal > 0.0 && GetWorld()->GetRealTimeSeconds() >= HitstopEndReal)
 	{
-		TickWaves(Now);
-		TickSector(Now);
+		HitstopEndReal = 0.0;
+		if (GS->Phase != EDCRunPhase::Reel)
+		{
+			SetDilation(1.f); // the reel drives dilation itself
+		}
+	}
+	if (ADCDemoPilot::IsRequested() && GetWorld()->GetRealTimeSeconds() >= NextHeartbeatReal)
+	{
+		// Scripted runs log the run clock so a stall can be told apart from a slow machine.
+		NextHeartbeatReal = GetWorld()->GetRealTimeSeconds() + 5.0;
+		UE_LOG(LogTemp, Display, TEXT("DCRUN phase=%d sector=%d now=%.1f end=%.1f dilation=%.3f paused=%d hitstop=%.2f"), static_cast<int32>(GS->Phase), GS->SectorIndex,
+			GS->Now(), GS->SectorEndTime, GetWorldSettings()->TimeDilation, GetWorld()->IsPaused() ? 1 : 0, HitstopEndReal);
+	}
+	const FPhaseHandlers* H = PhaseTable().Find(GS->Phase);
+	if (H && H->Tick)
+	{
+		(this->*H->Tick)(GS->Now());
 	}
 }
 
 void ADCGameMode::RequestHitstop()
 {
 	const FDCLookTuning& Look = UDCTuning::Get().Look;
-	UGameplayStatics::SetGlobalTimeDilation(this, Look.HitstopDilation);
+	SetDilation(Look.HitstopDilation);
 	HitstopEndReal = GetWorld()->GetRealTimeSeconds() + Look.HitstopSeconds;
 }
 
@@ -221,32 +812,4 @@ void ADCGameMode::CallStrike(const FDCStratagemDef& Def, const FVector& Target, 
 		Strike->Init(Def.Id, GS->Now() + Def.TelegraphSeconds + i * Def.BlastSpacing, Caller);
 		Strike->FinishSpawning(Xf);
 	}
-}
-
-void ADCGameMode::OnPhotoGraded(ADCCharacter* Photographer, const FDCPhotoRecord& Record, const FDCPhotoInputs& Inputs)
-{
-	ADCPlayerState* PS = Photographer ? Photographer->GetPlayerState<ADCPlayerState>() : nullptr;
-	if (!PS)
-	{
-		return;
-	}
-	FDCPhotoRecord Booked = Record;
-	Booked.Sector = GetGameState<ADCGameState>()->SectorIndex;
-	PS->AddPhoto(Booked);
-}
-
-void ADCGameMode::OnPlayerDowned(ADCCharacter* Player)
-{
-	ADCGameState* GS = GetGameState<ADCGameState>();
-	for (APlayerState* PS : GS->PlayerArray)
-	{
-		const ADCCharacter* C = PS ? PS->GetPawn<ADCCharacter>() : nullptr;
-		if (C && !C->IsDowned())
-		{
-			return;
-		}
-	}
-	// Everyone is down: the run fails, but the reel still plays.
-	ClearSector();
-	GS->Phase = EDCRunPhase::FrontPage;
 }

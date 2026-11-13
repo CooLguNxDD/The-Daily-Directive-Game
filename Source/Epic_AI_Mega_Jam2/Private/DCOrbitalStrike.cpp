@@ -6,6 +6,7 @@
 #include "DCAudio.h"
 #include "DCBuilding.h"
 #include "DCCharacter.h"
+#include "DCEnemy.h"
 #include "DCEnvironment.h"
 #include "DCGameMode.h"
 #include "DCGameState.h"
@@ -78,6 +79,18 @@ void ADCOrbitalStrike::BeginPlay()
 {
 	Super::BeginPlay();
 	const FDCStratagemDef* Def = GetDef();
+	if (bRestage)
+	{
+		SetReplicates(false);
+	}
+	if (Def && HasAuthority() && !bRestage && Def->Behaviour == TEXT("Decoy"))
+	{
+		// Decoy Paparazzi: the swarm mobs the beacon until it goes off.
+		if (ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>())
+		{
+			GS->Lures.Add(TPair<FVector, float>(GetActorLocation(), DetonateTime + 0.3f));
+		}
+	}
 	const FLinearColor BeamColor = Def ? Def->BeamColor : FLinearColor::Red;
 	const float Radius = Def ? Def->BlastRadius : 1000.f;
 
@@ -123,12 +136,17 @@ void ADCOrbitalStrike::Tick(float DeltaSeconds)
 	if (Now < DetonateTime)
 	{
 		TickTelegraph(Now, *Def);
+		if (HasAuthority() && !bRestage)
+		{
+			const float U = 1.f - (DetonateTime - Now) / FMath::Max(Def->TelegraphSeconds, 0.01f);
+			TickBehaviour(*Def, FMath::Clamp(U, 0.f, 1.f), DeltaSeconds);
+		}
 		return;
 	}
 	if (!bLocalDetonated)
 	{
 		bLocalDetonated = true;
-		if (HasAuthority())
+		if (HasAuthority() && !bRestage)
 		{
 			DetonateHost(*Def);
 		}
@@ -215,6 +233,30 @@ void ADCOrbitalStrike::TickBlast(float Now, const FDCStratagemDef& Def)
 	DCAssets::SetFlat(BeamMat, FLinearColor::White, 200.f * BeamFade);
 	Beam->SetVisibility(BeamFade > 0.f);
 	Light->SetIntensity(4.0e7f * Fade * Fade);
+}
+
+void ADCOrbitalStrike::TickBehaviour(const FDCStratagemDef& Def, float U, float DeltaSeconds)
+{
+	using FBehaviourFn = void (*)(ADCOrbitalStrike&, const FDCStratagemDef&, float, float);
+	static const TMap<FName, FBehaviourFn> Behaviours = {
+		// Gravity Singularity: everything nearby is dragged into the blast, harder as it charges.
+		{TEXT("Singularity"), [](ADCOrbitalStrike& S, const FDCStratagemDef& D, float Charge, float Dt)
+			{
+				const FVector Here = S.GetActorLocation();
+				for (ADCEnemy* E : TActorRange<ADCEnemy>(S.GetWorld()))
+				{
+					const FVector To = Here - E->GetActorLocation();
+					if (E->IsAlive() && !E->IsWalker() && To.Size2D() < D.BlastRadius * 2.5f)
+					{
+						E->SetActorLocation(E->GetActorLocation() + To.GetClampedToMaxSize(Dt * (600.f + 2400.f * Charge)));
+					}
+				}
+			}},
+	};
+	if (const FBehaviourFn* Fn = Behaviours.Find(Def.Behaviour))
+	{
+		(*Fn)(*this, Def, U, DeltaSeconds);
+	}
 }
 
 void ADCOrbitalStrike::DetonateHost(const FDCStratagemDef& Def)

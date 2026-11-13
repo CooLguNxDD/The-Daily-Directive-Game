@@ -5,6 +5,7 @@
 #include "DCAudio.h"
 #include "DCDebrisPool.h"
 #include "DCEnvironment.h"
+#include "DCGameMode.h"
 #include "DCGameState.h"
 #include "DCTuning.h"
 #include "Engine/World.h"
@@ -55,6 +56,7 @@ void ADCBuilding::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifet
 	DOREPLIFETIME(ADCBuilding, bCollapsed);
 	DOREPLIFETIME(ADCBuilding, CollapseTime);
 	DOREPLIFETIME(ADCBuilding, Epicenter);
+	DOREPLIFETIME(ADCBuilding, LotIndex);
 }
 
 void ADCBuilding::BeginPlay()
@@ -63,7 +65,7 @@ void ADCBuilding::BeginPlay()
 	BuildBlocks();
 	if (bCollapsed)
 	{
-		SimulateCollapse();
+		SimulateCollapse(LateJoinAnimates());
 	}
 }
 
@@ -155,7 +157,30 @@ void ADCBuilding::Collapse(const FVector& InEpicenter)
 	const ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>();
 	CollapseTime = GS ? GS->Now() : GetWorld()->GetTimeSeconds();
 	ForceNetUpdate();
-	SimulateCollapse();
+	SimulateCollapse(true);
+	if (ADCGameMode* GM = GetWorld()->GetAuthGameMode<ADCGameMode>())
+	{
+		GM->OnBuildingCollapsed(this);
+	}
+}
+
+bool ADCBuilding::LateJoinAnimates() const
+{
+	// Late joiners (more than a few seconds after the collapse) only see the rubble.
+	const ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>();
+	return !GS || GS->Now() - CollapseTime < 3.f;
+}
+
+void ADCBuilding::RestageCollapse(const FVector& InEpicenter, bool bAnimate)
+{
+	if (bCollapsed)
+	{
+		return;
+	}
+	bCollapsed = true;
+	Epicenter = InEpicenter;
+	BuildBlocks();
+	SimulateCollapse(bAnimate);
 }
 
 void ADCBuilding::OnRep_Collapsed()
@@ -163,11 +188,11 @@ void ADCBuilding::OnRep_Collapsed()
 	if (bCollapsed)
 	{
 		BuildBlocks();
-		SimulateCollapse();
+		SimulateCollapse(LateJoinAnimates());
 	}
 }
 
-void ADCBuilding::SimulateCollapse()
+void ADCBuilding::SimulateCollapse(bool bAnimateRequested)
 {
 	if (bSimulated)
 	{
@@ -179,9 +204,7 @@ void ADCBuilding::SimulateCollapse()
 	const ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>();
 	ADCDebrisPool* Pool = GS && GS->GetEnvironment() ? GS->GetEnvironment()->GetDebrisPool() : nullptr;
 
-	// Late joiners (more than a few seconds after the collapse) only see the rubble.
-	const float Age = GS ? GS->Now() - CollapseTime : 0.f;
-	const bool bAnimate = Pool && Age < 3.f;
+	const bool bAnimate = Pool && bAnimateRequested;
 
 	TArray<FTransform> Pieces;
 	for (UInstancedStaticMeshComponent* Ism : {Walls.Get(), Windows.Get()})

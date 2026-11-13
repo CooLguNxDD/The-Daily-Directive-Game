@@ -64,9 +64,14 @@ fi
 
 # C: cook, or a full package when asked. Cook errors and missing references only show here.
 if [[ "${UNREAL_GATE_PACKAGE:-0}" == 1 ]]; then
+  # The game target is built here, not by BuildCookRun: its UBT call refuses to run beside any editor that has
+  # Live Coding on (the engine is shared), and -NoHotReloadFromIDE does not pass through it.
+  stage "tier C: compile $project $platform $config" "$out/build-game.log" \
+    "$UE_ROOT/Engine/Build/BatchFiles/Build.bat" "$project" "$platform" "$config" \
+    -project="$uproject" -waitmutex -NoHotReload -NoHotReloadFromIDE || exit 1
   stage "tier C: package $platform $config" "$out/package.log" \
     "$UE_ROOT/Engine/Build/BatchFiles/RunUAT.bat" BuildCookRun -project="$uproject" -noP4 -utf8output \
-    -platform="$platform" -clientconfig="$config" -build -cook -stage -pak -archive \
+    -platform="$platform" -clientconfig="$config" -skipbuild -cook -stage -pak -archive \
     -archivedirectory="$out/package" -unattended -nullrhi || exit 1
 else
   stage "tier C: cook $platform" "$out/cook.log" \

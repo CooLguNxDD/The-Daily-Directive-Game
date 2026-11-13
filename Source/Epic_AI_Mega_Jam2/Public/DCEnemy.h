@@ -39,11 +39,16 @@ public:
 	void TryAttack(ADCCharacter* Target, float Now);
 	/** Host: a sound every machine hears at this enemy. */
 	void Cue(FName CueName) { MulticastCue(CueName); }
+	/** Host: Strobe Flash gear stuns the enemy until this server time. */
+	void HostStun(float Until) { StunnedUntil = FMath::Max(StunnedUntil, Until); Cue(TEXT("HitMarker")); }
+	/** Host: an active decoy beacon (Decoy Paparazzi) in range, if any. */
+	bool FindLure(float Range, FVector& Out) const;
 
 	FVector Heading = FVector::ForwardVector;
 	float NextAttackTime = 0.f;
 	float NextCueTime = 0.f;
 	bool bRushing = false;
+	float StunnedUntil = 0.f;
 
 	UPROPERTY(VisibleAnywhere) TObjectPtr<USphereComponent> Body;
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UStaticMeshComponent> Visual;

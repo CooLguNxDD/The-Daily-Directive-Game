@@ -140,15 +140,22 @@ namespace DCPhotoProbe
 			}
 			const FVector Center = Building->GetActorLocation() + FVector(0, 0, Building->GetHeight() * 0.4f);
 			Danger = FMath::Min(Danger, FVector::Dist(View.Location, Center));
+			// The falling mass spans the tower's whole height: any of these in frame and in sight counts.
 			FVector2D Ndc;
-			if (!ProjectToFrame(View, Center, Ndc) || FMath::Abs(Ndc.X) > 1.15f || FMath::Abs(Ndc.Y) > 1.15f)
-			{
-				continue;
-			}
+			bool bFramed = false;
 			Samples.Reset();
-			Samples.Add(Center);
-			Samples.Add(Center + FVector(0, 0, Building->GetHeight() * 0.4f));
-			if (VisibleFraction(World, View.Location, Samples, Photographer) <= 0.f)
+			for (const float Frac : {0.1f, 0.4f, 0.7f})
+			{
+				const FVector P = Building->GetActorLocation() + FVector(0, 0, Building->GetHeight() * Frac);
+				FVector2D PNdc;
+				if (ProjectToFrame(View, P, PNdc) && FMath::Abs(PNdc.X) <= 1.15f && FMath::Abs(PNdc.Y) <= 1.15f)
+				{
+					Ndc = bFramed ? Ndc : PNdc;
+					bFramed = true;
+					Samples.Add(P);
+				}
+			}
+			if (!bFramed || VisibleFraction(World, View.Location, Samples, Photographer) <= 0.f)
 			{
 				continue;
 			}
