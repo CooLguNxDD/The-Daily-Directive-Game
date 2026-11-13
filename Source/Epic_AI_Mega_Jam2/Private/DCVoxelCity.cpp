@@ -1,5 +1,7 @@
 #include "DCVoxelCity.h"
 
+#include "DCVoxelFx.h"
+
 #include "DCAssets.h"
 #include "DCAudio.h"
 #include "DCDebrisPool.h"
@@ -95,6 +97,14 @@ UMaterialInterface* ADCVoxelCity::VoxelMaterial()
 	return Material;
 }
 
+void ADCVoxelCity::BeginPlay()
+{
+	Super::BeginPlay();
+	FActorSpawnParameters Params;
+	Params.Owner = this;
+	Fx = GetWorld()->SpawnActor<ADCVoxelFx>(ADCVoxelFx::StaticClass(), FTransform::Identity, Params);
+}
+
 void ADCVoxelCity::EndPlay(const EEndPlayReason::Type Reason)
 {
 	for (const TSharedPtr<FMeshJob>& Job : Jobs)
@@ -157,6 +167,10 @@ void ADCVoxelCity::Clear()
 	DirtyCells.Reset();
 	Falling.Reset();
 	DeferredTerrain.Reset();
+	if (Fx)
+	{
+		Fx->ClearAll();
+	}
 	Sector.Towers.Reset();
 	Sector.Terrain.Data.Reset();
 	BuiltSector = INDEX_NONE;
@@ -227,9 +241,22 @@ FDCVoxelOpResult ADCVoxelCity::ApplyOp(const FDCVoxelOp& Op, bool bAnimate)
 	{
 		if (bAnimate)
 		{
-			StartFall(Piece, Now, DeferList);
+			// Where the piece's rubble lies: the landing dust and the decay smoke and fire sit there.
+			FVector Sum = FVector::ZeroVector;
+			for (int32 i = Piece.RubbleStart; i < Piece.RubbleStart + Piece.RubbleNum; ++i)
+			{
+				Sum += Sector.Terrain.ToWorld(Result.Rubble[i]);
+			}
+			const FVector Land = Piece.RubbleNum > 0 ? Sum / Piece.RubbleNum : Sector.Towers[Piece.Lot].Grid.ToWorld(Piece.Pivot);
+			StartFall(Piece, Now, DeferList, Land);
 			DeferList.Reset(); // the first piece to land shows the rubble
 		}
+	}
+	if (bAnimate && Fx && Op.Kind != TEXT("Fell"))
+	{
+		const FDCVoxelCarveDef& Carve = OpCtx.CarveFor(Op.Stratagem);
+		Fx->Emit(TEXT("Crater"), FVector(Op.CenterCm), Carve.CraterRadiusCm);
+		Fx->Burn(TEXT("CraterFire"), FVector(Op.CenterCm), Carve.CraterRadiusCm * 0.6f, OpCtx.Tuning->DecaySeconds * 0.5f);
 	}
 	for (const FIntVector& C : DeferList)
 	{
@@ -241,7 +268,7 @@ FDCVoxelOpResult ADCVoxelCity::ApplyOp(const FDCVoxelOp& Op, bool bAnimate)
 	return Result;
 }
 
-void ADCVoxelCity::StartFall(const FDCVoxelPiece& Piece, float Now, const TArray<FIntVector>& Deferred)
+void ADCVoxelCity::StartFall(const FDCVoxelPiece& Piece, float Now, const TArray<FIntVector>& Deferred, const FVector& LandAt)
 {
 	const FDCVoxelTuning& Tn = UDCVoxelSettings::Get().Tuning;
 	const FDCVoxelGrid& Grid = Sector.Towers[Piece.Lot].Grid;
@@ -254,7 +281,7 @@ void ADCVoxelCity::StartFall(const FDCVoxelPiece& Piece, float Now, const TArray
 	F->MaxAngle = Piece.bTopple ? Tn.ToppleDegrees : 0.f;
 	const float PivotHeight = F->Pivot.Z;
 	F->DropCm = Piece.bTopple ? FMath::Max(PivotHeight * 0.5f, 400.f) : FMath::Max(PivotHeight, 300.f);
-	F->LandCenter = F->Pivot + FVector(Piece.Dir) * 600.f;
+	F->LandCenter = LandAt;
 	const uint8 Mat = Piece.Materials.Num() > 0 ? Piece.Materials[0] : 1;
 	F->Color = Colors.IsValidIndex(Mat) ? FLinearColor::FromSRGBColor(Colors[Mat]) : FLinearColor::Black;
 	F->Comp = NewMesh(false);
@@ -489,7 +516,13 @@ void ADCVoxelCity::TickFalling(float Now)
 void ADCVoxelCity::Land(FFalling& F)
 {
 	F.bLanded = true;
-	const FVector Where = F.Comp ? F.Comp->Bounds.Origin * FVector(1, 1, 0) + FVector(0, 0, 150.f) : F.LandCenter;
+	const FVector Where = F.LandCenter + FVector(0, 0, 100.f);
+	if (Fx)
+	{
+		const float Radius = UDCVoxelSettings::Get().Tuning.TerrainVoxelCm * 12.f;
+		Fx->Emit(TEXT("Landing"), Where, Radius);
+		Fx->Burn(TEXT("Rubble"), Where, Radius, UDCVoxelSettings::Get().Tuning.DecaySeconds);
+	}
 	if (F.Comp)
 	{
 		MeshPool.Remove(F.Comp);

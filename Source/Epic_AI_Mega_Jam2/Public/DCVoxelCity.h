@@ -22,6 +22,7 @@ class EPIC_AI_MEGA_JAM2_API ADCVoxelCity : public AActor
 public:
 	ADCVoxelCity();
 
+	virtual void BeginPlay() override;
 	virtual void Tick(float DeltaSeconds) override;
 	virtual void EndPlay(const EEndPlayReason::Type Reason) override;
 
@@ -59,7 +60,7 @@ private:
 	void PollJobs();
 	void UploadCells();
 	void TickFalling(float Now);
-	void StartFall(const FDCVoxelPiece& Piece, float Now, const TArray<FIntVector>& DeferredTerrain);
+	void StartFall(const FDCVoxelPiece& Piece, float Now, const TArray<FIntVector>& DeferredTerrain, const FVector& LandAt);
 	void Land(FFalling& F);
 
 	FDCVoxelGrid& GridAt(int32 GridIndex);
@@ -91,4 +92,5 @@ private:
 	UPROPERTY() TObjectPtr<USceneComponent> Root;
 	UPROPERTY() TArray<TObjectPtr<UProceduralMeshComponent>> MeshPool;
 	UPROPERTY() TObjectPtr<UMaterialInterface> Material;
+	UPROPERTY() TObjectPtr<class ADCVoxelFx> Fx;
 };

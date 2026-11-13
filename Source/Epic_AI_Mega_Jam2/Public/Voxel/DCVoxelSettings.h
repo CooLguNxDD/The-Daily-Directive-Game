@@ -26,6 +26,9 @@ public:
 	/** One row per sector (the last row repeats for later sectors). */
 	UPROPERTY(EditAnywhere, Config, Category = "City") TArray<FDCVoxelSectorLayout> Sectors;
 	UPROPERTY(EditAnywhere, Config, Category = "City") TArray<FDCVoxelCarveDef> Carves;
+	/** Decay effects (R4): puff kinds and the emitters the city plays at a crater, a landing and burning rubble. */
+	UPROPERTY(EditAnywhere, Config, Category = "Fx") TArray<FDCFxKind> FxKinds;
+	UPROPERTY(EditAnywhere, Config, Category = "Fx") TArray<FDCFxEmitter> FxEmitters;
 	/** Vertex-colour material for voxel meshes (BaseColor = sRGB vertex colour, Emissive = alpha glow). */
 	UPROPERTY(EditAnywhere, Config, Category = "City") FSoftObjectPath VoxelMaterial = FSoftObjectPath(TEXT("/Game/DC/Materials/M_DCVoxel.M_DCVoxel"));
 

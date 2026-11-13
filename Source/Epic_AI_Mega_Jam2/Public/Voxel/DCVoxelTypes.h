@@ -124,6 +124,49 @@ struct FDCVoxelTuning
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 LandingDebris = 70;
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float VoxelMaterialGlowScale = 3.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") FDCVoxelCarveDef DefaultCarve;
+	/** Decay window: how long the rubble of a fallen piece smokes and burns (s). */
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float DecaySeconds = 9.f;
+};
+
+/** A puff kind for the decay effects (R4): a chunky voxel cube that moves, spins, grows or shrinks and dies. */
+USTRUCT(BlueprintType)
+struct FDCFxKind
+{
+	GENERATED_BODY()
+	UPROPERTY(EditAnywhere, Config, Category = "Fx") FName Id;
+	UPROPERTY(EditAnywhere, Config, Category = "Fx") FLinearColor Color = FLinearColor(0.3f, 0.28f, 0.25f);
+	/** Emissive multiplier (fire and embers only; blast white-orange is for blasts). */
+	UPROPERTY(EditAnywhere, Config, Category = "Fx") float Glow = 0.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Fx") int32 Pool = 200;
+	UPROPERTY(EditAnywhere, Config, Category = "Fx") float LifeMin = 1.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Fx") float LifeMax = 2.f;
+	/** Cube edge (cm) at birth and at death. */
+	UPROPERTY(EditAnywhere, Config, Category = "Fx") float SizeStart = 60.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Fx") float SizeEnd = 120.f;
+	/** Outward speed and upward speed at birth (cm/s); gravity (cm/s^2, negative = falls); drag per second. */
+	UPROPERTY(EditAnywhere, Config, Category = "Fx") float Speed = 200.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Fx") float Rise = 100.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Fx") float Gravity = 0.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Fx") float Drag = 1.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Fx") float SpinDeg = 60.f;
+};
+
+USTRUCT(BlueprintType)
+struct FDCFxBurst
+{
+	GENERATED_BODY()
+	UPROPERTY(EditAnywhere, Config, Category = "Fx") FName Kind;
+	UPROPERTY(EditAnywhere, Config, Category = "Fx") int32 Count = 10;
+};
+
+/** A named effect moment: what puffs spawn, and for burns how often (seconds between bursts). */
+USTRUCT(BlueprintType)
+struct FDCFxEmitter
+{
+	GENERATED_BODY()
+	UPROPERTY(EditAnywhere, Config, Category = "Fx") FName Id;
+	UPROPERTY(EditAnywhere, Config, Category = "Fx") TArray<FDCFxBurst> Bursts;
+	UPROPERTY(EditAnywhere, Config, Category = "Fx") float Interval = 0.25f;
 };
 
 /** One replicated voxel operation (R3): the host appends, every machine applies in Seq order. Positions are integer

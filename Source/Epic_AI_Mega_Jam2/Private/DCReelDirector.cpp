@@ -183,7 +183,7 @@ void ADCReelDirector::Restage(int32 ClipIndex)
 	const float Offset = GS->ReelClipStart - WindowStart;
 
 	// The sector's city, rebuilt from the run seed: same towers, same lots.
-	const FDCCityPlan Plan = DCCityRules::PlanCity(DCCityRules::SectorSeed(GS->RunSeed, Sector), T.City, T.Look.BuildingColors.Num());
+	const FDCCityPlan Plan = ADCVoxelCity::PlanSector(GS->RunSeed, Sector); // the same specs the sector played with
 	FActorSpawnParameters Params;
 	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 	TMap<int32, ADCBuilding*> ByLot;

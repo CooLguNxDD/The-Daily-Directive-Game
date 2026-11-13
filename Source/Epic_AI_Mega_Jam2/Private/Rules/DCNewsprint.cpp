@@ -128,8 +128,8 @@ namespace DCNewsprint
 				CellLuma[I] /= FMath::Max(Count[I], 1);
 			}
 		}
-		const FLinearColor Ink = FLinearColor(T.Ink.R, T.Ink.G, T.Ink.B);
-		const FLinearColor Paper = FLinearColor(T.Paper.R, T.Paper.G, T.Paper.B);
+		const FLinearColor InkC = FLinearColor(T.Ink.R, T.Ink.G, T.Ink.B);
+		const FLinearColor PaperC = FLinearColor(T.Paper.R, T.Paper.G, T.Paper.B);
 		for (int32 Y = 0; Y < H; ++Y)
 		{
 			for (int32 X = 0; X < W; ++X)
@@ -139,14 +139,14 @@ namespace DCNewsprint
 				const bool bRule = !bBorder && (X < T.BorderPx + T.RulePx || Y < T.BorderPx + T.RulePx || X >= W - T.BorderPx - T.RulePx || Y >= H - T.BorderPx - T.RulePx);
 				if (bBorder || bRule)
 				{
-					const FLinearColor& Edge = bBorder ? Paper : Ink;
+					const FLinearColor& Edge = bBorder ? PaperC : InkC;
 					Px = FColor(Clamp255(Edge.R), Clamp255(Edge.G), Clamp255(Edge.B), 255);
 					continue;
 				}
 				// Levels, then the photo's colour pulled toward the paper tone (sepia-like duotone).
 				const FLinearColor Src(Px.R * Gain + Offset, Px.G * Gain + Offset, Px.B * Gain + Offset);
 				const float L = FMath::Clamp(0.299f * Src.R + 0.587f * Src.G + 0.114f * Src.B, 0.f, 255.f) / 255.f;
-				const FLinearColor Tone = FMath::Lerp(Ink, Paper, L);
+				const FLinearColor Tone = FMath::Lerp(InkC, PaperC, L);
 				FLinearColor Out = FMath::Lerp(Tone, Src, FMath::Clamp(T.ColorKeep, 0.f, 1.f));
 				if (Cell > 0)
 				{
@@ -156,7 +156,7 @@ namespace DCNewsprint
 					const float Dx = (X % Cell) + 0.5f - Cell * 0.5f;
 					const float Dy = (Y % Cell) + 0.5f - Cell * 0.5f;
 					const float Inside = FMath::Clamp(R - FMath::Sqrt(Dx * Dx + Dy * Dy) + 0.5f, 0.f, 1.f);
-					const FLinearColor Dot = FMath::Lerp(Paper, Ink, Inside);
+					const FLinearColor Dot = FMath::Lerp(PaperC, InkC, Inside);
 					Out = FMath::Lerp(Out, Dot, FMath::Clamp(T.HalftoneMix, 0.f, 1.f));
 				}
 				const float N = (static_cast<float>(PixelHash(X, Y, Seed) & 0xFFFF) / 65535.f - 0.5f) * 2.f * T.Grain;
