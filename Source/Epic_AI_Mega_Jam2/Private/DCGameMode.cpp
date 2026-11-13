@@ -838,6 +838,11 @@ void ADCGameMode::EnterFrontPage(float Now)
 		}
 	}
 	GS->HeadlineIndex = DCRunRules::HeadlineIndex(GS->PagePicks);
+	for (const FDCPagePick& Pick : GS->PagePicks)
+	{
+		UE_LOG(LogTemp, Display, TEXT("DCPAGE photo=%d by=%s critic=%d votes=%d page=%d%s"), Pick.Photo.PhotoId, *Pick.PlayerName, Pick.Photo.Grade.Score, Pick.Votes, Pick.PageScore,
+			GS->PagePicks.IsValidIndex(GS->HeadlineIndex) && &GS->PagePicks[GS->HeadlineIndex] == &Pick ? TEXT(" HEADLINE") : TEXT(""));
+	}
 	if (GS->PagePicks.IsValidIndex(GS->HeadlineIndex))
 	{
 		const FDCPagePick& Top = GS->PagePicks[GS->HeadlineIndex];

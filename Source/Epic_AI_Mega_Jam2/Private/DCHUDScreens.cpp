@@ -409,7 +409,8 @@ void ADCHUD::DrawFrontPage(ADCGameState& GS, ADCCharacter* Me)
 			const float Cy = Sx(290.f) + Shown * (CardW * 9.f / 16.f + Sx(64.f));
 			const float Cx = SideX + (Shown % 2) * 0.f;
 			DrawPhotoCard(PC->GetPhotoImage(P.Photo.PhotoId), P.Photo.Grade, Cx, Cy, CardW, 1.f, false);
-			Text(FString::Printf(TEXT("%s  %s  %s"), *P.PlayerName.ToUpper(), *P.Photo.Grade.TimingLabel.ToString(), *FText::AsNumber(P.PageScore).ToString()), Cx, Cy + CardW * 9.f / 16.f + Sx(4.f), Ink, 0.5f);
+			Text(FString::Printf(TEXT("%s  |  CRITIC %s  |  %d VOTE%s  |  PAGE %s"), *P.PlayerName.ToUpper(), *FText::AsNumber(P.Photo.Grade.Score).ToString(), P.Votes,
+				P.Votes == 1 ? TEXT("") : TEXT("S"), *FText::AsNumber(P.PageScore).ToString()), Cx, Cy + CardW * 9.f / 16.f + Sx(4.f), Ink, 0.5f);
 			++Shown;
 		}
 	}
