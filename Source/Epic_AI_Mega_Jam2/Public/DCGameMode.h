@@ -48,7 +48,6 @@ public:
 	void CastVote(ADCPlayerState* PS, int32 PhotoId);
 
 	const FDCCityPlan& GetCityPlan() const { return CityPlan; }
-	float FindUpgradeParam(FName UpgradeId, bool bSecond = false) const;
 	/** Seconds between rogue strikes from the active mutators (0 = none). */
 	float RogueInterval() const;
 

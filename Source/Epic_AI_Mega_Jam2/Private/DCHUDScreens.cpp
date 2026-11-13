@@ -193,6 +193,13 @@ void ADCHUD::DrawDraft(ADCGameState& GS, ADCCharacter* Me)
 
 void ADCHUD::DrawReel(ADCGameState& GS, ADCCharacter* Me)
 {
+	ON_SCOPE_EXIT
+	{
+		if (Me)
+		{
+			DrawToast(*Me); // e.g. the last sector's quota verdict, said as the reel starts
+		}
+	};
 	const float W = Canvas->ClipX, H = Canvas->ClipY;
 	ADCPlayerController* PC = Cast<ADCPlayerController>(PlayerOwner);
 	if (!GS.ReelClips.IsValidIndex(GS.ReelIndex) || !PC)

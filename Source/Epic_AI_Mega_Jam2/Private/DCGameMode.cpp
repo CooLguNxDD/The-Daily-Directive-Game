@@ -139,12 +139,6 @@ float ADCGameMode::RogueInterval() const
 	return Interval;
 }
 
-float ADCGameMode::FindUpgradeParam(FName UpgradeId, bool bSecond) const
-{
-	const FDCUpgradeDef* Def = UDCTuning::Get().FindUpgrade(UpgradeId);
-	return Def ? (bSecond ? Def->Param2 : Def->Param) : 0.f;
-}
-
 // ---------------------------------------------------------------- run start / restart
 
 void ADCGameMode::StartRun()
@@ -524,13 +518,19 @@ void ADCGameMode::OnBuildingCollapsed(ADCBuilding* Building)
 void ADCGameMode::ScheduleCollapse(ADCBuilding* Building, const FVector& Epicenter, FName Kind, float Delay)
 {
 	ADCGameState* GS = GetGameState<ADCGameState>();
-	if (!Building || Building->IsCollapsed() || PendingCollapses.ContainsByPredicate([Building](const FPendingCollapse& P) { return P.Building == Building; }))
+	if (!Building || Building->IsCollapsed())
 	{
 		return;
 	}
 	if (Delay <= 0.f)
 	{
+		// Immediate (a strike's own record is the event): beats any telegraphed collapse still pending on it.
+		PendingCollapses.RemoveAll([Building](const FPendingCollapse& P) { return P.Building == Building; });
 		Building->Collapse(Epicenter);
+		return;
+	}
+	if (PendingCollapses.ContainsByPredicate([Building](const FPendingCollapse& P) { return P.Building == Building; }))
+	{
 		return;
 	}
 	const FDCBuildingSpec& Spec = Building->GetSpec();

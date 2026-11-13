@@ -14,26 +14,26 @@ namespace
 		PS.OwnedStratagems.AddUnique(Def.Unlock);
 	}
 
-	/** Cursed Disposable: fewer shots (Param), every photo worth more (Param2). Takes effect from the next sector. */
+	/** Cursed Disposable: fewer shots (FilmShots), every photo worth more (PhotoMultiplier). From the next sector. */
 	void Film(ADCGameState&, ADCPlayerState& PS, const FDCUpgradeDef& Def)
 	{
 		PS.Gear.AddUnique(Def.Id);
-		PS.FilmPerSector = FMath::Max(1, FMath::RoundToInt(Def.Param));
-		PS.PhotoMultiplier *= FMath::Max(Def.Param2, 0.f);
+		PS.FilmPerSector = Def.FilmShots > 0 ? Def.FilmShots : PS.FilmPerSector;
+		PS.PhotoMultiplier *= FMath::Max(Def.PhotoMultiplier, 0.f);
 	}
 
-	/** Strobe Flash and other shutter gear: read at the shutter by id (range Param cm, Param2 seconds). */
+	/** Strobe Flash and other shutter gear: read at the shutter from the row (StunRangeCm, StunSeconds). */
 	void Gear(ADCGameState&, ADCPlayerState& PS, const FDCUpgradeDef& Def)
 	{
 		PS.Gear.AddUnique(Def.Id);
 	}
 
-	/** Fisheye Danger Lens: wider viewfinder (Param2 degrees) and a bigger danger bonus (Param x). */
+	/** Fisheye Danger Lens: wider viewfinder (ExtraFOV degrees) and a bigger danger bonus (DangerMultiplier). */
 	void Fisheye(ADCGameState&, ADCPlayerState& PS, const FDCUpgradeDef& Def)
 	{
 		PS.Gear.AddUnique(Def.Id);
-		PS.DangerMultiplier *= FMath::Max(Def.Param, 0.f);
-		PS.ExtraFOV += Def.Param2;
+		PS.DangerMultiplier *= FMath::Max(Def.DangerMultiplier, 0.f);
+		PS.ExtraFOV += Def.ExtraFOV;
 	}
 
 	/** City Mutators change the whole city for everyone. */
