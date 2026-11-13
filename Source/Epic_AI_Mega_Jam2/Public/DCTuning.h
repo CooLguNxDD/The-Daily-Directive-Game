@@ -173,6 +173,8 @@ struct FDCLookTuning
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float FilmGrain = 0.35f;
 	/** Emissive of the fireball core and the ground shock ring at their peak (the bloom spike itself is BloomPeak). */
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float FireballGlow = 20.f;
+	/** Cubes in the voxel blast core (R4). */
+	UPROPERTY(EditAnywhere, Config, Category = "Look") int32 FireballCubes = 34;
 	/** Peak intensity of the blast's point light (it lights the street and the debris). */
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float BlastLightIntensity = 1.5e7f;
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float ShockGlow = 18.f;

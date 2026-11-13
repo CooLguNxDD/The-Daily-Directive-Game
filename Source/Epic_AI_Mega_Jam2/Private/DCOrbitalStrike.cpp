@@ -1,5 +1,6 @@
 #include "DCOrbitalStrike.h"
 
+#include "Components/InstancedStaticMeshComponent.h"
 #include "Components/PointLightComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "DCAssets.h"
@@ -49,6 +50,11 @@ ADCOrbitalStrike::ADCOrbitalStrike()
 	Ring = MakeFx(this, TEXT("Ring"), RootComponent);
 	Beacon = MakeFx(this, TEXT("Beacon"), RootComponent);
 	Fireball = MakeFx(this, TEXT("Fireball"), RootComponent);
+	FireCubes = CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("FireCubes"));
+	FireCubes->SetupAttachment(RootComponent);
+	FireCubes->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	FireCubes->SetCastShadow(false);
+	FireCubes->SetMobility(EComponentMobility::Movable);
 	Shock = MakeFx(this, TEXT("Shock"), RootComponent);
 	Light = CreateDefaultSubobject<UPointLightComponent>(TEXT("Light"));
 	Light->SetupAttachment(RootComponent);
@@ -115,6 +121,22 @@ void ADCOrbitalStrike::BeginPlay()
 	FireMat = DCAssets::MakeFlat(this, UDCTuning::Get().Look.Fire, 80.f);
 	Fireball->SetMaterial(0, FireMat);
 	Fireball->SetVisibility(false);
+	// The core's cubes, seeded from where the strike landed: every machine sees the same burst.
+	FireCubes->SetStaticMesh(DCAssets::Cube());
+	FireCubes->SetMaterial(0, FireMat);
+	FRandomStream CubeRng(GetTypeHash(FIntVector(GetActorLocation() / 10.f)));
+	const int32 NumCubes = FMath::Max(UDCTuning::Get().Look.FireballCubes, 1);
+	CubeSeeds.Reset();
+	TArray<FTransform> Hidden;
+	for (int32 i = 0; i < NumCubes; ++i)
+	{
+		const FVector Dir = CubeRng.VRand() * FVector(1.f, 1.f, 0.7f);
+		CubeSeeds.Add(FVector4f(FVector3f(Dir * CubeRng.FRandRange(0.25f, 1.f)), CubeRng.FRandRange(0.12f, 0.3f)));
+		Hidden.Add(FTransform(FQuat::Identity, FVector::ZeroVector, FVector::ZeroVector));
+	}
+	FireCubes->ClearInstances();
+	FireCubes->AddInstances(Hidden, false);
+	FireCubes->SetVisibility(false);
 
 	Shock->SetStaticMesh(DCAssets::Cylinder());
 	ShockMat = DCAssets::MakeFlat(this, FLinearColor(1.f, 0.9f, 0.7f), 40.f);
@@ -207,7 +229,7 @@ void ADCOrbitalStrike::DetonateLocal(const FDCStratagemDef& Def)
 	}
 	DCAudio::PlayAt(this, TEXT("Detonation"), Here, 1.f, FMath::FRandRange(0.9f, 1.05f));
 	DCAudio::Play2D(this, TEXT("Detonation"), 0.35f * Proximity, 0.8f);
-	Fireball->SetVisibility(true);
+	FireCubes->SetVisibility(true);
 	Shock->SetVisibility(true);
 	Ring->SetVisibility(false);
 	Beacon->SetVisibility(false);
@@ -219,12 +241,24 @@ void ADCOrbitalStrike::TickBlast(float Now, const FDCStratagemDef& Def)
 	const float Grow = FMath::Clamp(T / FireballGrowSeconds, 0.f, 1.f);
 	const float Fade = FMath::Clamp(1.f - (T - FireballGrowSeconds) / FireballLifeSeconds, 0.f, 1.f);
 	const float Scale = Def.FireballScale * FMath::Sqrt(Grow) * (0.6f + 0.4f * Fade);
-	Fireball->SetRelativeScale3D(FVector(Scale));
-	Fireball->SetRelativeLocation(FVector(0, 0, Scale * 35.f + T * 300.f));
+	// Voxel burst: cubes fly out from the core, rise with the heat and shrink as the fire cools; the gaps between
+	// them keep the target readable at the peak (the smooth sphere hid it).
+	const FVector Core(0, 0, Scale * 35.f + T * 300.f);
+	TArray<FTransform> Xf;
+	Xf.Reserve(CubeSeeds.Num());
+	for (int32 i = 0; i < CubeSeeds.Num(); ++i)
+	{
+		const FVector4f& C = CubeSeeds[i];
+		const float Out = 0.35f + 0.65f * FMath::Sqrt(Grow) + 0.25f * (1.f - Fade);
+		const FVector Pos = Core + FVector(C.X, C.Y, C.Z) * Scale * 50.f * Out + FVector(0, 0, T * 120.f * (1.f + C.W));
+		const float Size = Scale * C.W * FMath::Max(Fade, 0.f) * (0.6f + 0.4f * Grow);
+		Xf.Add(FTransform(FRotator(i * 37.f + T * 90.f, i * 53.f, i * 11.f), Pos, FVector(Size)));
+	}
+	FireCubes->BatchUpdateInstancesTransforms(0, Xf, false, true, true);
 	// Blast white-orange only at the first instant, then orange to ember red: the peak reads as fire, not a white dome.
 	const FLinearColor Hot = FMath::Lerp(FLinearColor(1.f, 0.48f, 0.1f), FLinearColor(1.f, 0.95f, 0.76f), FMath::Clamp(1.f - T / 0.25f, 0.f, 1.f));
 	DCAssets::SetFlat(FireMat, FMath::Lerp(FLinearColor(0.25f, 0.05f, 0.02f), Hot, Fade * Fade), 1.f + UDCTuning::Get().Look.FireballGlow * Fade * Fade * Fade);
-	Fireball->SetVisibility(Fade > 0.02f);
+	FireCubes->SetVisibility(Fade > 0.02f);
 
 	const float ShockR = Def.BlastRadius * 2.4f * FMath::Clamp(T / 0.6f, 0.f, 1.f) / 100.f;
 	Shock->SetRelativeScale3D(FVector(ShockR, ShockR, 0.04f));
