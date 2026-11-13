@@ -644,10 +644,10 @@ void ADCVoxelCity::Land(FFalling& F)
 	DCAudio::PlayAt(this, TEXT("Collapse"), Where, 1.f);
 }
 
-void ADCVoxelCity::FollowGameState()
+void ADCVoxelCity::SyncBuild()
 {
 	const ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>();
-	if (!GS)
+	if (!GS || !bFollowGameState)
 	{
 		return;
 	}
@@ -663,7 +663,13 @@ void ADCVoxelCity::FollowGameState()
 			Build(GS->RunSeed, GS->CitySector, GS->CityBuildId);
 		}
 	}
-	if (BuiltSector == INDEX_NONE)
+}
+
+void ADCVoxelCity::FollowGameState()
+{
+	SyncBuild();
+	const ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>();
+	if (!GS || BuiltSector == INDEX_NONE)
 	{
 		return;
 	}

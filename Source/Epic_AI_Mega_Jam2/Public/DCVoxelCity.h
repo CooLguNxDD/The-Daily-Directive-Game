@@ -61,6 +61,8 @@ private:
 	struct FFalling;
 
 	void FollowGameState();
+	/** Builds or clears to match the game state, without applying ops. */
+	void SyncBuild();
 	void QueueDirty(int32 GridIndex, const TSet<FIntVector>& Chunks);
 	void QueueAllDirty(TSet<FIntVector>* DeferTerrain);
 	void PollJobs();
