@@ -45,6 +45,7 @@ public:
 	virtual void EndPlay(const EEndPlayReason::Type Reason) override;
 	virtual void SetupInputComponent() override;
 	virtual void PlayerTick(float DeltaTime) override;
+	virtual void Tick(float DeltaSeconds) override;
 
 	UDCInputSet* GetInputSet();
 	float GetSensitivity() const { return Sensitivity; }

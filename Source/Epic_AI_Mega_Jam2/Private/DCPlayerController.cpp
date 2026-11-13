@@ -105,10 +105,16 @@ void ADCPlayerController::SetSensitivity(float Value)
 void ADCPlayerController::OnSensUp() { SetSensitivity(Sensitivity * 1.15f); DCAudio::Play2D(this, TEXT("UIClick")); }
 void ADCPlayerController::OnSensDown() { SetSensitivity(Sensitivity / 1.15f); DCAudio::Play2D(this, TEXT("UIClick")); }
 
+void ADCPlayerController::Tick(float DeltaSeconds)
+{
+	Super::Tick(DeltaSeconds);
+	// Runs on every copy: the client uploads, and the host-side copy of a remote player relays down to it.
+	PumpSends();
+}
+
 void ADCPlayerController::PlayerTick(float DeltaTime)
 {
 	Super::PlayerTick(DeltaTime);
-	PumpSends();
 	if (IsLocalController())
 	{
 		UpdateMenu();
