@@ -38,7 +38,7 @@ stage() {  # stage <name> <log> <command...>: one line per stage, the failing st
 # A: compile the editor target (what the tests and the cook load)
 stage "tier A: compile ${project}Editor" "$out/build.log" \
   "$UE_ROOT/Engine/Build/BatchFiles/Build.bat" "${project}Editor" "$platform" "$config" \
-  -project="$uproject" -waitmutex -NoHotReload || exit 1
+  -project="$uproject" -waitmutex -NoHotReload -NoHotReloadFromIDE || exit 1
 
 # B: automation tests, no window, no GPU. The process exit code is not proof: read the report.
 rm -rf "$out/report"
