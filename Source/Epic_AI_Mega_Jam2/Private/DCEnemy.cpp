@@ -102,10 +102,20 @@ namespace
 
 	void TickWalker(ADCEnemy& E, const FDCEnemyDef& Def, float Dt, float Now)
 	{
+		// R11: a walker marches on the nearest standing tower and shoulders it over; with none left it hunts players.
 		ADCCharacter* Target = E.FindTarget(Def.SenseRange, false);
-		if (Target)
+		const ADCBuilding* Tower = nullptr;
+		float Best = TNumericLimits<float>::Max();
+		for (ADCBuilding* B : TActorRange<ADCBuilding>(E.GetWorld()))
 		{
-			const FVector Want = (Target->GetActorLocation() - E.GetActorLocation()).GetSafeNormal2D();
+			const float D = B->IsCollapsed() ? Best : FVector::Dist2D(B->GetActorLocation(), E.GetActorLocation());
+			Tower = D < Best ? B : Tower;
+			Best = FMath::Min(Best, D);
+		}
+		const FVector Goal = Tower ? Tower->GetActorLocation() : (Target ? Target->GetActorLocation() : E.GetActorLocation() + E.Heading);
+		const FVector Want = (Goal - E.GetActorLocation()).GetSafeNormal2D();
+		if (!Want.IsNearlyZero())
+		{
 			E.Heading = FMath::VInterpNormalRotationTo(E.Heading, Want, Dt, 12.f);
 		}
 		const FVector Next = E.GetActorLocation() + E.Heading * Def.Speed * Dt;

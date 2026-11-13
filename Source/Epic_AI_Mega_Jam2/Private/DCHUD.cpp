@@ -466,7 +466,7 @@ void ADCHUD::DrawOnboarding(ADCCharacter& Me)
 		}
 	}
 	const float W = Canvas->ClipX;
-	const float Y = Sx(120.f);
+	const float Y = Canvas->ClipY - Sx(250.f); // low centre: the top band holds the timer, quota and HQ Scoop banner
 	Box(W * 0.5f - Sx(430.f), Y - Sx(6.f), Sx(860.f), Sx(78.f), Shade);
 	Text(TEXT("ORDERS: SHOOT THE DESTRUCTION. PHOTOS PAY FOR BIGGER BOMBS."), W * 0.5f, Y, Gold, 0.65f, true);
 	Text(Next ? FString::Printf(TEXT("%d/5  %s"), Done + 1, Next->Prompt) : FString(TEXT("YOU ARE A WAR PHOTOGRAPHER NOW. GET CLOSER.")), W * 0.5f, Y + Sx(32.f), FLinearColor::White, 0.75f, true);
