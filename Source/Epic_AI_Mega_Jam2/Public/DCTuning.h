@@ -98,6 +98,8 @@ struct FDCCameraTuning
 	 *  as fire and debris instead of a white frame. */
 	UPROPERTY(EditAnywhere, Config, Category = "Camera") float PhotoBloomFraction = 0.15f;
 	UPROPERTY(EditAnywhere, Config, Category = "Camera") float PhotoExposureBias = -0.6f;
+	/** Extra stops the photo closes down at the full flash (scaled by the flash still on screen). */
+	UPROPERTY(EditAnywhere, Config, Category = "Camera") float PhotoFlashStopDown = 2.f;
 };
 
 USTRUCT(BlueprintType)

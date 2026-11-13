@@ -698,7 +698,8 @@ void ADCCharacter::TakePhoto()
 	const ADCGameState* PhotoGS = GetWorld()->GetGameState<ADCGameState>();
 	const ADCEnvironment* Env = PhotoGS ? PhotoGS->GetEnvironment() : nullptr;
 	PhotoLook.BloomIntensity = Env ? Env->GetPhotoBloom(C.PhotoBloomFraction) : UDCTuning::Get().Look.BaseBloom;
-	PhotoLook.AutoExposureBias = UDCTuning::Get().Look.ExposureBias + C.PhotoExposureBias;
+	// Stop down while the blast is still blinding: the frame keeps the fire's colour and the debris edges.
+	PhotoLook.AutoExposureBias = UDCTuning::Get().Look.ExposureBias + C.PhotoExposureBias - (Env ? Env->GetFlashAlpha() * C.PhotoFlashStopDown : 0.f);
 	Capture->PostProcessBlendWeight = 1.f;
 	Capture->CaptureScene();
 
