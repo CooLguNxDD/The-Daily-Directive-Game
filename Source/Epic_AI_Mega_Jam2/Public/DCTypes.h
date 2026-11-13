@@ -119,4 +119,6 @@ struct FDCPagePick
 	UPROPERTY() FString PlayerName;
 	UPROPERTY() int32 Votes = 0;
 	UPROPERTY() int32 PageScore = 0;
+	/** Its column's headline (R22): the winner and up to two runner-ups get one. */
+	UPROPERTY() FString Headline;
 };

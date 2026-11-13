@@ -110,6 +110,51 @@ namespace DCRunRules
 		return Best;
 	}
 
+	FString PickHeadline(int32 Seed, const TArray<FDCHeadlineRow>& Rows, const TArray<FName>& Categories, const FString& Player,
+		const FString& Sector, const FString& CoStar, TSet<FString>& Used)
+	{
+		const FDCHeadlineRow* Row = nullptr;
+		for (const FName& C : Categories)
+		{
+			Row = Rows.FindByPredicate([C](const FDCHeadlineRow& R) { return R.Category == C && R.Lines.Num() > 0; });
+			if (Row)
+			{
+				break;
+			}
+		}
+		Row = Row ? Row : Rows.FindByPredicate([](const FDCHeadlineRow& R) { return R.Category == TEXT("ANY") && R.Lines.Num() > 0; });
+		if (!Row)
+		{
+			return FString::Printf(TEXT("VICTORY IN %s"), *Sector.ToUpper());
+		}
+		TArray<int32> Fresh;
+		for (int32 i = 0; i < Row->Lines.Num(); ++i)
+		{
+			if (!Used.Contains(Row->Lines[i]))
+			{
+				Fresh.Add(i);
+			}
+		}
+		if (Fresh.Num() == 0)
+		{
+			for (const FString& L : Row->Lines)
+			{
+				Used.Remove(L); // every line of this category printed: the next edition starts over
+			}
+			for (int32 i = 0; i < Row->Lines.Num(); ++i)
+			{
+				Fresh.Add(i);
+			}
+		}
+		const FString& Raw = Row->Lines[Fresh[static_cast<int32>(static_cast<uint32>(HashCombine(GetTypeHash(Seed), 0x4EAD1u)) % static_cast<uint32>(Fresh.Num()))]];
+		Used.Add(Raw);
+		FString Line = Raw;
+		Line.ReplaceInline(TEXT("{PLAYER}"), *Player.ToUpper());
+		Line.ReplaceInline(TEXT("{SECTOR}"), *Sector.ToUpper());
+		Line.ReplaceInline(TEXT("{COSTAR}"), CoStar.IsEmpty() ? TEXT("A COMRADE") : *CoStar.ToUpper());
+		return Line;
+	}
+
 	FString MakeHeadline(int32 Seed, const TArray<FString>& Templates, const TMap<FName, FString>& Subjects,
 		const FDCPhotoGrade& Grade, const FString& SectorName, const FString& Player)
 	{

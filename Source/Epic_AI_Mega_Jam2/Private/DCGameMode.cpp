@@ -1102,16 +1102,41 @@ void ADCGameMode::EnterFrontPage(float Now)
 		UE_LOG(LogTemp, Display, TEXT("DCPAGE photo=%d by=%s critic=%d votes=%d page=%d%s"), Pick.Photo.PhotoId, *Pick.PlayerName, Pick.Photo.Grade.Score, Pick.Votes, Pick.PageScore,
 			GS->PagePicks.IsValidIndex(GS->HeadlineIndex) && &GS->PagePicks[GS->HeadlineIndex] == &Pick ? TEXT(" HEADLINE") : TEXT(""));
 	}
+	// Full edition (R22): the winner and up to two runner-ups each get a satirical headline from the data rows, never a
+	// line this session already printed; a wiped run prints the mock-heroic CORRECTION edition.
+	static TSet<FString> PrintedThisSession;
+	TArray<int32> Order;
+	for (int32 i = 0; i < GS->PagePicks.Num(); ++i)
+	{
+		Order.Add(i);
+	}
+	Order.StableSort([GS](int32 A, int32 B) { return GS->PagePicks[A].PageScore > GS->PagePicks[B].PageScore; });
+	Order.Remove(GS->HeadlineIndex);
 	if (GS->PagePicks.IsValidIndex(GS->HeadlineIndex))
 	{
-		const FDCPagePick& Top = GS->PagePicks[GS->HeadlineIndex];
-		const FString SectorName = T.Sectors.IsValidIndex(Top.Photo.Sector) ? T.Sectors[Top.Photo.Sector].Name.ToString() : TEXT("THE FRONT");
-		GS->Headline = DCRunRules::MakeHeadline(GS->RunSeed ^ Top.Photo.PhotoId, T.Run.Headlines, T.Run.Subjects, Top.Photo.Grade, SectorName, Top.PlayerName);
+		Order.Insert(GS->HeadlineIndex, 0);
+	}
+	for (int32 k = 0; k < FMath::Min(3, Order.Num()); ++k)
+	{
+		FDCPagePick& Pick = GS->PagePicks[Order[k]];
+		const FString SectorName = T.Sectors.IsValidIndex(Pick.Photo.Sector) ? T.Sectors[Pick.Photo.Sector].Name.ToString() : TEXT("THE FRONT");
+		Pick.Headline = DCRunRules::PickHeadline(GS->RunSeed ^ Pick.Photo.PhotoId, T.HeadlineRows, Pick.Photo.Grade.Categories, Pick.PlayerName, SectorName, Pick.Photo.CoStar, PrintedThisSession);
+	}
+	if (GS->bRunFailed)
+	{
+		const FString Correction = DCRunRules::PickHeadline(GS->RunSeed, T.HeadlineRows, {FName(TEXT("CORRECTION"))}, GS->PagePicks.IsValidIndex(GS->HeadlineIndex) ? GS->PagePicks[GS->HeadlineIndex].PlayerName : FString(TEXT("OUR CORRESPONDENTS")),
+			TEXT("THE CITY"), FString(), PrintedThisSession);
+		GS->Headline = TEXT("CORRECTION: ") + Correction;
+	}
+	else if (GS->PagePicks.IsValidIndex(GS->HeadlineIndex))
+	{
+		GS->Headline = GS->PagePicks[GS->HeadlineIndex].Headline;
 	}
 	else
 	{
 		GS->Headline = TEXT("CAMERAS SILENT AS CITY STANDS: NO PHOTOS FILED");
 	}
+	UE_LOG(LogTemp, Display, TEXT("DCPAGE headline=\"%s\"%s"), *GS->Headline, GS->bRunFailed ? TEXT(" CORRECTION EDITION") : TEXT(""));
 	const int32 QuotasMet = GS->QuotaResults.FilterByPredicate([](bool b) { return b; }).Num();
 	GS->Subhead = FString::Printf(TEXT("%s  |  %d PHOTOGRAPHER%s  |  %s PROPAGANDA POINTS RAISED  |  QUOTAS MET %d/%d  |  RUN SEED %d"),
 		GS->bRunFailed ? TEXT("UNIT LOST IN ACTION, REEL RECOVERED") : TEXT("ALL SECTORS LIBERATED"),

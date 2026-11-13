@@ -10,6 +10,7 @@
 #include "Rules/DCPressureRules.h"
 #include "Rules/DCNewsprint.h"
 #include "Rules/DCPostStack.h"
+#include "Rules/DCRunRules.h"
 #include "Rules/DCWeather.h"
 #include "DCTuning.generated.h"
 
@@ -427,6 +428,8 @@ public:
 	UPROPERTY(EditAnywhere, Config, Category = "Run") FDCRunTuning Run;
 	UPROPERTY(EditAnywhere, Config, Category = "Run") TArray<FDCUpgradeDef> Upgrades;
 	UPROPERTY(EditAnywhere, Config, Category = "Run") TArray<FDCScoopDef> Scoops;
+	/** Full edition front page (R22): satirical headline rows per photo category. */
+	UPROPERTY(EditAnywhere, Config, Category = "Run") TArray<FDCHeadlineRow> HeadlineRows;
 	/** Post-process layer stack (R19): every layer of the scene and the photo look; code only sets weights by id. */
 	UPROPERTY(EditAnywhere, Config, Category = "Post") TArray<FDCPostLayer> PostLayers;
 	UPROPERTY(EditAnywhere, Config, Category = "Post") TArray<FDCPostPreset> PostPresets;

@@ -432,32 +432,49 @@ void ADCHUD::DrawFrontPage(ADCGameState& GS, ADCCharacter* Me)
 		Text(FString::Printf(TEXT("PHOTO: %s  |  CRITIC %s  |  %d VOTE%s  |  PAGE SCORE %s"), *(Top.Photo.CoStar.IsEmpty() ? Top.PlayerName.ToUpper() : Top.PlayerName.ToUpper() + TEXT(" WITH ") + Top.Photo.CoStar.ToUpper()), *FText::AsNumber(Top.Photo.Grade.Score).ToString(),
 			Top.Votes, Top.Votes == 1 ? TEXT("") : TEXT("S"), *FText::AsNumber(Top.PageScore).ToString()), Sx(60.f), Y + BigW * 9.f / 16.f + Sx(6.f), Ink, 0.55f);
 
-		// The other picks, smaller, down the right column.
+		// Full edition (R22): up to two runner-up columns down the right, each under its own satirical headline.
 		const float SideX = Sx(60.f) + BigW + Sx(50.f);
 		const float SideW = W - SideX - Sx(60.f);
-		// Up to four side picks: one column for two, two columns beyond, so the last card stays above the footer.
-		const int32 Sides = FMath::Min(4, FMath::Max(0, GS.PagePicks.Num() - (GS.HeadlineIndex >= 0 ? 1 : 0)));
-		const int32 Cols = Sides > 2 ? 2 : 1;
-		const float ColGap = Sx(16.f);
-		const float CardW = FMath::Min((SideW - (Cols - 1) * ColGap) / Cols, Sx(360.f));
-		int32 Shown = 0;
-		for (int32 i = 0; i < GS.PagePicks.Num() && Shown < 4; ++i)
+		TArray<int32> Runners;
+		for (int32 i = 0; i < GS.PagePicks.Num(); ++i)
 		{
-			if (i == GS.HeadlineIndex)
+			if (i != GS.HeadlineIndex && !GS.PagePicks[i].Headline.IsEmpty())
 			{
-				continue;
+				Runners.Add(i);
 			}
-			const FDCPagePick& P = GS.PagePicks[i];
-			const float Cy = Sx(290.f) + (Shown / Cols) * (CardW * 9.f / 16.f + Sx(64.f));
-			const float Cx = SideX + (Shown % Cols) * (CardW + ColGap);
-			DrawPhotoCard(PC->GetPhotoImage(P.Photo.PhotoId), P.Photo.Grade, Cx, Cy, CardW, 1.f, false);
-			// Name on one line, the numbers on the next: a narrow two-column card cannot hold both.
-			const FString Scores = FString::Printf(TEXT("CRITIC %s  |  %d VOTE%s  |  PAGE %s"), *FText::AsNumber(P.Photo.Grade.Score).ToString(), P.Votes,
-				P.Votes == 1 ? TEXT("") : TEXT("S"), *FText::AsNumber(P.PageScore).ToString());
-			Text(P.PlayerName.ToUpper(), Cx, Cy + CardW * 9.f / 16.f + Sx(4.f), Ink, 0.5f);
-			Text(Scores, Cx, Cy + CardW * 9.f / 16.f + Sx(24.f), Ink, 0.45f);
-			++Shown;
 		}
+		Runners.StableSort([&GS](int32 A, int32 B) { return GS.PagePicks[A].PageScore > GS.PagePicks[B].PageScore; });
+		Runners.SetNum(FMath::Min(Runners.Num(), 2));
+		const float ColumnH = (H - Sx(120.f) - Sx(290.f)) / 2.f;
+		const float CardW = FMath::Min(SideW, (ColumnH - Sx(96.f)) * 16.f / 9.f);
+		for (int32 k = 0; k < Runners.Num(); ++k)
+		{
+			const FDCPagePick& P = GS.PagePicks[Runners[k]];
+			const float Cy = Sx(290.f) + k * ColumnH;
+			Box(SideX, Cy - Sx(8.f), SideW, Sx(2.f), Ink);
+			// The column headline shrinks until it fits the column.
+			float HeadScale = 0.9f, Hw = 0.f, Hh = 0.f;
+			for (; HeadScale > 0.42f; HeadScale -= 0.04f)
+			{
+				Canvas->TextSize(BigFont, P.Headline, Hw, Hh, HeadScale * TextBoost * UiScale, HeadScale * TextBoost * UiScale);
+				if (Hw < SideW)
+				{
+					break;
+				}
+			}
+			Text(P.Headline, SideX, Cy, Ink, HeadScale);
+			const float PhotoY = Cy + Hh + Sx(8.f);
+			DrawPhotoCard(PC->GetPhotoImage(P.Photo.PhotoId), P.Photo.Grade, SideX, PhotoY, CardW, 1.f, false);
+			const FString Byline = P.Photo.CoStar.IsEmpty() ? P.PlayerName.ToUpper() : P.PlayerName.ToUpper() + TEXT(" WITH ") + P.Photo.CoStar.ToUpper();
+			Text(FString::Printf(TEXT("PHOTO: %s  |  CRITIC %s  |  %d VOTE%s"), *Byline, *FText::AsNumber(P.Photo.Grade.Score).ToString(), P.Votes, P.Votes == 1 ? TEXT("") : TEXT("S")),
+				SideX, PhotoY + CardW * 9.f / 16.f + Sx(4.f), Ink, 0.45f);
+		}
+	}
+	if (GS.bRunFailed)
+	{
+		// The mock-heroic correction edition: a stamped banner under the masthead.
+		Box(W * 0.5f - Sx(210.f), Sx(78.f), Sx(420.f), Sx(40.f), Ink);
+		Text(TEXT("CORRECTION EDITION"), W * 0.5f, Sx(84.f), Paper, 0.8f, true);
 	}
 	Box(Sx(40.f), H - Sx(110.f), W - Sx(80.f), Sx(2.f), Ink);
 	Text(GS.Subhead, W * 0.5f, H - Sx(100.f), Ink, 0.55f, true);
