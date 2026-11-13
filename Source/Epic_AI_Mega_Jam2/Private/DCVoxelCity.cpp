@@ -1,6 +1,8 @@
 #include "DCVoxelCity.h"
 
 #include "DCVoxelFx.h"
+#include "DCCharacter.h"
+#include "Components/CapsuleComponent.h"
 #include "Camera/CameraActor.h"
 #include "Camera/CameraComponent.h"
 #include "UnrealClient.h"
@@ -93,6 +95,24 @@ FDCCityPlan ADCVoxelCity::PlanSector(int32 RunSeed, int32 SectorIndex)
 		return Plan;
 	}
 	return DCCityRules::PlanCity(Seed, T.City, T.Look.BuildingColors.Num());
+}
+
+float ADCVoxelCity::SurfaceZCm(const FVector& Where) const
+{
+	const FDCVoxelGrid& T = Sector.Terrain;
+	if (BuiltSector == INDEX_NONE)
+	{
+		return 0.f;
+	}
+	const FIntVector C = T.ToLocal(DCVoxelMath::ToCm(FVector(Where.X, Where.Y, 0.f)));
+	for (int32 Z = UDCVoxelSettings::Get().Tuning.GroundLayers + 60; Z >= 0; --Z)
+	{
+		if (T.Data.IsSolid(FIntVector(C.X, C.Y, Z)))
+		{
+			return static_cast<float>(T.OriginCm.Z + (Z + 1) * T.VoxelCm);
+		}
+	}
+	return 0.f;
 }
 
 const FDCSeasonDef* ADCVoxelCity::SeasonFor(int32 RunSeed, int32 SectorIndex)
@@ -306,6 +326,19 @@ FDCVoxelOpResult ADCVoxelCity::ApplyOp(const FDCVoxelOp& Op, bool bAnimate)
 	{
 		SetTowerOffset(Lot, FVector::ZeroVector); // the stump stops shaking
 	}
+	// Host: nobody ends up inside the new rubble; lift them onto it (movement replicates to clients).
+	if (HasAuthority() && GetNetMode() != NM_Client && bFollowGameState)
+	{
+		for (ADCCharacter* C : TActorRange<ADCCharacter>(GetWorld()))
+		{
+			const float Half = C->GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
+			const float Surface = SurfaceZCm(C->GetActorLocation());
+			if (C->GetActorLocation().Z - Half < Surface - 10.f)
+			{
+				C->SetActorLocation(FVector(C->GetActorLocation().X, C->GetActorLocation().Y, Surface + Half + 5.f), false, nullptr, ETeleportType::TeleportPhysics);
+			}
+		}
+	}
 	const float Now = GetWorld()->GetTimeSeconds();
 
 	// The crater shows now; rubble chunks wait for their piece to land.
@@ -369,8 +402,8 @@ void ADCVoxelCity::StartFall(const FDCVoxelPiece& Piece, float Now, const TArray
 	// Leans over away from the blast: rotation about the horizontal axis perpendicular to the fall direction.
 	F->Axis = FVector::CrossProduct(FVector::UpVector, FVector(Piece.Dir)).GetSafeNormal();
 	F->MaxAngle = Piece.bTopple ? Tn.ToppleDegrees : 0.f;
-	const float PivotHeight = F->Pivot.Z;
-	F->DropCm = Piece.bTopple ? FMath::Max(PivotHeight * 0.5f, 400.f) : FMath::Max(PivotHeight, 300.f);
+	// The piece falls the whole way to where its rubble lies, then breaks: it never stops in the air.
+	F->DropCm = FMath::Max(F->Pivot.Z - LandAt.Z, 300.f);
 	F->LandCenter = LandAt;
 	const uint8 Mat = Piece.Materials.Num() > 0 ? Piece.Materials[0] : 1;
 	F->Color = Colors.IsValidIndex(Mat) ? FLinearColor::FromSRGBColor(Colors[Mat]) : FLinearColor::Black;

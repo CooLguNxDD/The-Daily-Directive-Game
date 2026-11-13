@@ -327,9 +327,12 @@ namespace DCVoxelOps
 			Typical = FMath::Max(Typical, Count);
 		}
 		int32 Break = INDEX_NONE;
-		if (!T.bFallen)
+		// A stump is checked again on every op (only below its old break): a later blast can bring it down further.
+		const bool bWasFallen = T.bFallen;
 		{
-			for (int32 Z = Size.Z - 1; Z >= 1; --Z)
+			// A stump's bitten band is weak by design: it only breaks again under fresh damage (half the support).
+			const int32 Need = bWasFallen ? Support / 2 : Support;
+			for (int32 Z = (bWasFallen ? FMath::Min(T.BreakZ - 1, Size.Z - 1) : Size.Z - 1); Z >= 1; --Z)
 			{
 				const int32 Intact = T.IntactLayers.IsValidIndex(Z) ? T.IntactLayers[Z] : 0;
 				if (Intact * 4 < Typical)
@@ -341,7 +344,7 @@ namespace DCVoxelOps
 				{
 					Now += Box.V[I] != 0 ? 1 : 0;
 				}
-				if (static_cast<int64>(Now) * 100 < static_cast<int64>(Intact) * Support)
+				if (static_cast<int64>(Now) * 100 < static_cast<int64>(Intact) * Need)
 				{
 					Break = Z;
 					break;
@@ -384,7 +387,10 @@ namespace DCVoxelOps
 			TakePiece(Piece, [LocalBreak](int32, int32, int32 Z) { return Z > LocalBreak; });
 			T.bFallen = true;
 			T.BreakZ = Break;
-			Out.FallenLots.Add(T.Lot);
+			if (!bWasFallen)
+			{
+				Out.FallenLots.Add(T.Lot); // the gameplay collapse record is one-shot
+			}
 			if (Piece.Cells.Num() == 0)
 			{
 				Out.Pieces.Pop();

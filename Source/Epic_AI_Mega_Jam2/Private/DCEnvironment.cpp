@@ -196,7 +196,7 @@ FDCPostResult ADCEnvironment::ComposeLook(bool bPhoto, bool bSpotlit) const
 	W.Add(TEXT("Viewfinder"), 0.f);
 	W.Add(TEXT("Damage"), 0.f);
 	W.Add(TEXT("FlashKick"), 0.f);
-	W.Add(TEXT("Flash"), FlashPeak * FlashAlpha * C.PhotoBloomFraction);
+	W.Add(TEXT("Flash"), FlashPeak * FlashAlpha / FMath::Max(T.Look.MaxBloomPeak, 1.f) * C.PhotoBloomFraction);
 	W.Add(TEXT("Photo"), 1.f);
 	W.Add(TEXT("PhotoFlash"), FlashAlpha * C.PhotoFlashStopDown);
 	W.Add(TEXT("Spotlit"), bSpotlit ? 1.f : 0.f);
@@ -225,7 +225,8 @@ void ADCEnvironment::UpdatePostWeights()
 {
 	// Code sets weights by id; what each layer does is data.
 	const ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>();
-	SetPostWeight(TEXT("Flash"), FlashPeak * FlashAlpha);
+	// The flash weight is 0..1 of the hottest stratagem's peak; the Flash row says how much bloom that is.
+	SetPostWeight(TEXT("Flash"), FlashPeak * FlashAlpha / FMath::Max(UDCTuning::Get().Look.MaxBloomPeak, 1.f));
 	SetPostWeight(TEXT("FlashKick"), FlashKick * FlashAlpha);
 	for (int32 i = 0; i < 3; ++i)
 	{

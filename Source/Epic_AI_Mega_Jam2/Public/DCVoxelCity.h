@@ -48,6 +48,9 @@ public:
 	int32 GetBuiltSector() const { return BuiltSector; }
 	class ADCVoxelFx* GetFx() const { return Fx; }
 
+	/** Top of the street, rubble included, at a point (cm): what walkers stand on and players are lifted onto. */
+	float SurfaceZCm(const FVector& Where) const;
+
 	/** The sector's season (rolled from the run seed by the district's weather rules) and its arc (R18). */
 	static const struct FDCSeasonDef* SeasonFor(int32 RunSeed, int32 Sector);
 	static struct FDCWeatherState WeatherAt(int32 RunSeed, int32 Sector, float Fraction);

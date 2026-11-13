@@ -230,7 +230,7 @@ void ADCOrbitalStrike::DetonateLocal(const FDCStratagemDef& Def)
 	DCAudio::PlayAt(this, TEXT("Detonation"), Here, 1.f, FMath::FRandRange(0.9f, 1.05f));
 	DCAudio::Play2D(this, TEXT("Detonation"), 0.35f * Proximity, 0.8f);
 	FireCubes->SetVisibility(true);
-	Shock->SetVisibility(true);
+	Shock->SetVisibility(false); // the filled shock disc read as a white bar edge-on (critic); the voxel core carries the peak
 	Ring->SetVisibility(false);
 	Beacon->SetVisibility(false);
 }
@@ -264,7 +264,7 @@ void ADCOrbitalStrike::TickBlast(float Now, const FDCStratagemDef& Def)
 	Shock->SetRelativeScale3D(FVector(ShockR, ShockR, 0.04f));
 	Shock->SetRelativeLocation(FVector(0, 0, 40.f));
 	DCAssets::SetFlat(ShockMat, FLinearColor(1.f, 0.85f, 0.6f), UDCTuning::Get().Look.ShockGlow * FMath::Clamp(1.f - T / 0.6f, 0.f, 1.f));
-	Shock->SetVisibility(T < 0.6f);
+	Shock->SetVisibility(false);
 
 	const float BeamFade = FMath::Clamp(1.f - T / 0.35f, 0.f, 1.f);
 	Beam->SetRelativeScale3D(FVector(3.f * BeamFade + 0.01f, 3.f * BeamFade + 0.01f, BeamHeightCm / 100.f));

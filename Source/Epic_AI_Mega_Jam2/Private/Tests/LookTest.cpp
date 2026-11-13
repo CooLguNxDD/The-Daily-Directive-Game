@@ -30,11 +30,16 @@ bool FDCPostStackTest::RunTest(const FString&)
 	const FDCPostResult Base = DCPostStack::Compose(T.PostLayers, None, 2);
 	TestTrue(TEXT("base grade is on by default"), Base.Bloom > 0.f && Base.Saturation < 1.f);
 
-	// The bloom peak reads: a blast adds its full peak, then decays with the weight.
+	// The bloom peak reads: the hottest blast (weight 1) adds the Flash row's bloom, then decays with the weight.
+	const FDCPostLayer* FlashRow = T.PostLayers.FindByPredicate([](const FDCPostLayer& L) { return L.Id == TEXT("Flash"); });
 	TMap<FName, float> Peak;
-	Peak.Add(TEXT("Flash"), 60.f);
+	Peak.Add(TEXT("Flash"), 1.f);
 	const FDCPostResult AtPeak = DCPostStack::Compose(T.PostLayers, Peak, 2);
-	TestTrue(TEXT("flash layer carries the bloom peak"), FMath::IsNearlyEqual(AtPeak.Bloom, Base.Bloom + 60.f, 0.01f));
+	TestTrue(TEXT("flash layer carries the bloom peak"), FlashRow && FMath::IsNearlyEqual(AtPeak.Bloom, Base.Bloom + FlashRow->Bloom, 0.01f) && AtPeak.Bloom > Base.Bloom * 4.f);
+	// The photo caps the bloom at full flash (R5: the target stays readable).
+	Peak.Add(TEXT("Photo"), 1.f);
+	const FDCPostLayer* PhotoRow = T.PostLayers.FindByPredicate([](const FDCPostLayer& L) { return L.Id == TEXT("Photo"); });
+	TestTrue(TEXT("photo bloom capped at full flash"), PhotoRow && PhotoRow->BloomCap > 0.f && DCPostStack::Compose(T.PostLayers, Peak, 2).Bloom <= PhotoRow->BloomCap + 0.001f);
 
 	// The photo stops down under the flash: exposure falls as the flash weight rises.
 	TMap<FName, float> Photo;
