@@ -8,6 +8,7 @@
 #include "DCAssets.h"
 #include "DCAudio.h"
 #include "DCEnemy.h"
+#include "DCEnvironment.h"
 #include "DCGameMode.h"
 #include "DCGameState.h"
 #include "DCInput.h"
@@ -690,6 +691,15 @@ void ADCCharacter::TakePhoto()
 	UTextureRenderTarget2D* Photo = UKismetRenderingLibrary::CreateRenderTarget2D(this, C.PhotoWidth, C.PhotoHeight, RTF_RGBA8);
 	Capture->TextureTarget = Photo;
 	Capture->FOVAngle = ZoomFOV;
+	// The photo is exposed for the fire, not the flash.
+	FPostProcessSettings& PhotoLook = Capture->PostProcessSettings;
+	PhotoLook.bOverride_BloomIntensity = true;
+	PhotoLook.bOverride_AutoExposureBias = true;
+	const ADCGameState* PhotoGS = GetWorld()->GetGameState<ADCGameState>();
+	const ADCEnvironment* Env = PhotoGS ? PhotoGS->GetEnvironment() : nullptr;
+	PhotoLook.BloomIntensity = Env ? Env->GetPhotoBloom(C.PhotoBloomFraction) : UDCTuning::Get().Look.BaseBloom;
+	PhotoLook.AutoExposureBias = UDCTuning::Get().Look.ExposureBias + C.PhotoExposureBias;
+	Capture->PostProcessBlendWeight = 1.f;
 	Capture->CaptureScene();
 
 	// Instant preview grade from the same rules; the host's grade replaces it when it arrives.

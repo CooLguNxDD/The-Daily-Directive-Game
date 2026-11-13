@@ -31,6 +31,9 @@ public:
 	/** 0..1 how blown-out the screen is right now (HUD draws a white veil from it). */
 	float GetFlashAlpha() const { return FlashAlpha; }
 
+	/** Bloom for a photo taken right now: the base look plus a fraction of the flash. */
+	float GetPhotoBloom(float Fraction) const;
+
 	ADCDebrisPool* GetDebrisPool() const { return DebrisPool; }
 
 private:

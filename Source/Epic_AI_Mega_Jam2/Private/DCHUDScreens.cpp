@@ -1,6 +1,7 @@
 // Run-flow screens of the canvas HUD: lobby roster, draft, reel overlay, final cut, vote and the front page.
 // Buttons are HUD hit boxes; a click dispatches by the box name prefix through a handler table.
 #include "DCHUD.h"
+#include "DCPalette.h"
 
 #include "DCAudio.h"
 #include "DCCharacter.h"
@@ -12,13 +13,10 @@
 #include "Engine/Texture.h"
 #include "Engine/World.h"
 
-namespace
+using namespace DCPalette;
+
+namespace DCHudScreens
 {
-	const FLinearColor Ink(0.06f, 0.05f, 0.05f, 1.f);
-	const FLinearColor Paper(0.95f, 0.91f, 0.82f, 1.f);
-	const FLinearColor Red(0.82f, 0.08f, 0.05f, 1.f);
-	const FLinearColor Gold(1.f, 0.78f, 0.2f, 1.f);
-	const FLinearColor Dim(0.f, 0.f, 0.f, 0.72f);
 
 	const ADCPlayerState* FindOwner(const ADCGameState& GS, int32 PhotoId)
 	{
@@ -50,6 +48,8 @@ namespace
 		return FString::Printf(TEXT("%d:%02d"), S / 60, S % 60);
 	}
 }
+
+using namespace DCHudScreens;
 
 bool ADCHUD::Button(const FString& Label, FName Id, float X, float Y, float W, float H, bool bEnabled, bool bSelected)
 {

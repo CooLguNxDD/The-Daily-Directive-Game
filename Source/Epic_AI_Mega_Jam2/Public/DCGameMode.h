@@ -26,6 +26,7 @@ public:
 	virtual void BeginPlay() override;
 	virtual void Tick(float DeltaSeconds) override;
 	virtual void RestartPlayer(AController* NewPlayer) override;
+	virtual void PostLogin(APlayerController* NewPlayer) override;
 
 	void CallStrike(const FDCStratagemDef& Def, const FVector& Target, AController* Caller);
 	void OnPhotoGraded(ADCCharacter* Photographer, const FDCPhotoRecord& Record, const FDCPhotoInputs& Inputs, TArray<FDCPoseSample>&& Poses);

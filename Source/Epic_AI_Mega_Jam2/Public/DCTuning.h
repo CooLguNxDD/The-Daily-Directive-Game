@@ -94,6 +94,10 @@ struct FDCCameraTuning
 	UPROPERTY(EditAnywhere, Config, Category = "Camera") float TagRangeCm = 9000.f;
 	/** Swarmers within this radius rush a photographer who raises the camera (R11). */
 	UPROPERTY(EditAnywhere, Config, Category = "Camera") float AggroRadiusCm = 5000.f;
+	/** The photo keeps this fraction of a blast's bloom spike, and none of its exposure kick, so a peak shot reads
+	 *  as fire and debris instead of a white frame. */
+	UPROPERTY(EditAnywhere, Config, Category = "Camera") float PhotoBloomFraction = 0.15f;
+	UPROPERTY(EditAnywhere, Config, Category = "Camera") float PhotoExposureBias = -0.6f;
 };
 
 USTRUCT(BlueprintType)
@@ -304,6 +308,8 @@ struct FDCRunTuning
 	UPROPERTY(EditAnywhere, Config, Category = "Run") int32 PodAmmo = 90;
 	UPROPERTY(EditAnywhere, Config, Category = "Run") float PodHealth = 50.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Run") int32 Port = 7777;
+	/** War-correspondent call signs given to players in join order (machine names never show). */
+	UPROPERTY(EditAnywhere, Config, Category = "Run") TArray<FString> CallSigns;
 	/** Headline templates: {SUBJECT} {SECTOR} {PLAYER} {TIMING} are filled from the headline photo. */
 	UPROPERTY(EditAnywhere, Config, Category = "Run") TArray<FString> Headlines;
 	/** Category tag -> headline subject words. */

@@ -103,6 +103,11 @@ void ADCEnvironment::Flash(float BloomPeak, float ExposureKick)
 	FlashStartReal = GetWorld()->GetRealTimeSeconds();
 }
 
+float ADCEnvironment::GetPhotoBloom(float Fraction) const
+{
+	return UDCTuning::Get().Look.BaseBloom + FlashPeak * FlashAlpha * Fraction;
+}
+
 void ADCEnvironment::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);

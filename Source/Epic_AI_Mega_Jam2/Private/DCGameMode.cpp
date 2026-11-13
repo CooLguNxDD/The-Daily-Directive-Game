@@ -104,6 +104,15 @@ TArray<ADCPlayerState*> ADCGameMode::Players() const
 	return Out;
 }
 
+void ADCGameMode::PostLogin(APlayerController* NewPlayer)
+{
+	Super::PostLogin(NewPlayer);
+	const TArray<FString>& Signs = UDCTuning::Get().Run.CallSigns;
+	const int32 Index = FMath::Max(0, GameState->PlayerArray.IndexOfByKey(NewPlayer->PlayerState));
+	const FString Sign = Signs.Num() > 0 ? Signs[Index % Signs.Num()] : FString::Printf(TEXT("CORRESPONDENT %d"), Index + 1);
+	ChangeName(NewPlayer, Sign, false);
+}
+
 FTransform ADCGameMode::SpawnTransformFor(int32 PlayerIndex) const
 {
 	// Spawn on the outer street, facing the city centre.

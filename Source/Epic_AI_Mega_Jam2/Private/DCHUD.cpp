@@ -1,4 +1,5 @@
 #include "DCHUD.h"
+#include "DCPalette.h"
 
 #include "DCCharacter.h"
 #include "DCEnvironment.h"
@@ -14,13 +15,10 @@
 #include "Engine/TextureRenderTarget2D.h"
 #include "Engine/World.h"
 
+using namespace DCPalette;
+
 namespace
 {
-	const FLinearColor Ink(0.06f, 0.05f, 0.05f, 1.f);
-	const FLinearColor Paper(0.95f, 0.91f, 0.82f, 1.f);
-	const FLinearColor Red(0.9f, 0.08f, 0.05f, 1.f);
-	const FLinearColor Gold(1.f, 0.78f, 0.2f, 1.f);
-	const FLinearColor Shade(0.f, 0.f, 0.f, 0.55f);
 
 	FString Upper(const FName& N) { return N.ToString().ToUpper(); }
 

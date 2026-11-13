@@ -1,4 +1,5 @@
 #include "DCMenu.h"
+#include "DCPalette.h"
 
 #include "DCAudio.h"
 #include "DCGameState.h"
@@ -15,11 +16,10 @@
 #include "Widgets/SBoxPanel.h"
 #include "Widgets/Text/STextBlock.h"
 
-namespace
+using namespace DCPalette;
+
+namespace DCMenuStyle
 {
-	const FLinearColor Paper(0.95f, 0.91f, 0.82f, 1.f);
-	const FLinearColor Ink(0.06f, 0.05f, 0.05f, 1.f);
-	const FLinearColor Red(0.82f, 0.08f, 0.05f, 1.f);
 
 	FSlateFontInfo Font(int32 Size, const char* Weight = "Bold")
 	{
@@ -60,6 +60,8 @@ namespace
 
 namespace DCMenu
 {
+	using namespace DCMenuStyle;
+
 	TSharedRef<SWidget> Build(ADCPlayerController* PC, uint8 Mode)
 	{
 		TWeakObjectPtr<ADCPlayerController> Weak(PC);
