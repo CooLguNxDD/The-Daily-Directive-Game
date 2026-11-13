@@ -271,7 +271,8 @@ void ADCDemoPilot::AddCycle(const FString& C)
 	Add(1.0f, [this] { Release(TEXT("Sprint")); Release(TEXT("Move")); return true; });
 	// 3: camera out, raise it, frame the tower.
 	Add(0.f, [this] { Tap(TEXT("Slot3")); return true; });
-	Add(0.5f, [this] { Press(TEXT("Aim")); return true; });
+	Add(0.2f, [this, C] { Shot(C + TEXT("_draw_camera")); return true; });
+	Add(0.3f, [this] { Press(TEXT("Aim")); return true; });
 	Add(0.3f, [this, C] { if (Tower.IsValid()) { AimAt(Tower->GetCenter()); } Shot(C + TEXT("_viewfinder")); return true; });
 	// Wait for detonation + Peak offset, then snap.
 	Add(0.f, [this]

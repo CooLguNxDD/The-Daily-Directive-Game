@@ -482,6 +482,15 @@ void ADCCharacter::OnRep_Slot()
 	{
 		DrawEndTime = Now() + UDCTuning::Get().Camera.DrawSeconds;
 	}
+	// The draw: the mannequin plays its equip motion over DrawSeconds while the prop swings in (R1).
+	const UDCTuning& T = UDCTuning::Get();
+	UAnimSequence* Equip = Cast<UAnimSequence>(T.Assets.DrawAnim.TryLoad());
+	UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance();
+	if (Equip && AnimInstance && HasActorBegunPlay() && !bDowned)
+	{
+		const float Rate = Equip->GetPlayLength() / FMath::Max(T.Camera.DrawSeconds, 0.05f);
+		AnimInstance->PlaySlotAnimationAsDynamicMontage(Equip, T.Assets.DrawSlot, 0.05f, 0.1f, Rate);
+	}
 }
 
 void ADCCharacter::ServerSetSlot_Implementation(EDCSlot NewSlot)
