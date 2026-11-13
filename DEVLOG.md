@@ -30,7 +30,24 @@ is kept from the run records (Glass Box modifier): what was decided, why, and wh
 - Photos travel as JPEG in 16 KB chunks through the host, so every player sees every pick in the vote and on the
   front page.
 
+## 2026-11-13: First checkpoint and after
+- Checkpoint 1 (cross-family review) merged green with one major: a solo player who went down failed the run at
+  once, so the self-revive could never finish. Now a downed solo player has 12 seconds to hold E.
+- HQ propaganda quota: each sector has a photo-score target on the HUD; missing it costs the draft. Playing safe
+  with the rifle now loses upgrades, which is the first pillar ("the shot is the weapon").
+- The draft shows all nine cards (three pools, three options each).
+- One collapse scheduler (advice from the Fable advisor): strikes, walker topples and Domino chains all write a
+  telegraphed event record. A condemned tower shakes, creaks and flashes red until it gives way, so every collapse
+  has a photo timing window, and the reel replays them from the same records.
+- Upgrade and mutator effects became data rows (multipliers, light and fog, stun, domino reach, rogue strikes).
+
 ## Problems met
 - The engine is shared with an editor that has Live Coding on: UnrealBuildTool refuses to build. Fixed with
   `-NoHotReloadFromIDE`, and the packaging step now builds the game target itself.
 - The gate script had a comment with a stray newline that broke tier B; fixed.
+- The ground slab was Static, so moving it down at run time was refused: it sat 50 cm high and hid the streets and
+  the tower bases. Found only when the new street lines did not show.
+- Photos at the bloom peak were pure white: the capture inherited the flash's exposure kick. Photos now keep a
+  fraction of the bloom and stop down while the flash is on screen.
+- A pointer into a temporary list made the Domino chain fire with a 0.1 s warning instead of 1.2 s.
+- Per-file colour constants clashed in unity builds and broke packaging; one palette header now owns them.
