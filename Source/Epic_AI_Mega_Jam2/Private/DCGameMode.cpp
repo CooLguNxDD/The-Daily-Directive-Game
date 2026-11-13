@@ -327,7 +327,7 @@ void ADCGameMode::TickWaves(float Now)
 	for (int32 W = 0; W < Sector.Waves.Num(); ++W)
 	{
 		const FDCWaveDef& Wave = Sector.Waves[W];
-		if (WaveSpawned[W] >= Wave.Count || Now < WaveNextTime[W] || Alive >= Sector.MaxAlive)
+		if (WaveSpawned[W] >= Wave.Count || Now < WaveNextTime[W] || (Alive >= Sector.MaxAlive && !Wave.bIgnoresCap))
 		{
 			continue;
 		}
@@ -545,8 +545,15 @@ void ADCGameMode::ScheduleCollapse(ADCBuilding* Building, const FVector& Epicent
 	}
 	if (Delay <= 0.f)
 	{
-		// Immediate (a strike's own record is the event): beats any telegraphed collapse still pending on it.
-		PendingCollapses.RemoveAll([Building](const FPendingCollapse& P) { return P.Building == Building; });
+		// Immediate (a strike's own record is the event): beats any telegraphed collapse still pending on it, and
+		// that collapse's future peak is withdrawn so photos are not graded against a peak that never comes.
+		if (PendingCollapses.RemoveAll([Building](const FPendingCollapse& P) { return P.Building == Building; }) > 0)
+		{
+			const float Now = GS->Now();
+			const int32 Lot = Building->GetLotIndex();
+			const int32 Sector = GS->SectorIndex;
+			GS->Blasts.RemoveAll([Now, Lot, Sector](const FDCBlastRecord& R) { return R.LotIndex == Lot && R.Sector == Sector && R.Time > Now; });
+		}
 		Building->Collapse(Epicenter);
 		return;
 	}

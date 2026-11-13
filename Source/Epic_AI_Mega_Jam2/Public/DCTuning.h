@@ -233,6 +233,8 @@ struct FDCWaveDef
 	UPROPERTY(EditAnywhere, Config, Category = "Sector") FName EnemyId;
 	UPROPERTY(EditAnywhere, Config, Category = "Sector") int32 Count = 1;
 	UPROPERTY(EditAnywhere, Config, Category = "Sector") float Interval = 2.f;
+	/** Special units (spotlights, walkers) spawn even when the swarm has filled the sector's MaxAlive cap. */
+	UPROPERTY(EditAnywhere, Config, Category = "Sector") bool bIgnoresCap = false;
 };
 
 USTRUCT(BlueprintType)
