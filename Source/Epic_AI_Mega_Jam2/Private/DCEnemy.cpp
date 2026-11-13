@@ -340,13 +340,17 @@ void ADCEnemy::SteerTowards(const FVector& Goal, float Speed, float DeltaSeconds
 	// Cruise at hover height over whatever is below; dive onto the goal when close.
 	const float CruiseZ = Ground + Hover;
 	const float WantZ = Dist2D < 600.f ? Goal.Z : FMath::Max(CruiseZ, Goal.Z);
-	To.Z = WantZ - Here.Z;
+	// After hitting a wall it keeps climbing for a moment, so cruise height does not pull it back into the wall.
+	To.Z = GetWorld()->GetTimeSeconds() < ClimbUntil ? Speed * DeltaSeconds * 4.f : WantZ - Here.Z;
 	const FVector Step = To.GetClampedToMaxSize(Speed * DeltaSeconds);
 	FHitResult Hit;
 	SetActorLocation(Here + Step, true, &Hit);
 	if (Hit.bBlockingHit && !Cast<APawn>(Hit.GetActor()))
 	{
-		SetActorLocation(Here + FVector(0, 0, Speed * DeltaSeconds), true);
+		// Blocked by a tower: slide along it and go up and over.
+		const FVector Slide = FVector::VectorPlaneProject(Step, Hit.ImpactNormal.GetSafeNormal2D());
+		SetActorLocation(GetActorLocation() + Slide + FVector(0, 0, Speed * DeltaSeconds), true);
+		ClimbUntil = GetWorld()->GetTimeSeconds() + 0.8f;
 	}
 	if (!Step.IsNearlyZero())
 	{

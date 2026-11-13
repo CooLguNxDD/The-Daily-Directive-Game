@@ -446,9 +446,9 @@ void ADCDemoPilot::AddEnemyFight(const FString& S)
 		{
 			AimAt(Target->GetActorLocation());
 		}
-		return Best < 1800.f;
+		return Best < 3200.f; // inside Strobe range (40 m), still small enough to frame
 	}, 6.f);
-	Add(0.f, [this] { Tap(TEXT("Fire")); return true; });
+	Add(0.f, [this, S] { Shot(S + TEXT("_swarm_closing")); Tap(TEXT("Fire")); return true; });
 	Add(0.35f, [this, S] { Shot(S + TEXT("_swarm_stamp")); LogPhoto(); return true; });
 	Add(0.9f, [this, S] { Shot(S + TEXT("_swarm_after")); Release(TEXT("Aim")); return true; });
 	Add(0.2f, [this] { Tap(TEXT("Slot1")); Target.Reset(); return true; });
@@ -530,14 +530,17 @@ void ADCDemoPilot::AddRifleOnly()
 			const ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>();
 			const ADCCharacter* Me = Cast<ADCCharacter>(GetWorld()->GetFirstPlayerController() ? GetWorld()->GetFirstPlayerController()->GetPawn() : nullptr);
 			int32 Alive = 0;
+			float Nearest = -1.f;
 			for (ADCEnemy* E : TActorRange<ADCEnemy>(GetWorld()))
 			{
 				Alive += E->IsAlive() ? 1 : 0;
+				const float D = E->IsAlive() && Me ? FVector::Dist(E->GetActorLocation(), Me->GetActorLocation()) : -1.f;
+				Nearest = D >= 0.f && (Nearest < 0.f || D < Nearest) ? D : Nearest;
 			}
 			const int32 SectorIdx = GS ? GS->SectorIndex : -1;
 			const int32 Quota = UDCTuning::Get().Sectors.IsValidIndex(SectorIdx) ? UDCTuning::Get().Sectors[SectorIdx].QuotaPoints : 0;
-			UE_LOG(LogDCDemo, Display, TEXT("DEMO rifle-only t=%ds phase=%d health=%.0f ammo=%d downed=%d enemies=%d quota=%d/%d failed=%d"), i * 15,
-				GS ? static_cast<int32>(GS->Phase) : -1, Me ? Me->GetHealth() : -1.f, Me ? Me->GetAmmo() : -1, Me && Me->IsDowned() ? 1 : 0, Alive,
+			UE_LOG(LogDCDemo, Display, TEXT("DEMO rifle-only t=%ds phase=%d health=%.0f ammo=%d downed=%d enemies=%d nearest=%.0fm quota=%d/%d failed=%d"), i * 15,
+				GS ? static_cast<int32>(GS->Phase) : -1, Me ? Me->GetHealth() : -1.f, Me ? Me->GetAmmo() : -1, Me && Me->IsDowned() ? 1 : 0, Alive, Nearest / 100.f,
 				GS ? GS->SectorPhotoPoints : 0, Quota, GS && GS->bRunFailed ? 1 : 0);
 			if (Me && Me->IsDowned())
 			{

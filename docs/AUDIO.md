@@ -25,3 +25,17 @@ Keep it in step with the code when a cue is added.
 | Reel: into a clip, freeze at the shutter, photo stamp | Whoosh, Flash, Stamp | DCHUDScreens DrawReel |
 | Front page prints | Press | DCHUDScreens DrawFrontPage |
 | Music bed (march loop), all phases | Music | DCPlayerController BeginPlay |
+
+## Listening pass (evidence for "no silent action")
+A scripted run records the real master mix and logs every cue it plays:
+`-dcdemo -dccueroll -dcaudiorec=<dir> "-ini:Engine:[Audio]:UnfocusedVolumeMultiplier=1.0"`.
+`-dccueroll` first plays every cue in the bank alone; then the normal scripted run plays its cues in context.
+`python tools/evidence/audio_cues.py <dir>/mix.wav <run.log>` checks each logged cue against the mix: a cue
+counts as heard when the loudest 50 ms in the 0.6 s after it is 3 dB over the quietest 50 ms before it, or peaks
+above -30 dBFS.
+
+Pitfall: the engine default `UnfocusedVolumeMultiplier=0` mutes a game window without focus, so a background
+evidence run records pure silence unless the override above is passed. Players with the game focused are unaffected.
+
+Result 2026-11-13 (run18, seed 777, editor `-game` build of this branch): 471 cue plays over 228 s, 35 distinct
+cues, all 35 heard; none silent. Report: `.fleet-task/gallery/audio18_cues.txt`.

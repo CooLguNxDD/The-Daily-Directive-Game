@@ -435,7 +435,17 @@ void ADCGameMode::TickRogueStrikes(float Now)
 	const FDCStratagemDef* Def = UDCTuning::Get().FindStratagem(TEXT("OrbitalLaser"));
 	if (Standing.Num() > 0 && Def)
 	{
-		CallStrike(*Def, Standing[SectorRng.RandRange(0, Standing.Num() - 1)]->GetActorLocation(), nullptr);
+		const FVector Target = Standing[SectorRng.RandRange(0, Standing.Num() - 1)]->GetActorLocation();
+		CallStrike(*Def, Target, nullptr);
+		// Every player hears where the free strike lands, so it reads as a photo chance, not noise off camera.
+		for (ADCPlayerState* PS : Players())
+		{
+			if (ADCCharacter* C = PS->GetPawn<ADCCharacter>())
+			{
+				const float Metres = FVector::Dist2D(C->GetActorLocation(), Target) / 100.f;
+				C->HostToast(FString::Printf(TEXT("ROGUE ORBITAL STRIKE INBOUND  %.0f M"), Metres));
+			}
+		}
 	}
 }
 
