@@ -425,9 +425,10 @@ void ADCDemoPilot::AddStratagemOnSwarm(const FString& S)
 		const APawn* Me = GetWorld()->GetFirstPlayerController() ? GetWorld()->GetFirstPlayerController()->GetPawn() : nullptr;
 		if (ADCEnemy* E = NearestEnemy())
 		{
-			// Between the swarmer and me, on the street, so the crowd gathers in front of the lens.
-			const FVector Spot = Me ? FMath::Lerp(Me->GetActorLocation(), E->GetActorLocation(), 0.6f) : E->GetActorLocation();
-			AimAt(FVector(Spot.X, Spot.Y, 0.f));
+			// 20 m toward the swarm, on the street at my feet' height, so the crowd gathers in front of the lens.
+			const FVector From = Me ? Me->GetActorLocation() : E->GetActorLocation();
+			const FVector Dir = (E->GetActorLocation() - From).GetSafeNormal2D();
+			AimAt(From + Dir * 2000.f - FVector(0, 0, 90.f));
 		}
 		return true;
 	});
