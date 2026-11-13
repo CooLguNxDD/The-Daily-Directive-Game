@@ -438,7 +438,7 @@ namespace DCVoxelCraft
 		const int32 Half = FMath::RoundToInt32(Plan.LotSizeCm * 0.45f);
 		const uint8 Rubble = Ctx.MaterialId(TEXT("Rubble"));
 		const uint8 Char = Ctx.MaterialId(TEXT("Char"));
-		const uint8 Ink = Ctx.MaterialId(TEXT("Ink"));
+		const uint8 InkId = Ctx.MaterialId(TEXT("Ink"));
 		const int32 Base = FMath::Max(1, Ctx.Tuning->GroundLayers);
 		for (const FVector& Where : Plan.RubbleZones)
 		{
@@ -457,7 +457,7 @@ namespace DCVoxelCraft
 					for (int32 k = 0; k < Height; ++k)
 					{
 						const uint32 Hm = H >> (k + 3);
-						Out.Data.Set(FIntVector(X, Y, Base + k), (Hm % 5) == 0 ? Char : ((Hm % 7) == 0 ? Ink : Rubble));
+						Out.Data.Set(FIntVector(X, Y, Base + k), (Hm % 5) == 0 ? Char : ((Hm % 7) == 0 ? InkId : Rubble));
 					}
 				}
 			}

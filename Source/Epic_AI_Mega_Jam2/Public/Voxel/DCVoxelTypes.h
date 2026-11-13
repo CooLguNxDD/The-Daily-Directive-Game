@@ -149,6 +149,8 @@ struct FDCDistrictRule
 	UPROPERTY(EditAnywhere, Config, Category = "District") FName LandmarkRecipe = TEXT("Landmark");
 	/** Lot kind forced along the sight line from the spawn street to the landmark (open or low, so it stays in view). */
 	UPROPERTY(EditAnywhere, Config, Category = "District") FName SightLineKind = TEXT("Low");
+	/** PCG rule set with slot Season: the sector's season (and so its weather arcs and snow), rolled per run (R18). */
+	UPROPERTY(EditAnywhere, Config, Category = "District") FName Weather;
 	/** Never fewer towers than this (a quota needs things to knock down). */
 	UPROPERTY(EditAnywhere, Config, Category = "District") int32 MinTowers = 8;
 };
@@ -174,6 +176,8 @@ struct FDCFxKind
 	UPROPERTY(EditAnywhere, Config, Category = "Fx") float Gravity = 0.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Fx") float Drag = 1.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Fx") float SpinDeg = 60.f;
+	/** Height multiplier (rain streaks). */
+	UPROPERTY(EditAnywhere, Config, Category = "Fx") float Stretch = 1.f;
 };
 
 USTRUCT(BlueprintType)

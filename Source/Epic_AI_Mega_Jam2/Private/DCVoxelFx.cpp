@@ -80,6 +80,15 @@ void ADCVoxelFx::Emit(FName Emitter, const FVector& Where, float Radius)
 	}
 }
 
+void ADCVoxelFx::SpawnKind(FName Kind, const FVector& Where, float Radius, int32 Count)
+{
+	const int32 K = KindIndex(Kind);
+	if (Puffs.IsValidIndex(K) && Count > 0)
+	{
+		Spawn(K, Where, Radius, Count);
+	}
+}
+
 void ADCVoxelFx::Burn(FName Emitter, const FVector& Where, float Radius, float Seconds)
 {
 	const float Now = GetWorld()->GetTimeSeconds();
@@ -126,13 +135,13 @@ void ADCVoxelFx::Tick(float DeltaSeconds)
 		for (FPuff& P : List)
 		{
 			P.Vel = P.Vel * DragK + FVector(0, 0, K.Gravity * DeltaSeconds);
-			P.Pos += P.Vel * DeltaSeconds;
+			P.Pos += (P.Vel + Wind) * DeltaSeconds;
 			P.Spin += P.SpinRate * DeltaSeconds;
 			const float U = FMath::Clamp((Now - P.Born) / P.Life, 0.f, 1.f);
 			// Pop in, grow toward the end size, shrink away in the last fifth: chunky, never a fade.
 			const float Pop = FMath::Min(U * 8.f, 1.f) * FMath::Min((1.f - U) * 5.f, 1.f);
 			const float Size = FMath::Lerp(K.SizeStart, K.SizeEnd, U) * Pop;
-			Xf.Add(FTransform(P.Spin, P.Pos, FVector(Size / 100.f)));
+			Xf.Add(FTransform(K.Stretch > 1.f ? FRotator::ZeroRotator : P.Spin, P.Pos, FVector(Size / 100.f, Size / 100.f, Size * K.Stretch / 100.f)));
 		}
 		const int32 Pool = Meshes[k]->GetInstanceCount();
 		while (Xf.Num() < Pool)

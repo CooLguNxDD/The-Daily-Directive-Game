@@ -10,6 +10,7 @@
 #include "Rules/DCPressureRules.h"
 #include "Rules/DCNewsprint.h"
 #include "Rules/DCPostStack.h"
+#include "Rules/DCWeather.h"
 #include "DCTuning.generated.h"
 
 USTRUCT(BlueprintType)
@@ -423,6 +424,9 @@ public:
 	/** Post-process layer stack (R19): every layer of the scene and the photo look; code only sets weights by id. */
 	UPROPERTY(EditAnywhere, Config, Category = "Post") TArray<FDCPostLayer> PostLayers;
 	UPROPERTY(EditAnywhere, Config, Category = "Post") TArray<FDCPostPreset> PostPresets;
+	/** Seasonal weather (R18): profiles the arcs blend, and seasons with their arcs and snow cover. */
+	UPROPERTY(EditAnywhere, Config, Category = "Weather") TArray<FDCWeatherProfile> WeatherProfiles;
+	UPROPERTY(EditAnywhere, Config, Category = "Weather") TArray<FDCSeasonDef> Seasons;
 	/** Preset applied at start (-dcpost=<Id> on the command line wins). */
 	UPROPERTY(EditAnywhere, Config, Category = "Post") FName PostPreset = TEXT("High");
 

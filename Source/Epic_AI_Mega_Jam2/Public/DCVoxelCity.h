@@ -9,6 +9,7 @@
 #include "Rules/DCCityPlan.h"
 #include "Voxel/DCVoxelMesher.h"
 #include "Voxel/DCVoxelOps.h"
+#include "Rules/DCWeather.h"
 #include "DCVoxelCity.generated.h"
 
 class UProceduralMeshComponent;
@@ -45,6 +46,11 @@ public:
 	void SetFollowGameState(bool bFollow) { bFollowGameState = bFollow; }
 
 	int32 GetBuiltSector() const { return BuiltSector; }
+	class ADCVoxelFx* GetFx() const { return Fx; }
+
+	/** The sector's season (rolled from the run seed by the district's weather rules) and its arc (R18). */
+	static const struct FDCSeasonDef* SeasonFor(int32 RunSeed, int32 Sector);
+	static struct FDCWeatherState WeatherAt(int32 RunSeed, int32 Sector, float Fraction);
 	int32 GetBuildId() const { return BuiltId; }
 	uint32 GetHash() const { return Sector.Hash(); }
 	const FDCVoxelSector& GetSector() const { return Sector; }

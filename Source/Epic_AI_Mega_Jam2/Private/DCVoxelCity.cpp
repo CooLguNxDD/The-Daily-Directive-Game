@@ -95,6 +95,63 @@ FDCCityPlan ADCVoxelCity::PlanSector(int32 RunSeed, int32 SectorIndex)
 	return DCCityRules::PlanCity(Seed, T.City, T.Look.BuildingColors.Num());
 }
 
+const FDCSeasonDef* ADCVoxelCity::SeasonFor(int32 RunSeed, int32 SectorIndex)
+{
+	const UDCVoxelSettings& V = UDCVoxelSettings::Get();
+	const FDCDistrictRule* D = V.District(SectorIndex);
+	return DCWeather::SeasonFor(UDCTuning::Get().Seasons, D ? V.RuleSet(D->Weather) : nullptr, DCCityRules::SectorSeed(RunSeed, SectorIndex));
+}
+
+FDCWeatherState ADCVoxelCity::WeatherAt(int32 RunSeed, int32 SectorIndex, float Fraction)
+{
+	const FDCSeasonDef* Season = SeasonFor(RunSeed, SectorIndex);
+	const FDCWeatherArc* Arc = Season ? DCWeather::ArcFor(*Season, DCCityRules::SectorSeed(RunSeed, SectorIndex)) : nullptr;
+	return Season && Arc ? DCWeather::At(UDCTuning::Get().WeatherProfiles, *Season, *Arc, Fraction) : FDCWeatherState();
+}
+
+namespace
+{
+	/** Winter: a layer of snow on exposed street tops and roof slabs, by hash (same on every machine). */
+	void LaySnow(FDCVoxelSector& Sector, float Cover, uint8 Snow, int32 Seed)
+	{
+		if (Cover <= 0.f || Snow == 0)
+		{
+			return;
+		}
+		const uint32 Threshold = static_cast<uint32>(FMath::Clamp(Cover, 0.f, 1.f) * 1000.f);
+		FDCVoxelGrid& T = Sector.Terrain;
+		const int32 Top = UDCVoxelSettings::Get().Tuning.GroundLayers - 1;
+		const FIntVector Lo = T.ToLocal(T.OriginCm);
+		const int32 N = 2 * FMath::Abs(T.OriginCm.X) / FMath::Max(T.VoxelCm, 1);
+		for (int32 Y = 0; Y < N; ++Y)
+		{
+			for (int32 X = 0; X < N; ++X)
+			{
+				const FIntVector P(Lo.X + X, Lo.Y + Y, Top);
+				if (T.Data.IsSolid(P) && !T.Data.IsSolid(P + FIntVector(0, 0, 1)) && DCPcg::Hash(Seed, 0x5A0Du, X * 4099 + Y) % 1000 < Threshold)
+				{
+					T.Data.Set(P, Snow); // the street top whitens (50 cm cells stay flush)
+				}
+			}
+		}
+		for (FDCVoxelTower& Tw : Sector.Towers)
+		{
+			const int32 Roof = Tw.Max.Z;
+			for (int32 Y = Tw.ScanMin.Y; Y < Tw.ScanMax.Y; ++Y)
+			{
+				for (int32 X = Tw.ScanMin.X; X < Tw.ScanMax.X; ++X)
+				{
+					const FIntVector P(X, Y, Roof);
+					if (Tw.Grid.Data.IsSolid(P) && !Tw.Grid.Data.IsSolid(P + FIntVector(0, 0, 1)) && DCPcg::Hash(Seed, 0x5A0Eu, X * 4099 + Y) % 1000 < Threshold)
+					{
+						Tw.Grid.Data.Set(P + FIntVector(0, 0, 1), Snow);
+					}
+				}
+			}
+		}
+	}
+}
+
 UMaterialInterface* ADCVoxelCity::VoxelMaterial()
 {
 	if (!Material)
@@ -213,6 +270,10 @@ void ADCVoxelCity::Build(int32 RunSeed, int32 SectorIndex, int32 BuildId)
 	DCVoxelCraft::CraftTerrain(Sector.Terrain, Plan, T.City.LotSizeCm, Craft);
 	DCVoxelCraft::CraftRubbleZones(Sector.Terrain, Plan, Craft);
 	DCVoxelCraft::CraftProps(Sector.Props, Plan, Craft);
+	if (const FDCSeasonDef* Season = SeasonFor(RunSeed, SectorIndex))
+	{
+		LaySnow(Sector, Season->SnowCover, Craft.MaterialId(TEXT("Snow")), DCCityRules::SectorSeed(RunSeed, SectorIndex));
+	}
 	OpCtx = V.OpContext(T.City.BlockSizeCm);
 	Colors = V.MeshColors();
 	BuiltSector = SectorIndex;

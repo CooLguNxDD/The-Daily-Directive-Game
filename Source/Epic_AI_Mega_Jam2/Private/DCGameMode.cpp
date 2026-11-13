@@ -338,6 +338,7 @@ void ADCGameMode::EnterSector(float Now)
 	float Duration = Sector ? Sector->DurationSeconds : 240.f;
 	FParse::Value(FCommandLine::Get(), TEXT("dcsectorseconds="), Duration); // short sectors for scripted test runs
 	GS->SectorEndTime = SectorStartTime + Duration;
+	GS->SectorStartTime = SectorStartTime;
 	const int32 Waves = Sector ? Sector->Waves.Num() : 0;
 	WaveSpawned.Init(0, Waves);
 	WaveNextTime.Init(0.f, Waves);

@@ -4,6 +4,9 @@
 #include "Misc/AutomationTest.h"
 #include "Rules/DCNewsprint.h"
 #include "Rules/DCPostStack.h"
+#include "Rules/DCWeather.h"
+#include "DCVoxelCity.h"
+#include "Voxel/DCVoxelSettings.h"
 
 #if WITH_DEV_AUTOMATION_TESTS
 
@@ -92,6 +95,59 @@ bool FDCNewsprintTest::RunTest(const FString&)
 	TestTrue(TEXT("halftone shows dots"), Max - Min > 40);
 	TestTrue(TEXT("the dim tower beside the white blast is lifted (R5)"), Sum / FMath::Max(1, W - 28) > 60);
 	AddInfo(FString::Printf(TEXT("DCPRINT tower row mean %lld (source 34), min %d max %d, gamma %.2f"), Sum / FMath::Max(1, W - 28), Min, Max, DCNewsprint::MidGamma(Px, P, Gain, Offset)));
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDCWeatherTest, "Epic_AI_Mega_Jam2.Look.SeasonalWeather", LookFlags)
+bool FDCWeatherTest::RunTest(const FString&)
+{
+	const UDCTuning& T = UDCTuning::Get();
+	const UDCVoxelSettings& V = UDCVoxelSettings::Get();
+	TestTrue(TEXT("profiles and seasons shipped"), T.WeatherProfiles.Num() >= 4 && T.Seasons.Num() >= 3);
+	for (const FDCWeatherProfile& P : T.WeatherProfiles)
+	{
+		// Readable for blasts and photos in every profile (R18): never a dark, foggy or blown sky.
+		TestTrue(FString::Printf(TEXT("%s keeps the sun"), *P.Id.ToString()), P.SunScale >= 0.4f);
+		TestTrue(FString::Printf(TEXT("%s fog stays light"), *P.Id.ToString()), P.FogDensity <= 0.03f);
+		TestTrue(FString::Printf(TEXT("%s exposure mild"), *P.Id.ToString()), FMath::Abs(P.Exposure) <= 0.6f);
+		TestTrue(FString::Printf(TEXT("%s precipitation kind exists"), *P.Id.ToString()), P.Precipitation.IsNone() || V.FxKinds.ContainsByPredicate([&P](const FDCFxKind& K) { return K.Id == P.Precipitation; }));
+	}
+	for (const FDCSeasonDef& S : T.Seasons)
+	{
+		for (const FDCWeatherArc& A : S.Arcs)
+		{
+			for (const FDCWeatherKey& K : A.Keys)
+			{
+				TestTrue(FString::Printf(TEXT("%s/%s key %s is a profile"), *S.Id.ToString(), *A.Id.ToString(), *K.Profile.ToString()),
+					T.WeatherProfiles.ContainsByPredicate([&K](const FDCWeatherProfile& P) { return P.Id == K.Profile; }));
+			}
+		}
+	}
+	TestTrue(TEXT("snow palette for winter sectors"), V.Palette.ContainsByPredicate([](const FDCVoxelMaterial& M) { return M.Id == TEXT("Snow"); }));
+	TSet<FName> SeasonsSeen;
+	for (int32 Seed = 1; Seed < 40; ++Seed)
+	{
+		for (int32 Sector = 0; Sector < 3; ++Sector)
+		{
+			const FDCWeatherState A = ADCVoxelCity::WeatherAt(Seed * 977, Sector, 0.37f);
+			const FDCWeatherState B = ADCVoxelCity::WeatherAt(Seed * 977, Sector, 0.37f);
+			TestTrue(TEXT("same seed and clock, same weather"), A.Arc == B.Arc && A.Blend.FogDensity == B.Blend.FogDensity && A.Blend.SunScale == B.Blend.SunScale);
+			SeasonsSeen.Add(A.Season);
+			// The arc changes during play, and smoothly: no jump between two moments 1% apart.
+			const FDCWeatherState Start = ADCVoxelCity::WeatherAt(Seed * 977, Sector, 0.f);
+			const FDCWeatherState End = ADCVoxelCity::WeatherAt(Seed * 977, Sector, 1.f);
+			TestTrue(TEXT("weather changes over the sector"), Start.From != End.To || Start.Blend.SunScale != End.Blend.SunScale);
+			float MaxStep = 0.f;
+			for (int32 i = 0; i < 100; ++i)
+			{
+				const FDCWeatherState X = ADCVoxelCity::WeatherAt(Seed * 977, Sector, i / 100.f);
+				const FDCWeatherState Y = ADCVoxelCity::WeatherAt(Seed * 977, Sector, (i + 1) / 100.f);
+				MaxStep = FMath::Max(MaxStep, FMath::Abs(X.Blend.SunScale - Y.Blend.SunScale));
+			}
+			TestTrue(TEXT("blend is continuous"), MaxStep < 0.1f);
+		}
+	}
+	TestTrue(TEXT("several seasons across seeds"), SeasonsSeen.Num() >= 3);
 	return true;
 }
 
