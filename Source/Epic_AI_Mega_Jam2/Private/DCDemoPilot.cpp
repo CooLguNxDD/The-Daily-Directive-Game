@@ -41,6 +41,52 @@ bool ADCDemoPilot::IsRequested()
 	return FParse::Param(FCommandLine::Get(), TEXT("dcdemo"));
 }
 
+bool ADCDemoPilot::IsMedicRequested()
+{
+	return FParse::Param(FCommandLine::Get(), TEXT("dcmedic"));
+}
+
+void ADCDemoPilot::TickMedic()
+{
+	ADCCharacter* Me = Cast<ADCCharacter>(GetWorld()->GetFirstPlayerController() ? GetWorld()->GetFirstPlayerController()->GetPawn() : nullptr);
+	if (!Me || Me->IsDowned())
+	{
+		return;
+	}
+	ADCCharacter* Down = nullptr;
+	for (ADCCharacter* C : TActorRange<ADCCharacter>(GetWorld()))
+	{
+		Down = (C != Me && C->IsDowned()) ? C : Down;
+	}
+	if (!Down)
+	{
+		if (bMedicHolding)
+		{
+			bMedicHolding = false;
+			Release(TEXT("Interact"));
+			Shot(TEXT("medic_revived_teammate"));
+			UE_LOG(LogDCDemo, Display, TEXT("DEMO medic: teammate back up"));
+		}
+		Release(TEXT("Move"));
+		return;
+	}
+	const float Dist = FVector::Dist2D(Down->GetActorLocation(), Me->GetActorLocation());
+	AimAt(Down->GetActorLocation());
+	if (Dist > 220.f)
+	{
+		Press(TEXT("Move"), FVector(0, 1, 0)); // run to them
+		return;
+	}
+	Release(TEXT("Move"));
+	if (!bMedicHolding)
+	{
+		bMedicHolding = true;
+		Press(TEXT("Interact"));
+		Shot(TEXT("medic_holding_E_on_teammate"));
+		UE_LOG(LogDCDemo, Display, TEXT("DEMO medic: holding E on %s"), *GetNameSafe(Down->GetPlayerState()));
+	}
+}
+
 void ADCDemoPilot::BeginPlay()
 {
 	Super::BeginPlay();
@@ -50,6 +96,11 @@ void ADCDemoPilot::BeginPlay()
 	}
 	IFileManager::Get().MakeDirectory(*ShotDir, true);
 	bQuit = FParse::Param(FCommandLine::Get(), TEXT("dcdemoquit"));
+	bMedic = IsMedicRequested() && !IsRequested();
+	if (bMedic)
+	{
+		return;
+	}
 	BuildScript();
 	StepReadyReal = GetWorld()->GetRealTimeSeconds() + 2.0; // let the city, sky and HUD settle
 	UE_LOG(LogDCDemo, Display, TEXT("DEMO start: %d steps, shots to %s"), Script.Num(), *ShotDir);
@@ -521,6 +572,11 @@ void ADCDemoPilot::BuildScript()
 void ADCDemoPilot::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
+	if (bMedic)
+	{
+		TickMedic();
+		return;
+	}
 	if (!Script.IsValidIndex(Next) || StepReadyReal < 0.0)
 	{
 		return;

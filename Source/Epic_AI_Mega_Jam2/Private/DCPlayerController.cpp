@@ -7,6 +7,7 @@
 #include "DCMenu.h"
 #include "DCPlayerState.h"
 #include "DCReelDirector.h"
+#include "DCDemoPilot.h"
 #include "DCTuning.h"
 #include "Engine/GameViewportClient.h"
 #include "Engine/LocalPlayer.h"
@@ -74,6 +75,10 @@ void ADCPlayerController::BeginPlay()
 		Sub->AddMappingContext(GetInputSet()->GetContext(), 0);
 	}
 	SetInputMode(FInputModeGameOnly());
+	if (ADCDemoPilot::IsMedicRequested() && !ADCDemoPilot::IsRequested())
+	{
+		GetWorld()->SpawnActor<ADCDemoPilot>();
+	}
 	if (UDCAudioSubsystem* Audio = GetGameInstance()->GetSubsystem<UDCAudioSubsystem>())
 	{
 		Audio->StartMusic(this, TEXT("Music"), 0.35f);
@@ -135,17 +140,30 @@ void ADCPlayerController::UpdateAutoVote()
 	{
 		return;
 	}
+	// Vote the runner-up among the other players' picks: within 600 of the leader, the vote flips the headline.
+	TArray<TPair<int32, const ADCPlayerState*>> Picks;
 	for (const APlayerState* P : GS->PlayerArray)
 	{
 		const ADCPlayerState* Other = Cast<ADCPlayerState>(P);
-		if (Other && Other != Mine && Other->FinalCut.Num() > 0)
+		for (int32 Id : (Other && Other != Mine) ? Other->FinalCut : TArray<int32>())
 		{
-			bAutoVoted = true;
-			UE_LOG(LogTemp, Display, TEXT("DCVOTE %s votes for photo %d by %s"), *Mine->GetPlayerName(), Other->FinalCut.Last(), *Other->GetPlayerName());
-			RequestVote(Other->FinalCut.Last()); // the critic's lowest pick, so the vote visibly changes the order
-			return;
+			Picks.Add(TPair<int32, const ADCPlayerState*>(Id, Other));
 		}
 	}
+	if (Picks.Num() == 0)
+	{
+		return;
+	}
+	Picks.Sort([](const TPair<int32, const ADCPlayerState*>& A, const TPair<int32, const ADCPlayerState*>& B)
+	{
+		const FDCPhotoRecord* PA = A.Value->FindPhoto(A.Key);
+		const FDCPhotoRecord* PB = B.Value->FindPhoto(B.Key);
+		return (PA ? PA->Grade.Score : 0) > (PB ? PB->Grade.Score : 0);
+	});
+	const TPair<int32, const ADCPlayerState*>& Choice = Picks[FMath::Min(1, Picks.Num() - 1)];
+	bAutoVoted = true;
+	UE_LOG(LogTemp, Display, TEXT("DCVOTE %s votes for photo %d by %s"), *Mine->GetPlayerName(), Choice.Key, *Choice.Value->GetPlayerName());
+	RequestVote(Choice.Key);
 }
 
 void ADCPlayerController::UpdateEvidenceShots()
