@@ -243,6 +243,7 @@ void ADCDemoPilot::AddCycle(const FString& C)
 		return !PS || !GS || PS->CooldownReadyTime(TEXT("OrbitalLaser")) <= GS->Now();
 	}, 20.f);
 	Add(0.f, [this] { Tap(TEXT("Slot2")); return true; });
+	Add(0.2f, [this, C] { Shot(C + TEXT("_draw_stratagem")); return true; });
 	FString WantedStratagem;
 	if (!C.StartsWith(TEXT("s0")) && FParse::Value(FCommandLine::Get(), TEXT("dcstratagem="), WantedStratagem))
 	{

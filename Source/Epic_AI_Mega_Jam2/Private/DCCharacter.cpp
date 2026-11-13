@@ -529,8 +529,10 @@ void ADCCharacter::OnRep_Slot()
 	const FSoftObjectPath* SlotAnim = T.Assets.SlotDrawAnims.Find(Slot);
 	UAnimSequence* Equip = Cast<UAnimSequence>((SlotAnim ? *SlotAnim : T.Assets.DrawAnim).TryLoad());
 	UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance();
-	if (Equip && AnimInstance && HasActorBegunPlay() && !bDowned)
+	// Once per change: the server's echo of a slot the owner already drew does not restart the motion.
+	if (Equip && AnimInstance && HasActorBegunPlay() && !bDowned && DrawnSlot != Slot)
 	{
+		DrawnSlot = Slot;
 		const float PlayRate = Equip->GetPlayLength() / FMath::Max(T.Camera.DrawSeconds, 0.05f);
 		AnimInstance->PlaySlotAnimationAsDynamicMontage(Equip, T.Assets.DrawSlot, 0.05f, 0.1f, PlayRate);
 	}

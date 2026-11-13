@@ -73,6 +73,15 @@ if [[ "${UNREAL_GATE_PACKAGE:-0}" == 1 ]]; then
     "$UE_ROOT/Engine/Build/BatchFiles/RunUAT.bat" BuildCookRun -project="$uproject" -noP4 -utf8output \
     -platform="$platform" -clientconfig="$config" -skipbuild -cook -stage -pak -archive \
     -archivedirectory="$out/package" -unattended -nullrhi || exit 1
+  # The packaged exe must start without the editor and play the core loop: -dcsmoke starts a run, drops a laser
+  # on a tower, checks the collapse and quits with one DCSMOKE line.
+  exe="$out/package/Windows/$project.exe"
+  smoke="$out/smoke.log"
+  stage "tier C: packaged exe smoke" "$out/smoke-stdout.log"     timeout 240 "$exe" -dcsmoke -nullrhi -unattended -nosound -log -abslog="$smoke" || exit 1
+  if ! grep -q "DCSMOKE PASS" "$smoke" 2>/dev/null; then
+    echo "gate: tier C packaged exe smoke FAIL (no DCSMOKE PASS in $smoke)"; grep -h "DCSMOKE" "$smoke" 2>/dev/null; exit 1
+  fi
+  grep -h "DCSMOKE" "$smoke" | sed 's/^.*DCSMOKE/gate: DCSMOKE/'
 else
   stage "tier C: cook $platform" "$out/cook.log" \
     "$UE_ROOT/Engine/Binaries/Win64/UnrealEditor-Cmd.exe" "$uproject" -run=cook \

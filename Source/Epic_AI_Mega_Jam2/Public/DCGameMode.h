@@ -31,6 +31,8 @@ public:
 	virtual void PreLogin(const FString& Options, const FString& Address, const FUniqueNetIdRepl& UniqueId, FString& ErrorMessage) override;
 
 	void CallStrike(const FDCStratagemDef& Def, const FVector& Target, AController* Caller);
+	/** Packaged-build smoke (-dcsmoke): start, strike a tower, check the collapse, log DCSMOKE, quit. */
+	void StartSmoke();
 	void OnPhotoGraded(ADCCharacter* Photographer, const FDCPhotoRecord& Record, const FDCPhotoInputs& Inputs, TArray<FDCPoseSample>&& Poses);
 	void OnPlayerDowned(ADCCharacter* Player);
 	/** Fails the run when every player is down and nobody can still get up (R12). */
@@ -100,6 +102,9 @@ private:
 	float SectorStartTime = 0.f;
 	TArray<int32> WaveSpawned;
 	TArray<float> WaveNextTime;
+	float LastPackTime = -1e6f;
+	float LastDownTime = -1e6f;
+	void TickPressure(float Now);
 	FRandomStream SectorRng;
 	float NextScoopTime = 0.f;
 	int32 LastScoop = -1;

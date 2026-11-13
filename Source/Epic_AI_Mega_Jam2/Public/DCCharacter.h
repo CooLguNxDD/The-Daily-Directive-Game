@@ -165,6 +165,8 @@ private:
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UStaticMeshComponent> Tracer;
 
 	UPROPERTY(ReplicatedUsing = OnRep_Slot) EDCSlot Slot = EDCSlot::Rifle;
+	/** The slot whose draw motion last played on this machine. */
+	EDCSlot DrawnSlot = EDCSlot::Rifle;
 	UPROPERTY(Replicated) bool bCameraRaised = false;
 	UPROPERTY(Replicated) bool bSprinting = false;
 	UPROPERTY(Replicated) float Health = 100.f;
