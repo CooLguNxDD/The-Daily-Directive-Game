@@ -268,7 +268,11 @@ void ADCHUD::DrawViewfinder(ADCCharacter& Me)
 		Box(W * 0.5f - Sx(100.f), H - Bar - M - Sx(20.f), Sx(200.f) * U, Sx(6.f), FLinearColor::White);
 		Text(TEXT("WINDING"), W * 0.5f, H - Bar - M - Sx(50.f), FLinearColor(1, 1, 1, 0.7f), 0.6f, true);
 	}
-	Text(TEXT("LMB  SNAP"), W * 0.5f, Bar + MY - Sx(10.f), FLinearColor(1, 1, 1, 0.7f), 0.6f, true); // under the timer and quota bar
+	else
+	{
+		// Bottom centre, where WINDING shows between shots: clear of the timer and the quota bar at the top.
+		Text(TEXT("LMB  SNAP"), W * 0.5f, H - Bar - M - Sx(50.f), FLinearColor(1, 1, 1, 0.7f), 0.6f, true);
+	}
 }
 
 void ADCHUD::DrawStatus(ADCGameState& GS, ADCCharacter& Me)
