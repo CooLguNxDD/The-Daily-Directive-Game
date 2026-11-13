@@ -110,7 +110,7 @@ namespace DCMenu
 				const FString HostAddress = Host.Address;
 				Column->AddSlot().AutoHeight().HAlign(HAlign_Center).Padding(0, 6, 0, 0)
 					[Label(FString::Printf(TEXT("%s  at  %s"), *Host.Name.ToUpper(), *HostAddress), 12, Ink)];
-				Column->AddSlot().AutoHeight().HAlign(HAlign_Center)[Button(FString::Printf(TEXT("JOIN  (%d/4 PLAYERS)"), Host.Players), [Weak, HostAddress]()
+				Column->AddSlot().AutoHeight().HAlign(HAlign_Center)[Button(FString::Printf(TEXT("JOIN  (%d/%d PLAYERS)"), Host.Players, UDCTuning::Get().Run.MaxPlayers), [Weak, HostAddress]()
 				{
 					if (ADCPlayerController* P = Weak.Get())
 					{

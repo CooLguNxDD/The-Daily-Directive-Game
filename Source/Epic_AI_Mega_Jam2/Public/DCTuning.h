@@ -278,6 +278,10 @@ struct FDCAssetTuning
 	};
 	UPROPERTY(EditAnywhere, Config, Category = "Assets") FName DrawSlot = TEXT("DefaultSlot");
 	UPROPERTY(EditAnywhere, Config, Category = "Assets") FName HandSocket = TEXT("hand_r");
+	/** Holster (R1): with another slot out, the rifle rides on the back at this bone and offset instead of vanishing. */
+	UPROPERTY(EditAnywhere, Config, Category = "Assets") FName HolsterSocket = TEXT("spine_03");
+	UPROPERTY(EditAnywhere, Config, Category = "Assets") FVector HolsterLocation = FVector(18.f, -22.f, 0.f);
+	UPROPERTY(EditAnywhere, Config, Category = "Assets") FRotator HolsterRotation = FRotator(0.f, 25.f, 90.f);
 	UPROPERTY(EditAnywhere, Config, Category = "Assets") FName HeadSocket = TEXT("head");
 };
 
@@ -347,6 +351,11 @@ struct FDCRunTuning
 	UPROPERTY(EditAnywhere, Config, Category = "Run") int32 ReelClipsPerPlayer = 2;
 	/** Seconds of recorded pose before the shutter (the clip length in game time). */
 	UPROPERTY(EditAnywhere, Config, Category = "Run") float ClipSeconds = 2.f;
+	/** Second take (R16): the camera dollies (WASD) this fast, at most this far from the original shot's camera. */
+	UPROPERTY(EditAnywhere, Config, Category = "Run") float SecondTakeDollyCmPerSec = 700.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Run") float SecondTakeRadiusCm = 2800.f;
+	/** Co-op cap (R12): a listen server refuses a join beyond this many players. */
+	UPROPERTY(EditAnywhere, Config, Category = "Run") int32 MaxPlayers = 4;
 	UPROPERTY(EditAnywhere, Config, Category = "Run") float PoseSampleHz = 12.f;
 	/** Playback speed of the clip (0.4 = slow motion). */
 	UPROPERTY(EditAnywhere, Config, Category = "Run") float ReelSlowMo = 0.4f;

@@ -276,6 +276,11 @@ void ADCCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompone
 void ADCCharacter::OnMove(const FInputActionInstance& I)
 {
 	const FVector2D V = I.GetValue().Get<FVector2D>();
+	if (ADCReelDirector* Director = ReelDirector())
+	{
+		Director->DollyTake(V); // R16: second-take camera dolly
+		return;
+	}
 	const FRotator Yaw(0.f, GetControlRotation().Yaw, 0.f);
 	AddMovementInput(FRotationMatrix(Yaw).GetUnitAxis(EAxis::X), V.Y);
 	AddMovementInput(FRotationMatrix(Yaw).GetUnitAxis(EAxis::Y), V.X);
@@ -436,6 +441,11 @@ void ADCCharacter::OnSlot3(const FInputActionInstance&) { SelectSlot(EDCSlot::Ca
 void ADCCharacter::OnZoom(const FInputActionInstance& I)
 {
 	const float Wheel = I.GetValue().Get<float>();
+	if (ADCReelDirector* Director = ReelDirector())
+	{
+		Director->ZoomTake(Wheel);
+		return;
+	}
 	if (Slot == EDCSlot::Stratagem && !bCameraRaised)
 	{
 		OnCycle(I);
@@ -499,7 +509,11 @@ void ADCCharacter::SelectSlot(EDCSlot NewSlot)
 
 void ADCCharacter::OnRep_Slot()
 {
-	RifleMesh->SetVisibility(Slot == EDCSlot::Rifle);
+	// The rifle is never hidden: in the hand for slot 1, slung on the back otherwise (R1 holster).
+	const FDCAssetTuning& A = UDCTuning::Get().Assets;
+	RifleMesh->AttachToComponent(GetMesh(), FAttachmentTransformRules::SnapToTargetNotIncludingScale, Slot == EDCSlot::Rifle ? A.HandSocket : A.HolsterSocket);
+	RifleMesh->SetRelativeLocation(Slot == EDCSlot::Rifle ? FVector(-10.f, 30.f, 0.f) : A.HolsterLocation);
+	RifleMesh->SetVisibility(true);
 	PhotoCamMesh->SetVisibility(Slot == EDCSlot::Camera);
 	BeaconMesh->SetVisibility(Slot == EDCSlot::Stratagem);
 	if (Slot != EDCSlot::Stratagem)
@@ -1121,8 +1135,9 @@ void ADCCharacter::UpdateHeldItems(float DeltaSeconds)
 	const float U = 1.f - FMath::Clamp((DrawEndTime - Now()) / DrawSeconds, 0.f, 1.f);
 	const float Ease = 1.f - FMath::Square(1.f - U);
 	const FRotator Swing(0.f, 0.f, -80.f * (1.f - Ease));
-	RifleMesh->SetRelativeScale3D(FVector(0.75f, 0.08f, 0.12f) * FMath::Lerp(0.3f, 1.f, Ease));
-	RifleMesh->SetRelativeRotation(FRotator(0.f, 90.f, 0.f) + Swing);
+	const bool bRifleInHand = Slot == EDCSlot::Rifle;
+	RifleMesh->SetRelativeScale3D(FVector(0.75f, 0.08f, 0.12f) * (bRifleInHand ? FMath::Lerp(0.3f, 1.f, Ease) : 1.f));
+	RifleMesh->SetRelativeRotation(bRifleInHand ? FRotator(0.f, 90.f, 0.f) + Swing : UDCTuning::Get().Assets.HolsterRotation);
 	PhotoCamMesh->SetRelativeScale3D(FVector(0.2f, 0.12f, 0.14f) * FMath::Lerp(0.3f, 1.f, Ease));
 	PhotoCamMesh->SetRelativeLocation(bCameraRaised ? FVector(-12.f, 20.f, 12.f) : FVector(-6.f, 8.f, 0.f));
 	PhotoCamMesh->SetRelativeRotation(Swing);

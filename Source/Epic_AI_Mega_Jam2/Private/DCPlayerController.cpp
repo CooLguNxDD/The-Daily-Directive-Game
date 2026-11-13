@@ -347,7 +347,7 @@ void ADCPlayerController::ServerSecondTake_Implementation(int32 PhotoId, FVector
 	// One second take per clip per player, only while that clip plays, from near the replayed scene; graded by
 	// the host on its own re-staged scene at the host's replay clock.
 	if (!GS || !PS || GS->Phase != EDCRunPhase::Reel || GS->ReelIndex != ClipIndex || GS->ReelStage > 1 || SecondTakeClips.Contains(ClipIndex) || PS->FindPhoto(PhotoId)
-		|| !GS->ReelClips.IsValidIndex(ClipIndex) || FVector::Dist(CamLoc, GS->ReelClips[ClipIndex].Photo.CameraLocation) > 3000.f)
+		|| !GS->ReelClips.IsValidIndex(ClipIndex) || FVector::Dist(CamLoc, GS->ReelClips[ClipIndex].Photo.CameraLocation) > UDCTuning::Get().Run.SecondTakeRadiusCm + 100.f)
 	{
 		if (!PS || !PS->FindPhoto(PhotoId))
 		{
@@ -375,7 +375,8 @@ void ADCPlayerController::ServerSecondTake_Implementation(int32 PhotoId, FVector
 	Record.Grade = DCPhotoRules::GradePhoto(DCPhotoProbe::Measure(GetWorld(), View, When, nullptr, false, Record.BlastId), UDCTuning::Get().Photo);
 	PS->AddPhoto(Record);
 	DCRunRules::InsertByCritic(PS->FinalCutChoices, PS->Photos, PhotoId); // second takes enter the ranking at their critic rank
-	UE_LOG(LogTemp, Display, TEXT("DCTAKE %s second take photo=%d clip=%d score=%d timing=%s"), *PS->GetPlayerName(), PhotoId, ClipIndex, Record.Grade.Score, *Record.Grade.TimingLabel.ToString());
+	UE_LOG(LogTemp, Display, TEXT("DCTAKE %s second take photo=%d clip=%d score=%d timing=%s camera %.0f cm from the original shot, fov %.0f"), *PS->GetPlayerName(), PhotoId, ClipIndex,
+		Record.Grade.Score, *Record.Grade.TimingLabel.ToString(), FVector::Dist(CamLoc, Clip.Photo.CameraLocation), View.FOV);
 	ClientSecondTakeGraded(PhotoId, Record.Grade);
 }
 

@@ -111,6 +111,16 @@ TArray<ADCPlayerState*> ADCGameMode::Players() const
 	return Out;
 }
 
+void ADCGameMode::PreLogin(const FString& Options, const FString& Address, const FUniqueNetIdRepl& UniqueId, FString& ErrorMessage)
+{
+	Super::PreLogin(Options, Address, UniqueId, ErrorMessage);
+	// Co-op is 1-4 (R12): a full crew refuses the join with a reason the client logs.
+	if (ErrorMessage.IsEmpty() && GameState && GameState->PlayerArray.Num() >= UDCTuning::Get().Run.MaxPlayers)
+	{
+		ErrorMessage = FString::Printf(TEXT("The crew is full (%d photographers)."), UDCTuning::Get().Run.MaxPlayers);
+	}
+}
+
 void ADCGameMode::Logout(AController* Exiting)
 {
 	Super::Logout(Exiting);

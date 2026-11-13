@@ -695,8 +695,10 @@ void ADCDemoPilot::BuildScript()
 	// Reel: the clip playing, the freeze, the photo.
 	AddWaitPhase(EDCRunPhase::Reel, 400.f);
 	Add(1.2f, [this] { Shot(TEXT("reel_play")); return true; });
-	// Second take (R16): raise the camera during the replay, frame the moment from the side, snap.
+	// Second take (R16): raise the camera during the replay, dolly sideways (WASD), frame the moment, snap.
 	Add(0.f, [this] { Press(TEXT("Aim")); return true; });
+	Add(0.1f, [this] { Press(TEXT("Move"), FVector(1, 0.4f, 0)); return true; });
+	Add(0.7f, [this] { Release(TEXT("Move")); return true; });
 	Add(0.3f, [this]
 	{
 		const ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>();
