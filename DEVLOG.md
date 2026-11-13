@@ -55,6 +55,14 @@ is kept from the run records (Glass Box modifier): what was decided, why, and wh
 - Evidence tooling: scripted pilot runs for each draft option, a rifle-only sector, and a listening pass that
   records the master mix and checks every cue played is audible (`tools/evidence/audio_cues.py`).
 
+## 2026-11-13: Pressure (after checkpoint 7)
+- Swarm pressure follows HQ's quota: a pure rule turns how far the crew lags the photo quota into a target number
+  of swarmers and a pack size; photo points lower it, kills never do. Packs of 4-8 land on a street ring around a
+  player; a collapse or a downed player buys a few seconds of relief; a hard cap per sector stops a death spiral.
+  A rifle-only player is now overrun in sector 2; a crew that keeps filing photos faces the smallest packs.
+- The gate's full tier now launches the packaged exe (-dcsmoke: start a run, drop a laser on a tower, check the
+  collapse) instead of only packaging it.
+
 ## Problems met
 - The engine is shared with an editor that has Live Coding on: UnrealBuildTool refuses to build. Fixed with
   `-NoHotReloadFromIDE`, and the packaging step now builds the game target itself.
@@ -70,3 +78,6 @@ is kept from the run records (Glass Box modifier): what was decided, why, and wh
   names now carry a time stamp.
 - The DRAMA tag on a pending strike sat at a fixed 9 m and fell off the bottom of frames aimed up a tower; it now
   rides the laser column where the view ray passes it.
+- Every rifle-only test showed swarmers idling 40-60 m away. A per-enemy trace showed them frozen against towers:
+  an inside corner or a window ledge blocked the one escape move they had. They now try several and take the first
+  that moves.
