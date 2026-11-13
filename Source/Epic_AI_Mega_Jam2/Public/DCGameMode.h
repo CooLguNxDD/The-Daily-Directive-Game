@@ -40,7 +40,7 @@ public:
 	void OnBuildingCollapsed(ADCBuilding* Building);
 	/** Every collapse goes through here. Delay > 0 writes a telegraphed event record (Kind) now and collapses the
 	 *  tower at its peak on the server clock; Delay 0 collapses at once (a strike's own record covers it). */
-	void ScheduleCollapse(ADCBuilding* Building, const FVector& Epicenter, FName Kind, float Delay);
+	void ScheduleCollapse(ADCBuilding* Building, const FVector& Epicenter, FName Kind, float Delay, float AtTime = -1.f);
 	void RequestHitstop();
 	bool IsCombatLive() const;
 

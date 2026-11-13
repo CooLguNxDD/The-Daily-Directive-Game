@@ -38,18 +38,23 @@ void FDCVoxelWorld::Set(const FIntVector& P, uint8 Material)
 	}
 }
 
-void FDCVoxelWorld::FillBox(const FIntVector& Min, const FIntVector& Max, uint8 Material)
+void FDCVoxelWorld::MarkDirtyWithNeighbours(const FIntVector& Key)
 {
-	for (int32 Z = Min.Z; Z < Max.Z; ++Z)
+	Dirty.Add(Key);
+	// Border voxels change the neighbours' faces and occlusion: remesh existing neighbours too (conservative).
+	static const FIntVector Around[6] = {{1, 0, 0}, {-1, 0, 0}, {0, 1, 0}, {0, -1, 0}, {0, 0, 1}, {0, 0, -1}};
+	for (const FIntVector& D : Around)
 	{
-		for (int32 Y = Min.Y; Y < Max.Y; ++Y)
+		if (Chunks.Contains(Key + D))
 		{
-			for (int32 X = Min.X; X < Max.X; ++X)
-			{
-				Set(FIntVector(X, Y, Z), Material);
-			}
+			Dirty.Add(Key + D);
 		}
 	}
+}
+
+void FDCVoxelWorld::FillBox(const FIntVector& Min, const FIntVector& Max, uint8 Material)
+{
+	EditBox(Min, Max, Material == 0, [Material](const FIntVector&, uint8) { return Material; });
 }
 
 int64 FDCVoxelWorld::CountSolid() const

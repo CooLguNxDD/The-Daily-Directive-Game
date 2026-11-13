@@ -50,6 +50,12 @@ public:
 
 	/** Writes one voxel and marks its chunk (and a neighbour chunk when on a border) dirty for remeshing. */
 	void Set(const FIntVector& P, uint8 Material);
+	/** Bulk edit, chunk by chunk (one map lookup per chunk, not per voxel): Fn(Position, OldValue) returns the new
+	 *  value for every voxel in [Min, Max). Only existing chunks are visited when bSkipEmpty (carving never creates).
+	 *  Returns how many voxels changed. Solid counts and dirty chunks stay correct. */
+	template <typename FnType>
+	int32 EditBox(const FIntVector& Min, const FIntVector& Max, bool bSkipEmpty, FnType&& Fn);
+
 	/** Fills an axis-aligned box, Min inclusive, Max exclusive. */
 	void FillBox(const FIntVector& Min, const FIntVector& Max, uint8 Material);
 
@@ -80,6 +86,70 @@ public:
 	bool HasDirty() const { return Dirty.Num() > 0; }
 
 private:
+	void MarkDirtyWithNeighbours(const FIntVector& Key);
+
 	TMap<FIntVector, TUniquePtr<FDCVoxelChunk>> Chunks;
 	TSet<FIntVector> Dirty;
 };
+
+template <typename FnType>
+int32 FDCVoxelWorld::EditBox(const FIntVector& Min, const FIntVector& Max, bool bSkipEmpty, FnType&& Fn)
+{
+	if (Min.X >= Max.X || Min.Y >= Max.Y || Min.Z >= Max.Z)
+	{
+		return 0;
+	}
+	constexpr int32 S = FDCVoxelChunk::Size;
+	const FIntVector C0 = ChunkOf(Min);
+	const FIntVector C1 = ChunkOf(Max - FIntVector(1));
+	int32 Changed = 0;
+	for (int32 Cz = C0.Z; Cz <= C1.Z; ++Cz)
+	{
+		for (int32 Cy = C0.Y; Cy <= C1.Y; ++Cy)
+		{
+			for (int32 Cx = C0.X; Cx <= C1.X; ++Cx)
+			{
+				const FIntVector Key(Cx, Cy, Cz);
+				TUniquePtr<FDCVoxelChunk>* Found = Chunks.Find(Key);
+				if (!Found && bSkipEmpty)
+				{
+					continue;
+				}
+				FDCVoxelChunk* C = Found ? Found->Get() : nullptr;
+				const FIntVector Base = Key * S;
+				const FIntVector Lo(FMath::Max(Min.X, Base.X), FMath::Max(Min.Y, Base.Y), FMath::Max(Min.Z, Base.Z));
+				const FIntVector Hi(FMath::Min(Max.X, Base.X + S), FMath::Min(Max.Y, Base.Y + S), FMath::Min(Max.Z, Base.Z + S));
+				int32 ChunkChanged = 0;
+				for (int32 Z = Lo.Z; Z < Hi.Z; ++Z)
+				{
+					for (int32 Y = Lo.Y; Y < Hi.Y; ++Y)
+					{
+						for (int32 X = Lo.X; X < Hi.X; ++X)
+						{
+							const int32 I = FDCVoxelChunk::Index(X - Base.X, Y - Base.Y, Z - Base.Z);
+							const uint8 Old = C ? C->V[I] : 0;
+							const uint8 New = Fn(FIntVector(X, Y, Z), Old);
+							if (New == Old)
+							{
+								continue;
+							}
+							if (!C)
+							{
+								C = Chunks.Add(Key, MakeUnique<FDCVoxelChunk>()).Get();
+							}
+							C->Solid += (New != 0 ? 1 : 0) - (Old != 0 ? 1 : 0);
+							C->V[I] = New;
+							++ChunkChanged;
+						}
+					}
+				}
+				if (ChunkChanged > 0)
+				{
+					MarkDirtyWithNeighbours(Key);
+					Changed += ChunkChanged;
+				}
+			}
+		}
+	}
+	return Changed;
+}

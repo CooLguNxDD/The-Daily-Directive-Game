@@ -105,11 +105,19 @@ float ADCVoxelCity::SurfaceZCm(const FVector& Where) const
 		return 0.f;
 	}
 	const FIntVector C = T.ToLocal(DCVoxelMath::ToCm(FVector(Where.X, Where.Y, 0.f)));
+	if (InFlight.IsValid())
+	{
+		// An op is writing the sector on a worker: answer from the cache (or the street) until it lands.
+		const float* Cached = SurfaceCache.Find(FIntPoint(C.X, C.Y));
+		return Cached ? *Cached : 0.f;
+	}
 	for (int32 Z = UDCVoxelSettings::Get().Tuning.GroundLayers + 60; Z >= 0; --Z)
 	{
 		if (T.Data.IsSolid(FIntVector(C.X, C.Y, Z)))
 		{
-			return static_cast<float>(T.OriginCm.Z + (Z + 1) * T.VoxelCm);
+			const float Top = static_cast<float>(T.OriginCm.Z + (Z + 1) * T.VoxelCm);
+			SurfaceCache.Add(FIntPoint(C.X, C.Y), Top);
+			return Top;
 		}
 	}
 	return 0.f;
@@ -117,7 +125,7 @@ float ADCVoxelCity::SurfaceZCm(const FVector& Where) const
 
 bool ADCVoxelCity::IsSolidAt(const FVector& Where) const
 {
-	if (BuiltSector == INDEX_NONE)
+	if (BuiltSector == INDEX_NONE || InFlight.IsValid()) // unknown while an op writes on a worker
 	{
 		return false;
 	}
@@ -225,6 +233,11 @@ void ADCVoxelCity::BeginPlay()
 
 void ADCVoxelCity::EndPlay(const EEndPlayReason::Type Reason)
 {
+	if (InFlight.IsValid())
+	{
+		InFlightTask.Wait();
+		InFlight.Reset();
+	}
 	for (const TSharedPtr<FMeshJob>& Job : Jobs)
 	{
 		Job->Task.Wait(); // jobs only touch their own data, but must not outlive the actor
@@ -271,6 +284,13 @@ UProceduralMeshComponent* ADCVoxelCity::NewMesh(bool bCollision)
 
 void ADCVoxelCity::Clear()
 {
+	if (InFlight.IsValid())
+	{
+		InFlightTask.Wait();
+		InFlight.Reset();
+	}
+	QueuedOps.Reset();
+	SurfaceCache.Reset();
 	for (const TSharedPtr<FMeshJob>& Job : Jobs)
 	{
 		Job->Task.Wait();
@@ -346,9 +366,80 @@ FDCVoxelOpResult ADCVoxelCity::ApplyOp(const FDCVoxelOp& Op, bool bAnimate)
 		UE_LOG(LogTemp, Warning, TEXT("DCVOXEL op seq=%d skipped: no city built"), Op.Seq);
 		return FDCVoxelOpResult();
 	}
+	WaitInFlight(); // the synchronous path (reel re-staging) never overlaps a queued op
 	const double Start = FPlatformTime::Seconds();
 	FDCVoxelOpResult Result = DCVoxelOps::Apply(Sector, Op, OpCtx);
 	AppliedSeq = FMath::Max(AppliedSeq, Op.Seq);
+	const uint32 Hash = Sector.Hash();
+	FinishOp(Op, Result, bAnimate, static_cast<float>((FPlatformTime::Seconds() - Start) * 1000.0), Hash, false);
+	return Result;
+}
+
+void ADCVoxelCity::ApplyOpAsync(const FDCVoxelOp& Op, bool bAnimate, TFunction<void(const FDCVoxelOpResult&, uint32)> OnDone)
+{
+	if (BuiltSector == INDEX_NONE || !OpCtx.Tuning)
+	{
+		SyncBuild();
+	}
+	if (BuiltSector == INDEX_NONE || !OpCtx.Tuning)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("DCVOXEL op seq=%d skipped: no city built"), Op.Seq);
+		return;
+	}
+	AppliedSeq = FMath::Max(AppliedSeq, Op.Seq); // queued: following never queues it twice
+	FQueuedOp& Q = QueuedOps.AddDefaulted_GetRef();
+	Q.Op = Op;
+	Q.bAnimate = bAnimate;
+	Q.OnDone = MoveTemp(OnDone);
+	StartNextOp();
+}
+
+void ADCVoxelCity::StartNextOp()
+{
+	if (InFlight.IsValid() || QueuedOps.Num() == 0)
+	{
+		return;
+	}
+	// One writer: the op runs on a worker while the game thread leaves the sector alone (readers use caches), so a
+	// collapse costs the game thread only the uploads (impact hitch, R13). Ops stay strictly in Seq order.
+	InFlight = MakeShared<FQueuedOp>(MoveTemp(QueuedOps[0]));
+	QueuedOps.RemoveAt(0);
+	TSharedPtr<FQueuedOp> Job = InFlight;
+	FDCVoxelSector* Target = &Sector;
+	const FDCVoxelOpContext* Ctx = &OpCtx;
+	InFlightTask = UE::Tasks::Launch(TEXT("DCVoxelOp"), [Job, Target, Ctx]()
+	{
+		const double Start = FPlatformTime::Seconds();
+		Job->Result = DCVoxelOps::Apply(*Target, Job->Op, *Ctx);
+		Job->Hash = Target->Hash();
+		Job->ApplyMs = static_cast<float>((FPlatformTime::Seconds() - Start) * 1000.0);
+	});
+}
+
+void ADCVoxelCity::WaitInFlight()
+{
+	if (!InFlight.IsValid())
+	{
+		return;
+	}
+	InFlightTask.Wait();
+	FinishInFlight();
+}
+
+void ADCVoxelCity::FinishInFlight()
+{
+	TSharedPtr<FQueuedOp> Done = InFlight;
+	InFlight.Reset();
+	SurfaceCache.Reset();
+	FinishOp(Done->Op, Done->Result, Done->bAnimate, Done->ApplyMs, Done->Hash, true);
+	if (Done->OnDone)
+	{
+		Done->OnDone(Done->Result, Done->Hash);
+	}
+}
+
+void ADCVoxelCity::FinishOp(const FDCVoxelOp& Op, FDCVoxelOpResult& Result, bool bAnimate, float ApplyMs, uint32 Hash, bool bOffThread)
+{
 	for (int32 Lot : Result.FallenLots)
 	{
 		SetTowerOffset(Lot, FVector::ZeroVector); // the stump stops shaking
@@ -412,10 +503,9 @@ FDCVoxelOpResult ADCVoxelCity::ApplyOp(const FDCVoxelOp& Op, bool bAnimate)
 	{
 		DeferredTerrain.Add({Now, C});
 	}
-	UE_LOG(LogTemp, Display, TEXT("DCVOXEL op seq=%d kind=%s lot=%d carved=%d fallen=%d pieces=%d rubble=%d %.0f ms hash=%08x%s"), Op.Seq, *Op.Kind.ToString(), Op.Lot,
-		Result.Carved, Result.FallenLots.Num(), Result.Pieces.Num(), Result.Rubble.Num(), (FPlatformTime::Seconds() - Start) * 1000.0, Sector.Hash(),
-		Op.ResultHash == 0 ? TEXT("") : (Op.ResultHash == Sector.Hash() ? TEXT(" match=host") : TEXT(" MISMATCH=host")));
-	return Result;
+	UE_LOG(LogTemp, Display, TEXT("DCVOXEL op seq=%d kind=%s lot=%d carved=%d fallen=%d pieces=%d rubble=%d %.0f ms off-thread=%d hash=%08x%s"), Op.Seq, *Op.Kind.ToString(), Op.Lot,
+		Result.Carved, Result.FallenLots.Num(), Result.Pieces.Num(), Result.Rubble.Num(), ApplyMs, bOffThread ? 1 : 0, Hash,
+		Op.ResultHash == 0 ? TEXT("") : (Op.ResultHash == Hash ? TEXT(" match=host") : TEXT(" MISMATCH=host")));
 }
 
 void ADCVoxelCity::StartFall(const FDCVoxelPiece& Piece, float Now, const TArray<FIntVector>& Deferred, const FVector& LandAt)
@@ -660,7 +750,14 @@ void ADCVoxelCity::TickFalling(float Now)
 			DeferredTerrain.RemoveAtSwap(i);
 		}
 	}
-	if (Show.Num() > 0)
+	if (Show.Num() > 0 && InFlight.IsValid())
+	{
+		for (const FIntVector& C : Show)
+		{
+			DeferredTerrain.Add({Now, C}); // the worker is writing: show next frame
+		}
+	}
+	else if (Show.Num() > 0)
 	{
 		QueueDirty(0, Show);
 	}
@@ -739,7 +836,7 @@ void ADCVoxelCity::FollowGameState()
 	{
 		if (Op.Build == BuiltId && Op.Seq > AppliedSeq)
 		{
-			ApplyOp(Op, Now - Op.Time < 2.f);
+			ApplyOpAsync(Op, Now - Op.Time < 2.f, nullptr);
 		}
 	}
 }
@@ -750,6 +847,11 @@ void ADCVoxelCity::Tick(float DeltaSeconds)
 	if (bFollowGameState) // the host drives Build and ApplyOp directly first, so following is a no-op there
 	{
 		FollowGameState();
+	}
+	if (InFlight.IsValid() && InFlightTask.IsCompleted())
+	{
+		FinishInFlight();
+		StartNextOp();
 	}
 	PollJobs();
 	UploadCells();

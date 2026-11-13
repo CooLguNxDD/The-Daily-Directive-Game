@@ -313,18 +313,31 @@ void ADCOrbitalStrike::DetonateHost(const FDCStratagemDef& Def)
 		Op.Stratagem = Def.Id;
 		Op.CenterCm = DCVoxelMath::ToCm(FVector(Here.X, Here.Y, 0.f));
 		Op.BlastRadiusCm = FMath::RoundToInt32(Def.BlastRadius);
-		const int32 Index = GS->VoxelOps.Num();
-		GS->AddVoxelOp(Op);
-		const FDCVoxelOpResult Result = City->ApplyOp(GS->VoxelOps[Index], true);
-		GS->VoxelOps[Index].ResultHash = City->GetHash();
-		for (ADCBuilding* Building : TActorRange<ADCBuilding>(World))
+		const int32 Seq = GS->AddVoxelOp(Op).Seq;
+		// The op runs on a worker; the collapse records follow when it lands (a frame or a few later).
+		TWeakObjectPtr<ADCGameState> WeakGS(GS);
+		const FVector Epicenter = Here;
+		const float OpTime = GS->VoxelOps.Last().Time;
+		City->ApplyOpAsync(GS->VoxelOps.Last(), true, [WeakGS, Seq, Epicenter, OpTime](const FDCVoxelOpResult& Result, uint32 Hash)
 		{
-			ADCGameMode* GM = World->GetAuthGameMode<ADCGameMode>();
-			if (GM && Result.FallenLots.Contains(Building->GetLotIndex()))
+			ADCGameState* State = WeakGS.Get();
+			if (!State)
 			{
-				GM->ScheduleCollapse(Building, Here, TEXT("Strike"), 0.f);
+				return;
 			}
-		}
+			if (FDCVoxelOp* Rec = State->VoxelOps.FindByPredicate([Seq](const FDCVoxelOp& O) { return O.Seq == Seq; }))
+			{
+				Rec->ResultHash = Hash;
+			}
+			ADCGameMode* GM = State->GetWorld()->GetAuthGameMode<ADCGameMode>();
+			for (ADCBuilding* Building : TActorRange<ADCBuilding>(State->GetWorld()))
+			{
+				if (GM && Result.FallenLots.Contains(Building->GetLotIndex()))
+				{
+					GM->ScheduleCollapse(Building, Epicenter, TEXT("Strike"), 0.f, OpTime); // at the blast, not when the worker finished
+				}
+			}
+		});
 	}
 	for (ADCBuilding* Building : TActorRange<ADCBuilding>(World))
 	{

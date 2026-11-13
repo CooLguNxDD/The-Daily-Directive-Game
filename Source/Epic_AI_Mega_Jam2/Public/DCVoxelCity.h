@@ -6,6 +6,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
+#include "Tasks/Task.h"
 #include "Rules/DCCityPlan.h"
 #include "Voxel/DCVoxelMesher.h"
 #include "Voxel/DCVoxelOps.h"
@@ -38,6 +39,9 @@ public:
 
 	/** Applies one op now (host: right after appending it; reel: at its replay time). Animate plays the fall. */
 	FDCVoxelOpResult ApplyOp(const FDCVoxelOp& Op, bool bAnimate);
+	/** Queues an op for the worker (play): ops run one at a time in Seq order; OnDone gets the result and the voxel hash
+	 *  on the game thread when it lands. */
+	void ApplyOpAsync(const FDCVoxelOp& Op, bool bAnimate, TFunction<void(const FDCVoxelOpResult&, uint32)> OnDone);
 
 	/** Condemned-tower shake: offsets every mesh of a lot (cosmetic). */
 	void SetTowerOffset(int32 Lot, const FVector& Offset);
@@ -76,6 +80,23 @@ private:
 	void StartFall(const FDCVoxelPiece& Piece, float Now, const TArray<FIntVector>& DeferredTerrain, const FVector& LandAt);
 	void Land(FFalling& F);
 	void TickCityShot();
+	void StartNextOp();
+	void WaitInFlight();
+	void FinishInFlight();
+	void FinishOp(const FDCVoxelOp& Op, FDCVoxelOpResult& Result, bool bAnimate, float ApplyMs, uint32 Hash, bool bOffThread);
+	struct FQueuedOp
+	{
+		FDCVoxelOp Op;
+		bool bAnimate = true;
+		TFunction<void(const FDCVoxelOpResult&, uint32)> OnDone;
+		FDCVoxelOpResult Result;
+		uint32 Hash = 0;
+		float ApplyMs = 0.f;
+	};
+	TArray<FQueuedOp> QueuedOps;
+	TSharedPtr<FQueuedOp> InFlight;
+	UE::Tasks::FTask InFlightTask;
+	mutable TMap<FIntPoint, float> SurfaceCache;
 	int32 ShotStep = 0;
 	double NextShotReal = 0.0;
 	UPROPERTY() TObjectPtr<class ACameraActor> ShotCamera;

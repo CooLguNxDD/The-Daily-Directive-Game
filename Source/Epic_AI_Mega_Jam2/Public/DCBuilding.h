@@ -31,7 +31,8 @@ public:
 	FVector GetEpicenter() const { return Epicenter; }
 
 	/** Host only: collapse now, pushed away from Epicenter. Idempotent. */
-	void Collapse(const FVector& Epicenter);
+	/** AtTime: server time of the collapse (an op that landed later on a worker keeps its own time); < 0 = now. */
+	void Collapse(const FVector& Epicenter, float AtTime = -1.f);
 
 	bool IsCollapsed() const { return bCollapsed; }
 	float GetCollapseTime() const { return CollapseTime; }

@@ -36,6 +36,10 @@ struct EPIC_AI_MEGA_JAM2_API FDCVoxelOpResult
 	TArray<FIntVector> Rubble;
 	TArray<uint8> RubbleMaterials;
 	int32 Carved = 0;
+	/** Where the op's time went (ms): carve and bite, structure pass, settle (evidence for the impact hitch, R13). */
+	float CarveMs = 0.f;
+	float StructureMs = 0.f;
+	float SettleMs = 0.f;
 };
 
 /** Settings the ops read, resolved once. */

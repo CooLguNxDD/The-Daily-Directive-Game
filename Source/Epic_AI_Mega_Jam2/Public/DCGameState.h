@@ -81,7 +81,7 @@ public:
 	bool HasMutator(FName Id) const { return Mutators.Contains(Id); }
 	/** The active mutators' definitions (data drives their effects; code never names a mutator). */
 	TArray<const struct FDCUpgradeDef*> ActiveMutators() const;
-	void AddCollapse(int32 Sector, int32 Lot, const FVector& Epicenter);
+	void AddCollapse(int32 Sector, int32 Lot, const FVector& Epicenter, float Time = -1.f);
 
 private:
 	UPROPERTY() TObjectPtr<ADCEnvironment> Environment;

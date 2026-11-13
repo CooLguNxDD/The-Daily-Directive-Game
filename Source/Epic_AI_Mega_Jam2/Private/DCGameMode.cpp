@@ -732,7 +732,7 @@ void ADCGameMode::OnPhotoGraded(ADCCharacter* Photographer, const FDCPhotoRecord
 void ADCGameMode::OnBuildingCollapsed(ADCBuilding* Building)
 {
 	ADCGameState* GS = GetGameState<ADCGameState>();
-	GS->AddCollapse(GS->SectorIndex, Building->GetLotIndex(), Building->GetEpicenter());
+	GS->AddCollapse(GS->SectorIndex, Building->GetLotIndex(), Building->GetEpicenter(), Building->GetCollapseTime());
 	const TArray<const FDCUpgradeDef*> Active = GS->ActiveMutators();
 	const FDCUpgradeDef* const* Domino = Active.FindByPredicate([](const FDCUpgradeDef* D) { return D->DominoReachCm > 0.f; });
 	if (!Domino)
@@ -758,7 +758,7 @@ void ADCGameMode::OnBuildingCollapsed(ADCBuilding* Building)
 	}
 }
 
-void ADCGameMode::ScheduleCollapse(ADCBuilding* Building, const FVector& Epicenter, FName Kind, float Delay)
+void ADCGameMode::ScheduleCollapse(ADCBuilding* Building, const FVector& Epicenter, FName Kind, float Delay, float AtTime)
 {
 	ADCGameState* GS = GetGameState<ADCGameState>();
 	if (!Building || Building->IsCollapsed())
@@ -776,7 +776,7 @@ void ADCGameMode::ScheduleCollapse(ADCBuilding* Building, const FVector& Epicent
 			const int32 Sector = GS->SectorIndex;
 			GS->Blasts.RemoveAll([Now, Lot, Sector](const FDCBlastRecord& R) { return R.LotIndex == Lot && R.Sector == Sector && R.Time > Now; });
 		}
-		Building->Collapse(Epicenter);
+		Building->Collapse(Epicenter, AtTime);
 		return;
 	}
 	if (PendingCollapses.ContainsByPredicate([Building](const FPendingCollapse& P) { return P.Building == Building; }))

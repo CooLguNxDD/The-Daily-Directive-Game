@@ -116,12 +116,12 @@ const FDCBlastRecord* ADCGameState::FindBlast(int32 Id) const
 	return Blasts.FindByPredicate([Id](const FDCBlastRecord& B) { return B.Id == Id; });
 }
 
-void ADCGameState::AddCollapse(int32 Sector, int32 Lot, const FVector& Epicenter)
+void ADCGameState::AddCollapse(int32 Sector, int32 Lot, const FVector& Epicenter, float Time)
 {
 	check(HasAuthority());
 	FDCCollapseRecord& Rec = Collapses.AddDefaulted_GetRef();
 	Rec.Sector = Sector;
 	Rec.LotIndex = Lot;
-	Rec.Time = Now();
+	Rec.Time = Time >= 0.f ? Time : Now();
 	Rec.Epicenter = Epicenter;
 }
