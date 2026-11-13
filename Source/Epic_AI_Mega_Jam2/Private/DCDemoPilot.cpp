@@ -292,7 +292,12 @@ void ADCDemoPilot::BuildScript()
 		if (Sector + 1 < Sectors)
 		{
 			// Draft: shot the offer, then click the second card (the camera gear) through the HUD intent.
-			AddWaitPhase(EDCRunPhase::Draft, 400.f);
+			// Draft, or straight into the next sector when the crew missed HQ's quota.
+			Add(0.f, [this, Sector]
+			{
+				const ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>();
+				return GS && (GS->Phase == EDCRunPhase::Draft || GS->Phase == EDCRunPhase::Reel || GS->SectorIndex > Sector);
+			}, 400.f);
 			Add(1.f, [this, S] { Shot(S + TEXT("_draft")); return true; });
 			Add(0.5f, [this, Sector]
 			{

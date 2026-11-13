@@ -36,6 +36,10 @@ public:
 	/** Server time the current timed phase (draft, final cut, vote) ends. */
 	UPROPERTY(Replicated) float PhaseEndTime = 0.f;
 	UPROPERTY(Replicated) bool bRunFailed = false;
+	/** Photo score filed by the whole crew this sector, against the sector quota. */
+	UPROPERTY(Replicated) int32 SectorPhotoPoints = 0;
+	/** One entry per finished sector: was the quota met. */
+	UPROPERTY(Replicated) TArray<bool> QuotaResults;
 	UPROPERTY(Replicated) TArray<FDCCollapseRecord> Collapses;
 	UPROPERTY(Replicated) FDCScoopState Scoop;
 	/** City Mutators drafted this run (apply to everyone). */

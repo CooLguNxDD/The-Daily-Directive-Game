@@ -235,6 +235,8 @@ struct FDCSectorDef
 	UPROPERTY(EditAnywhere, Config, Category = "Sector") TArray<FDCWaveDef> Waves;
 	/** Enemy cap alive at once (host spawner waits when reached). */
 	UPROPERTY(EditAnywhere, Config, Category = "Sector") int32 MaxAlive = 24;
+	/** HQ propaganda quota (R6): photo score the crew must file this sector, or HQ withholds the draft. */
+	UPROPERTY(EditAnywhere, Config, Category = "Sector") int32 QuotaPoints = 1500;
 };
 
 /** Soft references to the few binary assets the game uses; each has an engine fallback. */

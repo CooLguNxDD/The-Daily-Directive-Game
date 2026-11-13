@@ -8,6 +8,7 @@
 #include "Components/StaticMeshComponent.h"
 #include "DCAssets.h"
 #include "DCDebrisPool.h"
+#include "Components/InstancedStaticMeshComponent.h"
 #include "DCTuning.h"
 #include "Engine/World.h"
 
@@ -44,6 +45,49 @@ ADCEnvironment::ADCEnvironment()
 	Ground->SetupAttachment(Root);
 	Ground->SetMobility(EComponentMobility::Static);
 	Ground->SetCollisionProfileName(TEXT("BlockAll"));
+
+	for (TObjectPtr<UInstancedStaticMeshComponent>* Ism : {&Sidewalks, &Dashes})
+	{
+		*Ism = CreateDefaultSubobject<UInstancedStaticMeshComponent>(Ism == &Sidewalks ? TEXT("Sidewalks") : TEXT("Dashes"));
+		(*Ism)->SetupAttachment(Root);
+		(*Ism)->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		(*Ism)->SetCastShadow(false);
+	}
+}
+
+void ADCEnvironment::BuildStreets()
+{
+	const FDCCityTuning& City = UDCTuning::Get().City;
+	const FDCLookTuning& Look = UDCTuning::Get().Look;
+	Sidewalks->SetStaticMesh(DCAssets::Cube());
+	Dashes->SetStaticMesh(DCAssets::Cube());
+	Sidewalks->SetMaterial(0, DCAssets::MakeFlat(this, Look.Ground));
+	Dashes->SetMaterial(0, DCAssets::MakeFlat(this, FLinearColor(0.9f, 0.82f, 0.6f), 0.3f));
+	const float Pitch = City.LotSizeCm + City.StreetWidthCm;
+	const float OffX = (City.GridX - 1) * Pitch * 0.5f;
+	const float OffY = (City.GridY - 1) * Pitch * 0.5f;
+	// One raised, kerbed block per lot, plazas included.
+	const float Block = (City.LotSizeCm + City.StreetWidthCm * 0.3f) / 100.f;
+	for (int32 X = 0; X < City.GridX; ++X)
+	{
+		for (int32 Y = 0; Y < City.GridY; ++Y)
+		{
+			Sidewalks->AddInstance(FTransform(FRotator::ZeroRotator, FVector(X * Pitch - OffX, Y * Pitch - OffY, 2.f), FVector(Block, Block, 0.06f)));
+		}
+	}
+	// Dashed centre lines down every street, both directions.
+	const float Span = FMath::Max(City.GridX, City.GridY) * Pitch;
+	constexpr float DashCm = 300.f;
+	constexpr float GapCm = 350.f;
+	for (int32 Line = 0; Line <= FMath::Max(City.GridX, City.GridY); ++Line)
+	{
+		const float Along = Line * Pitch - FMath::Max(OffX, OffY) - Pitch * 0.5f;
+		for (float T = -Span * 0.5f; T < Span * 0.5f; T += DashCm + GapCm)
+		{
+			Dashes->AddInstance(FTransform(FRotator::ZeroRotator, FVector(T, Along, 1.f), FVector(DashCm / 100.f, 0.25f, 0.02f)));
+			Dashes->AddInstance(FTransform(FRotator::ZeroRotator, FVector(Along, T, 1.f), FVector(0.25f, DashCm / 100.f, 0.02f)));
+		}
+	}
 }
 
 void ADCEnvironment::BeginPlay()
@@ -64,6 +108,7 @@ void ADCEnvironment::BeginPlay()
 	Ground->SetWorldScale3D(FVector(Size, Size, 1.f));
 	Ground->SetWorldLocation(FVector(0.f, 0.f, -50.f));
 	Ground->SetMaterial(0, DCAssets::MakeFlat(this, Look.Street));
+	BuildStreets();
 
 	FPostProcessSettings& S = Post->Settings;
 	S.bOverride_AutoExposureMethod = true;

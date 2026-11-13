@@ -231,6 +231,7 @@ void ADCGameMode::EnterSector(float Now)
 		WaveNextTime[W] = SectorStartTime + Sector->Waves[W].StartSeconds;
 	}
 	GS->Scoop = FDCScoopState();
+	GS->SectorPhotoPoints = 0;
 	NextScoopTime = Now + T.Run.ScoopFirstSeconds;
 	NextRogueTime = Now + FindUpgradeParam(RogueId);
 
@@ -258,8 +259,32 @@ void ADCGameMode::TickSectorPhase(float Now)
 		return;
 	}
 	ClearCombat();
-	const bool bMore = UDCTuning::Get().Sectors.IsValidIndex(GS->SectorIndex + 1);
-	EnterPhase(bMore ? EDCRunPhase::Draft : EDCRunPhase::Reel);
+	const UDCTuning& T = UDCTuning::Get();
+	const bool bMore = T.Sectors.IsValidIndex(GS->SectorIndex + 1);
+	const int32 Quota = T.Sectors.IsValidIndex(GS->SectorIndex) ? T.Sectors[GS->SectorIndex].QuotaPoints : 0;
+	const bool bQuotaMet = GS->SectorPhotoPoints >= Quota;
+	GS->QuotaResults.Add(bQuotaMet);
+	for (ADCPlayerState* PS : Players())
+	{
+		if (ADCCharacter* C = PS->GetPawn<ADCCharacter>())
+		{
+			C->HostToast(bQuotaMet ? FString::Printf(TEXT("QUOTA MET: %d / %d. HQ IS PLEASED."), GS->SectorPhotoPoints, Quota)
+				: FString::Printf(TEXT("QUOTA MISSED: %d / %d. HQ WITHHOLDS YOUR REQUISITION."), GS->SectorPhotoPoints, Quota));
+		}
+	}
+	if (!bMore)
+	{
+		EnterPhase(EDCRunPhase::Reel);
+		return;
+	}
+	if (bQuotaMet)
+	{
+		EnterPhase(EDCRunPhase::Draft);
+		return;
+	}
+	// Quota missed (R6): no draft, straight into the next sector.
+	GS->SectorIndex += 1;
+	EnterPhase(EDCRunPhase::Sector);
 }
 
 void ADCGameMode::TickWaves(float Now)
@@ -425,6 +450,7 @@ void ADCGameMode::OnPhotoGraded(ADCCharacter* Photographer, const FDCPhotoRecord
 	Booked.Sector = GS->SectorIndex;
 	PS->AddPhoto(Booked);
 	PhotoPoses.Add(Record.PhotoId, MoveTemp(Poses));
+	GS->SectorPhotoPoints += Record.Grade.Score;
 
 	// HQ Scoop (R8): the first photo that meets it drops a supply pod on the photographer at once.
 	const UDCTuning& T = UDCTuning::Get();
@@ -760,9 +786,10 @@ void ADCGameMode::EnterFrontPage(float Now)
 	{
 		GS->Headline = TEXT("CAMERAS SILENT AS CITY STANDS: NO PHOTOS FILED");
 	}
-	GS->Subhead = FString::Printf(TEXT("%s  |  %d PHOTOGRAPHER%s  |  %s PROPAGANDA POINTS RAISED  |  RUN SEED %d"),
+	const int32 QuotasMet = GS->QuotaResults.FilterByPredicate([](bool b) { return b; }).Num();
+	GS->Subhead = FString::Printf(TEXT("%s  |  %d PHOTOGRAPHER%s  |  %s PROPAGANDA POINTS RAISED  |  QUOTAS MET %d/%d  |  RUN SEED %d"),
 		GS->bRunFailed ? TEXT("UNIT LOST IN ACTION, REEL RECOVERED") : TEXT("ALL SECTORS LIBERATED"),
-		All.Num(), All.Num() == 1 ? TEXT("") : TEXT("S"), *FText::AsNumber(Total).ToString(), GS->RunSeed);
+		All.Num(), All.Num() == 1 ? TEXT("") : TEXT("S"), *FText::AsNumber(Total).ToString(), QuotasMet, GS->QuotaResults.Num(), GS->RunSeed);
 	GS->ForceNetUpdate();
 }
 

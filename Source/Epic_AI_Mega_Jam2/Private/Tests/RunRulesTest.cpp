@@ -123,6 +123,10 @@ bool FDCRunDataTest::RunTest(const FString&)
 	}
 	TestTrue(TEXT("R8: about five scoop templates"), T.Scoops.Num() >= 5);
 	TestEqual(TEXT("R9: three sectors"), T.Sectors.Num(), 3);
+	for (const FDCSectorDef& Sector : T.Sectors)
+	{
+		TestTrue(FString::Printf(TEXT("R6: sector %s has an HQ photo quota"), *Sector.Name.ToString()), Sector.QuotaPoints > 0);
+	}
 	TestEqual(TEXT("R7: 15 shots per sector"), T.Camera.ShotsPerSector, 15);
 	const FDCTimingWindow* Over = DCPhotoRules::FindWindow(T.Photo, 0.f);
 	const FDCTimingWindow* Peak = DCPhotoRules::FindWindow(T.Photo, 0.5f);
