@@ -427,7 +427,11 @@ void ADCHUD::DrawFrontPage(ADCGameState& GS, ADCCharacter* Me)
 		// The other picks, smaller, down the right column.
 		const float SideX = Sx(60.f) + BigW + Sx(50.f);
 		const float SideW = W - SideX - Sx(60.f);
-		const float CardW = FMath::Min(SideW, Sx(360.f));
+		// Up to four side picks: one column for two, two columns beyond, so the last card stays above the footer.
+		const int32 Sides = FMath::Min(4, FMath::Max(0, GS.PagePicks.Num() - (GS.HeadlineIndex >= 0 ? 1 : 0)));
+		const int32 Cols = Sides > 2 ? 2 : 1;
+		const float ColGap = Sx(16.f);
+		const float CardW = FMath::Min((SideW - (Cols - 1) * ColGap) / Cols, Sx(360.f));
 		int32 Shown = 0;
 		for (int32 i = 0; i < GS.PagePicks.Num() && Shown < 4; ++i)
 		{
@@ -436,11 +440,14 @@ void ADCHUD::DrawFrontPage(ADCGameState& GS, ADCCharacter* Me)
 				continue;
 			}
 			const FDCPagePick& P = GS.PagePicks[i];
-			const float Cy = Sx(290.f) + Shown * (CardW * 9.f / 16.f + Sx(64.f));
-			const float Cx = SideX + (Shown % 2) * 0.f;
+			const float Cy = Sx(290.f) + (Shown / Cols) * (CardW * 9.f / 16.f + Sx(64.f));
+			const float Cx = SideX + (Shown % Cols) * (CardW + ColGap);
 			DrawPhotoCard(PC->GetPhotoImage(P.Photo.PhotoId), P.Photo.Grade, Cx, Cy, CardW, 1.f, false);
-			Text(FString::Printf(TEXT("%s  |  CRITIC %s  |  %d VOTE%s  |  PAGE %s"), *P.PlayerName.ToUpper(), *FText::AsNumber(P.Photo.Grade.Score).ToString(), P.Votes,
-				P.Votes == 1 ? TEXT("") : TEXT("S"), *FText::AsNumber(P.PageScore).ToString()), Cx, Cy + CardW * 9.f / 16.f + Sx(4.f), Ink, 0.5f);
+			// Name on one line, the numbers on the next: a narrow two-column card cannot hold both.
+			const FString Scores = FString::Printf(TEXT("CRITIC %s  |  %d VOTE%s  |  PAGE %s"), *FText::AsNumber(P.Photo.Grade.Score).ToString(), P.Votes,
+				P.Votes == 1 ? TEXT("") : TEXT("S"), *FText::AsNumber(P.PageScore).ToString());
+			Text(P.PlayerName.ToUpper(), Cx, Cy + CardW * 9.f / 16.f + Sx(4.f), Ink, 0.5f);
+			Text(Scores, Cx, Cy + CardW * 9.f / 16.f + Sx(24.f), Ink, 0.45f);
 			++Shown;
 		}
 	}

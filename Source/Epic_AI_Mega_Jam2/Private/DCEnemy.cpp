@@ -430,7 +430,8 @@ void ADCEnemy::Tick(float DeltaSeconds)
 		(*Behaviour)(*this, *Def, DeltaSeconds, GS ? GS->Now() : GetWorld()->GetTimeSeconds());
 	}
 	// Evidence trace (-dcenemytrace): every 5 s, where each enemy is and whether it moved.
-	if (FParse::Param(FCommandLine::Get(), TEXT("dcenemytrace")) && GetWorld()->GetTimeSeconds() >= NextTraceTime)
+	static const bool bTrace = FParse::Param(FCommandLine::Get(), TEXT("dcenemytrace"));
+	if (bTrace && GetWorld()->GetTimeSeconds() >= NextTraceTime)
 	{
 		NextTraceTime = GetWorld()->GetTimeSeconds() + 5.f;
 		UE_LOG(LogTemp, Display, TEXT("DCTRACE %s %s at %s moved=%.1f dt=%.3f rushing=%d"), *GetName(), *Def->Id.ToString(), *GetActorLocation().ToCompactString(),

@@ -377,6 +377,18 @@ void ADCDemoPilot::AddWalkerWatch()
 	Add(0.4f, [this] { Shot(TEXT("walker_topple_stamp")); LogPhoto(); Release(TEXT("Aim")); return true; });
 }
 
+void ADCDemoPilot::AddWidestFrame(const FString& S)
+{
+	// The widest the lens goes (wheel all the way out), framed at each sector start: 1.3x on the stock lens,
+	// wider with Fisheye gear. Then back to the default zoom.
+	Add(0.f, [this] { Tap(TEXT("Slot3")); return true; });
+	Add(0.7f, [this] { Press(TEXT("Aim")); Press(TEXT("Zoom"), FVector(-1, 0, 0)); return true; });
+	Add(0.6f, [this] { Release(TEXT("Zoom")); Tower = PickTower(); if (Tower.IsValid()) { AimAt(Tower->GetCenter()); } return true; });
+	Add(0.4f, [this, S] { Shot(S + TEXT("_widest")); UsedTowers.Reset(); return true; });
+	Add(0.f, [this] { Press(TEXT("Zoom"), FVector(1, 0, 0)); return true; });
+	Add(0.12f, [this] { Release(TEXT("Zoom")); Release(TEXT("Aim")); Tap(TEXT("Slot1")); return true; });
+}
+
 void ADCDemoPilot::AddStratagemOnSwarm(const FString& S)
 {
 	// -dcstratagem=Id (sectors 2-3): drop the drafted stratagem on the swarm, then watch it through the viewfinder
@@ -435,10 +447,12 @@ void ADCDemoPilot::AddStratagemOnSwarm(const FString& S)
 	});
 	Add(0.3f, [this, S] { Tap(TEXT("Fire")); Shot(S + TEXT("_crowd_call")); return true; });
 	Add(0.5f, [this] { Tap(TEXT("Slot3")); return true; });
-	Add(0.6f, [this] { Press(TEXT("Aim")); return true; });
-	for (int32 i = 0; i < 6; ++i)
+	// Widest lens for the crowd, frames every half second through the telegraph.
+	Add(0.6f, [this] { Press(TEXT("Aim")); Press(TEXT("Zoom"), FVector(-1, 0, 0)); return true; });
+	Add(0.5f, [this] { Release(TEXT("Zoom")); return true; });
+	for (int32 i = 0; i < 12; ++i)
 	{
-		Add(i == 0 ? 0.2f : 1.f, [this, S, i]
+		Add(i == 0 ? 0.1f : 0.5f, [this, S, i]
 		{
 			for (ADCOrbitalStrike* Strike : TActorRange<ADCOrbitalStrike>(GetWorld()))
 			{
@@ -453,7 +467,6 @@ void ADCDemoPilot::AddStratagemOnSwarm(const FString& S)
 
 void ADCDemoPilot::AddEnemyFight(const FString& S)
 {
-	AddStratagemOnSwarm(S);
 	// Wait for an enemy, then hold the rifle on it: frames of the enemy, the tracer and the hit marker.
 	Add(0.f, [this] { Tap(TEXT("Slot1")); return true; });
 	Add(0.6f, [this]
@@ -741,6 +754,8 @@ void ADCDemoPilot::BuildScript()
 		{
 			AddWaitPhase(EDCRunPhase::Sector, 120.f);
 			Add(1.5f, [this, S] { UsedTowers.Reset(); Shot(S + TEXT("_start")); return true; });
+			AddWidestFrame(S);
+			AddStratagemOnSwarm(S); // -dcstratagem only: the drafted stratagem on the first pack, cooldown fresh
 		}
 		int32 Cycles = CyclesPerSector;
 		FParse::Value(FCommandLine::Get(), TEXT("dccycles="), Cycles); // more strike-and-snap cycles per sector

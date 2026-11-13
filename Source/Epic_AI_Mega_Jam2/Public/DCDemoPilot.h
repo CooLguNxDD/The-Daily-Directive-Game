@@ -44,6 +44,7 @@ private:
 	void AddCycle(const FString& Name);
 	void AddEnemyFight(const FString& Sector);
 	void AddStratagemOnSwarm(const FString& Sector);
+	void AddWidestFrame(const FString& Sector);
 	/** -dcwatchwalker: frame the walker through the viewfinder, snap it, then frame the tower it condemns. */
 	void AddWalkerWatch();
 	void AddWaitPhase(EDCRunPhase Phase, float Timeout);

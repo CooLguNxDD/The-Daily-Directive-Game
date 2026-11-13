@@ -699,6 +699,10 @@ void ADCCharacter::ServerReload_Implementation()
 	HostAmmo += Take;
 	HostReserve -= Take;
 	HostNextFireTime = Now() + R.ReloadSeconds * 0.9f;
+	// The owner's count follows the host's once the reload would have finished (a slot change can cancel the
+	// owner's local reload; the host has already moved the rounds).
+	FTimerHandle Sync;
+	GetWorldTimerManager().SetTimer(Sync, FTimerDelegate::CreateWeakLambda(this, [this] { ClientSyncAmmo(HostAmmo, HostReserve); }), R.ReloadSeconds, false);
 }
 
 // ---------------------------------------------------------------- stratagem
