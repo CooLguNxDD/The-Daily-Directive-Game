@@ -165,16 +165,22 @@ void ADCEnvironment::Tick(float DeltaSeconds)
 	// Instant peak, fast fall, long tail: readable as "the bloom peak" then "the decay window".
 	FlashAlpha = FMath::Pow(1.f - T, 2.5f);
 
-	// Solar Eclipse (City Mutator): the sky goes dark, so every blast blazes against it.
+	// Mutator look overrides (Solar Eclipse: the sky goes dark so every blast blazes against it), from data.
 	const ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>();
-	const bool bEclipse = GS && GS->HasMutator(TEXT("Eclipse"));
-	if (bEclipse != bEclipseApplied)
+	const int32 MutatorCount = GS ? GS->Mutators.Num() : 0;
+	if (MutatorCount != AppliedMutatorCount)
 	{
-		bEclipseApplied = bEclipse;
-		const float Light = bEclipse ? Look.EclipseLight : 1.f;
+		AppliedMutatorCount = MutatorCount;
+		float Light = 1.f;
+		FLinearColor FogColor = Look.FogColor;
+		for (const FDCUpgradeDef* Mutator : GS->ActiveMutators())
+		{
+			Light *= Mutator->LightScale;
+			FogColor = Mutator->bOverrideFog ? Mutator->FogColor : FogColor;
+		}
 		Sun->SetIntensity(Look.SunIntensityLux * Light);
 		SkyLight->SetIntensity(Light);
-		Fog->SetFogInscatteringColor(bEclipse ? Look.EclipseFog : Look.FogColor);
+		Fog->SetFogInscatteringColor(FogColor);
 	}
 	ApplyLook(Look.BaseBloom + FlashPeak * FlashAlpha, Look.ExposureBias + FlashKick * FlashAlpha);
 }

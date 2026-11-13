@@ -165,9 +165,6 @@ struct FDCLookTuning
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float FilmGrain = 0.35f;
 	/** Emissive of the fireball core and the ground shock ring at their peak (the bloom spike itself is BloomPeak). */
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float FireballGlow = 45.f;
-	/** Solar Eclipse mutator: sun and sky light fraction, and the fog colour of the dark sky. */
-	UPROPERTY(EditAnywhere, Config, Category = "Look") float EclipseLight = 0.12f;
-	UPROPERTY(EditAnywhere, Config, Category = "Look") FLinearColor EclipseFog = FLinearColor(0.12f, 0.05f, 0.08f);
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float ShockGlow = 18.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float HitstopSeconds = 0.12f;
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float HitstopDilation = 0.05f;
@@ -282,6 +279,22 @@ struct FDCUpgradeDef
 	UPROPERTY(EditAnywhere, Config, Category = "Run") FName Unlock;
 	UPROPERTY(EditAnywhere, Config, Category = "Run") float Param = 0.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Run") float Param2 = 0.f;
+
+	// What an owned upgrade (gear) or an active mutator does, as data. Zero / one means "no effect".
+	/** Photos with a blast in frame score this much more (mutators). */
+	UPROPERTY(EditAnywhere, Config, Category = "Run") float BlastPhotoMultiplier = 1.f;
+	/** Sun and sky light scale while active (mutators; 1 = unchanged). */
+	UPROPERTY(EditAnywhere, Config, Category = "Run") float LightScale = 1.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Run") bool bOverrideFog = false;
+	UPROPERTY(EditAnywhere, Config, Category = "Run") FLinearColor FogColor = FLinearColor::Black;
+	/** The shutter stuns enemies in frame within this range for this long (gear). */
+	UPROPERTY(EditAnywhere, Config, Category = "Run") float StunRangeCm = 0.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Run") float StunSeconds = 0.f;
+	/** A collapse drags towers within this reach down after this delay (mutators). */
+	UPROPERTY(EditAnywhere, Config, Category = "Run") float DominoReachCm = 0.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Run") float DominoDelaySeconds = 0.f;
+	/** HQ fires a free strike on a random standing tower this often (mutators). */
+	UPROPERTY(EditAnywhere, Config, Category = "Run") float RogueStrikeSeconds = 0.f;
 };
 
 /** An HQ Scoop template (R8): a photo condition with a time limit. */

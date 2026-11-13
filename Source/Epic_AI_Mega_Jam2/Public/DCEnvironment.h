@@ -55,5 +55,5 @@ private:
 	float FlashKick = 0.f;
 	double FlashStartReal = -100.0;
 	float FlashAlpha = 0.f;
-	bool bEclipseApplied = false;
+	int32 AppliedMutatorCount = 0;
 };

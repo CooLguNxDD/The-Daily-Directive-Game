@@ -858,30 +858,32 @@ FDCPhotoInputs ADCCharacter::MeasureShot(const FDCShotView& View, float ShotTime
 	const ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>();
 	In.ExtraMultiplier = PS ? PS->PhotoMultiplier : 1.f;
 	In.DangerScale = PS ? PS->DangerMultiplier : 1.f;
-	// Solar Eclipse: blasts blaze against the dark sky, so blast photos pay more.
-	const FDCUpgradeDef* Eclipse = UDCTuning::Get().FindUpgrade(TEXT("Eclipse"));
-	if (GS && Eclipse && GS->HasMutator(Eclipse->Id) && In.bHasBlast)
+	// Mutators that make blast photos pay more (Solar Eclipse: blasts blaze against the dark sky).
+	for (const FDCUpgradeDef* Mutator : GS ? GS->ActiveMutators() : TArray<const FDCUpgradeDef*>())
 	{
-		In.ExtraMultiplier *= Eclipse->Param;
+		In.ExtraMultiplier *= In.bHasBlast ? Mutator->BlastPhotoMultiplier : 1.f;
 	}
 	return In;
 }
 
 void ADCCharacter::ApplyStrobe(const FDCShotView& View)
 {
-	// Strobe Flash gear: the shutter stuns every enemy in frame within range.
+	// Gear with a stun (Strobe Flash): the shutter stuns every enemy in frame within range.
 	const ADCPlayerState* PS = GetPlayerState<ADCPlayerState>();
-	const FDCUpgradeDef* Strobe = UDCTuning::Get().FindUpgrade(TEXT("StrobeFlash"));
-	if (!PS || !Strobe || !PS->HasGear(Strobe->Id))
+	for (const FName& GearId : PS ? PS->Gear : TArray<FName>())
 	{
-		return;
-	}
-	const float Until = Now() + Strobe->Param2;
-	for (ADCEnemy* E : TActorRange<ADCEnemy>(GetWorld()))
-	{
-		if (E->IsAlive() && FVector::Dist(E->GetActorLocation(), View.Location) < Strobe->Param && DCPhotoProbe::InFrame(View, E->GetActorLocation()))
+		const FDCUpgradeDef* Gear = UDCTuning::Get().FindUpgrade(GearId);
+		if (!Gear || Gear->StunSeconds <= 0.f)
 		{
-			E->HostStun(Until);
+			continue;
+		}
+		const float Until = Now() + Gear->StunSeconds;
+		for (ADCEnemy* E : TActorRange<ADCEnemy>(GetWorld()))
+		{
+			if (E->IsAlive() && FVector::Dist(E->GetActorLocation(), View.Location) < Gear->StunRangeCm && DCPhotoProbe::InFrame(View, E->GetActorLocation()))
+			{
+				E->HostStun(Until);
+			}
 		}
 	}
 }

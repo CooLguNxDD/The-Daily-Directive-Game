@@ -101,6 +101,14 @@ void ADCBuilding::Tick(float DeltaSeconds)
 			Ism->SetRelativeLocation(Offset);
 		}
 	}
+	// Condemned windows pulse alarm red, faster as the peak nears; normal again otherwise.
+	const FLinearColor Calm = PaletteColor(Spec.ColorIndex) * 0.25f;
+	const float Pulse = Condemned ? 0.5f + 0.5f * FMath::Sin(T * FMath::Lerp(6.f, 30.f, U)) : 0.f;
+	if (WindowMat && (Condemned || bWindowsAlarmed))
+	{
+		bWindowsAlarmed = Condemned != nullptr;
+		DCAssets::SetFlat(WindowMat, Condemned ? FMath::Lerp(Calm, UDCTuning::Get().Look.Accent, Pulse) : Calm, Condemned ? 4.f + 30.f * Pulse * U : 0.05f);
+	}
 	if (!Condemned)
 	{
 		return;
@@ -134,7 +142,8 @@ void ADCBuilding::BuildBlocks()
 	const FDCLookTuning& Look = UDCTuning::Get().Look;
 	const FLinearColor Base = PaletteColor(Spec.ColorIndex);
 	Walls->SetMaterial(0, DCAssets::MakeFlat(this, Base));
-	Windows->SetMaterial(0, DCAssets::MakeFlat(this, Base * 0.25f, 0.05f));
+	WindowMat = DCAssets::MakeFlat(this, Base * 0.25f, 0.05f);
+	Windows->SetMaterial(0, WindowMat);
 	Trim->SetMaterial(0, DCAssets::MakeFlat(this, Look.Accent));
 	Rubble->SetMaterial(0, DCAssets::MakeFlat(this, Base * 0.6f));
 

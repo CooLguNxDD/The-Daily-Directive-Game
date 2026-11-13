@@ -65,6 +65,8 @@ public:
 	TArray<TPair<FVector, float>> Lures;
 
 	bool HasMutator(FName Id) const { return Mutators.Contains(Id); }
+	/** The active mutators' definitions (data drives their effects; code never names a mutator). */
+	TArray<const struct FDCUpgradeDef*> ActiveMutators() const;
 	void AddCollapse(int32 Sector, int32 Lot, const FVector& Epicenter);
 
 private:

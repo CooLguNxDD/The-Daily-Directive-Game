@@ -1,6 +1,7 @@
 #include "DCGameState.h"
 
 #include "DCEnvironment.h"
+#include "DCTuning.h"
 #include "Engine/World.h"
 #include "Net/UnrealNetwork.h"
 
@@ -75,6 +76,19 @@ int32 ADCGameState::AddEvent(FName Kind, const FVector& Location, float Radius, 
 	Rec.Time = PeakTime;
 	Rec.LotIndex = LotIndex;
 	return Id;
+}
+
+TArray<const FDCUpgradeDef*> ADCGameState::ActiveMutators() const
+{
+	TArray<const FDCUpgradeDef*> Out;
+	for (const FName& Id : Mutators)
+	{
+		if (const FDCUpgradeDef* Def = UDCTuning::Get().FindUpgrade(Id))
+		{
+			Out.Add(Def);
+		}
+	}
+	return Out;
 }
 
 const FDCBlastRecord* ADCGameState::FindBlast(int32 Id) const

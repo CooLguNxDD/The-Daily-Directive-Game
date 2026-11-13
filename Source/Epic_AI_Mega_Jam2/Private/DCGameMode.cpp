@@ -21,9 +21,6 @@
 
 namespace
 {
-	const FName DominoId(TEXT("Domino"));
-	const FName EclipseId(TEXT("Eclipse"));
-	const FName RogueId(TEXT("RogueStrikes"));
 	constexpr int32 MaxDominoGenerations = 2;
 	constexpr float FreezeDilation = 0.01f;
 }
@@ -132,6 +129,16 @@ void ADCGameMode::RestartPlayer(AController* NewPlayer)
 	RestartPlayerAtTransform(NewPlayer, SpawnTransformFor(FMath::Max(Index, 0)));
 }
 
+float ADCGameMode::RogueInterval() const
+{
+	float Interval = 0.f;
+	for (const FDCUpgradeDef* Mutator : GetGameState<ADCGameState>()->ActiveMutators())
+	{
+		Interval = Mutator->RogueStrikeSeconds > 0.f ? Mutator->RogueStrikeSeconds : Interval;
+	}
+	return Interval;
+}
+
 float ADCGameMode::FindUpgradeParam(FName UpgradeId, bool bSecond) const
 {
 	const FDCUpgradeDef* Def = UDCTuning::Get().FindUpgrade(UpgradeId);
@@ -234,7 +241,7 @@ void ADCGameMode::EnterSector(float Now)
 	GS->Scoop = FDCScoopState();
 	GS->SectorPhotoPoints = 0;
 	NextScoopTime = Now + T.Run.ScoopFirstSeconds;
-	NextRogueTime = Now + FindUpgradeParam(RogueId);
+	NextRogueTime = Now + RogueInterval();
 
 	int32 PlayerIndex = 0;
 	for (ADCPlayerState* PS : Players())
@@ -370,8 +377,8 @@ void ADCGameMode::TickScoop(float Now)
 void ADCGameMode::TickRogueStrikes(float Now)
 {
 	const ADCGameState* GS = GetGameState<ADCGameState>();
-	const float Interval = FindUpgradeParam(RogueId);
-	if (!GS->HasMutator(RogueId) || Interval <= 0.f || Now < NextRogueTime)
+	const float Interval = RogueInterval();
+	if (Interval <= 0.f || Now < NextRogueTime)
 	{
 		return;
 	}
@@ -488,7 +495,8 @@ void ADCGameMode::OnBuildingCollapsed(ADCBuilding* Building)
 {
 	ADCGameState* GS = GetGameState<ADCGameState>();
 	GS->AddCollapse(GS->SectorIndex, Building->GetLotIndex(), Building->GetEpicenter());
-	if (!GS->HasMutator(DominoId))
+	const FDCUpgradeDef* const* Domino = GS->ActiveMutators().FindByPredicate([](const FDCUpgradeDef* D) { return D->DominoReachCm > 0.f; });
+	if (!Domino)
 	{
 		return;
 	}
@@ -498,8 +506,8 @@ void ADCGameMode::OnBuildingCollapsed(ADCBuilding* Building)
 	{
 		return;
 	}
-	const float Reach = FindUpgradeParam(DominoId);
-	const float Delay = FMath::Max(FindUpgradeParam(DominoId, true), 0.1f);
+	const float Reach = (*Domino)->DominoReachCm;
+	const float Delay = FMath::Max((*Domino)->DominoDelaySeconds, 0.1f);
 	for (ADCBuilding* Other : TActorRange<ADCBuilding>(GetWorld()))
 	{
 		if (Other == Building || Other->IsCollapsed() || FVector::Dist2D(Other->GetActorLocation(), Building->GetActorLocation()) > Reach)
@@ -526,8 +534,9 @@ void ADCGameMode::ScheduleCollapse(ADCBuilding* Building, const FVector& Epicent
 	const FDCBuildingSpec& Spec = Building->GetSpec();
 	const float Radius = FMath::Max(Spec.SizeX, Spec.SizeY) * Spec.BlockSize;
 	const float Peak = GS->Now() + Delay;
-	GS->AddEvent(Kind, Building->GetActorLocation(), Radius, Peak, Building->GetLotIndex());
+	const int32 EventId = GS->AddEvent(Kind, Building->GetActorLocation(), Radius, Peak, Building->GetLotIndex());
 	PendingCollapses.Add({Building, Epicenter, Peak});
+	UE_LOG(LogTemp, Display, TEXT("DCEVENT %d kind=%s lot=%d telegraph=%.2f peak=%.2f"), EventId, *Kind.ToString(), Building->GetLotIndex(), GS->Now(), Peak);
 }
 
 void ADCGameMode::TickPendingCollapses(float Now)
