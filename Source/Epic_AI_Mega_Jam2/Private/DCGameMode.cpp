@@ -175,9 +175,23 @@ void ADCGameMode::PostLogin(APlayerController* NewPlayer)
 	{
 		Beacon->SetPlayerCount(GameState->PlayerArray.Num());
 	}
-	const int32 Index = FMath::Max(0, GameState->PlayerArray.IndexOfByKey(NewPlayer->PlayerState));
-	const FString Sign = Signs.Num() > 0 ? Signs[Index % Signs.Num()] : FString::Printf(TEXT("CORRESPONDENT %d"), Index + 1);
-	ChangeName(NewPlayer, Sign, false);
+	// First call sign no other player holds (a rejoin after a leave must not duplicate one) (R8).
+	ADCPlayerState* Mine = NewPlayer->GetPlayerState<ADCPlayerState>();
+	if (!Mine)
+	{
+		return;
+	}
+	TSet<FString> Taken;
+	for (const APlayerState* Other : GameState->PlayerArray)
+	{
+		const ADCPlayerState* DC = Cast<ADCPlayerState>(Other);
+		if (DC && DC != Mine && !DC->GetCallSign().IsEmpty())
+		{
+			Taken.Add(DC->GetCallSign());
+		}
+	}
+	const FString* Free = Signs.FindByPredicate([&Taken](const FString& S) { return !Taken.Contains(S); });
+	Mine->SetCallSign(Free ? *Free : FString::Printf(TEXT("CORRESPONDENT %d"), GameState->PlayerArray.Num()));
 }
 
 FTransform ADCGameMode::SpawnTransformFor(int32 PlayerIndex) const

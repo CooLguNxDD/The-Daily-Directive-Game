@@ -59,4 +59,13 @@ public:
 	UPROPERTY(Replicated) int32 VotedFor = 0;
 
 	bool HasGear(FName Id) const { return Gear.Contains(Id); }
+
+	/** Host: the press call sign every screen shows (R8). The engine's player name (the PC's network name on LAN
+	 *  or online subsystems) is never shown: GetPlayerName() returns this through GetPlayerNameCustom. */
+	void SetCallSign(const FString& InSign) { CallSign = InSign; ForceNetUpdate(); }
+	const FString& GetCallSign() const { return CallSign; }
+	virtual FString GetPlayerNameCustom() const override;
+
+private:
+	UPROPERTY(Replicated) FString CallSign;
 };

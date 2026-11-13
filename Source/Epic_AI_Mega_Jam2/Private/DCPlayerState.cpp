@@ -6,6 +6,12 @@
 ADCPlayerState::ADCPlayerState()
 {
 	SetNetUpdateFrequency(20.f);
+	bUseCustomPlayerNames = true; // GetPlayerName() returns the call sign, never the network name (R8)
+}
+
+FString ADCPlayerState::GetPlayerNameCustom() const
+{
+	return CallSign.IsEmpty() ? FString(TEXT("CORRESPONDENT")) : CallSign;
 }
 
 void ADCPlayerState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -30,6 +36,7 @@ void ADCPlayerState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLi
 	DOREPLIFETIME(ADCPlayerState, FinalCut);
 	DOREPLIFETIME(ADCPlayerState, bFinalCutDone);
 	DOREPLIFETIME(ADCPlayerState, VotedFor);
+	DOREPLIFETIME(ADCPlayerState, CallSign);
 }
 
 void ADCPlayerState::BeginPlay()
