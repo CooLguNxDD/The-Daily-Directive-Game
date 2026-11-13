@@ -289,17 +289,19 @@ void ADCHUD::DrawFinalCut(ADCGameState& GS, ADCCharacter* Me)
 	const UDCTuning& T = UDCTuning::Get();
 	ADCPlayerController* PC = Cast<ADCPlayerController>(PlayerOwner);
 	const ADCPlayerState* PS = PC ? PC->GetPlayerState<ADCPlayerState>() : nullptr;
-	Box(0, 0, W, H, Ink);
-	Text(TEXT("FINAL CUT"), W * 0.5f, Sx(30.f), Gold, 1.4f, true);
+	// The editor's desk in cream and ink (R6): picks are marked in signal yellow, nothing else is coloured.
+	Box(0, 0, W, H, Paper);
+	Box(Sx(40.f), Sx(86.f), W - Sx(80.f), Sx(3.f), Ink);
+	Text(TEXT("FINAL CUT"), W * 0.5f, Sx(24.f), Ink, 1.4f, true);
 	Text(FString::Printf(TEXT("PICK %d SHOTS FOR THE FRONT PAGE. THE CRITIC RANKED THEM; OVERRULE AT WILL.   %s"), T.Run.FinalCutPicks, *Clock(GS.PhaseEndTime - GS.Now())),
-		W * 0.5f, Sx(100.f), Paper, 0.7f, true);
+		W * 0.5f, Sx(100.f), Ink, 0.7f, true);
 	if (!PS || !PC)
 	{
 		return;
 	}
 	if (PS->FinalCutChoices.Num() == 0)
 	{
-		Text(TEXT("NO PHOTOS FILED. HQ IS DISAPPOINTED."), W * 0.5f, H * 0.5f, Red, 1.f, true);
+		Text(TEXT("NO PHOTOS FILED. HQ IS DISAPPOINTED."), W * 0.5f, H * 0.5f, Ink, 1.f, true);
 		return;
 	}
 	const TArray<int32>& Picks = PS->bFinalCutDone ? PS->FinalCut : PC->GetLocalPicks();
@@ -323,7 +325,8 @@ void ADCHUD::DrawFinalCut(ADCGameState& GS, ADCCharacter* Me)
 		if (Order != INDEX_NONE)
 		{
 			Frame(X - Sx(10.f), Y - Sx(10.f), CardW + Sx(20.f), CardW * 9.f / 16.f + Sx(50.f), Sx(8.f), Gold);
-			Text(FString::Printf(TEXT("PICK %d"), Order + 1), X + CardW - Sx(90.f), Y + CardW * 9.f / 16.f + Sx(2.f), Gold, 0.6f);
+			Box(X + CardW - Sx(96.f), Y + CardW * 9.f / 16.f + Sx(2.f), Sx(92.f), Sx(26.f), Gold);
+			Text(FString::Printf(TEXT("PICK %d"), Order + 1), X + CardW - Sx(90.f), Y + CardW * 9.f / 16.f + Sx(2.f), Ink, 0.6f);
 		}
 		if (!PS->bFinalCutDone)
 		{

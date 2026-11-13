@@ -398,11 +398,19 @@ void ADCHUD::DrawPhotoCard(UTexture* Image, const FDCPhotoGrade& Grade, float X,
 	Text(Score, Cx, By + Sx(4.f), InkStamp, 1.6f * S, true);
 	Text(Timing, Cx, By + Sx(4.f) + Th * 1.0f, InkStamp, 0.8f * S, true);
 	Canvas->Canvas->PopTransform();
-	float Ty = Y + Sx(8.f);
+	float Ty = Y + Sx(16.f);
+	// Category words as ink type on signal-yellow tags, inset inside the print's border (a blown-out spotlit shot keeps
+	// a red tag: that one is a warning).
+	const float TagScale = FMath::Clamp(W / Sx(640.f), 0.45f, 1.f);
 	for (const FName& Category : Grade.Categories)
 	{
-		Text(Upper(Category), X + Sx(10.f), Ty, Grade.bSpotlit && Category == Grade.Categories[0] ? Red : Gold, 0.8f);
-		Ty += Sx(28.f);
+		const FString Word = Upper(Category);
+		float Cw = 0.f, Ch = 0.f;
+		Canvas->TextSize(BigFont, Word, Cw, Ch, 0.8f * TagScale * TextBoost * UiScale, 0.8f * TagScale * TextBoost * UiScale);
+		const bool bWarn = Grade.bSpotlit && Category == Grade.Categories[0];
+		Box(X + Sx(14.f), Ty, Cw + Sx(12.f), Ch + Sx(2.f), bWarn ? Red : Gold);
+		Text(Word, X + Sx(20.f), Ty, bWarn ? Paper : Ink, 0.8f * TagScale);
+		Ty += Ch + Sx(6.f);
 	}
 }
 
