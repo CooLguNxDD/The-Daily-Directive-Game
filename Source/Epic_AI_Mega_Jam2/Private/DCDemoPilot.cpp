@@ -427,7 +427,9 @@ void ADCDemoPilot::BuildScript()
 			AddWaitPhase(EDCRunPhase::Sector, 120.f);
 			Add(1.5f, [this, S] { UsedTowers.Reset(); Shot(S + TEXT("_start")); return true; });
 		}
-		for (int32 Cycle = 0; Cycle < CyclesPerSector; ++Cycle)
+		int32 Cycles = CyclesPerSector;
+		FParse::Value(FCommandLine::Get(), TEXT("dccycles="), Cycles); // more strike-and-snap cycles per sector
+		for (int32 Cycle = 0; Cycle < Cycles; ++Cycle)
 		{
 			AddCycle(FString::Printf(TEXT("%s_c%d"), *S, Cycle));
 		}
