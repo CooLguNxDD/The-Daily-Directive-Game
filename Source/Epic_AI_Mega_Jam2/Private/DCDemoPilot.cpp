@@ -593,6 +593,13 @@ void ADCDemoPilot::Tick(float DeltaSeconds)
 		(bDown ? Press(TEXT("Interact")) : Release(TEXT("Interact")));
 	}
 	TickDefend();
+	// The first time a spotlight unit lights the pilot, frame the blow-out (R11 evidence).
+	if (Me && Me->IsSpotlit() && !bSpotlitFramed)
+	{
+		bSpotlitFramed = true;
+		Shot(TEXT("spotlit_blown_out"));
+		UE_LOG(LogDCDemo, Display, TEXT("DEMO spotlit"));
+	}
 	// Any supply pod that lands gets framed once (HQ Scoop reward evidence).
 	for (ADCSupplyPod* Pod : TActorRange<ADCSupplyPod>(GetWorld()))
 	{
