@@ -16,6 +16,7 @@
 #include "DCOrbitalStrike.h"
 #include "DCPlayerController.h"
 #include "DCPlayerState.h"
+#include "DCReelDirector.h"
 #include "DCTuning.h"
 #include "Engine/TextureRenderTarget2D.h"
 #include "EnhancedInputComponent.h"
@@ -340,9 +341,21 @@ bool ADCCharacter::InSector() const
 	return GS && GS->Phase == EDCRunPhase::Sector;
 }
 
+ADCReelDirector* ADCCharacter::ReelDirector() const
+{
+	const ADCPlayerController* PC = Cast<ADCPlayerController>(GetController());
+	const ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>();
+	return PC && GS && GS->Phase == EDCRunPhase::Reel ? PC->GetReelDirector() : nullptr;
+}
+
 void ADCCharacter::OnFire(const FInputActionInstance&)
 {
 	bTriggerHeld = true;
+	if (ADCReelDirector* Director = ReelDirector())
+	{
+		Director->SnapSecondTake(); // R16: second take during the reel
+		return;
+	}
 	if (bDowned || IsDrawing() || !InSector())
 	{
 		return;
@@ -364,6 +377,11 @@ void ADCCharacter::OnFireEnd(const FInputActionInstance&) { bTriggerHeld = false
 void ADCCharacter::OnAim(const FInputActionInstance&)
 {
 	bAimHeld = true;
+	if (ADCReelDirector* Director = ReelDirector())
+	{
+		Director->SetTakeRaised(true);
+		return;
+	}
 	if (Slot != EDCSlot::Camera || bDowned || !InSector())
 	{
 		return;
@@ -377,6 +395,10 @@ void ADCCharacter::OnAim(const FInputActionInstance&)
 void ADCCharacter::OnAimEnd(const FInputActionInstance&)
 {
 	bAimHeld = false;
+	if (ADCReelDirector* Director = ReelDirector())
+	{
+		Director->SetTakeRaised(false);
+	}
 	if (!bCameraRaised)
 	{
 		return;

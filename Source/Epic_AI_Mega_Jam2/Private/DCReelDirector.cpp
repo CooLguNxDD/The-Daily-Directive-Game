@@ -2,6 +2,13 @@
 
 #include "Animation/AnimSequence.h"
 #include "Camera/CameraComponent.h"
+#include "Components/SceneCaptureComponent2D.h"
+#include "DCAudio.h"
+#include "DCPhotoProbe.h"
+#include "DCPlayerController.h"
+#include "DCPlayerState.h"
+#include "Engine/TextureRenderTarget2D.h"
+#include "Kismet/KismetRenderingLibrary.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "DCAssets.h"
@@ -66,6 +73,11 @@ ADCReelDirector::ADCReelDirector()
 	Camera->SetupAttachment(RootComponent);
 	Camera->SetUsingAbsoluteLocation(true);
 	Camera->SetUsingAbsoluteRotation(true);
+	TakeCapture = CreateDefaultSubobject<USceneCaptureComponent2D>(TEXT("TakeCapture"));
+	TakeCapture->SetupAttachment(Camera);
+	TakeCapture->bCaptureEveryFrame = false;
+	TakeCapture->bCaptureOnMovement = false;
+	TakeCapture->CaptureSource = ESceneCaptureSource::SCS_FinalColorLDR;
 	Puppet = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("Puppet"));
 	Puppet->SetupAttachment(RootComponent);
 	Puppet->SetUsingAbsoluteLocation(true);
@@ -186,10 +198,10 @@ void ADCReelDirector::Restage(int32 ClipIndex)
 		}
 		if (Rec.Time < WindowStart)
 		{
-			(*B)->RestageCollapse(Rec.Epicenter, false); // already rubble when the clip starts
+			(*B)->RestageCollapse(Rec.Epicenter, false, Rec.Time); // already rubble when the clip starts
 			continue;
 		}
-		Pending.Add({Rec.Time + Offset, *B, Rec.Epicenter});
+		Pending.Add({Rec.Time + Offset, *B, Rec.Epicenter, Rec.Time});
 	}
 	for (const FDCBlastRecord& Blast : GS->Blasts)
 	{
@@ -234,6 +246,16 @@ void ADCReelDirector::TickCamera(float ClipTime, float Progress)
 	const FDCReelClip& Clip = GS->ReelClips[StagedIndex];
 	const FVector ShotLoc = Clip.Photo.CameraLocation;
 	const FVector Subject = ShotLoc + Clip.Photo.CameraRotation.Vector() * 3000.f;
+	if (bTakeRaised)
+	{
+		// Second take: the player aims freely from the behind-the-scenes position.
+		if (const APlayerController* PC = GetWorld()->GetFirstPlayerController())
+		{
+			Camera->SetWorldRotation(PC->GetControlRotation());
+		}
+		Camera->SetFieldOfView(UDCTuning::Get().Camera.ViewfinderFOVWide);
+		return;
+	}
 	if (GS->ReelStage > 0 || Clip.Poses.Num() == 0)
 	{
 		// Frozen at the shutter: the photographer's exact framing.
@@ -251,6 +273,63 @@ void ADCReelDirector::TickCamera(float ClipTime, float Progress)
 	Camera->SetFieldOfView(70.f);
 }
 
+float ADCReelDirector::ContentTime() const
+{
+	const ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>();
+	return GS ? FMath::Clamp(WindowStart + (GS->Now() - GS->ReelClipStart), WindowStart, ShotTime) : 0.f;
+}
+
+bool ADCReelDirector::CanTakeThisClip() const
+{
+	const ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>();
+	return GS && GS->Phase == EDCRunPhase::Reel && GS->ReelClips.IsValidIndex(StagedIndex) && GS->ReelStage <= 1 && TakenClip != StagedIndex;
+}
+
+void ADCReelDirector::SetTakeRaised(bool bRaised)
+{
+	if (bRaised == bTakeRaised || (bRaised && !CanTakeThisClip()))
+	{
+		return;
+	}
+	bTakeRaised = bRaised;
+	if (bRaised)
+	{
+		if (APlayerController* PC = GetWorld()->GetFirstPlayerController())
+		{
+			PC->SetControlRotation(Camera->GetComponentRotation()); // continue from the orbit's framing
+		}
+		DCAudio::Play2D(this, TEXT("Draw"), 0.6f, 1.3f);
+	}
+}
+
+void ADCReelDirector::SnapSecondTake()
+{
+	ADCPlayerController* PC = Cast<ADCPlayerController>(GetWorld()->GetFirstPlayerController());
+	const ADCPlayerState* PS = PC ? PC->GetPlayerState<ADCPlayerState>() : nullptr;
+	if (!bTakeRaised || !CanTakeThisClip() || !PC || !PS)
+	{
+		return;
+	}
+	TakenClip = StagedIndex;
+	const FDCCameraTuning& C = UDCTuning::Get().Camera;
+	UTextureRenderTarget2D* Image = UKismetRenderingLibrary::CreateRenderTarget2D(this, C.PhotoWidth, C.PhotoHeight, RTF_RGBA8);
+	TakeCapture->TextureTarget = Image;
+	TakeCapture->FOVAngle = Camera->FieldOfView;
+	TakeCapture->CaptureScene();
+	FDCShotView View;
+	View.Location = Camera->GetComponentLocation();
+	View.Rotation = Camera->GetComponentRotation();
+	View.FOV = Camera->FieldOfView;
+	const float When = ContentTime();
+	int32 BlastId = 0;
+	const FDCPhotoGrade Preview = DCPhotoRules::GradePhoto(DCPhotoProbe::Measure(GetWorld(), View, When, nullptr, false, BlastId), UDCTuning::Get().Photo);
+	const int32 PhotoId = (PS->GetPlayerId() & 0xffff) * 1000 + 500 + (++TakeCounter);
+	PC->AddLocalPhoto(PhotoId, Image, Preview, View, When);
+	PC->RequestSecondTake(PhotoId, View, StagedIndex);
+	DCAudio::Play2D(this, TEXT("Shutter"));
+	bTakeRaised = false;
+}
+
 void ADCReelDirector::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
@@ -261,7 +340,12 @@ void ADCReelDirector::Tick(float DeltaSeconds)
 	}
 	if (GS->ReelIndex != StagedIndex)
 	{
+		bTakeRaised = false;
 		Restage(GS->ReelIndex);
+	}
+	if (bTakeRaised && !CanTakeThisClip())
+	{
+		bTakeRaised = false;
 	}
 	const float Now = GS->Now();
 	for (int32 i = Pending.Num() - 1; i >= 0; --i)
@@ -270,7 +354,7 @@ void ADCReelDirector::Tick(float DeltaSeconds)
 		{
 			if (ADCBuilding* B = Pending[i].Building.Get())
 			{
-				B->RestageCollapse(Pending[i].Epicenter, true);
+				B->RestageCollapse(Pending[i].Epicenter, true, Pending[i].ContentTime);
 			}
 			Pending.RemoveAtSwap(i);
 		}

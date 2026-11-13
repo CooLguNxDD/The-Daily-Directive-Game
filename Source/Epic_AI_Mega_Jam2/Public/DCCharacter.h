@@ -122,6 +122,8 @@ private:
 	void UpdateRevive(float DeltaSeconds);
 	void RecordPose();
 	bool InSector() const;
+	/** The local reel director while the reel plays (second take input goes there), else null. */
+	class ADCReelDirector* ReelDirector() const;
 	/** Measures the shot and applies the photographer gear and the city mutators to the inputs. */
 	FDCPhotoInputs MeasureShot(const FDCShotView& View, float ShotTime, int32& OutBlastId) const;
 	void ApplyStrobe(const FDCShotView& View);

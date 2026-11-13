@@ -25,7 +25,7 @@ public:
 	void InitSpec(const FDCBuildingSpec& InSpec, int32 InLot) { Spec = InSpec; LotIndex = InLot; }
 
 	/** Reel re-staging (local actor, any machine): collapse now with the debris effect, or go straight to rubble. */
-	void RestageCollapse(const FVector& InEpicenter, bool bAnimate);
+	void RestageCollapse(const FVector& InEpicenter, bool bAnimate, float InCollapseTime = 0.f);
 
 	int32 GetLotIndex() const { return LotIndex; }
 	FVector GetEpicenter() const { return Epicenter; }

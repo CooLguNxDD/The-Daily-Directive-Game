@@ -6,6 +6,7 @@
 #include "DCInput.h"
 #include "DCMenu.h"
 #include "DCPlayerState.h"
+#include "Rules/DCPhotoRules.h"
 #include "DCReelDirector.h"
 #include "DCDemoPilot.h"
 #include "DCTuning.h"
@@ -307,6 +308,48 @@ void ADCPlayerController::ServerPickUpgrade_Implementation(FName Id)
 	{
 		GM->PickUpgrade(GetPlayerState<ADCPlayerState>(), Id);
 	}
+}
+
+void ADCPlayerController::ServerSecondTake_Implementation(int32 PhotoId, FVector_NetQuantize10 CamLoc, FRotator CamRot, float FOV, int32 ClipIndex)
+{
+	ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>();
+	ADCPlayerState* PS = GetPlayerState<ADCPlayerState>();
+	const FDCCameraTuning& C = UDCTuning::Get().Camera;
+	// One second take per clip per player, only while that clip plays, from near the replayed scene; graded by
+	// the host on its own re-staged scene at the host's replay clock.
+	if (!GS || !PS || GS->Phase != EDCRunPhase::Reel || GS->ReelIndex != ClipIndex || GS->ReelStage > 1 || SecondTakeClips.Contains(ClipIndex) || PS->FindPhoto(PhotoId)
+		|| !GS->ReelClips.IsValidIndex(ClipIndex) || FVector::Dist(CamLoc, GS->ReelClips[ClipIndex].Photo.CameraLocation) > 3000.f)
+	{
+		return;
+	}
+	SecondTakeClips.Add(ClipIndex);
+	const FDCReelClip& Clip = GS->ReelClips[ClipIndex];
+	const float WindowStart = Clip.Photo.ShotTime - UDCTuning::Get().Run.ClipSeconds;
+	const float When = FMath::Clamp(WindowStart + (GS->Now() - GS->ReelClipStart), WindowStart, Clip.Photo.ShotTime);
+	FDCShotView View;
+	View.Location = CamLoc;
+	View.Rotation = CamRot;
+	View.FOV = FMath::Clamp(FOV, C.ViewfinderFOVTight, C.ViewfinderFOVWide + PS->ExtraFOV);
+	FDCPhotoRecord Record;
+	Record.PhotoId = PhotoId;
+	Record.OwnerPlayerId = PS->GetPlayerId();
+	Record.Sector = Clip.Photo.Sector;
+	Record.ShotTime = When;
+	Record.CameraLocation = CamLoc;
+	Record.CameraRotation = CamRot;
+	Record.FOV = View.FOV;
+	Record.bSecondTake = true;
+	Record.Grade = DCPhotoRules::GradePhoto(DCPhotoProbe::Measure(GetWorld(), View, When, nullptr, false, Record.BlastId), UDCTuning::Get().Photo);
+	PS->AddPhoto(Record);
+	PS->FinalCutChoices.Add(PhotoId); // second takes can enter the ranking
+	UE_LOG(LogTemp, Display, TEXT("DCTAKE %s second take photo=%d clip=%d score=%d timing=%s"), *PS->GetPlayerName(), PhotoId, ClipIndex, Record.Grade.Score, *Record.Grade.TimingLabel.ToString());
+	ClientSecondTakeGraded(PhotoId, Record.Grade);
+}
+
+void ADCPlayerController::ClientSecondTakeGraded_Implementation(int32 PhotoId, FDCPhotoGrade Grade)
+{
+	ConfirmLocalPhoto(PhotoId, Grade);
+	ClientUploadPhotos_Implementation({PhotoId}); // every machine gets the image for the final cut and vote
 }
 
 void ADCPlayerController::ToggleFinalCutPick(int32 PhotoId)

@@ -521,7 +521,22 @@ void ADCDemoPilot::BuildScript()
 
 	// Reel: the clip playing, the freeze, the photo.
 	AddWaitPhase(EDCRunPhase::Reel, 400.f);
-	Add(2.0f, [this] { Shot(TEXT("reel_play")); return true; });
+	Add(1.2f, [this] { Shot(TEXT("reel_play")); return true; });
+	// Second take (R16): raise the camera during the replay, frame the moment from the side, snap.
+	Add(0.f, [this] { Press(TEXT("Aim")); return true; });
+	Add(0.3f, [this]
+	{
+		const ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>();
+		if (GS && GS->ReelClips.IsValidIndex(GS->ReelIndex))
+		{
+			const FDCPhotoRecord& P = GS->ReelClips[GS->ReelIndex].Photo;
+			AimAt(FVector(P.CameraLocation) + P.CameraRotation.Vector() * 2500.f);
+		}
+		Shot(TEXT("reel_second_take_raised"));
+		return true;
+	});
+	Add(0.3f, [this] { Tap(TEXT("Fire")); return true; });
+	Add(0.4f, [this] { Shot(TEXT("reel_second_take_stamp")); Release(TEXT("Aim")); return true; });
 	Add(0.f, [this] { const ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>(); return GS && GS->ReelStage == 1; }, 20.f);
 	Add(0.3f, [this] { Shot(TEXT("reel_freeze")); return true; });
 	Add(0.f, [this] { const ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>(); return GS && GS->ReelStage == 2; }, 20.f);
