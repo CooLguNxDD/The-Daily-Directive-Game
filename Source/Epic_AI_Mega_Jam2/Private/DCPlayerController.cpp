@@ -102,6 +102,7 @@ void ADCPlayerController::SetSensitivity(float Value)
 	Sensitivity = FMath::Clamp(Value, 0.05f, 5.f);
 }
 
+void ADCPlayerController::Confirm() { DCAudio::Play2D(this, TEXT("UIConfirm"), 0.9f); }
 void ADCPlayerController::OnSensUp() { SetSensitivity(Sensitivity * 1.15f); DCAudio::Play2D(this, TEXT("UIClick")); }
 void ADCPlayerController::OnSensDown() { SetSensitivity(Sensitivity / 1.15f); DCAudio::Play2D(this, TEXT("UIClick")); }
 

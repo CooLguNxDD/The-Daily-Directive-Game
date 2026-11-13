@@ -132,6 +132,8 @@ struct FDCCityTuning
 	UPROPERTY(EditAnywhere, Config, Category = "City") float DebrisLifeSeconds = 7.f;
 	UPROPERTY(EditAnywhere, Config, Category = "City") float FireFraction = 0.25f;
 	UPROPERTY(EditAnywhere, Config, Category = "City") int32 DebrisPoolSize = 600;
+	/** Chance a tower hangs a propaganda banner (red cloth, cream emblem) down one face. */
+	UPROPERTY(EditAnywhere, Config, Category = "City") float BannerChance = 0.65f;
 };
 
 /** Flat propaganda palette and post-process look. */
@@ -153,6 +155,9 @@ struct FDCLookTuning
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float Contrast = 1.25f;
 	UPROPERTY(EditAnywhere, Config, Category = "Look") FLinearColor ColorGain = FLinearColor(1.08f, 1.0f, 0.86f);
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float FilmGrain = 0.35f;
+	/** Emissive of the fireball core and the ground shock ring at their peak (the bloom spike itself is BloomPeak). */
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float FireballGlow = 45.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float ShockGlow = 18.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float HitstopSeconds = 0.12f;
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float HitstopDilation = 0.05f;
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float FlashDecaySeconds = 0.9f;

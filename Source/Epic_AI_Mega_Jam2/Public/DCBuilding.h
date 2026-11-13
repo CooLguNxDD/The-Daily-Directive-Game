@@ -46,6 +46,7 @@ private:
 	UFUNCTION() void OnRep_Spec();
 	UFUNCTION() void OnRep_Collapsed();
 	void BuildBlocks();
+	void BuildBanners();
 	void SimulateCollapse(bool bAnimate);
 	bool LateJoinAnimates() const;
 
@@ -59,6 +60,8 @@ private:
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UInstancedStaticMeshComponent> Windows;
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UInstancedStaticMeshComponent> Trim;
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UInstancedStaticMeshComponent> Rubble;
+	UPROPERTY(VisibleAnywhere) TObjectPtr<UInstancedStaticMeshComponent> Banners;
+	UPROPERTY(VisibleAnywhere) TObjectPtr<UInstancedStaticMeshComponent> Emblems;
 
 	bool bBuilt = false;
 	bool bSimulated = false;

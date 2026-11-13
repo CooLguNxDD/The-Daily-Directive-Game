@@ -64,10 +64,10 @@ public:
 	// Run intent (HUD buttons and the menu call these on the local controller).
 	void RequestStartRun() { ServerStartRun(); }
 	void RequestRestart() { ServerRestartRun(); }
-	void RequestPickUpgrade(FName Id) { ServerPickUpgrade(Id); }
+	void RequestPickUpgrade(FName Id) { ServerPickUpgrade(Id); Confirm(); }
 	void ToggleFinalCutPick(int32 PhotoId);
-	void RequestSubmitFinalCut() { ServerSubmitFinalCut(LocalPicks); }
-	void RequestVote(int32 PhotoId) { ServerVote(PhotoId); }
+	void RequestSubmitFinalCut() { ServerSubmitFinalCut(LocalPicks); Confirm(); }
+	void RequestVote(int32 PhotoId) { ServerVote(PhotoId); Confirm(); }
 	const TArray<int32>& GetLocalPicks() const { return LocalPicks; }
 
 	// Menu (local).
@@ -81,6 +81,8 @@ public:
 
 private:
 	void OnSensUp();
+	/** UI confirm cue for a committed choice (draft, send to press, vote). */
+	void Confirm();
 	void OnSensDown();
 	void UpdateMenu();
 	void UpdateCursor();

@@ -45,6 +45,12 @@ ADCBuilding::ADCBuilding()
 	Windows = MakeIsm(this, TEXT("Windows"), RootComponent);
 	Trim = MakeIsm(this, TEXT("Trim"), RootComponent);
 	Rubble = MakeIsm(this, TEXT("Rubble"), RootComponent);
+	Banners = MakeIsm(this, TEXT("Banners"), RootComponent);
+	Emblems = MakeIsm(this, TEXT("Emblems"), RootComponent);
+	for (UInstancedStaticMeshComponent* Cloth : {Banners.Get(), Emblems.Get()})
+	{
+		Cloth->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	}
 	// Rubble appears where players may be standing after they ran in: it never traps a pawn.
 	Rubble->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
 }
@@ -83,7 +89,7 @@ void ADCBuilding::BuildBlocks()
 	}
 	bBuilt = true;
 	UStaticMesh* Cube = DCAssets::Cube();
-	for (UInstancedStaticMeshComponent* Ism : {Walls.Get(), Windows.Get(), Trim.Get(), Rubble.Get()})
+	for (UInstancedStaticMeshComponent* Ism : {Walls.Get(), Windows.Get(), Trim.Get(), Rubble.Get(), Banners.Get(), Emblems.Get()})
 	{
 		Ism->ClearInstances();
 		Ism->SetStaticMesh(Cube);
@@ -124,6 +130,32 @@ void ADCBuilding::BuildBlocks()
 	const FVector Footprint(Spec.SizeX * S, Spec.SizeY * S, 0.f);
 	Trim->AddInstance(FTransform(FRotator::ZeroRotator, FVector(0, 0, Spec.Floors * B + 0.15f * B), FVector(Footprint.X + 0.2f, Footprint.Y + 0.2f, 0.3f * S)));
 	Trim->AddInstance(FTransform(FRotator::ZeroRotator, FVector(0, 0, 5.f), FVector(Footprint.X + 1.2f, Footprint.Y + 1.2f, 0.1f)));
+	BuildBanners();
+}
+
+void ADCBuilding::BuildBanners()
+{
+	// Propaganda look: a red banner down one face with a cream diamond emblem, seeded per tower.
+	FRandomStream Rng(Spec.Seed ^ 0xBA22E2);
+	if (Spec.Floors < 5 || Rng.FRand() > UDCTuning::Get().City.BannerChance)
+	{
+		return;
+	}
+	const FDCLookTuning& Look = UDCTuning::Get().Look;
+	Banners->SetMaterial(0, DCAssets::MakeFlat(this, Look.Accent, 0.6f));
+	Emblems->SetMaterial(0, DCAssets::MakeFlat(this, FLinearColor(0.95f, 0.9f, 0.78f), 0.4f));
+	const float B = Spec.BlockSize;
+	const float S = B / 100.f;
+	// Which face: +X, -X, +Y or -Y.
+	static const FVector Faces[] = {FVector(1, 0, 0), FVector(-1, 0, 0), FVector(0, 1, 0), FVector(0, -1, 0)};
+	const FVector Normal = Faces[Rng.RandRange(0, UE_ARRAY_COUNT(Faces) - 1)];
+	const float Half = (FMath::Abs(Normal.X) > 0.f ? Spec.SizeX : Spec.SizeY) * B * 0.5f;
+	const float Top = (Spec.Floors - 1) * B;
+	const float Bottom = 2.f * B;
+	const FVector Center = Normal * (Half + 6.f) + FVector(0, 0, (Top + Bottom) * 0.5f);
+	const FRotator Facing = Normal.Rotation();
+	Banners->AddInstance(FTransform(Facing, Center, FVector(0.04f, S * 0.95f, (Top - Bottom) / 100.f)));
+	Emblems->AddInstance(FTransform(Facing + FRotator(0.f, 0.f, 45.f), Center + Normal * 6.f + FVector(0, 0, (Top - Bottom) * 0.22f), FVector(0.04f, S * 0.5f, S * 0.5f)));
 }
 
 FVector ADCBuilding::GetCenter() const
@@ -251,6 +283,8 @@ void ADCBuilding::SimulateCollapse(bool bAnimateRequested)
 	{
 		Trim->RemoveInstance(0);
 	}
+	Banners->ClearInstances();
+	Emblems->ClearInstances();
 	// Rubble mound where the tower stood.
 	const float B = Spec.BlockSize;
 	const float S = B / 100.f;
