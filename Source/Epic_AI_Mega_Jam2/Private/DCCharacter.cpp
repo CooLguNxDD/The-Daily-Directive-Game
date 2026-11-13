@@ -717,6 +717,12 @@ void ADCCharacter::TakePhoto()
 	PhotoLook.BloomIntensity = Env ? Env->GetPhotoBloom(C.PhotoBloomFraction) : UDCTuning::Get().Look.BaseBloom;
 	// Stop down while the blast is still blinding: the frame keeps the fire's colour and the debris edges.
 	PhotoLook.AutoExposureBias = UDCTuning::Get().Look.ExposureBias + C.PhotoExposureBias - (Env ? Env->GetFlashAlpha() * C.PhotoFlashStopDown : 0.f);
+	if (IsSpotlit())
+	{
+		// A spotlight in the lens blows the frame out: the photo shows it, not just the score.
+		PhotoLook.AutoExposureBias += C.SpotlitPhotoStops;
+		PhotoLook.BloomIntensity += 8.f;
+	}
 	Capture->PostProcessBlendWeight = 1.f;
 	Capture->CaptureScene();
 

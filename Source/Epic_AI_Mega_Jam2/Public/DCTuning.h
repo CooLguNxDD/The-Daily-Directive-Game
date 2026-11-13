@@ -100,6 +100,8 @@ struct FDCCameraTuning
 	UPROPERTY(EditAnywhere, Config, Category = "Camera") float PhotoExposureBias = -0.6f;
 	/** Extra stops the photo closes down at the full flash (scaled by the flash still on screen). */
 	UPROPERTY(EditAnywhere, Config, Category = "Camera") float PhotoFlashStopDown = 2.f;
+	/** Stops a spotlit photo is pushed over (R11: spotlight units blow out exposure). */
+	UPROPERTY(EditAnywhere, Config, Category = "Camera") float SpotlitPhotoStops = 3.5f;
 };
 
 USTRUCT(BlueprintType)
