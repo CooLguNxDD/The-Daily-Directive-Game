@@ -195,6 +195,7 @@ FDCPostResult ADCEnvironment::ComposeLook(bool bPhoto, bool bSpotlit) const
 	TMap<FName, float> W = PostWeights;
 	W.Add(TEXT("Viewfinder"), 0.f);
 	W.Add(TEXT("Damage"), 0.f);
+	W.Add(TEXT("LastFrame"), 0.f); // the dying look is the player's screen, not the print
 	W.Add(TEXT("FlashKick"), 0.f);
 	W.Add(TEXT("Flash"), FlashPeak * FlashAlpha / FMath::Max(T.Look.MaxBloomPeak, 1.f) * C.PhotoBloomFraction);
 	W.Add(TEXT("Photo"), 1.f);
