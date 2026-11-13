@@ -78,6 +78,11 @@ namespace DCPcg
 			{
 				return false;
 			}
+			// With symmetry, a seam cell's mirrored twin sits right beside it.
+			if ((bMirrorX && W - 1 - X == X + 1) || (bMirrorY && H - 1 - Y == Y + 1))
+			{
+				return true;
+			}
 			static const FIntPoint Around[4] = {{-1, 0}, {0, -1}, {1, 0}, {0, 1}};
 			for (const FIntPoint& D : Around)
 			{

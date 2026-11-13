@@ -837,6 +837,25 @@ void ADCGameMode::CheckWipe()
 			return;
 		}
 	}
+	// Everyone is down. A downed player still holding a Last Frame (R21) gets a short grace to take it first.
+	bool bLastFramePending = false;
+	for (ADCPlayerState* PS : Players())
+	{
+		const ADCCharacter* C = PS->GetPawn<ADCCharacter>();
+		bLastFramePending |= C && C->HasLastFrame();
+	}
+	const float Now = GS->Now();
+	if (bLastFramePending && (WipeGraceUntil < 0.f || Now < WipeGraceUntil))
+	{
+		if (WipeGraceUntil < 0.f)
+		{
+			WipeGraceUntil = Now + UDCTuning::Get().Photo.LastFrameWipeGraceSeconds;
+			FTimerHandle Recheck;
+			GetWorldTimerManager().SetTimer(Recheck, FTimerDelegate::CreateWeakLambda(this, [this] { CheckWipe(); }), UDCTuning::Get().Photo.LastFrameWipeGraceSeconds + 0.05f, false);
+		}
+		return;
+	}
+	WipeGraceUntil = -1.f;
 	// Everyone is down: the run fails, but the reel still plays (R12).
 	UE_LOG(LogTemp, Display, TEXT("DCWIPE all %d players down in sector %d: run failed, rolling the reel"), Players().Num(), GS->SectorIndex + 1);
 	GS->bRunFailed = true;

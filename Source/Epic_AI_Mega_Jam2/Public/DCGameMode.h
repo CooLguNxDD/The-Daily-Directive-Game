@@ -99,6 +99,8 @@ private:
 	int32 AutoStartPlayers = 1;
 	bool bScriptedDownDone = false;
 	double HitstopEndReal = 0.0;
+	/** Server time a wipe waits until, while a downed player can still take a Last Frame (-1 = none). */
+	float WipeGraceUntil = -1.f;
 	float SectorStartTime = 0.f;
 	TArray<int32> WaveSpawned;
 	TArray<float> WaveNextTime;

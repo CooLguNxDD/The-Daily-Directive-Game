@@ -588,7 +588,8 @@ namespace DCVoxelOps
 				}
 			}
 			Out.Carved += CarveSphere(Sector.Terrain, C, Carve.CraterRadiusCm);
-			Out.Carved += CarveSphere(Sector.Props, C, Carve.SphereRadiusCm); // props in the blast are gone
+			// Props in the blast are gone, top to bottom (a sphere left their tops floating: review CP2).
+			Out.Carved += CarveColumn(Sector.Props, C, Carve.SphereRadiusCm, Sector.Props.ToLocal(FIntVector(0, 0, 4000)).Z);
 		}
 		Out.CarveMs = Lap();
 		// Towers are independent grids: their structure passes run in parallel, and the results merge in lot order

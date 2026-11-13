@@ -800,7 +800,7 @@ void ADCCharacter::TakePhoto()
 	{
 		return;
 	}
-	if (PS->ShotsLeft <= 0)
+	if (PS->ShotsLeft <= 0 && !HasLastFrame()) // the Last Frame needs no film (R21)
 	{
 		Toast(TEXT("OUT OF FILM"));
 		DCAudio::Play2D(this, TEXT("DryFire"));
@@ -826,11 +826,12 @@ void ADCCharacter::TakePhoto()
 	}
 	if (const ADCVoxelCity* City = ADCVoxelCity::Get(this))
 	{
-		FVector Free = Lens;
+		const FVector From = Capture->GetComponentLocation(); // the Last Frame lens when downed, else the camera
+		FVector Free = From;
 		const FVector Back = -Capture->GetForwardVector();
 		for (int32 Step = 1; Step <= 24 && City->IsSolidAt(Free); ++Step)
 		{
-			Free = Lens + Back * (Step * 25.f) + FVector(0, 0, Step * 10.f);
+			Free = From + Back * (Step * 25.f) + FVector(0, 0, Step * 10.f);
 		}
 		Capture->SetWorldLocation(Free);
 	}
@@ -864,7 +865,7 @@ void ADCCharacter::ServerSubmitPhoto_Implementation(int32 PhotoId, FVector_NetQu
 		return;
 	}
 	bLastFrameReady = bLastFrameReady && !bLast; // spent
-	if (!PS->ConsumeShot())
+	if (!bLast && !PS->ConsumeShot())
 	{
 		return;
 	}

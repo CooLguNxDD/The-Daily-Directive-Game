@@ -42,8 +42,13 @@ bool FDCPcgRulesTest::RunTest(const FString&)
 	}
 	TestFalse(TEXT("adjacency rule: no two A side by side"), bAdjacent);
 	R.Mirror = TEXT("X");
-	R.NoSameNeighbour.Reset();
 	const TArray<FName> M = DCPcg::PickGrid(R, 7, 4, 3);
+	bool bSeam = false;
+	for (int32 Y = 0; Y < 3; ++Y)
+	{
+		bSeam |= M[Y * 4 + 1] == TEXT("A") && M[Y * 4 + 2] == TEXT("A");
+	}
+	TestFalse(TEXT("adjacency holds across the mirror seam"), bSeam);
 	bool bMirrored = true;
 	for (int32 Y = 0; Y < 3; ++Y)
 	{

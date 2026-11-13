@@ -380,7 +380,9 @@ void ADCHUD::DrawPhotoCard(UTexture* Image, const FDCPhotoGrade& Grade, float X,
 	const FString Timing = FString::Printf(TEXT("%s  %gx"), *Upper(Grade.TimingLabel), FMath::RoundToFloat(Grade.Multiplier * 100.f) / 100.f);
 	float Tw = 0.f, Th = 0.f;
 	Canvas->TextSize(BigFont, Score, Tw, Th, 1.6f * S * TextBoost * UiScale, 1.6f * S * TextBoost * UiScale);
-	const float Bw = Tw + Sx(30.f), Bh = Th * 1.9f + Sx(14.f);
+	float TimingW = 0.f, TimingH = 0.f;
+	Canvas->TextSize(BigFont, Timing, TimingW, TimingH, 0.8f * S * TextBoost * UiScale, 0.8f * S * TextBoost * UiScale);
+	const float Bw = FMath::Max(Tw, TimingW) + Sx(30.f), Bh = Th * 1.9f + Sx(14.f); // fits both lines (review CP2)
 	const float Bx = Cx - Bw * 0.5f, By = Cy - Sx(10.f);
 	// Tilt: a per-photo angle from the score, so the same photo always lands the same way.
 	const float Tilt = -7.f + static_cast<float>(Grade.Score % 5);
