@@ -292,15 +292,25 @@ void ADCGameMode::TickSectorPhase(float Now)
 {
 	// Evidence runs (-dcdownhost=S): the host player is knocked down S seconds into the first sector, so a
 	// teammate's revive can be recorded. Never active otherwise.
-	float DownAt = 0.f;
-	if (!bScriptedDownDone && FParse::Value(FCommandLine::Get(), TEXT("dcdownhost="), DownAt) && Now >= SectorStartTime + DownAt)
+	// -dcdownall=S knocks every player down instead (a co-op wipe: the run fails and the reel still plays).
+	static const TPair<const TCHAR*, int32> DownSwitches[] = {{TEXT("dcdownhost="), 1}, {TEXT("dcdownall="), MAX_int32}};
+	for (const TPair<const TCHAR*, int32>& Switch : DownSwitches)
 	{
+		float DownAt = 0.f;
+		if (bScriptedDownDone || !FParse::Value(FCommandLine::Get(), Switch.Key, DownAt) || Now < SectorStartTime + DownAt)
+		{
+			continue;
+		}
 		bScriptedDownDone = true;
 		const TArray<ADCPlayerState*> All = Players();
-		if (ADCCharacter* Host = All.Num() > 0 ? All[0]->GetPawn<ADCCharacter>() : nullptr)
+		for (int32 i = 0; i < All.Num() && i < Switch.Value; ++i)
 		{
-			Host->HostApplyHurt(10000.f, Host->GetActorLocation() + FVector(500, 0, 0));
+			if (ADCCharacter* C = All[i]->GetPawn<ADCCharacter>())
+			{
+				C->HostApplyHurt(10000.f, C->GetActorLocation() + FVector(500, 0, 0));
+			}
 		}
+		UE_LOG(LogTemp, Display, TEXT("DCDOWN scripted %s players knocked down"), Switch.Value == 1 ? TEXT("host") : TEXT("all"));
 	}
 	CheckWipe();
 	if (GetGameState<ADCGameState>()->Phase != EDCRunPhase::Sector)
@@ -654,6 +664,7 @@ void ADCGameMode::CheckWipe()
 		}
 	}
 	// Everyone is down: the run fails, but the reel still plays (R12).
+	UE_LOG(LogTemp, Display, TEXT("DCWIPE all %d players down in sector %d: run failed, rolling the reel"), Players().Num(), GS->SectorIndex + 1);
 	GS->bRunFailed = true;
 	ClearCombat();
 	EnterPhase(EDCRunPhase::Reel);
