@@ -299,6 +299,8 @@ struct FDCAssetTuning
 	UPROPERTY(EditAnywhere, Config, Category = "Assets") FVector HolsterLocation = FVector(18.f, -22.f, 0.f);
 	UPROPERTY(EditAnywhere, Config, Category = "Assets") FRotator HolsterRotation = FRotator(0.f, 25.f, 90.f);
 	UPROPERTY(EditAnywhere, Config, Category = "Assets") FName HeadSocket = TEXT("head");
+	/** Title menu key art (generated via media.sh, R11; ASSETS.md). */
+	UPROPERTY(EditAnywhere, Config, Category = "Assets") FSoftObjectPath MenuKeyArt = FSoftObjectPath(TEXT("/Game/DC/Art/T_MenuKeyArt.T_MenuKeyArt"));
 };
 
 /** A draft option (R10). Pool groups it; Effect is resolved by id in the upgrade registry (DCUpgrades.cpp). */

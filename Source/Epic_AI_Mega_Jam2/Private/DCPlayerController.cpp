@@ -237,6 +237,23 @@ void ADCPlayerController::UpdateMenu()
 	{
 		Beacon->StartListening();
 	}
+	// Evidence runs (-dcmenushot=<file>) frame the title menu after 4 real seconds, then quit.
+	static FString MenuShot;
+	static const bool bMenuShot = FParse::Value(FCommandLine::Get(), TEXT("dcmenushot="), MenuShot);
+	if (bMenuShot && Mode == 0)
+	{
+		const double Real = GetWorld()->GetRealTimeSeconds();
+		static bool bShotTaken = false;
+		if (!bShotTaken && Real > 4.0)
+		{
+			bShotTaken = true;
+			FScreenshotRequest::RequestScreenshot(MenuShot, true, false);
+		}
+		if (Real > 6.0)
+		{
+			FGenericPlatformMisc::RequestExit(false);
+		}
+	}
 	// Evidence runs (-dclanjoin=S) press the first LAN game's JOIN after S real seconds, the same path as the button.
 	float LanJoinAfter = 0.f;
 	if (Mode == 0 && MenuMode == 0 && Hosts.Num() > 0 && FParse::Value(FCommandLine::Get(), TEXT("dclanjoin="), LanJoinAfter)

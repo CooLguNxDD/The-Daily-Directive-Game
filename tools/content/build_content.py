@@ -94,6 +94,38 @@ def build_voxel_material():
     unreal.log("build_content: M_DCVoxel saved")
 
 
+ART_DIR = "/Game/DC/Art"
+ART_SOURCE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "Content", "DC", "Art", "Source")
+
+# Generated art (R11, listed in ASSETS.md): source PNG beside the asset, imported as UI textures.
+TEXTURES = {
+    "T_MenuKeyArt": "menu-keyart.png",
+}
+
+
+def import_textures():
+    for name, file in TEXTURES.items():
+        path = f"{ART_DIR}/{name}"
+        src = os.path.normpath(os.path.join(ART_SOURCE, file))
+        if keep(path) or not os.path.exists(src):
+            continue
+        task = unreal.AssetImportTask()
+        task.set_editor_property("filename", src)
+        task.set_editor_property("destination_path", ART_DIR)
+        task.set_editor_property("destination_name", name)
+        task.set_editor_property("automated", True)
+        task.set_editor_property("replace_existing", True)
+        task.set_editor_property("save", False)
+        tools.import_asset_tasks([task])
+        tex = unreal.load_asset(path)
+        if tex:
+            tex.set_editor_property("compression_settings", unreal.TextureCompressionSettings.TC_EDITOR_ICON)
+            tex.set_editor_property("mip_gen_settings", unreal.TextureMipGenSettings.TMGS_NO_MIPMAPS)
+            tex.set_editor_property("lod_group", unreal.TextureGroup.TEXTUREGROUP_UI)
+            eal.save_asset(path)
+            unreal.log(f"build_content: {name} imported from {file}")
+
+
 def build_map():
     path = f"{MAP_DIR}/L_City"
     if eal.does_asset_exist(path):
@@ -106,5 +138,6 @@ def build_map():
 
 build_flat_material()
 build_voxel_material()
+import_textures()
 build_map()
 unreal.log("build_content: done")

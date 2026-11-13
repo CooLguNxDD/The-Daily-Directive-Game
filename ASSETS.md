@@ -20,5 +20,20 @@ art) is in the game.
 | All sound and music | synthesised at start-up | `DCAudio.cpp` renders every cue from code recipes; no audio files |
 | HUD, menus, newspaper front page | drawn at run time | Canvas HUD (`DCHUD*.cpp`) and Slate (`DCMenu.cpp`) |
 
+## Generated (R11)
+| Asset | Path | Tool | Notes |
+|-------|------|------|-------|
+| Title menu key art | `Content/DC/Art/T_MenuKeyArt.uasset` (source `Content/DC/Art/Source/menu-keyart.png`) | `scripts/media.sh` (agy backend, 2026-11-13; codex was out of quota) | prompt in `goal/epic-ai-mega-jam2/refs/game/menu-keyart.md`; imported by `tools/content/build_content.py` |
+| Critic reference board (not in the build) | `goal/epic-ai-mega-jam2/refs/board/*.png` | `scripts/media.sh` (agy) | poster city, newspaper front, strike call-in, ink stamp, voxel city; the human picks keepers |
+
+## Made in code or from text (no third-party source)
+| Asset | Path | How it is made |
+|-------|------|----------------|
+| Voxel city, terrain, rubble | spawned at run time | C++ voxel engine (`Source/.../Voxel/`) from recipes and districts in `Config/DefaultGame.ini` |
+| `M_DCVoxel` vertex-colour voxel material | `Content/DC/Materials/M_DCVoxel.uasset` | `tools/content/build_content.py` |
+| Enemy and prop voxel models | `Content/DC/Voxel/*.dcvox` | `tools/voxel-forge/forge.py` from `tools/voxel-forge/recipes/*.vfr` (R17) |
+| Newsprint photo print, stamp grit | at run time | C++ (`Rules/DCNewsprint.cpp`, `DCHUD::StampGrit`) |
+| Decay effects, voxel blast core, weather precipitation | at run time | C++ pooled instanced cubes (`DCVoxelFx`, `DCOrbitalStrike`) from ini rows |
+
 ## Store packs
 None are used. Store packs, if added later, stay local-only under `Content/_LocalPacks/` and get a row here.
