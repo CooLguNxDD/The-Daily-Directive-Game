@@ -443,8 +443,11 @@ void ADCHUD::DrawFrontPage(ADCGameState& GS, ADCCharacter* Me)
 			const float Cy = Sx(290.f) + (Shown / Cols) * (CardW * 9.f / 16.f + Sx(64.f));
 			const float Cx = SideX + (Shown % Cols) * (CardW + ColGap);
 			DrawPhotoCard(PC->GetPhotoImage(P.Photo.PhotoId), P.Photo.Grade, Cx, Cy, CardW, 1.f, false);
-			Text(FString::Printf(TEXT("%s  |  CRITIC %s  |  %d VOTE%s  |  PAGE %s"), *P.PlayerName.ToUpper(), *FText::AsNumber(P.Photo.Grade.Score).ToString(), P.Votes,
-				P.Votes == 1 ? TEXT("") : TEXT("S"), *FText::AsNumber(P.PageScore).ToString()), Cx, Cy + CardW * 9.f / 16.f + Sx(4.f), Ink, 0.5f);
+			// Name on one line, the numbers on the next: a narrow two-column card cannot hold both.
+			const FString Scores = FString::Printf(TEXT("CRITIC %s  |  %d VOTE%s  |  PAGE %s"), *FText::AsNumber(P.Photo.Grade.Score).ToString(), P.Votes,
+				P.Votes == 1 ? TEXT("") : TEXT("S"), *FText::AsNumber(P.PageScore).ToString());
+			Text(P.PlayerName.ToUpper(), Cx, Cy + CardW * 9.f / 16.f + Sx(4.f), Ink, 0.5f);
+			Text(Scores, Cx, Cy + CardW * 9.f / 16.f + Sx(24.f), Ink, 0.45f);
 			++Shown;
 		}
 	}

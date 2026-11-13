@@ -69,6 +69,7 @@ if [[ "${UNREAL_GATE_PACKAGE:-0}" == 1 ]]; then
   stage "tier C: compile $project $platform $config" "$out/build-game.log" \
     "$UE_ROOT/Engine/Build/BatchFiles/Build.bat" "$project" "$platform" "$config" \
     -project="$uproject" -waitmutex -NoHotReload -NoHotReloadFromIDE || exit 1
+  rm -rf "$out/package" # a fresh archive: old crash-reporter folders must not ride into the zip
   stage "tier C: package $platform $config" "$out/package.log" \
     "$UE_ROOT/Engine/Build/BatchFiles/RunUAT.bat" BuildCookRun -project="$uproject" -noP4 -utf8output \
     -platform="$platform" -clientconfig="$config" -skipbuild -cook -stage -pak -archive \
