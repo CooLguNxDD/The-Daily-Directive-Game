@@ -133,6 +133,8 @@ struct FDCVoxelOp
 {
 	GENERATED_BODY()
 	UPROPERTY() int32 Seq = 0;
+	/** Which city build the op belongs to (GameState CityBuildId): a rebuilt sector starts clean. */
+	UPROPERTY() int32 Build = 0;
 	UPROPERTY() int32 Sector = 0;
 	/** Server time the op happened (the reel replays it at this content time). */
 	UPROPERTY() float Time = 0.f;

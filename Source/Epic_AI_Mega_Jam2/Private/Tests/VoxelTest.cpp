@@ -8,6 +8,10 @@
 #include "Voxel/DCVoxelOps.h"
 #include "Voxel/DCVoxelSettings.h"
 #include "Voxel/DCVoxelWorld.h"
+#include "Voxel/DCVoxelModel.h"
+#include "HAL/FileManager.h"
+#include "Misc/FileHelper.h"
+#include "Misc/Paths.h"
 
 #if WITH_DEV_AUTOMATION_TESTS
 
@@ -194,7 +198,7 @@ bool FDCVoxelDataTest::RunTest(const FString&)
 	for (const FDCVoxelMaterial& M : V.Palette)
 	{
 		const bool bRed = M.Color.R > 0.3f && M.Color.G < 0.1f && M.Color.B < 0.1f;
-		TestFalse(FString::Printf(TEXT("palette %s is not red"), *M.Id.ToString()), bRed);
+		TestFalse(FString::Printf(TEXT("palette %s is not red (only Danger may be)"), *M.Id.ToString()), bRed && M.Id != TEXT("Danger"));
 	}
 	return true;
 }
@@ -247,6 +251,52 @@ bool FDCVoxelMesherTest::RunTest(const FString&)
 	M.Reset();
 	DCVoxelMesher::MeshPadded(Padded, Colors, 25.f, 0.f, M);
 	TestEqual(TEXT("border voxel: five quads in its own chunk"), M.Indices.Num(), 5 * 6);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDCVoxelModelTest, "Epic_AI_Mega_Jam2.Voxel.ForgeModels", VoxelFlags)
+bool FDCVoxelModelTest::RunTest(const FString&)
+{
+	// Every shipped voxel-forge model parses, uses palette names the game knows, and every enemy model exists (R17).
+	const UDCVoxelSettings& V = UDCVoxelSettings::Get();
+	TArray<FString> Files;
+	const FString Dir = FPaths::ProjectContentDir() / TEXT("DC/Voxel");
+	IFileManager::Get().FindFiles(Files, *(Dir / TEXT("*.dcvox")), true, false);
+	TestTrue(TEXT("models shipped"), Files.Num() >= 3);
+	for (const FString& File : Files)
+	{
+		FString Text, Error;
+		FDCVoxelModel M;
+		TestTrue(FString::Printf(TEXT("%s loads"), *File), FFileHelper::LoadFileToString(Text, *(Dir / File)));
+		TestTrue(FString::Printf(TEXT("%s parses: %s"), *File, *Error), FDCVoxelModel::Parse(Text, M, Error));
+		for (const FName& Slot : M.Slots)
+		{
+			TestTrue(FString::Printf(TEXT("%s slot %s in palette"), *File, *Slot.ToString()), V.Palette.ContainsByPredicate([&Slot](const FDCVoxelMaterial& P) { return P.Id == Slot; }));
+		}
+	}
+	for (const FDCEnemyDef& E : UDCTuning::Get().Enemies)
+	{
+		if (!E.Model.IsNone())
+		{
+			TestTrue(FString::Printf(TEXT("enemy %s model %s exists"), *E.Id.ToString(), *E.Model.ToString()), Files.Contains(E.Model.ToString() + TEXT(".dcvox")));
+		}
+	}
+	// Malformed data is rejected, never trusted.
+	FDCVoxelModel Bad;
+	FString Error;
+	auto Doc = [](std::initializer_list<const TCHAR*> Lines)
+	{
+		FString Out;
+		for (const TCHAR* L : Lines)
+		{
+			Out += L;
+			Out += TEXT("\n");
+		}
+		return Out;
+	};
+	TestFalse(TEXT("short volume rejected"), FDCVoxelModel::Parse(Doc({TEXT("dcvox 1"), TEXT("size 2 2 2"), TEXT("slots Ink"), TEXT("rle"), TEXT("3*1")}), Bad, Error));
+	TestFalse(TEXT("unknown slot rejected"), FDCVoxelModel::Parse(Doc({TEXT("dcvox 1"), TEXT("size 1 1 1"), TEXT("slots Ink"), TEXT("rle"), TEXT("1*5")}), Bad, Error));
+	TestTrue(TEXT("tiny model parses"), FDCVoxelModel::Parse(Doc({TEXT("dcvox 1"), TEXT("size 1 1 2"), TEXT("slots Ink"), TEXT("rle"), TEXT("1*0 1*1")}), Bad, Error) && Bad.Cells[1] == 1);
 	return true;
 }
 

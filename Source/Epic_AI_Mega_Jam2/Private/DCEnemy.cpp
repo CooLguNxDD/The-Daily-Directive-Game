@@ -1,5 +1,9 @@
 #include "DCEnemy.h"
 
+#include "ProceduralMeshComponent.h"
+#include "Voxel/DCVoxelModel.h"
+#include "Voxel/DCVoxelSettings.h"
+
 #include "Components/SphereComponent.h"
 #include "Components/SpotLightComponent.h"
 #include "Components/StaticMeshComponent.h"
@@ -231,10 +235,33 @@ void ADCEnemy::BeginPlay()
 	Heading = GetActorForwardVector();
 }
 
+bool ADCEnemy::BuildModel(const FDCEnemyDef& Def)
+{
+	const FDCVoxelMeshData* Mesh = DCVoxelModels::Mesh(Def.Model);
+	if (!Mesh)
+	{
+		return false;
+	}
+	UProceduralMeshComponent* Model = NewObject<UProceduralMeshComponent>(this, TEXT("VoxelModel"));
+	Model->SetupAttachment(Body);
+	Model->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	Model->RegisterComponent();
+	Model->CreateMeshSection(0, Mesh->Positions, Mesh->Indices, Mesh->Normals, Mesh->UVs, Mesh->Colors, {}, false);
+	Model->SetMaterial(0, Cast<UMaterialInterface>(UDCVoxelSettings::Get().VoxelMaterial.TryLoad()));
+	Model->SetRelativeLocation(Def.ModelOffset);
+	Model->SetRelativeScale3D(FVector(Def.ModelScale));
+	for (UStaticMeshComponent* Part : {Visual.Get(), Eye.Get(), LegA.Get(), LegB.Get(), LegC.Get()})
+	{
+		Part->SetVisibility(false);
+	}
+	return true;
+}
+
 void ADCEnemy::BuildVisual()
 {
 	const FDCEnemyDef& Def = *GetDef();
 	const float S = Def.Scale;
+	BuildModel(Def); // the basic shapes below stay hidden behind a model, as the fallback, and set collision sizes
 	Visual->SetMaterial(0, DCAssets::MakeFlat(this, Def.Color));
 	Eye->SetStaticMesh(DCAssets::Sphere());
 	Eye->SetMaterial(0, DCAssets::MakeFlat(this, Def.EyeColor, 40.f));

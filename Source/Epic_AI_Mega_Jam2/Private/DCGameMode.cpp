@@ -10,6 +10,7 @@
 #include "DCOrbitalStrike.h"
 #include "DCPlayerController.h"
 #include "DCPlayerState.h"
+#include "DCVoxelCity.h"
 #include "DCSupplyPod.h"
 #include "DCTuning.h"
 #include "DCUpgrades.h"
@@ -79,6 +80,7 @@ void ADCGameMode::BeginPlay()
 	Super::BeginPlay();
 	ADCGameState* GS = GetGameState<ADCGameState>();
 	GS->RunSeed = RequestedSeed != 0 ? RequestedSeed : FMath::RandRange(1000, 999999);
+	GS->VoxelOps.Reset();
 	BuildCity(0); // the lobby's backdrop is the first sector
 	if (GetNetMode() == NM_ListenServer)
 	{
@@ -279,6 +281,16 @@ void ADCGameMode::ClearCity()
 	}
 	DominoGeneration.Reset();
 	PendingCollapses.Reset();
+	ADCGameState* GS = GetGameState<ADCGameState>();
+	if (GS && GS->CitySector != INDEX_NONE)
+	{
+		GS->CitySector = INDEX_NONE;
+		++GS->CityBuildId;
+		if (ADCVoxelCity* City = GS->GetVoxelCity())
+		{
+			City->Clear();
+		}
+	}
 }
 
 void ADCGameMode::BuildCity(int32 SectorIndex)
@@ -288,7 +300,17 @@ void ADCGameMode::BuildCity(int32 SectorIndex)
 	const UDCTuning& T = UDCTuning::Get();
 	const int32 Seed = DCCityRules::SectorSeed(GS->RunSeed, SectorIndex);
 	SectorRng.Initialize(Seed);
-	CityPlan = DCCityRules::PlanCity(Seed, T.City, T.Look.BuildingColors.Num());
+	CityPlan = ADCVoxelCity::PlanSector(GS->RunSeed, SectorIndex); // recipes applied when the voxel city is on (R2)
+	{
+		// Every machine's voxel city follows these two fields; the host's builds now when it exists already.
+		ADCGameState* MutableGS = GetGameState<ADCGameState>();
+		MutableGS->CitySector = SectorIndex;
+		++MutableGS->CityBuildId;
+		if (ADCVoxelCity* City = GS->GetVoxelCity())
+		{
+			City->Build(GS->RunSeed, SectorIndex, MutableGS->CityBuildId);
+		}
+	}
 	for (int32 Lot = 0; Lot < CityPlan.Buildings.Num(); ++Lot)
 	{
 		const FDCLotPlan& Plan = CityPlan.Buildings[Lot];

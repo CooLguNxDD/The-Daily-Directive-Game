@@ -5,6 +5,8 @@
 #include "DCAssets.h"
 #include "DCAudio.h"
 #include "DCBuilding.h"
+#include "DCVoxelCity.h"
+#include "Voxel/DCVoxelGrid.h"
 #include "DCCharacter.h"
 #include "DCEnemy.h"
 #include "DCEnvironment.h"
@@ -266,8 +268,34 @@ void ADCOrbitalStrike::DetonateHost(const FDCStratagemDef& Def)
 	const FVector Here = GetActorLocation();
 	GS->AddBlast(Here, Def.BlastRadius, Def.Id);
 
+	if (ADCVoxelCity* City = ADCVoxelCity::IsEnabled() ? GS->GetVoxelCity() : nullptr)
+	{
+		// Voxel city (R3): the strike is one op every machine applies; the structure pass decides which towers fall,
+		// and those become the usual collapse records (scoring, domino, reel).
+		FDCVoxelOp Op;
+		Op.Kind = TEXT("Strike");
+		Op.Stratagem = Def.Id;
+		Op.CenterCm = DCVoxelMath::ToCm(FVector(Here.X, Here.Y, 0.f));
+		Op.BlastRadiusCm = FMath::RoundToInt32(Def.BlastRadius);
+		const int32 Index = GS->VoxelOps.Num();
+		GS->AddVoxelOp(Op);
+		const FDCVoxelOpResult Result = City->ApplyOp(GS->VoxelOps[Index], true);
+		GS->VoxelOps[Index].ResultHash = City->GetHash();
+		for (ADCBuilding* Building : TActorRange<ADCBuilding>(World))
+		{
+			ADCGameMode* GM = World->GetAuthGameMode<ADCGameMode>();
+			if (GM && Result.FallenLots.Contains(Building->GetLotIndex()))
+			{
+				GM->ScheduleCollapse(Building, Here, TEXT("Strike"), 0.f);
+			}
+		}
+	}
 	for (ADCBuilding* Building : TActorRange<ADCBuilding>(World))
 	{
+		if (ADCVoxelCity::IsEnabled())
+		{
+			break; // block city only: every tower near the blast collapses whole
+		}
 		const FDCBuildingSpec& Spec = Building->GetSpec();
 		const float HalfFootprint = FMath::Max(Spec.SizeX, Spec.SizeY) * Spec.BlockSize * 0.5f;
 		if (FVector::Dist2D(Building->GetActorLocation(), Here) <= Def.BlastRadius + HalfFootprint)

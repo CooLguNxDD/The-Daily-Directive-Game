@@ -4,13 +4,13 @@
 
 namespace
 {
-	constexpr int32 S = FDCVoxelChunk::Size;
-	constexpr int32 P = S + 2;
+	constexpr int32 MeshS = FDCVoxelChunk::Size;
+	constexpr int32 MeshP = MeshS + 2;
 
 	struct FPaddedView
 	{
 		const uint8* V;
-		uint8 At(const int32 C[3]) const { return V[(C[2] * P + C[1]) * P + C[0]]; }
+		uint8 At(const int32 C[3]) const { return V[(C[2] * MeshP + C[1]) * MeshP + C[0]]; }
 		bool Solid(const int32 C[3]) const { return At(C) != 0; }
 	};
 
@@ -28,8 +28,8 @@ namespace
 			Out.Positions.Add(Corners[k]);
 			Out.Normals.Add(Normal);
 			Out.UVs.Add(Uv[k]);
-			const float Shade = 1.f - AOStrength * (3 - AO[k]) / 3.f;
-			Out.Colors.Add(FColor(static_cast<uint8>(Base.R * Shade), static_cast<uint8>(Base.G * Shade), static_cast<uint8>(Base.B * Shade), Base.A));
+			const float AOShade = 1.f - AOStrength * (3 - AO[k]) / 3.f;
+			Out.Colors.Add(FColor(static_cast<uint8>(Base.R * AOShade), static_cast<uint8>(Base.G * AOShade), static_cast<uint8>(Base.B * AOShade), Base.A));
 		}
 		// Split along the diagonal that keeps occlusion gradients smooth.
 		const bool bFlipDiagonal = AO[0] + AO[2] < AO[1] + AO[3];
@@ -54,22 +54,22 @@ namespace DCVoxelMesher
 {
 	void MeshPadded(const TArray<uint8>& Padded, const FDCVoxelColors& Colors, float VoxelSizeCm, float AOStrength, FDCVoxelMeshData& Out)
 	{
-		check(Padded.Num() == P * P * P);
+		check(Padded.Num() == MeshP * MeshP * MeshP);
 		const FPaddedView View{Padded.GetData()};
 		TArray<uint32> Mask;
-		Mask.SetNumUninitialized(S * S);
+		Mask.SetNumUninitialized(MeshS * MeshS);
 		static const FColor Missing(255, 0, 255, 0);
 
 		for (int32 D = 0; D < 3; ++D)
 		{
 			const int32 U = (D + 1) % 3;
 			const int32 V = (D + 2) % 3;
-			for (int32 Slice = 0; Slice <= S; ++Slice)
+			for (int32 Slice = 0; Slice <= MeshS; ++Slice)
 			{
 				// Build the face mask between interior layer Slice-1 (A) and Slice (B). Padded index = interior + 1.
-				for (int32 J = 0; J < S; ++J)
+				for (int32 J = 0; J < MeshS; ++J)
 				{
-					for (int32 I = 0; I < S; ++I)
+					for (int32 I = 0; I < MeshS; ++I)
 					{
 						int32 A[3], B[3];
 						A[D] = Slice;     // padded index of interior Slice-1
@@ -80,7 +80,7 @@ namespace DCVoxelMesher
 						const uint8 Mb = View.At(B);
 						uint32 Key = 0;
 						const bool bFront = Ma != 0 && Mb == 0 && Slice > 0;     // face of A looking +D
-						const bool bBack = Mb != 0 && Ma == 0 && Slice < S;      // face of B looking -D
+						const bool bBack = Mb != 0 && Ma == 0 && Slice < MeshS;      // face of B looking -D
 						if (bFront || bBack)
 						{
 							const int32* Air = bFront ? B : A;
@@ -101,32 +101,32 @@ namespace DCVoxelMesher
 							const uint32 Mat = bFront ? Ma : Mb;
 							Key = Mat | (static_cast<uint32>(bFront ? 1 : 2) << 8) | (static_cast<uint32>(AO[0] | (AO[1] << 2) | (AO[2] << 4) | (AO[3] << 6)) << 10);
 						}
-						Mask[I + J * S] = Key;
+						Mask[I + J * MeshS] = Key;
 					}
 				}
 				// Greedy merge of equal keys into rectangles.
-				for (int32 J = 0; J < S; ++J)
+				for (int32 J = 0; J < MeshS; ++J)
 				{
-					for (int32 I = 0; I < S;)
+					for (int32 I = 0; I < MeshS;)
 					{
-						const uint32 Key = Mask[I + J * S];
+						const uint32 Key = Mask[I + J * MeshS];
 						if (Key == 0)
 						{
 							++I;
 							continue;
 						}
 						int32 W = 1;
-						while (I + W < S && Mask[I + W + J * S] == Key)
+						while (I + W < MeshS && Mask[I + W + J * MeshS] == Key)
 						{
 							++W;
 						}
 						int32 H = 1;
-						for (; J + H < S; ++H)
+						for (; J + H < MeshS; ++H)
 						{
 							bool bRow = true;
 							for (int32 k = 0; k < W && bRow; ++k)
 							{
-								bRow = Mask[I + k + (J + H) * S] == Key;
+								bRow = Mask[I + k + (J + H) * MeshS] == Key;
 							}
 							if (!bRow)
 							{
@@ -137,7 +137,7 @@ namespace DCVoxelMesher
 						{
 							for (int32 k = 0; k < W; ++k)
 							{
-								Mask[I + k + (J + h) * S] = 0;
+								Mask[I + k + (J + h) * MeshS] = 0;
 							}
 						}
 

@@ -369,6 +369,38 @@ namespace DCVoxelCraft
 		const uint8 Paving = Ctx.MaterialId(T.LotMaterial);
 		const uint8 Kerb = Ctx.MaterialId(T.KerbMaterial);
 		Out.Data.FillBox(FIntVector(0, 0, 0), FIntVector(N, N, Layers), Street);
+		// Lane dashes down the middle of every street (flush paint in the top layer).
+		const uint8 Paint = Ctx.MaterialId(TEXT("Paint"));
+		TArray<int32> LinesX, LinesY;
+		for (const FVector& P : Plan.StreetPoints)
+		{
+			LinesX.AddUnique(FMath::RoundToInt32(P.X));
+			LinesY.AddUnique(FMath::RoundToInt32(P.Y));
+		}
+		const int32 DashOn = FMath::Max(1, 150 / Vcm);
+		const int32 DashPeriod = FMath::Max(DashOn + 1, 450 / Vcm);
+		for (int32 X : LinesX)
+		{
+			const int32 Lx = Out.ToLocal(FIntVector(X, 0, 0)).X;
+			for (int32 Y = 0; Y < N; ++Y)
+			{
+				if (Y % DashPeriod < DashOn)
+				{
+					Out.Data.Set(FIntVector(Lx, Y, Layers - 1), Paint);
+				}
+			}
+		}
+		for (int32 Y : LinesY)
+		{
+			const int32 Ly = Out.ToLocal(FIntVector(0, Y, 0)).Y;
+			for (int32 X = 0; X < N; ++X)
+			{
+				if (X % DashPeriod < DashOn)
+				{
+					Out.Data.Set(FIntVector(X, Ly, Layers - 1), Paint);
+				}
+			}
+		}
 		// Every built lot gets paving and a kerb ring one voxel above the street.
 		const int32 LotHalf = FMath::RoundToInt32(LotSizeCm * 0.5f);
 		const int32 Z = Layers - 1;

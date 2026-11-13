@@ -69,4 +69,5 @@ private:
 	bool bWindowsAlarmed = false;
 	UPROPERTY() TObjectPtr<class UMaterialInstanceDynamic> WindowMat;
 	bool bSimulated = false;
+	FVector LastShake = FVector::ZeroVector;
 };

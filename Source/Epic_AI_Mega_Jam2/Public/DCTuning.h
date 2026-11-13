@@ -227,6 +227,11 @@ struct FDCEnemyDef
 	/** Spotlight: cone range (cm) and half-angle (deg) that blows out a photographer's exposure. */
 	UPROPERTY(EditAnywhere, Config, Category = "Enemy") float LightRange = 4500.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Enemy") float LightHalfAngle = 14.f;
+	/** voxel-forge model (Content/DC/Voxel/<Model>.dcvox) worn instead of the basic shapes (R10, R17); None keeps the shapes. */
+	UPROPERTY(EditAnywhere, Config, Category = "Enemy") FName Model;
+	UPROPERTY(EditAnywhere, Config, Category = "Enemy") float ModelScale = 1.f;
+	/** Model pivot (its bottom centre) relative to the actor, which flies at HoverHeight. */
+	UPROPERTY(EditAnywhere, Config, Category = "Enemy") FVector ModelOffset = FVector::ZeroVector;
 };
 
 /** One wave inside a sector: Count enemies of EnemyId, one every Interval seconds from StartSeconds. */

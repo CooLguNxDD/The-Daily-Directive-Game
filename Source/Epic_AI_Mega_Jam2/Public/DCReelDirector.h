@@ -5,6 +5,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Voxel/DCVoxelTypes.h"
 #include "GameFramework/Actor.h"
 #include "DCReelDirector.generated.h"
 
@@ -65,6 +66,8 @@ private:
 	UPROPERTY() TObjectPtr<UAnimSequence> IdleAnim;
 
 	TArray<FPendingCollapse> Pending;
+	/** Voxel city: the clip sector's ops that happen during the clip, at their replay server time. */
+	TArray<TPair<float, FDCVoxelOp>> PendingVoxelOps;
 	int32 StagedIndex = -1;
 	float WindowStart = 0.f;
 	float ShotTime = 0.f;

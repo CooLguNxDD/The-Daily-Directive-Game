@@ -1,4 +1,6 @@
 #include "DCReelDirector.h"
+
+#include "DCVoxelCity.h"
 #include "Misc/App.h"
 
 #include "Animation/AnimSequence.h"
@@ -125,6 +127,10 @@ void ADCReelDirector::BeginPlay()
 void ADCReelDirector::EndPlay(const EEndPlayReason::Type Reason)
 {
 	ClearStage();
+	if (ADCVoxelCity* City = ADCVoxelCity::Get(this))
+	{
+		City->SetFollowGameState(true); // back to the game state's city (cleared after the reel)
+	}
 	SetPawnsHidden(false);
 	if (APlayerController* PC = GetWorld()->GetFirstPlayerController())
 	{
@@ -155,6 +161,7 @@ void ADCReelDirector::ClearStage()
 	}
 	Staged.Reset();
 	Pending.Reset();
+	PendingVoxelOps.Reset();
 }
 
 void ADCReelDirector::Restage(int32 ClipIndex)
@@ -189,6 +196,26 @@ void ADCReelDirector::Restage(int32 ClipIndex)
 		B->FinishSpawning(Xf);
 		Staged.Add(B);
 		ByLot.Add(Lot, B);
+	}
+	// Voxel city: rebuild the clip's sector from the run seed and replay its ops: the ones before the clip as
+	// settled rubble, the ones inside it at their replay time with the fall.
+	if (ADCVoxelCity* City = ADCVoxelCity::Get(this))
+	{
+		City->SetFollowGameState(false);
+		City->Build(GS->RunSeed, Sector, -1 - ClipIndex);
+		for (const FDCVoxelOp& Op : GS->VoxelOps)
+		{
+			if (Op.Sector != Sector || Op.Time > ShotTime + 0.5f)
+			{
+				continue;
+			}
+			if (Op.Time < WindowStart)
+			{
+				City->ApplyOp(Op, false);
+				continue;
+			}
+			PendingVoxelOps.Add({Op.Time + Offset, Op});
+		}
 	}
 	for (const FDCCollapseRecord& Rec : GS->Collapses)
 	{
@@ -389,6 +416,18 @@ void ADCReelDirector::Tick(float DeltaSeconds)
 			}
 			Pending.RemoveAtSwap(i);
 		}
+	}
+	for (int32 i = 0; i < PendingVoxelOps.Num();)
+	{
+		if (Now < PendingVoxelOps[i].Key)
+		{
+			break; // kept in op order: apply strictly in sequence
+		}
+		if (ADCVoxelCity* City = ADCVoxelCity::Get(this))
+		{
+			City->ApplyOp(PendingVoxelOps[i].Value, true);
+		}
+		PendingVoxelOps.RemoveAt(0);
 	}
 	const float Length = FMath::Max(ShotTime - WindowStart, 0.01f);
 	const float ClipTime = FMath::Clamp(WindowStart + (Now - GS->ReelClipStart), WindowStart, ShotTime);

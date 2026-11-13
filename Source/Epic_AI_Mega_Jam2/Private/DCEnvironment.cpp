@@ -1,5 +1,8 @@
 #include "DCEnvironment.h"
 
+#include "DCVoxelCity.h"
+#include "Voxel/DCVoxelSettings.h"
+
 #include "Components/DirectionalLightComponent.h"
 #include "Components/ExponentialHeightFogComponent.h"
 #include "Components/PostProcessComponent.h"
@@ -107,9 +110,16 @@ void ADCEnvironment::BeginPlay()
 	Ground->SetStaticMesh(DCAssets::Cube());
 	const float Size = Look.GroundSizeCm / 100.f;
 	Ground->SetWorldScale3D(FVector(Size, Size, 1.f));
-	Ground->SetWorldLocation(FVector(0.f, 0.f, -50.f));
+	// Voxel city: the terrain grid carries streets, lots and kerbs from z = 0 down; the slab sinks below it and only
+	// catches anything that falls through a crater.
+	const bool bVoxel = ADCVoxelCity::IsEnabled();
+	const float Below = bVoxel ? UDCVoxelSettings::Get().Tuning.GroundLayers * UDCVoxelSettings::Get().Tuning.TerrainVoxelCm + 20.f : 0.f;
+	Ground->SetWorldLocation(FVector(0.f, 0.f, -50.f - Below));
 	Ground->SetMaterial(0, DCAssets::MakeFlat(this, Look.Street));
-	BuildStreets();
+	if (!bVoxel)
+	{
+		BuildStreets();
+	}
 	UE_LOG(LogTemp, Display, TEXT("DCENV streets: sidewalks=%d dashes=%d registered=%d visible=%d"), Sidewalks->GetInstanceCount(), Dashes->GetInstanceCount(),
 		Sidewalks->IsRegistered() ? 1 : 0, Sidewalks->IsVisible() ? 1 : 0);
 
