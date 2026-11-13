@@ -128,7 +128,10 @@ namespace
 			for (int32 X = 0; X < N; ++X)
 			{
 				const FIntVector P(Lo.X + X, Lo.Y + Y, Top);
-				if (T.Data.IsSolid(P) && !T.Data.IsSolid(P + FIntVector(0, 0, 1)) && DCPcg::Hash(Seed, 0x5A0Du, X * 4099 + Y) % 1000 < Threshold)
+				// Drifts in 2 m patches with ragged edges, not a per-cell checkerboard.
+				const bool bPatch = DCPcg::Hash(Seed, 0x5A0Du, (X / 4) * 4099 + Y / 4) % 1000 < Threshold;
+				const bool bEdge = DCPcg::Hash(Seed, 0x5A0Fu, X * 4099 + Y) % 1000 < Threshold / 4;
+				if (T.Data.IsSolid(P) && !T.Data.IsSolid(P + FIntVector(0, 0, 1)) && (bPatch || bEdge))
 				{
 					T.Data.Set(P, Snow); // the street top whitens (50 cm cells stay flush)
 				}
