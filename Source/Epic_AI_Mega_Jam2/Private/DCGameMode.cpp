@@ -149,6 +149,9 @@ void ADCGameMode::StartRun()
 		return;
 	}
 	GS->SectorIndex = 0;
+	// Evidence runs can start in a later sector (-dcstartsector=N) to reach its enemies sooner.
+	FParse::Value(FCommandLine::Get(), TEXT("dcstartsector="), GS->SectorIndex);
+	GS->SectorIndex = FMath::Clamp(GS->SectorIndex, 0, FMath::Max(UDCTuning::Get().Sectors.Num() - 1, 0));
 	EnterPhase(EDCRunPhase::Sector);
 }
 

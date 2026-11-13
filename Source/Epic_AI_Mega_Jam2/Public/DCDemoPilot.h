@@ -39,6 +39,8 @@ private:
 	void BuildScript();
 	void AddCycle(const FString& Name);
 	void AddEnemyFight(const FString& Sector);
+	/** -dcwatchwalker: frame the walker through the viewfinder, snap it, then frame the tower it condemns. */
+	void AddWalkerWatch();
 	void AddWaitPhase(EDCRunPhase Phase, float Timeout);
 	void Add(float Delay, TFunction<bool()> Do, float Timeout = 12.f);
 	void Press(FName Action, const FVector& Value = FVector(1, 0, 0));
