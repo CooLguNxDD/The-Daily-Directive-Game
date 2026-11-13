@@ -63,4 +63,8 @@ private:
 	TSet<TObjectKey<ADCBuilding>> UsedTowers;
 	int32 ShotIndex = 0;
 	bool bAutoReviving = false;
+	/** While waiting for the sector to end, the pilot shoots the nearest enemy (rifle, real input). */
+	bool bDefend = false;
+	bool bDefendFiring = false;
+	void TickDefend();
 };

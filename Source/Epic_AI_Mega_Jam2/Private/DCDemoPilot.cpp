@@ -284,8 +284,39 @@ void ADCDemoPilot::AddWaitPhase(EDCRunPhase Phase, float Timeout)
 	Add(0.f, [this, Phase]
 	{
 		const ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>();
-		return GS && GS->Phase == Phase;
+		bDefend = !(GS && GS->Phase == Phase);
+		return !bDefend;
 	}, Timeout);
+}
+
+void ADCDemoPilot::TickDefend()
+{
+	const ADCCharacter* Me = Cast<ADCCharacter>(GetWorld()->GetFirstPlayerController() ? GetWorld()->GetFirstPlayerController()->GetPawn() : nullptr);
+	const ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>();
+	ADCEnemy* Nearest = nullptr;
+	float Best = 2500.f;
+	if (bDefend && Me && !Me->IsDowned() && GS && GS->Phase == EDCRunPhase::Sector)
+	{
+		for (ADCEnemy* E : TActorRange<ADCEnemy>(GetWorld()))
+		{
+			const float D = E->IsAlive() ? FVector::Dist(E->GetActorLocation(), Me->GetActorLocation()) : Best;
+			Nearest = D < Best ? E : Nearest;
+			Best = FMath::Min(Best, D);
+		}
+	}
+	if (Nearest)
+	{
+		if (Me->GetSlot() != EDCSlot::Rifle)
+		{
+			Tap(TEXT("Slot1"));
+		}
+		AimAt(Nearest->GetActorLocation());
+	}
+	if ((Nearest != nullptr) != bDefendFiring)
+	{
+		bDefendFiring = Nearest != nullptr;
+		(bDefendFiring ? Press(TEXT("Fire")) : Release(TEXT("Fire")));
+	}
 }
 
 void ADCDemoPilot::BuildScript()
@@ -320,7 +351,8 @@ void ADCDemoPilot::BuildScript()
 			Add(0.f, [this, Sector]
 			{
 				const ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>();
-				return GS && (GS->Phase == EDCRunPhase::Draft || GS->Phase == EDCRunPhase::Reel || GS->SectorIndex > Sector);
+				bDefend = !(GS && (GS->Phase == EDCRunPhase::Draft || GS->Phase == EDCRunPhase::Reel || GS->SectorIndex > Sector));
+				return !bDefend;
 			}, 400.f);
 			Add(1.f, [this, S] { Shot(S + TEXT("_draft")); return true; });
 			Add(0.5f, [this, Sector]
@@ -406,6 +438,7 @@ void ADCDemoPilot::Tick(float DeltaSeconds)
 		UE_LOG(LogDCDemo, Display, TEXT("DEMO %s"), bDown ? TEXT("downed: holding E") : TEXT("revived"));
 		(bDown ? Press(TEXT("Interact")) : Release(TEXT("Interact")));
 	}
+	TickDefend();
 	if (Real < StepReadyReal)
 	{
 		return;
