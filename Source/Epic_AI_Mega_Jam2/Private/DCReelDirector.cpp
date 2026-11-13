@@ -344,6 +344,8 @@ void ADCReelDirector::SnapSecondTake()
 	UTextureRenderTarget2D* Image = UKismetRenderingLibrary::CreateRenderTarget2D(this, C.PhotoWidth, C.PhotoHeight, RTF_RGBA8);
 	TakeCapture->TextureTarget = Image;
 	TakeCapture->FOVAngle = Camera->FieldOfView;
+	ADCCharacter::ApplyPhotoLook(GetWorld(), TakeCapture->PostProcessSettings, false);
+	TakeCapture->PostProcessBlendWeight = 1.f;
 	TakeCapture->CaptureScene();
 	FDCShotView View;
 	View.Location = Camera->GetComponentLocation();

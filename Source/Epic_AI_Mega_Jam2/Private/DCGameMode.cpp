@@ -44,7 +44,8 @@ void ADCGameMode::InitGame(const FString& MapName, const FString& Options, FStri
 	RequestedSeed = UGameplayStatics::GetIntOption(Options, TEXT("seed"), 0);
 	FParse::Value(FCommandLine::Get(), TEXT("dcseed="), RequestedSeed);
 	// Solo from the menu (?solo) and the scripted demo start at once; a listen host waits in the lobby.
-	bAutoStart = UGameplayStatics::HasOption(Options, TEXT("solo")) || ADCDemoPilot::IsRequested() || FParse::Param(FCommandLine::Get(), TEXT("dcsolo"));
+	bAutoStart = UGameplayStatics::HasOption(Options, TEXT("solo")) || ADCDemoPilot::IsRequested() || FParse::Param(FCommandLine::Get(), TEXT("dcsolo"))
+		|| FParse::Param(FCommandLine::Get(), TEXT("dcsmoke"));
 }
 
 const TMap<EDCRunPhase, ADCGameMode::FPhaseHandlers>& ADCGameMode::PhaseTable()
@@ -96,6 +97,42 @@ void ADCGameMode::BeginPlay()
 	{
 		GetWorld()->SpawnActor<ADCDemoPilot>();
 	}
+	if (FParse::Param(FCommandLine::Get(), TEXT("dcsmoke")))
+	{
+		StartSmoke();
+	}
+}
+
+void ADCGameMode::StartSmoke()
+{
+	// Packaged-build smoke (-dcsmoke, run by the gate's full tier on the archived exe): the run starts, HQ drops a
+	// laser on a tower, the tower collapses, then the game quits with one DCSMOKE line the gate checks.
+	FTimerHandle Strike, Verdict;
+	GetWorldTimerManager().SetTimer(Strike, FTimerDelegate::CreateWeakLambda(this, [this]
+	{
+		const FDCStratagemDef* Def = UDCTuning::Get().FindStratagem(TEXT("OrbitalLaser"));
+		for (ADCBuilding* B : TActorRange<ADCBuilding>(GetWorld()))
+		{
+			if (Def && !B->IsCollapsed())
+			{
+				CallStrike(*Def, B->GetActorLocation(), nullptr);
+				break;
+			}
+		}
+	}), 2.f, false);
+	GetWorldTimerManager().SetTimer(Verdict, FTimerDelegate::CreateWeakLambda(this, [this]
+	{
+		const ADCGameState* GS = GetGameState<ADCGameState>();
+		int32 Towers = 0;
+		for (ADCBuilding* B : TActorRange<ADCBuilding>(GetWorld()))
+		{
+			++Towers;
+		}
+		const bool bPass = GS && GS->Phase == EDCRunPhase::Sector && Towers > 0 && GS->Blasts.Num() > 0 && GS->Collapses.Num() > 0 && Players().Num() > 0;
+		UE_LOG(LogTemp, Display, TEXT("DCSMOKE %s phase=%d towers=%d blasts=%d collapses=%d players=%d"), bPass ? TEXT("PASS") : TEXT("FAIL"),
+			GS ? static_cast<int32>(GS->Phase) : -1, Towers, GS ? GS->Blasts.Num() : 0, GS ? GS->Collapses.Num() : 0, Players().Num());
+		FGenericPlatformMisc::RequestExit(false);
+	}), 9.f, false);
 }
 
 TArray<ADCPlayerState*> ADCGameMode::Players() const
@@ -259,6 +296,8 @@ void ADCGameMode::EnterSector(float Now)
 	BuildCity(GS->SectorIndex);
 
 	SectorStartTime = Now;
+	LastPackTime = -1e6f;
+	LastDownTime = -1e6f;
 	const FDCSectorDef* Sector = T.Sectors.IsValidIndex(GS->SectorIndex) ? &T.Sectors[GS->SectorIndex] : nullptr;
 	float Duration = Sector ? Sector->DurationSeconds : 240.f;
 	FParse::Value(FCommandLine::Get(), TEXT("dcsectorseconds="), Duration); // short sectors for scripted test runs
@@ -292,15 +331,25 @@ void ADCGameMode::TickSectorPhase(float Now)
 {
 	// Evidence runs (-dcdownhost=S): the host player is knocked down S seconds into the first sector, so a
 	// teammate's revive can be recorded. Never active otherwise.
-	float DownAt = 0.f;
-	if (!bScriptedDownDone && FParse::Value(FCommandLine::Get(), TEXT("dcdownhost="), DownAt) && Now >= SectorStartTime + DownAt)
+	// -dcdownall=S knocks every player down instead (a co-op wipe: the run fails and the reel still plays).
+	static const TPair<const TCHAR*, int32> DownSwitches[] = {{TEXT("dcdownhost="), 1}, {TEXT("dcdownall="), MAX_int32}};
+	for (const TPair<const TCHAR*, int32>& Switch : DownSwitches)
 	{
+		float DownAt = 0.f;
+		if (bScriptedDownDone || !FParse::Value(FCommandLine::Get(), Switch.Key, DownAt) || Now < SectorStartTime + DownAt)
+		{
+			continue;
+		}
 		bScriptedDownDone = true;
 		const TArray<ADCPlayerState*> All = Players();
-		if (ADCCharacter* Host = All.Num() > 0 ? All[0]->GetPawn<ADCCharacter>() : nullptr)
+		for (int32 i = 0; i < All.Num() && i < Switch.Value; ++i)
 		{
-			Host->HostApplyHurt(10000.f, Host->GetActorLocation() + FVector(500, 0, 0));
+			if (ADCCharacter* C = All[i]->GetPawn<ADCCharacter>())
+			{
+				C->HostApplyHurt(10000.f, C->GetActorLocation() + FVector(500, 0, 0));
+			}
 		}
+		UE_LOG(LogTemp, Display, TEXT("DCDOWN scripted %s players knocked down"), Switch.Value == 1 ? TEXT("host") : TEXT("all"));
 	}
 	CheckWipe();
 	if (GetGameState<ADCGameState>()->Phase != EDCRunPhase::Sector)
@@ -308,6 +357,7 @@ void ADCGameMode::TickSectorPhase(float Now)
 		return;
 	}
 	TickWaves(Now);
+	TickPressure(Now);
 	TickPendingCollapses(Now);
 	TickScoop(Now);
 	TickRogueStrikes(Now);
@@ -382,6 +432,80 @@ void ADCGameMode::TickWaves(float Now)
 		++Alive;
 		WaveNextTime[W] = Now + Wave.Interval;
 	}
+}
+
+void ADCGameMode::TickPressure(float Now)
+{
+	const ADCGameState* GS = GetGameState<ADCGameState>();
+	const UDCTuning& T = UDCTuning::Get();
+	if (!T.Sectors.IsValidIndex(GS->SectorIndex) || CityPlan.StreetPoints.Num() == 0)
+	{
+		return;
+	}
+	const FDCSectorDef& Sector = T.Sectors[GS->SectorIndex];
+	const FDCEnemyDef* Def = T.FindEnemy(Sector.Pressure.EnemyId);
+	if (!Def)
+	{
+		return;
+	}
+	FDCPressureInputs In;
+	In.SectorElapsed = Now - SectorStartTime;
+	In.SectorDuration = GS->SectorEndTime - SectorStartTime; // the real length (evidence runs shorten it)
+	In.PhotoPoints = GS->SectorPhotoPoints;
+	In.QuotaPoints = Sector.QuotaPoints;
+	In.SinceDown = Now - LastDownTime;
+	In.SinceLastPack = Now - LastPackTime;
+	for (const FDCCollapseRecord& C : GS->Collapses)
+	{
+		In.SinceCollapse = C.Time <= Now ? FMath::Min(In.SinceCollapse, Now - C.Time) : In.SinceCollapse;
+	}
+	for (ADCEnemy* E : TActorRange<ADCEnemy>(GetWorld()))
+	{
+		In.Alive += E->IsAlive() && E->GetKind() == Def->Id ? 1 : 0;
+	}
+	TArray<ADCCharacter*> Standing;
+	for (ADCPlayerState* PS : Players())
+	{
+		ADCCharacter* C = PS->GetPawn<ADCCharacter>();
+		if (C && !C->IsDowned())
+		{
+			Standing.Add(C);
+		}
+	}
+	In.PlayersStanding = Standing.Num();
+	const FDCPressureDecision D = DCPressureRules::Decide(In, Sector.Pressure);
+	if (D.PackSize <= 0)
+	{
+		return;
+	}
+	// A pack lands on a street point in a ring around one standing player, then hunts.
+	const FVector Near = Standing[SectorRng.RandRange(0, Standing.Num() - 1)]->GetActorLocation();
+	TArray<FVector> Ring;
+	for (const FVector& P : CityPlan.StreetPoints)
+	{
+		const float Dist = FVector::Dist2D(P, Near);
+		if (Dist >= Sector.Pressure.RingMinCm && Dist <= Sector.Pressure.RingMaxCm)
+		{
+			Ring.Add(P);
+		}
+	}
+	const TArray<FVector>& Pool = Ring.Num() > 0 ? Ring : CityPlan.StreetPoints;
+	const FVector Centre = Pool[SectorRng.RandRange(0, Pool.Num() - 1)];
+	for (int32 i = 0; i < D.PackSize; ++i)
+	{
+		const FVector Where = Centre + FVector(SectorRng.FRandRange(-400, 400), SectorRng.FRandRange(-400, 400), Def->HoverHeight);
+		const FTransform Xf(FRotator(0, SectorRng.FRandRange(0, 360), 0), Where);
+		// Never inside a tower: a spot that would collide is nudged clear or skipped.
+		ADCEnemy* E = GetWorld()->SpawnActorDeferred<ADCEnemy>(ADCEnemy::StaticClass(), Xf, nullptr, nullptr, ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButDontSpawnIfColliding);
+		if (E)
+		{
+			E->InitKind(Def->Id);
+			E->FinishSpawning(Xf);
+		}
+	}
+	LastPackTime = Now;
+	UE_LOG(LogTemp, Display, TEXT("DCPACK sector=%d t=%.0f pack=%d alive=%d target=%d lag=%.2f photo=%d/%d"), GS->SectorIndex + 1, In.SectorElapsed, D.PackSize, In.Alive,
+		D.TargetAlive, D.Lag, In.PhotoPoints, In.QuotaPoints);
 }
 
 void ADCGameMode::TickScoop(float Now)
@@ -634,6 +758,7 @@ void ADCGameMode::TickPendingCollapses(float Now)
 
 void ADCGameMode::OnPlayerDowned(ADCCharacter* Player)
 {
+	LastDownTime = GetGameState<ADCGameState>()->Now(); // pressure relief: no pack right after a down
 	CheckWipe();
 }
 
@@ -654,6 +779,7 @@ void ADCGameMode::CheckWipe()
 		}
 	}
 	// Everyone is down: the run fails, but the reel still plays (R12).
+	UE_LOG(LogTemp, Display, TEXT("DCWIPE all %d players down in sector %d: run failed, rolling the reel"), Players().Num(), GS->SectorIndex + 1);
 	GS->bRunFailed = true;
 	ClearCombat();
 	EnterPhase(EDCRunPhase::Reel);

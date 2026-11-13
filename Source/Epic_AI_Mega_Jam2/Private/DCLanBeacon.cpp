@@ -74,6 +74,12 @@ void UDCLanBeacon::StartListening()
 	if (!Socket->Bind(*Any))
 	{
 		UE_LOG(LogTemp, Warning, TEXT("DCLanBeacon: cannot bind port %d; LAN list disabled (IP join still works)"), UDCTuning::Get().Run.LanBeaconPort);
+		// No socket, no ticker; stay marked as listening so the menu does not retry the bind every frame.
+		Socket->Close();
+		Sockets->DestroySocket(Socket);
+		Socket = nullptr;
+		bListening = true;
+		return;
 	}
 	bAnnouncing = false;
 	bListening = true;

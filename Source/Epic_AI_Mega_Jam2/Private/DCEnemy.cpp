@@ -345,11 +345,33 @@ void ADCEnemy::SteerTowards(const FVector& Goal, float Speed, float DeltaSeconds
 	const FVector Step = To.GetClampedToMaxSize(Speed * DeltaSeconds);
 	FHitResult Hit;
 	SetActorLocation(Here + Step, true, &Hit);
-	if (Hit.bBlockingHit && !Cast<APawn>(Hit.GetActor()))
+	if (Hit.bStartPenetrating)
 	{
-		// Blocked by a tower: slide along it and go up and over.
+		// Started inside geometry (rubble landed on it, or a tight spawn): rise out without sweeping.
+		SetActorLocation(Here + FVector(Step.X, Step.Y, Speed * DeltaSeconds * 2.f), false);
+	}
+	else if (Hit.bBlockingHit && Cast<APawn>(Hit.GetActor()))
+	{
+		// Blocked by a packmate (or a player): slide round it. Without this a tight pack deadlocked for good.
 		const FVector Slide = FVector::VectorPlaneProject(Step, Hit.ImpactNormal.GetSafeNormal2D());
-		SetActorLocation(GetActorLocation() + Slide + FVector(0, 0, Speed * DeltaSeconds), true);
+		SetActorLocation(GetActorLocation() + Slide, true);
+	}
+	else if (Hit.bBlockingHit)
+	{
+		// Blocked by a tower: the first escape that moves wins - slide along it and climb, climb straight up,
+		// or back off the wall and climb (inside corners and window ledges block the first two).
+		const float Up = FMath::Max(Speed * DeltaSeconds, 2.f);
+		const FVector Out = Hit.ImpactNormal.GetSafeNormal2D() * Up;
+		const FVector Escapes[] = {FVector::VectorPlaneProject(Step, Hit.ImpactNormal.GetSafeNormal2D()) + FVector(0, 0, Up), FVector(0, 0, Up), Out + FVector(0, 0, Up), Out * 2.f};
+		for (const FVector& Try : Escapes)
+		{
+			const FVector From = GetActorLocation();
+			SetActorLocation(From + Try, true);
+			if (!GetActorLocation().Equals(From, 0.1f))
+			{
+				break;
+			}
+		}
 		ClimbUntil = GetWorld()->GetTimeSeconds() + 0.8f;
 	}
 	if (!Step.IsNearlyZero())
@@ -402,9 +424,17 @@ void ADCEnemy::Tick(float DeltaSeconds)
 		AddActorWorldRotation(FRotator(0, 400.f * DeltaSeconds, 0));
 		return;
 	}
+	const FVector Before = GetActorLocation();
 	if (const FBehaviour* Behaviour = Behaviours().Find(Def->Behaviour))
 	{
 		(*Behaviour)(*this, *Def, DeltaSeconds, GS ? GS->Now() : GetWorld()->GetTimeSeconds());
+	}
+	// Evidence trace (-dcenemytrace): every 5 s, where each enemy is and whether it moved.
+	if (FParse::Param(FCommandLine::Get(), TEXT("dcenemytrace")) && GetWorld()->GetTimeSeconds() >= NextTraceTime)
+	{
+		NextTraceTime = GetWorld()->GetTimeSeconds() + 5.f;
+		UE_LOG(LogTemp, Display, TEXT("DCTRACE %s %s at %s moved=%.1f dt=%.3f rushing=%d"), *GetName(), *Def->Id.ToString(), *GetActorLocation().ToCompactString(),
+			FVector::Dist(Before, GetActorLocation()), DeltaSeconds, bRushing ? 1 : 0);
 	}
 }
 

@@ -7,6 +7,7 @@
 #include "InputCoreTypes.h"
 #include "DCTypes.h"
 #include "Rules/DCPhotoRules.h"
+#include "Rules/DCPressureRules.h"
 #include "DCTuning.generated.h"
 
 USTRUCT(BlueprintType)
@@ -252,6 +253,8 @@ struct FDCSectorDef
 	UPROPERTY(EditAnywhere, Config, Category = "Sector") int32 MaxAlive = 24;
 	/** HQ propaganda quota (R6): photo score the crew must file this sector, or HQ withholds the draft. */
 	UPROPERTY(EditAnywhere, Config, Category = "Sector") int32 QuotaPoints = 1500;
+	/** Swarm packs follow the crew's quota lag (Rules/DCPressureRules); Waves keep the special units. */
+	UPROPERTY(EditAnywhere, Config, Category = "Sector") FDCPressureTuning Pressure;
 };
 
 /** Soft references to the few binary assets the game uses; each has an engine fallback. */
@@ -275,6 +278,7 @@ struct FDCAssetTuning
 	UPROPERTY(EditAnywhere, Config, Category = "Assets") TMap<EDCSlot, FSoftObjectPath> SlotDrawAnims = {
 		{EDCSlot::Rifle, FSoftObjectPath(TEXT("/Game/Characters/Mannequins/Anims/Rifle/MM_Rifle_Equip.MM_Rifle_Equip"))},
 		{EDCSlot::Camera, FSoftObjectPath(TEXT("/Game/Characters/Mannequins/Anims/Rifle/MM_Rifle_Reload.MM_Rifle_Reload"))},
+		{EDCSlot::Stratagem, FSoftObjectPath(TEXT("/Game/Characters/Mannequins/Anims/Unarmed/Attack/MM_Attack_01.MM_Attack_01"))},
 	};
 	UPROPERTY(EditAnywhere, Config, Category = "Assets") FName DrawSlot = TEXT("DefaultSlot");
 	UPROPERTY(EditAnywhere, Config, Category = "Assets") FName HandSocket = TEXT("hand_r");

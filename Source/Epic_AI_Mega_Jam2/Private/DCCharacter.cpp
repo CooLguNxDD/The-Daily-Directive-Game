@@ -529,15 +529,40 @@ void ADCCharacter::OnRep_Slot()
 	const FSoftObjectPath* SlotAnim = T.Assets.SlotDrawAnims.Find(Slot);
 	UAnimSequence* Equip = Cast<UAnimSequence>((SlotAnim ? *SlotAnim : T.Assets.DrawAnim).TryLoad());
 	UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance();
-	if (Equip && AnimInstance && HasActorBegunPlay() && !bDowned)
+	// Once per change: the server's echo of a slot the owner already drew does not restart the motion.
+	if (Equip && AnimInstance && HasActorBegunPlay() && !bDowned && DrawnSlot != Slot)
 	{
+		DrawnSlot = Slot;
 		const float PlayRate = Equip->GetPlayLength() / FMath::Max(T.Camera.DrawSeconds, 0.05f);
 		AnimInstance->PlaySlotAnimationAsDynamicMontage(Equip, T.Assets.DrawSlot, 0.05f, 0.1f, PlayRate);
 	}
 }
 
+void ADCCharacter::ApplyPhotoLook(const UWorld* World, FPostProcessSettings& PhotoLook, bool bSpotlit)
+{
+	// The photo is exposed for the fire, not the flash. One look for live shots and second takes.
+	const FDCCameraTuning& C = UDCTuning::Get().Camera;
+	PhotoLook.bOverride_BloomIntensity = true;
+	PhotoLook.bOverride_AutoExposureBias = true;
+	const ADCGameState* PhotoGS = World ? World->GetGameState<ADCGameState>() : nullptr;
+	const ADCEnvironment* Env = PhotoGS ? PhotoGS->GetEnvironment() : nullptr;
+	PhotoLook.BloomIntensity = Env ? Env->GetPhotoBloom(C.PhotoBloomFraction) : UDCTuning::Get().Look.BaseBloom;
+	// Stop down while the blast is still blinding: the frame keeps the fire's colour and the debris edges.
+	PhotoLook.AutoExposureBias = UDCTuning::Get().Look.ExposureBias + C.PhotoExposureBias - (Env ? Env->GetFlashAlpha() * C.PhotoFlashStopDown : 0.f);
+	if (bSpotlit)
+	{
+		// A spotlight in the lens blows the frame out: the photo shows it, not just the score.
+		PhotoLook.AutoExposureBias += C.SpotlitPhotoStops;
+		PhotoLook.BloomIntensity += C.SpotlitPhotoBloom;
+	}
+}
+
 void ADCCharacter::ServerSetSlot_Implementation(EDCSlot NewSlot)
 {
+	if (IsLocallyControlled() && Slot == NewSlot)
+	{
+		return; // listen-server host: SelectSlot already applied it locally; don't restart the draw
+	}
 	Slot = NewSlot;
 	bCameraRaised = false;
 	DrawEndTime = Now() + UDCTuning::Get().Camera.DrawSeconds * 0.8f;
@@ -780,21 +805,7 @@ void ADCCharacter::TakePhoto()
 	UTextureRenderTarget2D* Photo = UKismetRenderingLibrary::CreateRenderTarget2D(this, C.PhotoWidth, C.PhotoHeight, RTF_RGBA8);
 	Capture->TextureTarget = Photo;
 	Capture->FOVAngle = LensFOV();
-	// The photo is exposed for the fire, not the flash.
-	FPostProcessSettings& PhotoLook = Capture->PostProcessSettings;
-	PhotoLook.bOverride_BloomIntensity = true;
-	PhotoLook.bOverride_AutoExposureBias = true;
-	const ADCGameState* PhotoGS = GetWorld()->GetGameState<ADCGameState>();
-	const ADCEnvironment* Env = PhotoGS ? PhotoGS->GetEnvironment() : nullptr;
-	PhotoLook.BloomIntensity = Env ? Env->GetPhotoBloom(C.PhotoBloomFraction) : UDCTuning::Get().Look.BaseBloom;
-	// Stop down while the blast is still blinding: the frame keeps the fire's colour and the debris edges.
-	PhotoLook.AutoExposureBias = UDCTuning::Get().Look.ExposureBias + C.PhotoExposureBias - (Env ? Env->GetFlashAlpha() * C.PhotoFlashStopDown : 0.f);
-	if (IsSpotlit())
-	{
-		// A spotlight in the lens blows the frame out: the photo shows it, not just the score.
-		PhotoLook.AutoExposureBias += C.SpotlitPhotoStops;
-		PhotoLook.BloomIntensity += C.SpotlitPhotoBloom;
-	}
+	ApplyPhotoLook(GetWorld(), Capture->PostProcessSettings, IsSpotlit());
 	Capture->PostProcessBlendWeight = 1.f;
 	Capture->CaptureScene();
 

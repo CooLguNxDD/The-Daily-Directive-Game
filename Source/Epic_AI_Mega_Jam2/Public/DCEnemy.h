@@ -52,6 +52,7 @@ public:
 	bool bRushing = false;
 	/** Local clock until which steering keeps climbing after a wall hit (host). */
 	float ClimbUntil = 0.f;
+	float NextTraceTime = 0.f;
 	UPROPERTY(Replicated) float StunnedUntil = 0.f;
 
 	UPROPERTY(VisibleAnywhere) TObjectPtr<USphereComponent> Body;

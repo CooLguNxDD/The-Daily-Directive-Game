@@ -243,6 +243,7 @@ void ADCDemoPilot::AddCycle(const FString& C)
 		return !PS || !GS || PS->CooldownReadyTime(TEXT("OrbitalLaser")) <= GS->Now();
 	}, 20.f);
 	Add(0.f, [this] { Tap(TEXT("Slot2")); return true; });
+	Add(0.2f, [this, C] { Shot(C + TEXT("_draw_stratagem")); return true; });
 	FString WantedStratagem;
 	if (!C.StartsWith(TEXT("s0")) && FParse::Value(FCommandLine::Get(), TEXT("dcstratagem="), WantedStratagem))
 	{
@@ -376,8 +377,83 @@ void ADCDemoPilot::AddWalkerWatch()
 	Add(0.4f, [this] { Shot(TEXT("walker_topple_stamp")); LogPhoto(); Release(TEXT("Aim")); return true; });
 }
 
+void ADCDemoPilot::AddStratagemOnSwarm(const FString& S)
+{
+	// -dcstratagem=Id (sectors 2-3): drop the drafted stratagem on the swarm, then watch it through the viewfinder
+	// (Decoy: the swarm mobs the beacon; Singularity: the swarm is dragged in). Frames every second.
+	FString Wanted;
+	if (S == TEXT("s0") || !FParse::Value(FCommandLine::Get(), TEXT("dcstratagem="), Wanted))
+	{
+		return;
+	}
+	auto NearestEnemy = [this]() -> ADCEnemy*
+	{
+		const APawn* Me = GetWorld()->GetFirstPlayerController() ? GetWorld()->GetFirstPlayerController()->GetPawn() : nullptr;
+		ADCEnemy* Best = nullptr;
+		float BestD = 1e9f;
+		for (ADCEnemy* E : TActorRange<ADCEnemy>(GetWorld()))
+		{
+			const float D = Me && E->IsAlive() && !E->IsWalker() ? FVector::Dist(E->GetActorLocation(), Me->GetActorLocation()) : 1e9f;
+			Best = D < BestD ? E : Best;
+			BestD = FMath::Min(BestD, D);
+		}
+		return Best;
+	};
+	Add(0.f, [this, Wanted]
+	{
+		const APlayerController* PC = GetWorld()->GetFirstPlayerController();
+		const ADCPlayerState* PS = PC ? PC->GetPlayerState<ADCPlayerState>() : nullptr;
+		const ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>();
+		return !PS || !GS || PS->CooldownReadyTime(FName(*Wanted)) <= GS->Now();
+	}, 35.f);
+	Add(0.f, [NearestEnemy] { return NearestEnemy() != nullptr; }, 30.f);
+	Add(0.f, [this] { Tap(TEXT("Slot2")); return true; });
+	for (int32 i = 0; i < 6; ++i)
+	{
+		Add(0.35f, [this, Wanted]
+		{
+			const APlayerController* PC = GetWorld()->GetFirstPlayerController();
+			const ADCCharacter* Me = PC ? Cast<ADCCharacter>(PC->GetPawn()) : nullptr;
+			if (Me && Me->GetSelectedStratagem() != FName(*Wanted))
+			{
+				Tap(TEXT("Cycle"));
+			}
+			return true;
+		});
+	}
+	Add(0.3f, [this, NearestEnemy]
+	{
+		const APawn* Me = GetWorld()->GetFirstPlayerController() ? GetWorld()->GetFirstPlayerController()->GetPawn() : nullptr;
+		if (ADCEnemy* E = NearestEnemy())
+		{
+			// 20 m toward the swarm, on the street at my feet' height, so the crowd gathers in front of the lens.
+			const FVector From = Me ? Me->GetActorLocation() : E->GetActorLocation();
+			const FVector Dir = (E->GetActorLocation() - From).GetSafeNormal2D();
+			AimAt(From + Dir * 2000.f - FVector(0, 0, 90.f));
+		}
+		return true;
+	});
+	Add(0.3f, [this, S] { Tap(TEXT("Fire")); Shot(S + TEXT("_crowd_call")); return true; });
+	Add(0.5f, [this] { Tap(TEXT("Slot3")); return true; });
+	Add(0.6f, [this] { Press(TEXT("Aim")); return true; });
+	for (int32 i = 0; i < 6; ++i)
+	{
+		Add(i == 0 ? 0.2f : 1.f, [this, S, i]
+		{
+			for (ADCOrbitalStrike* Strike : TActorRange<ADCOrbitalStrike>(GetWorld()))
+			{
+				AimAt(Strike->GetActorLocation() + FVector(0, 0, 150.f));
+			}
+			Shot(FString::Printf(TEXT("%s_crowd_%d"), *S, i));
+			return true;
+		});
+	}
+	Add(0.2f, [this] { Release(TEXT("Aim")); Tap(TEXT("Slot1")); return true; });
+}
+
 void ADCDemoPilot::AddEnemyFight(const FString& S)
 {
+	AddStratagemOnSwarm(S);
 	// Wait for an enemy, then hold the rifle on it: frames of the enemy, the tracer and the hit marker.
 	Add(0.f, [this] { Tap(TEXT("Slot1")); return true; });
 	Add(0.6f, [this]
@@ -539,6 +615,20 @@ void ADCDemoPilot::AddRifleOnly()
 			}
 			const int32 SectorIdx = GS ? GS->SectorIndex : -1;
 			const int32 Quota = UDCTuning::Get().Sectors.IsValidIndex(SectorIdx) ? UDCTuning::Get().Sectors[SectorIdx].QuotaPoints : 0;
+			// The nearest swarmer: where it is relative to me (a stuck pack shows here).
+			const ADCEnemy* NearSwarmer = nullptr;
+			float NearSwarmerD = 1e9f;
+			for (ADCEnemy* E : TActorRange<ADCEnemy>(GetWorld()))
+			{
+				const float D = Me && E->IsAlive() && E->GetKind() == TEXT("Swarmer") ? FVector::Dist2D(E->GetActorLocation(), Me->GetActorLocation()) : 1e9f;
+				NearSwarmer = D < NearSwarmerD ? E : NearSwarmer;
+				NearSwarmerD = FMath::Min(NearSwarmerD, D);
+			}
+			if (NearSwarmer && Me)
+			{
+				UE_LOG(LogDCDemo, Display, TEXT("DEMO rifle-only swarmer d2d=%.0fm dz=%.0fm loc=%s"), NearSwarmerD / 100.f,
+					(NearSwarmer->GetActorLocation().Z - Me->GetActorLocation().Z) / 100.f, *NearSwarmer->GetActorLocation().ToCompactString());
+			}
 			UE_LOG(LogDCDemo, Display, TEXT("DEMO rifle-only t=%ds phase=%d health=%.0f ammo=%d downed=%d enemies=%d nearest=%.0fm quota=%d/%d failed=%d"), i * 15,
 				GS ? static_cast<int32>(GS->Phase) : -1, Me ? Me->GetHealth() : -1.f, Me ? Me->GetAmmo() : -1, Me && Me->IsDowned() ? 1 : 0, Alive, Nearest / 100.f,
 				GS ? GS->SectorPhotoPoints : 0, Quota, GS && GS->bRunFailed ? 1 : 0);

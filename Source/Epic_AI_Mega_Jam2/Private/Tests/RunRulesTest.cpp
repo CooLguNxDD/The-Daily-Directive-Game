@@ -6,6 +6,7 @@
 #include "Misc/AutomationTest.h"
 #include "Rules/DCPhotoRules.h"
 #include "Rules/DCRunRules.h"
+#include "Rules/DCPressureRules.h"
 
 #if WITH_DEV_AUTOMATION_TESTS
 
@@ -128,6 +129,42 @@ bool FDCLanPacketTest::RunTest(const FString&)
 	TestFalse(TEXT("foreign packet ignored"), UDCLanBeacon::ParsePacket(TEXT("HELLO|1|2|x"), Port, Name, Players));
 	TestFalse(TEXT("bad port ignored"), UDCLanBeacon::ParsePacket(TEXT("DCHOST1|99999|1|x"), Port, Name, Players));
 	TestFalse(TEXT("non-numeric ignored"), UDCLanBeacon::ParsePacket(TEXT("DCHOST1|abc|1|x"), Port, Name, Players));
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDCPressureRulesTest, "Epic_AI_Mega_Jam2.Run.Pressure",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FDCPressureRulesTest::RunTest(const FString&)
+{
+	FDCPressureTuning T;
+	T.StartSeconds = 20.f; T.BaseAlive = 5; T.PerPlayer = 3; T.LagBonus = 8; T.FullLagFraction = 0.35f;
+	T.PackMin = 5; T.PackMax = 8; T.PackGapSeconds = 14.f; T.ReliefSeconds = 5.f; T.HardCap = 18;
+	FDCPressureInputs In;
+	In.SectorDuration = 240.f; In.QuotaPoints = 3000; In.PlayersStanding = 1;
+
+	In.SectorElapsed = 10.f;
+	TestEqual(TEXT("quiet before the first pack"), DCPressureRules::Decide(In, T).PackSize, 0);
+
+	In.SectorElapsed = 120.f; In.PhotoPoints = 1500; // on pace
+	FDCPressureDecision OnPace = DCPressureRules::Decide(In, T);
+	TestEqual(TEXT("no lag on pace"), OnPace.Lag, 0.f);
+	TestEqual(TEXT("on pace: base target"), OnPace.TargetAlive, 5);
+	TestEqual(TEXT("on pace: smallest pack"), OnPace.PackSize, 5);
+
+	In.PhotoPoints = 0; // a rifle-only crew: 1500 behind, more than 35 % of the quota
+	FDCPressureDecision Behind = DCPressureRules::Decide(In, T);
+	TestEqual(TEXT("full lag"), Behind.Lag, 1.f);
+	TestEqual(TEXT("lag raises the target"), Behind.TargetAlive, 13);
+	TestEqual(TEXT("lag raises the pack"), Behind.PackSize, 8);
+
+	In.SinceCollapse = 2.f;
+	TestEqual(TEXT("a collapse buys relief"), DCPressureRules::Decide(In, T).PackSize, 0);
+	In.SinceCollapse = 1e6f; In.SinceDown = 1.f;
+	TestEqual(TEXT("a down buys relief"), DCPressureRules::Decide(In, T).PackSize, 0);
+	In.SinceDown = 1e6f; In.Alive = 11;
+	TestEqual(TEXT("a pack only fills the room left"), DCPressureRules::Decide(In, T).PackSize, 2);
+	In.Alive = 0; In.PlayersStanding = 4; T.LagBonus = 50;
+	TestEqual(TEXT("hard cap holds"), DCPressureRules::Decide(In, T).TargetAlive, 18);
 	return true;
 }
 
