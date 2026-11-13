@@ -453,7 +453,6 @@ void ADCDemoPilot::AddStratagemOnSwarm(const FString& S)
 
 void ADCDemoPilot::AddEnemyFight(const FString& S)
 {
-	AddStratagemOnSwarm(S);
 	// Wait for an enemy, then hold the rifle on it: frames of the enemy, the tracer and the hit marker.
 	Add(0.f, [this] { Tap(TEXT("Slot1")); return true; });
 	Add(0.6f, [this]
@@ -741,6 +740,7 @@ void ADCDemoPilot::BuildScript()
 		{
 			AddWaitPhase(EDCRunPhase::Sector, 120.f);
 			Add(1.5f, [this, S] { UsedTowers.Reset(); Shot(S + TEXT("_start")); return true; });
+			AddStratagemOnSwarm(S); // -dcstratagem only: the drafted stratagem on the first pack, cooldown fresh
 		}
 		int32 Cycles = CyclesPerSector;
 		FParse::Value(FCommandLine::Get(), TEXT("dccycles="), Cycles); // more strike-and-snap cycles per sector

@@ -215,11 +215,12 @@ void ADCHUD::DrawViewfinder(ADCCharacter& Me)
 	const float Bar = FMath::Max(0.f, (H - FrameH) * 0.5f);
 	Box(0, 0, W, Bar, FLinearColor::Black);
 	Box(0, H - Bar, W, Bar, FLinearColor::Black);
-	const float M = Sx(60.f), L = Sx(70.f), T = 4.f;
+	// Brackets sit inside the status widgets (points, film top; health, ammo bottom), not over them.
+	const float M = Sx(60.f), MY = Sx(120.f), L = Sx(70.f), T = 4.f;
 	for (int32 Corner = 0; Corner < 4; ++Corner)
 	{
 		const float X = (Corner % 2) ? W - M : M;
-		const float Y = (Corner / 2) ? H - Bar - M : Bar + M;
+		const float Y = (Corner / 2) ? H - Bar - MY : Bar + MY;
 		const float Dx = (Corner % 2) ? -L : L;
 		const float Dy = (Corner / 2) ? -L : L;
 		DrawLine(X, Y, X + Dx, Y, Line, T);
@@ -267,7 +268,7 @@ void ADCHUD::DrawViewfinder(ADCCharacter& Me)
 		Box(W * 0.5f - Sx(100.f), H - Bar - M - Sx(20.f), Sx(200.f) * U, Sx(6.f), FLinearColor::White);
 		Text(TEXT("WINDING"), W * 0.5f, H - Bar - M - Sx(50.f), FLinearColor(1, 1, 1, 0.7f), 0.6f, true);
 	}
-	Text(TEXT("LMB  SNAP"), W * 0.5f, Bar + M - Sx(10.f), FLinearColor(1, 1, 1, 0.7f), 0.6f, true);
+	Text(TEXT("LMB  SNAP"), W * 0.5f, Bar + MY - Sx(10.f), FLinearColor(1, 1, 1, 0.7f), 0.6f, true); // under the timer and quota bar
 }
 
 void ADCHUD::DrawStatus(ADCGameState& GS, ADCCharacter& Me)
