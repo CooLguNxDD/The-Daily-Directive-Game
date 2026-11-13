@@ -357,6 +357,12 @@ void ADCGameMode::TickScoop(float Now)
 		return;
 	}
 	Scoop.Index = DCRunRules::PickScoop(SectorRng, T.Scoops.Num(), LastScoop);
+	FString Forced;
+	if (FParse::Value(FCommandLine::Get(), TEXT("dcscoop="), Forced)) // evidence runs: force one template
+	{
+		const int32 ForcedIndex = T.Scoops.IndexOfByPredicate([&Forced](const FDCScoopDef& D) { return D.Id == FName(*Forced); });
+		Scoop.Index = ForcedIndex != INDEX_NONE ? ForcedIndex : Scoop.Index;
+	}
 	LastScoop = Scoop.Index;
 	Scoop.bDone = false;
 	Scoop.CompletedBy.Reset();

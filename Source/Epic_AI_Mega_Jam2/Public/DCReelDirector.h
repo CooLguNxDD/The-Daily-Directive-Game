@@ -43,6 +43,7 @@ private:
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UCameraComponent> Camera;
 	UPROPERTY(VisibleAnywhere) TObjectPtr<USkeletalMeshComponent> Puppet;
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UStaticMeshComponent> PuppetCamera;
+	UPROPERTY(VisibleAnywhere) TObjectPtr<UStaticMeshComponent> PuppetFlash;
 	UPROPERTY() TArray<TObjectPtr<AActor>> Staged;
 	UPROPERTY() TObjectPtr<UAnimSequence> RunAnim;
 	UPROPERTY() TObjectPtr<UAnimSequence> IdleAnim;

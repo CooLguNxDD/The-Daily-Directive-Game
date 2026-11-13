@@ -74,6 +74,9 @@ ADCReelDirector::ADCReelDirector()
 	PuppetCamera = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("PuppetCamera"));
 	PuppetCamera->SetupAttachment(Puppet);
 	PuppetCamera->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	PuppetFlash = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("PuppetFlash"));
+	PuppetFlash->SetupAttachment(PuppetCamera);
+	PuppetFlash->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 }
 
 void ADCReelDirector::BeginPlay()
@@ -86,10 +89,18 @@ void ADCReelDirector::BeginPlay()
 	}
 	RunAnim = Cast<UAnimSequence>(T.Assets.ReelRunAnim.TryLoad());
 	IdleAnim = Cast<UAnimSequence>(T.Assets.ReelIdleAnim.TryLoad());
-	PuppetCamera->AttachToComponent(Puppet, FAttachmentTransformRules::SnapToTargetNotIncludingScale, T.Assets.HandSocket);
+	// The stand-in frames with the camera at its eye: a boxy press camera in front of the face reads as
+	// "taking the shot" even on the shared aim pose.
+	PuppetCamera->AttachToComponent(Puppet, FAttachmentTransformRules::SnapToTargetNotIncludingScale, T.Assets.HeadSocket);
 	PuppetCamera->SetStaticMesh(DCAssets::Cube());
-	PuppetCamera->SetMaterial(0, DCAssets::MakeFlat(this, FLinearColor(0.9f, 0.85f, 0.75f)));
-	PuppetCamera->SetRelativeScale3D(FVector(0.2f, 0.12f, 0.14f));
+	PuppetCamera->SetMaterial(0, DCAssets::MakeFlat(this, FLinearColor(0.08f, 0.08f, 0.08f)));
+	PuppetCamera->SetRelativeLocation(FVector(0.f, 18.f, 2.f));
+	PuppetCamera->SetRelativeScale3D(FVector(0.28f, 0.16f, 0.2f));
+	PuppetFlash->AttachToComponent(PuppetCamera, FAttachmentTransformRules::KeepRelativeTransform);
+	PuppetFlash->SetStaticMesh(DCAssets::Cube());
+	PuppetFlash->SetMaterial(0, DCAssets::MakeFlat(this, FLinearColor(1.f, 0.95f, 0.8f), 6.f));
+	PuppetFlash->SetRelativeLocation(FVector(0.f, 0.f, 60.f));
+	PuppetFlash->SetRelativeScale3D(FVector(0.5f, 0.6f, 0.4f));
 	Puppet->SetVisibility(false, true);
 	SetPawnsHidden(true);
 	if (APlayerController* PC = GetWorld()->GetFirstPlayerController())
@@ -206,7 +217,7 @@ void ADCReelDirector::TickPuppet(float ClipTime)
 	}
 	const FDCPoseSample Pose = SamplePose(Clip.Poses, ClipTime);
 	Puppet->SetWorldLocationAndRotation(FVector(Pose.Location) - FVector(0, 0, 92.f), FRotator(0.f, Pose.Yaw - 90.f, 0.f));
-	PuppetCamera->SetVisibility(Pose.bCamera);
+	PuppetCamera->SetVisibility(Pose.bCamera, true);
 	const bool bRun = Pose.Speed > RunSpeedThreshold;
 	UAnimSequence* Want = bRun ? RunAnim.Get() : IdleAnim.Get();
 	if (Want && (!bAnimSet || Puppet->GetSingleNodeInstance() == nullptr || bRunning != bRun))
