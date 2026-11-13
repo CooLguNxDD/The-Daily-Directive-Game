@@ -115,9 +115,11 @@ void ADCEnvironment::BeginPlay()
 	Ground->SetWorldScale3D(FVector(Size, Size, 1.f));
 	// Voxel city: the terrain grid carries streets, lots and kerbs from z = 0 down; the slab sinks below it and only
 	// catches anything that falls through a crater.
+	// Voxel city: the slab stays as an invisible floor at z = 0 (the terrain's collision cooks asynchronously, so a pawn
+	// spawned on the first frame must not fall the ground layers' depth); the voxel terrain draws the street.
 	const bool bVoxel = ADCVoxelCity::IsEnabled();
-	const float Below = bVoxel ? UDCVoxelSettings::Get().Tuning.GroundLayers * UDCVoxelSettings::Get().Tuning.TerrainVoxelCm + 20.f : 0.f;
-	Ground->SetWorldLocation(FVector(0.f, 0.f, -50.f - Below));
+	Ground->SetWorldLocation(FVector(0.f, 0.f, -50.f));
+	Ground->SetVisibility(!bVoxel);
 	Ground->SetMaterial(0, DCAssets::MakeFlat(this, Look.Street));
 	if (!bVoxel)
 	{

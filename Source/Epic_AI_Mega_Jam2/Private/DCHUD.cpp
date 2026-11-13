@@ -1,4 +1,6 @@
 #include "DCHUD.h"
+
+#include "Engine/Texture2D.h"
 #include "DCPalette.h"
 
 #include "DCCharacter.h"
@@ -233,7 +235,7 @@ void ADCHUD::DrawViewfinder(ADCCharacter& Me)
 	DrawLine(0, Bar + FrameH / 3, W, Bar + FrameH / 3, Faint, 1.f);
 	DrawLine(0, Bar + 2 * FrameH / 3, W, Bar + 2 * FrameH / 3, Faint, 1.f);
 	Frame(W * 0.5f - Sx(14.f), H * 0.5f - Sx(14.f), Sx(28.f), Sx(28.f), 2.f, Line);
-	Box(W * 0.5f - 2.f, H * 0.5f - 2.f, 4.f, 4.f, Red);
+	Box(W * 0.5f - 2.f, H * 0.5f - 2.f, 4.f, 4.f, Gold);
 
 	// Live floating tags on things worth shooting (R2).
 	const ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>();
@@ -250,9 +252,12 @@ void ADCHUD::DrawViewfinder(ADCCharacter& Me)
 		const FString Label = Upper(Tag.Tag);
 		float Tw = 0.f, Th = 0.f;
 		Canvas->TextSize(BigFont, Label, Tw, Th, 0.7f * TextBoost * UiScale, 0.7f * TextBoost * UiScale);
-		Box(S.X - Tw * 0.5f - 6.f, S.Y - Th - 4.f, Tw + 12.f, Th + 4.f, FLinearColor(Red.R, Red.G, Red.B, 0.85f * Pulse));
-		Text(Label, S.X, S.Y - Th - 3.f, Paper, 0.7f, true);
-		DrawLine(S.X, S.Y, S.X, S.Y + Sx(18.f), Red, 2.f);
+		// Target tags are things the player can use: signal yellow with ink type (red stays for danger, R6).
+		// Never under the timer and quota bar at the top.
+		const float Ty = FMath::Max(S.Y, Sx(120.f) + Th + 4.f);
+		Box(S.X - Tw * 0.5f - 6.f, Ty - Th - 4.f, Tw + 12.f, Th + 4.f, FLinearColor(Gold.R, Gold.G, Gold.B, 0.9f * Pulse));
+		Text(Label, S.X, Ty - Th - 3.f, Ink, 0.7f, true);
+		DrawLine(S.X, Ty, S.X, Ty + Sx(18.f), Gold, 2.f);
 	}
 
 	// Film and wind-on.
@@ -260,7 +265,8 @@ void ADCHUD::DrawViewfinder(ADCCharacter& Me)
 	const int32 Shots = PS ? PS->ShotsLeft : 0;
 	Text(FString::Printf(TEXT("FILM %d"), Shots), W - M - Sx(150.f), H - Bar - M - Sx(50.f), Shots > 3 ? FLinearColor::White : Red, 1.f);
 	const float Zoom = UDCTuning::Get().Move.ThirdPersonFOV / FMath::Max(Me.GetZoomFOV(), 1.f);
-	Text(FString::Printf(TEXT("%.1fx  WHEEL ZOOM"), Zoom), M + Sx(10.f), H - Bar - M - Sx(50.f), FLinearColor::White, 0.7f);
+	// Above the health block (they overlapped at 720p).
+	Text(FString::Printf(TEXT("%.1fx  WHEEL ZOOM"), Zoom), M + Sx(10.f), H - Bar - M - Sx(115.f), FLinearColor::White, 0.7f);
 	const float Wind = Me.GetWindOnLeft();
 	if (Wind > 0.f)
 	{
@@ -299,7 +305,7 @@ void ADCHUD::DrawStatus(ADCGameState& GS, ADCCharacter& Me)
 		const float Q = FMath::Clamp(static_cast<float>(GS.SectorPhotoPoints) / Sector->QuotaPoints, 0.f, 1.f);
 		const float Bw = Sx(360.f), Bx = W * 0.5f - Bw * 0.5f, By = Sx(96.f);
 		Box(Bx, By, Bw, Sx(14.f), Shade);
-		Box(Bx + Sx(2.f), By + Sx(2.f), (Bw - Sx(4.f)) * Q, Sx(10.f), Q >= 1.f ? Gold : Red);
+		Box(Bx + Sx(2.f), By + Sx(2.f), (Bw - Sx(4.f)) * Q, Sx(10.f), Q >= 1.f ? Gold : Paper);
 		Text(FString::Printf(TEXT("HQ QUOTA %s / %s"), *FormatPoints(GS.SectorPhotoPoints), *FormatPoints(Sector->QuotaPoints)), W * 0.5f, By + Sx(14.f), Q >= 1.f ? Gold : FLinearColor::White, 0.5f, true);
 	}
 
@@ -322,8 +328,8 @@ void ADCHUD::DrawStatus(ADCGameState& GS, ADCCharacter& Me)
 	{
 		const bool bActive = static_cast<int32>(Me.GetSlot()) == i;
 		const float X = W * 0.5f - Sx(255.f) + i * Sx(170.f);
-		Box(X, H - Sx(70.f), Sx(160.f), Sx(44.f), bActive ? FLinearColor(Red.R, Red.G, Red.B, 0.9f) : Shade);
-		Text(Names[i], X + Sx(80.f), H - Sx(62.f), bActive ? Paper : FLinearColor(1, 1, 1, 0.6f), 0.75f, true);
+		Box(X, H - Sx(70.f), Sx(160.f), Sx(44.f), bActive ? FLinearColor(Gold.R, Gold.G, Gold.B, 0.95f) : Shade);
+		Text(Names[i], X + Sx(80.f), H - Sx(62.f), bActive ? Ink : FLinearColor(1, 1, 1, 0.6f), 0.75f, true);
 	}
 	if (Me.IsDrawing())
 	{
@@ -366,7 +372,7 @@ void ADCHUD::DrawPhotoCard(UTexture* Image, const FDCPhotoGrade& Grade, float X,
 	{
 		return;
 	}
-	// The stamp slams in: big, then settles.
+	// The stamp slams in big and settles, tilted, in signal-yellow ink with worn grit (R5, R6: score stamps are yellow).
 	const float S = FMath::Lerp(2.4f, 1.f, FMath::Clamp(StampSlam, 0.f, 1.f));
 	const float Cx = X + W * 0.62f, Cy = Y + H * 0.62f;
 	const FString Score = FString::Printf(TEXT("+%s"), *FormatPoints(Grade.Score));
@@ -374,15 +380,74 @@ void ADCHUD::DrawPhotoCard(UTexture* Image, const FDCPhotoGrade& Grade, float X,
 	const FString Timing = FString::Printf(TEXT("%s  %gx"), *Upper(Grade.TimingLabel), FMath::RoundToFloat(Grade.Multiplier * 100.f) / 100.f);
 	float Tw = 0.f, Th = 0.f;
 	Canvas->TextSize(BigFont, Score, Tw, Th, 1.6f * S * TextBoost * UiScale, 1.6f * S * TextBoost * UiScale);
-	Box(Cx - Tw * 0.5f - Sx(10.f), Cy - Sx(8.f), Tw + Sx(20.f), Th * 1.9f + Sx(10.f), FLinearColor(Red.R, Red.G, Red.B, 0.92f));
-	Text(Score, Cx, Cy, Paper, 1.6f * S, true);
-	Text(Timing, Cx, Cy + Th * 1.05f, Gold, 0.8f * S, true);
+	const float Bw = Tw + Sx(30.f), Bh = Th * 1.9f + Sx(14.f);
+	const float Bx = Cx - Bw * 0.5f, By = Cy - Sx(10.f);
+	// Tilt: a per-photo angle from the score, so the same photo always lands the same way.
+	const float Tilt = -7.f + static_cast<float>(Grade.Score % 5);
+	const FVector Pivot(Cx, By + Bh * 0.5f, 0.f);
+	Canvas->Canvas->PushRelativeTransform(FTranslationMatrix(-Pivot) * FRotationMatrix(FRotator(0.f, Tilt, 0.f)) * FTranslationMatrix(Pivot));
+	const FLinearColor InkStamp(Gold.R, Gold.G, Gold.B, 0.95f);
+	Box(Bx, By, Bw, Bh, FLinearColor(Ink.R, Ink.G, Ink.B, 0.3f));
+	Frame(Bx, By, Bw, Bh, Sx(4.f), InkStamp);
+	Frame(Bx + Sx(7.f), By + Sx(7.f), Bw - Sx(14.f), Bh - Sx(14.f), Sx(1.5f), InkStamp);
+	Text(Score, Cx, By + Sx(4.f), InkStamp, 1.6f * S, true);
+	Text(Timing, Cx, By + Sx(4.f) + Th * 1.0f, InkStamp, 0.8f * S, true);
+	if (UTexture2D* Worn = StampGrit())
+	{
+		// Paper-coloured speckle over the ink: the stamp reads as pressed by hand, not drawn by a computer.
+		DrawTexture(Worn, Bx, By, Bw, Bh, 0, 0, Bw / Sx(256.f), Bh / Sx(128.f), FLinearColor(Paper.R, Paper.G, Paper.B, 0.4f), BLEND_Translucent);
+	}
+	Canvas->Canvas->PopTransform();
 	float Ty = Y + Sx(8.f);
 	for (const FName& Category : Grade.Categories)
 	{
 		Text(Upper(Category), X + Sx(10.f), Ty, Grade.bSpotlit && Category == Grade.Categories[0] ? Red : Gold, 0.8f);
 		Ty += Sx(28.f);
 	}
+}
+
+UTexture2D* ADCHUD::StampGrit()
+{
+	if (Grit)
+	{
+		return Grit;
+	}
+	// Speckles and a few worn streaks, alpha only (seeded: the same grit every run).
+	constexpr int32 Gw = 256, Gh = 128;
+	TArray<FColor> Px;
+	Px.SetNumZeroed(Gw * Gh);
+	FRandomStream Rng(0x57A3);
+	for (int32 i = 0; i < 900; ++i)
+	{
+		const int32 X0 = Rng.RandRange(0, Gw - 1), Y0 = Rng.RandRange(0, Gh - 1);
+		const int32 R = Rng.RandRange(0, 2);
+		for (int32 Dy = -R; Dy <= R; ++Dy)
+		{
+			for (int32 Dx = -R; Dx <= R; ++Dx)
+			{
+				Px[((Y0 + Dy + Gh) % Gh) * Gw + (X0 + Dx + Gw) % Gw] = FColor(255, 255, 255, static_cast<uint8>(Rng.RandRange(150, 255)));
+			}
+		}
+	}
+	for (int32 i = 0; i < 14; ++i)
+	{
+		const int32 Y0 = Rng.RandRange(0, Gh - 1), X0 = Rng.RandRange(0, Gw - 1), Len = Rng.RandRange(20, 90);
+		for (int32 k = 0; k < Len; ++k)
+		{
+			Px[((Y0 + k / 12) % Gh) * Gw + (X0 + k) % Gw] = FColor(255, 255, 255, 200);
+		}
+	}
+	Grit = UTexture2D::CreateTransient(Gw, Gh, PF_B8G8R8A8);
+	if (Grit)
+	{
+		void* Mip = Grit->GetPlatformData()->Mips[0].BulkData.Lock(LOCK_READ_WRITE);
+		FMemory::Memcpy(Mip, Px.GetData(), Px.Num() * sizeof(FColor));
+		Grit->GetPlatformData()->Mips[0].BulkData.Unlock();
+		Grit->AddressX = TA_Wrap;
+		Grit->AddressY = TA_Wrap;
+		Grit->UpdateResource();
+	}
+	return Grit;
 }
 
 void ADCHUD::DrawStamp(ADCPlayerController& PC)

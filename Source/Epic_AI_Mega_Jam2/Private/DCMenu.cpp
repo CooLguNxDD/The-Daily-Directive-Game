@@ -32,7 +32,7 @@ namespace DCMenuStyle
 		return SNew(STextBlock).Text(FText::FromString(Text)).Font(Font(Size)).ColorAndOpacity(Color).Justification(ETextJustify::Center).AutoWrapText(false);
 	}
 
-	TSharedRef<SWidget> Button(const FString& Text, TFunction<void()> OnClick, const FLinearColor& Fill = Red)
+	TSharedRef<SWidget> Button(const FString& Text, TFunction<void()> OnClick, const FLinearColor& Fill = Gold)
 	{
 		return SNew(SBox).WidthOverride(420.f).HeightOverride(64.f).Padding(FMargin(0, 6))
 			[
@@ -41,7 +41,7 @@ namespace DCMenuStyle
 				.HAlign(HAlign_Center).VAlign(VAlign_Center)
 				.OnClicked_Lambda([OnClick]() { OnClick(); return FReply::Handled(); })
 				[
-					SNew(STextBlock).Text(FText::FromString(Text)).Font(Font(22)).ColorAndOpacity(Paper)
+					SNew(STextBlock).Text(FText::FromString(Text)).Font(Font(22)).ColorAndOpacity(Fill.Equals(Ink) ? Paper : Ink)
 				]
 			];
 	}

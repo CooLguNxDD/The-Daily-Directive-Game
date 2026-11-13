@@ -71,6 +71,9 @@ private:
 	bool bHaveSpawn = false;
 	double OnboardDoneReal = -1.0;
 
+	/** Ink grit for stamps: a code-made mask of speckles and worn edges, drawn in paper over the stamp ink (R5). */
+	class UTexture2D* StampGrit();
+	UPROPERTY() TObjectPtr<class UTexture2D> Grit;
 	UPROPERTY() TObjectPtr<UFont> BigFont;
 	UPROPERTY() TObjectPtr<UFont> SmallFont;
 };

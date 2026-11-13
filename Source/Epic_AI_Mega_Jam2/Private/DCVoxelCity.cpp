@@ -540,7 +540,7 @@ void ADCVoxelCity::Land(FFalling& F)
 		for (int32 i = 0; i < Tn.LandingDebris; ++i)
 		{
 			FDCDebrisSpawn D;
-			D.Transform = FTransform(FRotator(Rng.FRandRange(0, 360), Rng.FRandRange(0, 360), 0), Where + Rng.VRand() * FVector(600, 600, 200), FVector(S * Rng.FRandRange(0.4f, 1.1f)));
+			D.Transform = FTransform(FRotator(Rng.FRandRange(0, 360), Rng.FRandRange(0, 360), 0), Where + Rng.VRand() * FVector(600, 600, 200), FVector(S * Rng.FRandRange(0.15f, 0.5f)));
 			D.LinearVelocity = Rng.VRand() * FVector(700, 700, 0) + FVector(0, 0, Rng.FRandRange(300, 900));
 			D.AngularVelocityDeg = Rng.VRand() * 300.f;
 			D.Color = F.Color * Rng.FRandRange(0.7f, 1.3f);

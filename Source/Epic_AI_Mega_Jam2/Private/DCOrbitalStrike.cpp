@@ -221,7 +221,9 @@ void ADCOrbitalStrike::TickBlast(float Now, const FDCStratagemDef& Def)
 	const float Scale = Def.FireballScale * FMath::Sqrt(Grow) * (0.6f + 0.4f * Fade);
 	Fireball->SetRelativeScale3D(FVector(Scale));
 	Fireball->SetRelativeLocation(FVector(0, 0, Scale * 35.f + T * 300.f));
-	DCAssets::SetFlat(FireMat, FMath::Lerp(FLinearColor(0.25f, 0.05f, 0.02f), FLinearColor(1.f, 0.85f, 0.6f), Fade * Fade), 2.f + UDCTuning::Get().Look.FireballGlow * Fade * Fade);
+	// Blast white-orange only at the first instant, then orange to ember red: the peak reads as fire, not a white dome.
+	const FLinearColor Hot = FMath::Lerp(FLinearColor(1.f, 0.48f, 0.1f), FLinearColor(1.f, 0.95f, 0.76f), FMath::Clamp(1.f - T / 0.25f, 0.f, 1.f));
+	DCAssets::SetFlat(FireMat, FMath::Lerp(FLinearColor(0.25f, 0.05f, 0.02f), Hot, Fade * Fade), 1.f + UDCTuning::Get().Look.FireballGlow * Fade * Fade * Fade);
 	Fireball->SetVisibility(Fade > 0.02f);
 
 	const float ShockR = Def.BlastRadius * 2.4f * FMath::Clamp(T / 0.6f, 0.f, 1.f) / 100.f;
