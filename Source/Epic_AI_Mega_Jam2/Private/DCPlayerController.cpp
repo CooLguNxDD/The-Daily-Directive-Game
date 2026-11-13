@@ -22,6 +22,7 @@
 #include "Kismet/KismetSystemLibrary.h"
 #include "Modules/ModuleManager.h"
 #include "TextureResource.h"
+#include "UnrealClient.h"
 
 namespace
 {
@@ -113,7 +114,29 @@ void ADCPlayerController::PlayerTick(float DeltaTime)
 		UpdateMenu();
 		UpdateCursor();
 		UpdateReel();
+		UpdateEvidenceShots();
 	}
+}
+
+void ADCPlayerController::UpdateEvidenceShots()
+{
+	float Every = 0.f;
+	FString Dir;
+	if (!FParse::Value(FCommandLine::Get(), TEXT("dcshotevery="), Every) || Every <= 0.f || !FParse::Value(FCommandLine::Get(), TEXT("dcshots="), Dir))
+	{
+		return;
+	}
+	const double Real = GetWorld()->GetRealTimeSeconds();
+	if (Real < NextEvidenceShotReal)
+	{
+		return;
+	}
+	NextEvidenceShotReal = Real + Every;
+	const ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>();
+	const FString File = Dir / FString::Printf(TEXT("%03d_phase%d.png"), EvidenceShotIndex++, GS ? static_cast<int32>(GS->Phase) : -1);
+	FScreenshotRequest::RequestScreenshot(File, true, false);
+	UE_LOG(LogTemp, Display, TEXT("DCSHOT %s net=%d players=%d collapses=%d blasts=%d"), *File, static_cast<int32>(GetNetMode()), GS ? GS->PlayerArray.Num() : 0,
+		GS ? GS->Collapses.Num() : 0, GS ? GS->Blasts.Num() : 0);
 }
 
 void ADCPlayerController::UpdateReel()

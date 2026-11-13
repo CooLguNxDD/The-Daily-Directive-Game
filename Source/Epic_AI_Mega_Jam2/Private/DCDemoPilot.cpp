@@ -225,7 +225,8 @@ void ADCDemoPilot::AddWaitPhase(EDCRunPhase Phase, float Timeout)
 
 void ADCDemoPilot::BuildScript()
 {
-	Add(0.f, [this] { Shot(TEXT("spawn")); return true; });
+	AddWaitPhase(EDCRunPhase::Sector, 240.f); // co-op scripted runs wait in the lobby for the second player
+	Add(0.5f, [this] { Shot(TEXT("spawn")); return true; });
 
 	// Rifle: a short burst at the nearest tower's base.
 	Add(0.5f, [this] { Tower = PickTower(); if (Tower.IsValid()) { AimAt(Tower->GetActorLocation() + FVector(0, 0, 300)); } UsedTowers.Reset(); return true; });

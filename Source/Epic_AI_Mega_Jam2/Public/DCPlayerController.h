@@ -84,6 +84,8 @@ private:
 	void UpdateMenu();
 	void UpdateCursor();
 	void UpdateReel();
+	/** Evidence runs: `-dcshotevery=<seconds> -dcshots=<dir>` saves a frame on this machine every N seconds. */
+	void UpdateEvidenceShots();
 	void PumpSends();
 	void HostReceivedPhoto(int32 PhotoId, const TArray<uint8>& Bytes);
 	void StoreImage(int32 PhotoId, const TArray<uint8>& Bytes);
@@ -108,4 +110,6 @@ private:
 	UPROPERTY() TObjectPtr<class ADCReelDirector> Director;
 	uint8 MenuMode = 255;
 	float Sensitivity = 1.f;
+	double NextEvidenceShotReal = 0.0;
+	int32 EvidenceShotIndex = 0;
 };

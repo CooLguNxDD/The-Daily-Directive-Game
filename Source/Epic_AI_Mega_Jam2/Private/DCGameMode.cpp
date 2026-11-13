@@ -81,7 +81,9 @@ void ADCGameMode::BeginPlay()
 	ADCGameState* GS = GetGameState<ADCGameState>();
 	GS->RunSeed = RequestedSeed != 0 ? RequestedSeed : FMath::RandRange(1000, 999999);
 	BuildCity(0); // the lobby's backdrop is the first sector
-	if (bAutoStart)
+	// Scripted co-op runs (-dcwaitplayers=N) hold the lobby until N players joined.
+	FParse::Value(FCommandLine::Get(), TEXT("dcwaitplayers="), AutoStartPlayers);
+	if (bAutoStart && AutoStartPlayers <= 1)
 	{
 		StartRun();
 	}
@@ -788,6 +790,10 @@ void ADCGameMode::Tick(float DeltaSeconds)
 		NextHeartbeatReal = GetWorld()->GetRealTimeSeconds() + 5.0;
 		UE_LOG(LogTemp, Display, TEXT("DCRUN phase=%d sector=%d now=%.1f end=%.1f dilation=%.3f paused=%d hitstop=%.2f"), static_cast<int32>(GS->Phase), GS->SectorIndex,
 			GS->Now(), GS->SectorEndTime, GetWorldSettings()->TimeDilation, GetWorld()->IsPaused() ? 1 : 0, HitstopEndReal);
+	}
+	if (bAutoStart && GS->Phase == EDCRunPhase::Lobby && GS->PlayerArray.Num() >= AutoStartPlayers)
+	{
+		StartRun();
 	}
 	const FPhaseHandlers* H = PhaseTable().Find(GS->Phase);
 	if (H && H->Tick)
