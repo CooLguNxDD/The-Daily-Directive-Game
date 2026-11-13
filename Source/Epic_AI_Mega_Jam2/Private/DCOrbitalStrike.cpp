@@ -108,7 +108,8 @@ void ADCOrbitalStrike::BeginPlay()
 	Beam->SetRelativeLocation(FVector(0, 0, BeamHeightCm * 0.5f));
 
 	Ring->SetStaticMesh(DCAssets::Cylinder());
-	Ring->SetMaterial(0, DCAssets::MakeFlat(this, BeamColor * 0.35f, 1.5f));
+	// The danger zone in propaganda red (art bible), dim enough to stay red instead of blooming pink.
+	Ring->SetMaterial(0, DCAssets::MakeFlat(this, UDCTuning::Get().Look.Accent, 0.35f));
 	Ring->SetRelativeLocation(FVector(0, 0, 3.f));
 	Ring->SetRelativeScale3D(FVector(Radius * 2.f / 100.f, Radius * 2.f / 100.f, 0.02f));
 
@@ -190,7 +191,7 @@ void ADCOrbitalStrike::TickTelegraph(float Now, const FDCStratagemDef& Def)
 	const float Width = FMath::Lerp(7.f, 0.35f, FMath::Pow(U, 0.7f));
 	const float Pulse = 0.5f + 0.5f * FMath::Sin(Now * FMath::Lerp(6.f, 40.f, U));
 	Beam->SetRelativeScale3D(FVector(Width, Width, BeamHeightCm / 100.f));
-	DCAssets::SetFlat(BeamMat, Def.BeamColor, FMath::Lerp(2.f, 60.f, U * U) * (0.7f + 0.3f * Pulse));
+	DCAssets::SetFlat(BeamMat, Def.BeamColor, FMath::Lerp(1.f, 12.f, U * U) * (0.7f + 0.3f * Pulse)); // red, not blown to magenta
 	Beacon->SetVisibility(Pulse > 0.3f || U > 0.8f);
 
 	if (!bChargePlayed && U > 0.f && Def.TelegraphSeconds - (Now - Start) <= 3.2f)
@@ -268,7 +269,7 @@ void ADCOrbitalStrike::TickBlast(float Now, const FDCStratagemDef& Def)
 
 	const float BeamFade = FMath::Clamp(1.f - T / 0.35f, 0.f, 1.f);
 	Beam->SetRelativeScale3D(FVector(3.f * BeamFade + 0.01f, 3.f * BeamFade + 0.01f, BeamHeightCm / 100.f));
-	DCAssets::SetFlat(BeamMat, FLinearColor::White, 200.f * BeamFade);
+	DCAssets::SetFlat(BeamMat, FMath::Lerp(Def.BeamColor, FLinearColor(1.f, 0.95f, 0.76f), 0.5f), 20.f * BeamFade); // a short white-orange flash, then gone
 	Beam->SetVisibility(BeamFade > 0.f);
 	Light->SetIntensity(UDCTuning::Get().Look.BlastLightIntensity * Fade * Fade);
 }
