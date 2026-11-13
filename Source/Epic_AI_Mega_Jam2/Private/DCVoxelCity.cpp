@@ -292,7 +292,7 @@ FDCVoxelOpResult ADCVoxelCity::ApplyOp(const FDCVoxelOp& Op, bool bAnimate)
 {
 	if (BuiltSector == INDEX_NONE || !OpCtx.Tuning)
 	{
-		FollowGameState(); // the host may call before the first tick built the city
+		SyncBuild(); // build only: following would also apply this very op, and the caller applies it again below
 	}
 	if (BuiltSector == INDEX_NONE || !OpCtx.Tuning)
 	{
