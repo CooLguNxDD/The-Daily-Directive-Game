@@ -67,6 +67,7 @@ private:
 	bool bAutoReviving = false;
 	/** While waiting for the sector to end, the pilot shoots the nearest enemy (rifle, real input). */
 	bool bDefend = false;
+	TSet<TObjectKey<class ADCSupplyPod>> FramedPods;
 	bool bDefendFiring = false;
 	void TickDefend();
 };

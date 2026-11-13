@@ -2,6 +2,7 @@
 
 #include "DCBuilding.h"
 #include "DCEnemy.h"
+#include "DCSupplyPod.h"
 #include "DCCharacter.h"
 #include "DCGameState.h"
 #include "DCInput.h"
@@ -534,6 +535,17 @@ void ADCDemoPilot::Tick(float DeltaSeconds)
 		(bDown ? Press(TEXT("Interact")) : Release(TEXT("Interact")));
 	}
 	TickDefend();
+	// Any supply pod that lands gets framed once (HQ Scoop reward evidence).
+	for (ADCSupplyPod* Pod : TActorRange<ADCSupplyPod>(GetWorld()))
+	{
+		if (!FramedPods.Contains(Pod) && Pod->HasLanded())
+		{
+			FramedPods.Add(Pod);
+			AimAt(Pod->GetActorLocation() + FVector(0, 0, 100.f));
+			Shot(TEXT("supply_pod_landed"));
+			UE_LOG(LogDCDemo, Display, TEXT("DEMO supply pod landed"));
+		}
+	}
 	if (Real < StepReadyReal)
 	{
 		return;
