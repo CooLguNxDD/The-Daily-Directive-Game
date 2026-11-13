@@ -95,6 +95,12 @@ void ADCPlayerController::EndPlay(const EEndPlayReason::Type Reason)
 		GEngine->GameViewport->RemoveViewportWidgetContent(MenuWidget.ToSharedRef());
 	}
 	MenuWidget.Reset();
+	// Leaving the title menu (solo, join, quit): stop listening for LAN games. A host's announcement is the game mode's.
+	UDCLanBeacon* Beacon = GetGameInstance() ? GetGameInstance()->GetSubsystem<UDCLanBeacon>() : nullptr;
+	if (Beacon && Beacon->IsListening())
+	{
+		Beacon->Stop();
+	}
 	Super::EndPlay(Reason);
 }
 

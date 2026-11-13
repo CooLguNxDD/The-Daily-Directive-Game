@@ -29,6 +29,8 @@ struct FDCLocalFeedback
 	float ToastTime = -10.f;
 };
 
+struct FPostProcessSettings;
+
 UCLASS()
 class EPIC_AI_MEGA_JAM2_API ADCCharacter : public ACharacter
 {
@@ -57,6 +59,8 @@ public:
 	float GetZoomFOV() const { return LensFOV(); }
 	/** Viewfinder FOV: the wheel zoom plus lens gear (Fisheye ExtraFOV). */
 	float LensFOV() const;
+	/** Photo exposure (bloom, stop-down while the flash blinds, spotlight blow-out) for any photo capture. */
+	static void ApplyPhotoLook(const UWorld* World, FPostProcessSettings& PhotoLook, bool bSpotlit);
 	float GetWindOnLeft() const;
 	FName GetSelectedStratagem() const { return SelectedStratagem; }
 	bool GetStrikeAim(FVector& Out) const { Out = StrikeAimPoint; return bStrikeAimValid; }
