@@ -2,6 +2,7 @@
 
 #include "DCBuilding.h"
 #include "DCCharacter.h"
+#include "DCDemoPilot.h"
 #include "DCEnemy.h"
 #include "DCGameState.h"
 #include "DCHUD.h"
@@ -37,6 +38,10 @@ void ADCGameMode::BeginPlay()
 	ADCGameState* GS = GetGameState<ADCGameState>();
 	GS->RunSeed = RequestedSeed != 0 ? RequestedSeed : FMath::RandRange(1000, 999999);
 	StartSector(0);
+	if (ADCDemoPilot::IsRequested())
+	{
+		GetWorld()->SpawnActor<ADCDemoPilot>();
+	}
 }
 
 FTransform ADCGameMode::SpawnTransformFor(int32 PlayerIndex) const

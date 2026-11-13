@@ -838,24 +838,24 @@ void ADCCharacter::UpdateRevive(float DeltaSeconds)
 	{
 		return;
 	}
-	float Rate = 0.f;
+	float ReviveRate = 0.f;
 	for (ADCCharacter* Other : TActorRange<ADCCharacter>(GetWorld()))
 	{
 		if (Other != this && !Other->bDowned && Other->bHostReviveHeld && FVector::Dist(Other->GetActorLocation(), GetActorLocation()) < ReviveRangeCm)
 		{
-			Rate = 1.f / TeamReviveSeconds;
+			ReviveRate = 1.f / TeamReviveSeconds;
 		}
 	}
 	const AGameStateBase* GS = GetWorld()->GetGameState();
 	const bool bSolo = GS && GS->PlayerArray.Num() <= 1;
-	if (Rate <= 0.f && bSolo && bHostReviveHeld && SelfRevivesLeft > 0)
+	if (ReviveRate <= 0.f && bSolo && bHostReviveHeld && SelfRevivesLeft > 0)
 	{
-		Rate = 1.f / SelfReviveSeconds;
+		ReviveRate = 1.f / SelfReviveSeconds;
 	}
-	ReviveProgress = Rate > 0.f ? ReviveProgress + Rate * DeltaSeconds : FMath::Max(0.f, ReviveProgress - DeltaSeconds * 0.5f);
+	ReviveProgress = ReviveRate > 0.f ? ReviveProgress + ReviveRate * DeltaSeconds : FMath::Max(0.f, ReviveProgress - DeltaSeconds * 0.5f);
 	if (ReviveProgress >= 1.f)
 	{
-		SelfRevivesLeft -= (Rate == 1.f / SelfReviveSeconds) ? 1 : 0;
+		SelfRevivesLeft -= (ReviveRate == 1.f / SelfReviveSeconds) ? 1 : 0;
 		HostRevive();
 	}
 }
