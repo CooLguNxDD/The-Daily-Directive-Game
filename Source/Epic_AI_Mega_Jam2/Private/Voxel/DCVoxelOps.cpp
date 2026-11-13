@@ -146,6 +146,54 @@ namespace
 	};
 }
 
+namespace
+{
+	/** Rubble that settled on a tower's roof drops onto its stump when the tower falls (columns in x, y order). */
+	void DropTerrainOver(FDCVoxelSector& Sector, const FDCVoxelTower& T)
+	{
+		FDCVoxelGrid& G = Sector.Terrain;
+		const int32 V = G.VoxelCm;
+		const FIntVector Lo = G.ToLocal(T.FootMinCm());
+		const FIntVector Hi = G.ToLocal(T.FootMaxCm() - FIntVector(1));
+		const int32 Floor = DCVoxelMath::FloorDiv(T.TopCm() - G.OriginCm.Z + V - 1, V);
+		const int32 Ceil = DCVoxelMath::FloorDiv(T.Grid.OriginCm.Z + T.ScanMax.Z * T.Grid.VoxelCm - G.OriginCm.Z, V) + 2;
+		TArray<uint8> Fallen;
+		for (int32 Y = Lo.Y; Y <= Hi.Y; ++Y)
+		{
+			for (int32 X = Lo.X; X <= Hi.X; ++X)
+			{
+				Fallen.Reset();
+				for (int32 Z = Floor; Z <= Ceil; ++Z)
+				{
+					const FIntVector P(X, Y, Z);
+					if (const uint8 M = G.Data.Get(P))
+					{
+						Fallen.Add(M);
+						G.Data.Set(P, 0);
+					}
+				}
+				if (Fallen.Num() == 0)
+				{
+					continue;
+				}
+				int32 Top = 0;
+				for (int32 Z = Floor - 1; Z >= 0; --Z)
+				{
+					if (G.Data.IsSolid(FIntVector(X, Y, Z)))
+					{
+						Top = Z + 1;
+						break;
+					}
+				}
+				for (int32 i = 0; i < Fallen.Num(); ++i)
+				{
+					G.Data.Set(FIntVector(X, Y, Top + i), Fallen[i]);
+				}
+			}
+		}
+	}
+}
+
 namespace DCVoxelOps
 {
 	uint32 Hash(const FIntVector& P, uint32 Salt)
@@ -526,6 +574,10 @@ namespace DCVoxelOps
 		{
 			FDCVoxelTower& T = Sector.Towers[Lot];
 			Structure(T, DominantDir(C, TowerCenterCm(T)), Ctx, Out); // falls away from the blast
+		}
+		for (int32 Lot : Out.FallenLots)
+		{
+			DropTerrainOver(Sector, Sector.Towers[Lot]); // nothing left floating where the roof was
 		}
 		for (FDCVoxelPiece& Piece : Out.Pieces)
 		{

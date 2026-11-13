@@ -148,6 +148,54 @@ bool FDCVoxelDeterminismTest::RunTest(const FString&)
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDCVoxelNoFloatTest, "Epic_AI_Mega_Jam2.Voxel.RubbleNeverFloats", VoxelFlags)
+bool FDCVoxelNoFloatTest::RunTest(const FString&)
+{
+	// Strike every tower in turn (rubble lands on neighbours' roofs, then those neighbours fall): afterwards every
+	// rubble cell rests on something - the cell below, or a tower still standing under it.
+	const FDCVoxelOpContext Ctx = UDCVoxelSettings::Get().OpContext(UDCTuning::Get().City.BlockSizeCm);
+	FDCVoxelSector S;
+	Craft(S, VoxelPlan(DCCityRules::SectorSeed(31337, 2), 2));
+	for (int32 i = 0; i < S.Towers.Num(); ++i)
+	{
+		DCVoxelOps::Apply(S, StrikeAt(S.Towers[i], i + 1, 1300), Ctx);
+	}
+	const FDCVoxelGrid& G = S.Terrain;
+	const int32 Ground = UDCVoxelSettings::Get().Tuning.GroundLayers;
+	int32 Floating = 0;
+	int32 Checked = 0;
+	G.Data.ForEachChunk([&](const FIntVector& Key, const FDCVoxelChunk& C)
+	{
+		for (int32 i = 0; i < FDCVoxelChunk::Volume; ++i)
+		{
+			if (C.V[i] == 0)
+			{
+				continue;
+			}
+			const FIntVector P = Key * FDCVoxelChunk::Size + FIntVector(i & 31, (i >> 5) & 31, i >> 10);
+			if (P.Z <= Ground)
+			{
+				continue; // street layers and kerbs
+			}
+			++Checked;
+			if (G.Data.IsSolid(P - FIntVector(0, 0, 1)))
+			{
+				continue;
+			}
+			const FIntVector Cm = G.CenterCm(P);
+			const bool bOnTower = S.Towers.ContainsByPredicate([&Cm](const FDCVoxelTower& T)
+			{
+				return Cm.X >= T.FootMinCm().X && Cm.X < T.FootMaxCm().X && Cm.Y >= T.FootMinCm().Y && Cm.Y < T.FootMaxCm().Y && Cm.Z >= T.TopCm() - 100;
+			});
+			Floating += bOnTower ? 0 : 1;
+		}
+	});
+	AddInfo(FString::Printf(TEXT("DCVOXEL rubble cells %d, floating %d"), Checked, Floating));
+	TestTrue(TEXT("rubble exists"), Checked > 100);
+	TestEqual(TEXT("no rubble floats"), Floating, 0);
+	return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDCVoxelSmallCarveTest, "Epic_AI_Mega_Jam2.Voxel.SmallHoleStands", VoxelFlags)
 bool FDCVoxelSmallCarveTest::RunTest(const FString&)
 {

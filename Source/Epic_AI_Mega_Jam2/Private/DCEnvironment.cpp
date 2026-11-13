@@ -221,7 +221,7 @@ void ADCEnvironment::UpdatePostWeights()
 	}
 	const APlayerController* PC = GetWorld()->GetFirstPlayerController();
 	const ADCCharacter* Me = PC ? Cast<ADCCharacter>(PC->GetPawn()) : nullptr;
-	SetPostWeight(TEXT("Viewfinder"), Me && Me->IsCameraRaised() ? 1.f : 0.f);
+	SetPostWeight(TEXT("Viewfinder"), Me && Me->IsCameraRaised() && Me->GetSlot() == EDCSlot::Camera ? 1.f : 0.f);
 	const float SinceHurt = Me ? GetWorld()->GetRealTimeSeconds() - Me->Feedback().HurtTime : 100.f;
 	SetPostWeight(TEXT("Damage"), FMath::Clamp(1.f - SinceHurt / 0.6f, 0.f, 1.f));
 }

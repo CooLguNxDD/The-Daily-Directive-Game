@@ -108,7 +108,7 @@ void ADCHUD::DrawSector(ADCGameState& GS, ADCCharacter* Me)
 	}
 	TrackOnboarding(*Me);
 	DrawFlashes(GS, *Me);
-	if (Me->IsCameraRaised())
+	if (Me->IsCameraRaised() && Me->GetSlot() == EDCSlot::Camera) // never over another slot while the raise flag catches up
 	{
 		DrawViewfinder(*Me);
 	}
@@ -390,13 +390,13 @@ void ADCHUD::DrawPhotoCard(UTexture* Image, const FDCPhotoGrade& Grade, float X,
 	Box(Bx, By, Bw, Bh, FLinearColor(Ink.R, Ink.G, Ink.B, 0.3f));
 	Frame(Bx, By, Bw, Bh, Sx(4.f), InkStamp);
 	Frame(Bx + Sx(7.f), By + Sx(7.f), Bw - Sx(14.f), Bh - Sx(14.f), Sx(1.5f), InkStamp);
-	Text(Score, Cx, By + Sx(4.f), InkStamp, 1.6f * S, true);
-	Text(Timing, Cx, By + Sx(4.f) + Th * 1.0f, InkStamp, 0.8f * S, true);
 	if (UTexture2D* Worn = StampGrit())
 	{
-		// Paper-coloured speckle over the ink: the stamp reads as pressed by hand, not drawn by a computer.
-		DrawTexture(Worn, Bx, By, Bw, Bh, 0, 0, Bw / Sx(256.f), Bh / Sx(128.f), FLinearColor(Paper.R, Paper.G, Paper.B, 0.4f), BLEND_Translucent);
+		// Paper-coloured speckle over the frame ink (under the type, so small stamps stay legible): pressed by hand.
+		DrawTexture(Worn, Bx, By, Bw, Bh, 0, 0, Bw / Sx(256.f), Bh / Sx(128.f), FLinearColor(Paper.R, Paper.G, Paper.B, 0.35f), BLEND_Translucent);
 	}
+	Text(Score, Cx, By + Sx(4.f), InkStamp, 1.6f * S, true);
+	Text(Timing, Cx, By + Sx(4.f) + Th * 1.0f, InkStamp, 0.8f * S, true);
 	Canvas->Canvas->PopTransform();
 	float Ty = Y + Sx(8.f);
 	for (const FName& Category : Grade.Categories)
