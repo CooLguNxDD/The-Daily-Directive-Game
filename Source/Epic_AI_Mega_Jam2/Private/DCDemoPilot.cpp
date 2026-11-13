@@ -1,6 +1,7 @@
 #include "DCDemoPilot.h"
 
 #include "DCBuilding.h"
+#include "DCEnemy.h"
 #include "DCCharacter.h"
 #include "DCGameState.h"
 #include "DCInput.h"
@@ -93,7 +94,7 @@ void ADCDemoPilot::Tap(FName Name)
 	GetWorldTimerManager().SetTimer(H, FTimerDelegate::CreateWeakLambda(this, [this, Name] { Release(Name); }), 0.08f, false);
 }
 
-void ADCDemoPilot::AimAt(const FVector& Target)
+void ADCDemoPilot::AimAt(const FVector& LookTarget)
 {
 	APlayerController* PC = GetWorld()->GetFirstPlayerController();
 	if (!PC || !PC->PlayerCameraManager)
@@ -101,7 +102,7 @@ void ADCDemoPilot::AimAt(const FVector& Target)
 		return;
 	}
 	const FVector From = PC->PlayerCameraManager->GetCameraLocation();
-	PC->SetControlRotation((Target - From).Rotation());
+	PC->SetControlRotation((LookTarget - From).Rotation());
 }
 
 void ADCDemoPilot::Shot(const FString& Name)
@@ -214,6 +215,46 @@ void ADCDemoPilot::AddCycle(const FString& C)
 	Add(0.5f, [this] { Tap(TEXT("Slot1")); return true; });
 }
 
+void ADCDemoPilot::AddEnemyFight(const FString& S)
+{
+	// Wait for an enemy, then hold the rifle on it: frames of the enemy, the tracer and the hit marker.
+	Add(0.f, [this] { Tap(TEXT("Slot1")); return true; });
+	Add(0.6f, [this]
+	{
+		const APawn* Me = GetWorld()->GetFirstPlayerController() ? GetWorld()->GetFirstPlayerController()->GetPawn() : nullptr;
+		const ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>();
+		if (!Me || !GS || GS->Phase != EDCRunPhase::Sector)
+		{
+			return true; // the sector ended first
+		}
+		float Best = TNumericLimits<float>::Max();
+		for (ADCEnemy* E : TActorRange<ADCEnemy>(GetWorld()))
+		{
+			const float D = E->IsAlive() ? FVector::Dist(E->GetActorLocation(), Me->GetActorLocation()) : Best;
+			if (D < Best)
+			{
+				Best = D;
+				Target = E;
+			}
+		}
+		return Target.IsValid();
+	}, 40.f);
+	for (int32 i = 0; i < 4; ++i)
+	{
+		Add(i == 0 ? 0.f : 0.5f, [this, S, i]
+		{
+			if (Target.IsValid())
+			{
+				AimAt(Target->GetActorLocation());
+				Press(TEXT("Fire"));
+			}
+			Shot(FString::Printf(TEXT("%s_enemy%d"), *S, i));
+			return true;
+		});
+	}
+	Add(0.3f, [this] { Release(TEXT("Fire")); Target.Reset(); return true; });
+}
+
 void ADCDemoPilot::AddWaitPhase(EDCRunPhase Phase, float Timeout)
 {
 	Add(0.f, [this, Phase]
@@ -247,6 +288,7 @@ void ADCDemoPilot::BuildScript()
 		{
 			AddCycle(FString::Printf(TEXT("%s_c%d"), *S, Cycle));
 		}
+		AddEnemyFight(S);
 		if (Sector + 1 < Sectors)
 		{
 			// Draft: shot the offer, then click the second card (the camera gear) through the HUD intent.

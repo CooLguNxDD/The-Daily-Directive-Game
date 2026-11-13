@@ -38,12 +38,13 @@ private:
 
 	void BuildScript();
 	void AddCycle(const FString& Name);
+	void AddEnemyFight(const FString& Sector);
 	void AddWaitPhase(EDCRunPhase Phase, float Timeout);
 	void Add(float Delay, TFunction<bool()> Do, float Timeout = 12.f);
 	void Press(FName Action, const FVector& Value = FVector(1, 0, 0));
 	void Release(FName Action);
 	void Tap(FName Action);
-	void AimAt(const FVector& Target);
+	void AimAt(const FVector& LookTarget);
 	void Shot(const FString& Name);
 	void LogPhoto();
 	ADCBuilding* PickTower();
@@ -58,6 +59,7 @@ private:
 	FString ShotDir;
 	bool bQuit = false;
 	TWeakObjectPtr<ADCBuilding> Tower;
+	TWeakObjectPtr<class ADCEnemy> Target;
 	TSet<TObjectKey<ADCBuilding>> UsedTowers;
 	int32 ShotIndex = 0;
 };
