@@ -17,3 +17,6 @@ Build/
 
 # Store asset packs stay local-only (root CLAUDE.md asset pack policy)
 Content/_LocalPacks/
+Content/Developers/
+Content/Collections/
+Content/_LocalPacks/
