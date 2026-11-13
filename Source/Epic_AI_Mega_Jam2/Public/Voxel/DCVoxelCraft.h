@@ -6,6 +6,7 @@
 #include "Rules/DCCityPlan.h"
 #include "Voxel/DCVoxelGrid.h"
 #include "Voxel/DCVoxelTypes.h"
+#include "Rules/DCPcg.h"
 
 /** A crafted tower in its own grid, with the solid count of every layer when intact (the structure pass compares). */
 struct EPIC_AI_MEGA_JAM2_API FDCVoxelTower
@@ -30,8 +31,12 @@ struct EPIC_AI_MEGA_JAM2_API FDCVoxelTower
 };
 
 /** Everything crafting needs, resolved from settings once. */
+struct FDCVoxelModel;
+
 struct EPIC_AI_MEGA_JAM2_API FDCVoxelCraftContext
 {
+	/** voxel-forge models by name for props (loaded on the game thread before crafting). */
+	TMap<FName, const FDCVoxelModel*> Models;
 	const TArray<FDCVoxelMaterial>* Palette = nullptr;
 	const TArray<FDCVoxelRecipe>* Recipes = nullptr;
 	const FDCVoxelTuning* Tuning = nullptr;
@@ -48,11 +53,23 @@ namespace DCVoxelCraft
 	 *  the lot's own seed. Gameplay (photo framing, enemies) keeps reading the spec, which now matches the voxels. */
 	EPIC_AI_MEGA_JAM2_API void ApplyRecipes(FDCCityPlan& Plan, const FDCVoxelSectorLayout& Layout, const TArray<FDCVoxelRecipe>& Recipes, int32 MaxFitBays);
 
+	/** The city builder (R16): lays out a sector from its district rule with the PCG rule sets (R15): street grid, lot
+	 *  kinds (towers, low blocks, plazas, rubble zones), the landmark, the sight line from the spawn street to it, and
+	 *  props on streets, plazas and rubble. Pure: same seed and rows, same plan. */
+	EPIC_AI_MEGA_JAM2_API FDCCityPlan PlanDistrict(int32 Seed, const FDCDistrictRule& District, const FDCPcgRuleSet* LotRules, const FDCPcgRuleSet* PropRules,
+		const FDCVoxelSectorLayout& Layout, const TArray<FDCVoxelRecipe>& Recipes, float BayCm);
+
+	/** Stamps the plan's props into a prop grid (Tuning.PropVoxelCm), in quarter turns, from the loaded models. */
+	EPIC_AI_MEGA_JAM2_API void CraftProps(FDCVoxelGrid& Out, const FDCCityPlan& Plan, const FDCVoxelCraftContext& Ctx);
+
 	/** Crafts one tower at its lot, in a new grid of Tuning.TowerVoxelCm. */
 	EPIC_AI_MEGA_JAM2_API void CraftTower(FDCVoxelTower& Out, const FDCLotPlan& Lot, int32 LotIndex, const FDCVoxelCraftContext& Ctx);
 
 	/** The sector terrain: ground slab (street, lot paving, kerbs) at Tuning.TerrainVoxelCm, top surface at z = 0. */
 	EPIC_AI_MEGA_JAM2_API void CraftTerrain(FDCVoxelGrid& Out, const FDCCityPlan& Plan, float LotSizeCm, const FDCVoxelCraftContext& Ctx);
+
+	/** Pre-ruined lots: rubble mounds in the terrain grid. */
+	EPIC_AI_MEGA_JAM2_API void CraftRubbleZones(FDCVoxelGrid& Out, const FDCCityPlan& Plan, const FDCVoxelCraftContext& Ctx);
 
 	/** Crafts every tower of the plan. Same plan and data, same voxels on every machine. */
 	EPIC_AI_MEGA_JAM2_API void CraftCity(const FDCCityPlan& Plan, const FDCVoxelCraftContext& Ctx, TArray<FDCVoxelTower>& OutTowers);

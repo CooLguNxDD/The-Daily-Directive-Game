@@ -1,6 +1,9 @@
 #include "DCVoxelCity.h"
 
 #include "DCVoxelFx.h"
+#include "Camera/CameraActor.h"
+#include "Camera/CameraComponent.h"
+#include "UnrealClient.h"
 
 #include "DCAssets.h"
 #include "DCAudio.h"
@@ -14,6 +17,7 @@
 #include "Tasks/Task.h"
 #include "Voxel/DCVoxelCraft.h"
 #include "Voxel/DCVoxelSettings.h"
+#include "Voxel/DCVoxelModel.h"
 
 struct ADCVoxelCity::FMeshJob
 {
@@ -75,13 +79,20 @@ ADCVoxelCity* ADCVoxelCity::Get(const UObject* WorldContext)
 FDCCityPlan ADCVoxelCity::PlanSector(int32 RunSeed, int32 SectorIndex)
 {
 	const UDCTuning& T = UDCTuning::Get();
-	FDCCityPlan Plan = DCCityRules::PlanCity(DCCityRules::SectorSeed(RunSeed, SectorIndex), T.City, T.Look.BuildingColors.Num());
+	const int32 Seed = DCCityRules::SectorSeed(RunSeed, SectorIndex);
 	if (IsEnabled())
 	{
 		const UDCVoxelSettings& V = UDCVoxelSettings::Get();
+		// The city builder (R16) when the sector has a district row; recipes on the block grid otherwise.
+		if (const FDCDistrictRule* D = V.District(SectorIndex))
+		{
+			return DCVoxelCraft::PlanDistrict(Seed, *D, V.RuleSet(D->Rules), V.RuleSet(D->Props), V.SectorLayout(SectorIndex), V.Recipes, T.City.BlockSizeCm);
+		}
+		FDCCityPlan Plan = DCCityRules::PlanCity(Seed, T.City, T.Look.BuildingColors.Num());
 		DCVoxelCraft::ApplyRecipes(Plan, V.SectorLayout(SectorIndex), V.Recipes, FMath::FloorToInt(T.City.LotSizeCm / T.City.BlockSizeCm));
+		return Plan;
 	}
-	return Plan;
+	return DCCityRules::PlanCity(Seed, T.City, T.Look.BuildingColors.Num());
 }
 
 UMaterialInterface* ADCVoxelCity::VoxelMaterial()
@@ -117,12 +128,17 @@ void ADCVoxelCity::EndPlay(const EEndPlayReason::Type Reason)
 
 FDCVoxelGrid& ADCVoxelCity::GridAt(int32 GridIndex)
 {
-	return GridIndex == 0 ? Sector.Terrain : Sector.Towers[GridIndex - 1].Grid;
+	return const_cast<FDCVoxelGrid&>(static_cast<const ADCVoxelCity*>(this)->GridAt(GridIndex));
 }
 
 const FDCVoxelGrid& ADCVoxelCity::GridAt(int32 GridIndex) const
 {
-	return GridIndex == 0 ? Sector.Terrain : Sector.Towers[GridIndex - 1].Grid;
+	// 0 = terrain, 1..N = towers, N + 1 = props.
+	if (GridIndex == 0)
+	{
+		return Sector.Terrain;
+	}
+	return Sector.Towers.IsValidIndex(GridIndex - 1) ? Sector.Towers[GridIndex - 1].Grid : Sector.Props;
 }
 
 FIntVector ADCVoxelCity::CellOf(int32 GridIndex, const FIntVector& Chunk) const
@@ -173,6 +189,7 @@ void ADCVoxelCity::Clear()
 	}
 	Sector.Towers.Reset();
 	Sector.Terrain.Data.Reset();
+	Sector.Props.Data.Reset();
 	BuiltSector = INDEX_NONE;
 	AppliedSeq = 0;
 }
@@ -184,9 +201,18 @@ void ADCVoxelCity::Build(int32 RunSeed, int32 SectorIndex, int32 BuildId)
 	const UDCTuning& T = UDCTuning::Get();
 	const double Start = FPlatformTime::Seconds();
 	const FDCCityPlan Plan = PlanSector(RunSeed, SectorIndex);
-	const FDCVoxelCraftContext Craft = V.CraftContext(T.City.BlockSizeCm);
+	FDCVoxelCraftContext Craft = V.CraftContext(T.City.BlockSizeCm);
+	for (const FDCPropPlan& Prop : Plan.Props)
+	{
+		if (!Craft.Models.Contains(Prop.Model))
+		{
+			Craft.Models.Add(Prop.Model, DCVoxelModels::Parsed(Prop.Model)); // file reads stay on the game thread
+		}
+	}
 	DCVoxelCraft::CraftCity(Plan, Craft, Sector.Towers);
 	DCVoxelCraft::CraftTerrain(Sector.Terrain, Plan, T.City.LotSizeCm, Craft);
+	DCVoxelCraft::CraftRubbleZones(Sector.Terrain, Plan, Craft);
+	DCVoxelCraft::CraftProps(Sector.Props, Plan, Craft);
 	OpCtx = V.OpContext(T.City.BlockSizeCm);
 	Colors = V.MeshColors();
 	BuiltSector = SectorIndex;
@@ -598,4 +624,48 @@ void ADCVoxelCity::Tick(float DeltaSeconds)
 	PollJobs();
 	UploadCells();
 	TickFalling(GetWorld()->GetTimeSeconds());
+	TickCityShot();
+}
+
+void ADCVoxelCity::TickCityShot()
+{
+	// City builder preview (R16): -dccityshot=<dir> frames the built, fully meshed sector from three aerial cameras
+	// through the player's view (real render), then quits. Never active in normal play.
+	static FString Dir;
+	static const bool bWanted = FParse::Value(FCommandLine::Get(), TEXT("dccityshot="), Dir);
+	if (!bWanted || BuiltSector == INDEX_NONE || IsMeshing() || ShotStep >= 4)
+	{
+		return;
+	}
+	APlayerController* PC = GetWorld()->GetFirstPlayerController();
+	const double Real = GetWorld()->GetRealTimeSeconds();
+	if (!PC || Real < NextShotReal)
+	{
+		return;
+	}
+	const float Half = Sector.Terrain.OriginCm.X < 0 ? -static_cast<float>(Sector.Terrain.OriginCm.X) : 10000.f;
+	static const FVector Eyes[3] = {FVector(-1.1f, -1.1f, 0.55f), FVector(1.15f, -0.4f, 0.35f), FVector(-1.2f, 0.f, 0.06f)};
+	if (ShotStep > 0)
+	{
+		FScreenshotRequest::RequestScreenshot(Dir / FString::Printf(TEXT("cityshot_sector%d_%d.png"), BuiltSector, ShotStep - 1), false, false);
+	}
+	if (ShotStep < 3)
+	{
+		if (!ShotCamera)
+		{
+			ShotCamera = GetWorld()->SpawnActor<ACameraActor>(ACameraActor::StaticClass(), FTransform::Identity);
+			ShotCamera->GetCameraComponent()->SetFieldOfView(70.f);
+		}
+		const FVector Eye = Eyes[ShotStep] * Half + FVector(0, 0, 200.f);
+		const FVector Look = FVector(0, 0, ShotStep == 2 ? 1500.f : 0.f);
+		ShotCamera->SetActorLocationAndRotation(Eye, (Look - Eye).Rotation());
+		PC->SetViewTargetWithBlend(ShotCamera, 0.f);
+	}
+	else
+	{
+		UE_LOG(LogTemp, Display, TEXT("DCCITYSHOT sector=%d frames written to %s"), BuiltSector, *Dir);
+		FGenericPlatformMisc::RequestExit(false);
+	}
+	++ShotStep;
+	NextShotReal = Real + 1.5;
 }

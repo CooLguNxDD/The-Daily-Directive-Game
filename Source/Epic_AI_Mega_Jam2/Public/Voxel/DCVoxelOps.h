@@ -55,6 +55,8 @@ struct EPIC_AI_MEGA_JAM2_API FDCVoxelSector
 {
 	TArray<FDCVoxelTower> Towers;
 	FDCVoxelGrid Terrain;
+	/** Street props, plaza dressing and wrecks from voxel-forge models (R16, R17), 5 cm. */
+	FDCVoxelGrid Props;
 	/** Content hash over every grid (determinism evidence: host and clients compare after each op). */
 	uint32 Hash() const;
 };

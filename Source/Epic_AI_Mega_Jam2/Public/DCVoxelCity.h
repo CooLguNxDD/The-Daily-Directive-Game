@@ -62,10 +62,14 @@ private:
 	void TickFalling(float Now);
 	void StartFall(const FDCVoxelPiece& Piece, float Now, const TArray<FIntVector>& DeferredTerrain, const FVector& LandAt);
 	void Land(FFalling& F);
+	void TickCityShot();
+	int32 ShotStep = 0;
+	double NextShotReal = 0.0;
+	UPROPERTY() TObjectPtr<class ACameraActor> ShotCamera;
 
 	FDCVoxelGrid& GridAt(int32 GridIndex);
 	const FDCVoxelGrid& GridAt(int32 GridIndex) const;
-	int32 NumGrids() const { return Sector.Towers.Num() + 1; }
+	int32 NumGrids() const { return Sector.Towers.Num() + 2; }
 	FIntVector CellOf(int32 GridIndex, const FIntVector& Chunk) const;
 	UProceduralMeshComponent* NewMesh(bool bCollision);
 	UMaterialInterface* VoxelMaterial();

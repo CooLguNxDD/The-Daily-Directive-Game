@@ -27,4 +27,6 @@ namespace DCVoxelModels
 {
 	/** The mesh of a model by name, loaded and meshed on first use (game thread); nullptr when missing or bad. */
 	EPIC_AI_MEGA_JAM2_API const FDCVoxelMeshData* Mesh(FName Model);
+	/** The parsed model by name (cached, game thread); nullptr when missing or malformed. */
+	EPIC_AI_MEGA_JAM2_API const FDCVoxelModel* Parsed(FName Model);
 }

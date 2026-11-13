@@ -10,7 +10,7 @@ const FDCVoxelCarveDef& FDCVoxelOpContext::CarveFor(FName Stratagem) const
 
 uint32 FDCVoxelSector::Hash() const
 {
-	uint32 H = Terrain.Data.ContentHash();
+	uint32 H = HashCombine(Terrain.Data.ContentHash(), Props.Data.ContentHash());
 	for (const FDCVoxelTower& T : Towers)
 	{
 		H = HashCombine(H, T.Grid.Data.ContentHash());
@@ -569,6 +569,7 @@ namespace DCVoxelOps
 				}
 			}
 			Out.Carved += CarveSphere(Sector.Terrain, C, Carve.CraterRadiusCm);
+			Out.Carved += CarveSphere(Sector.Props, C, Carve.SphereRadiusCm); // props in the blast are gone
 		}
 		for (int32 Lot : Out.TouchedLots)
 		{

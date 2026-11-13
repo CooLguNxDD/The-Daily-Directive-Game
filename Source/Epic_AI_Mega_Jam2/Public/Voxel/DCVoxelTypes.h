@@ -130,6 +130,29 @@ struct FDCVoxelTuning
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float DecaySeconds = 9.f;
 };
 
+/** District rules for one sector (R16): the street grid, which lot kinds the PCG rules roll, the landmark, the sight
+ *  line, and the prop rule set. The city builder turns these into the plan; the crafter turns the plan into voxels. */
+USTRUCT(BlueprintType)
+struct FDCDistrictRule
+{
+	GENERATED_BODY()
+	UPROPERTY(EditAnywhere, Config, Category = "District") FName Id;
+	UPROPERTY(EditAnywhere, Config, Category = "District") int32 GridX = 4;
+	UPROPERTY(EditAnywhere, Config, Category = "District") int32 GridY = 4;
+	UPROPERTY(EditAnywhere, Config, Category = "District") float LotSizeCm = 2600.f;
+	UPROPERTY(EditAnywhere, Config, Category = "District") float StreetWidthCm = 1600.f;
+	/** PCG rule set: slot Lot (kinds: Tower, Low, Plaza, Rubble), LandmarkFloors (range), LowFloors (range),
+	 *  LowRecipe (choices). */
+	UPROPERTY(EditAnywhere, Config, Category = "District") FName Rules;
+	/** PCG rule set: slots Street / StreetCount, Plaza / PlazaCount, Rubble / RubbleCount (model choices and ranges). */
+	UPROPERTY(EditAnywhere, Config, Category = "District") FName Props;
+	UPROPERTY(EditAnywhere, Config, Category = "District") FName LandmarkRecipe = TEXT("Landmark");
+	/** Lot kind forced along the sight line from the spawn street to the landmark (open or low, so it stays in view). */
+	UPROPERTY(EditAnywhere, Config, Category = "District") FName SightLineKind = TEXT("Low");
+	/** Never fewer towers than this (a quota needs things to knock down). */
+	UPROPERTY(EditAnywhere, Config, Category = "District") int32 MinTowers = 8;
+};
+
 /** A puff kind for the decay effects (R4): a chunky voxel cube that moves, spins, grows or shrinks and dies. */
 USTRUCT(BlueprintType)
 struct FDCFxKind

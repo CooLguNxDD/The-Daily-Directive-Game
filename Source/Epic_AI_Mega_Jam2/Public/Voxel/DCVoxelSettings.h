@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "Engine/DeveloperSettings.h"
 #include "Voxel/DCVoxelTypes.h"
+#include "Rules/DCPcg.h"
 #include "DCVoxelSettings.generated.h"
 
 struct FDCVoxelCraftContext;
@@ -26,6 +27,9 @@ public:
 	/** One row per sector (the last row repeats for later sectors). */
 	UPROPERTY(EditAnywhere, Config, Category = "City") TArray<FDCVoxelSectorLayout> Sectors;
 	UPROPERTY(EditAnywhere, Config, Category = "City") TArray<FDCVoxelCarveDef> Carves;
+	/** City builder (R16): one district row per sector (the last repeats); PCG rule sets they roll (R15). */
+	UPROPERTY(EditAnywhere, Config, Category = "District") TArray<FDCDistrictRule> Districts;
+	UPROPERTY(EditAnywhere, Config, Category = "District") TArray<FDCPcgRuleSet> RuleSets;
 	/** Decay effects (R4): puff kinds and the emitters the city plays at a crater, a landing and burning rubble. */
 	UPROPERTY(EditAnywhere, Config, Category = "Fx") TArray<FDCFxKind> FxKinds;
 	UPROPERTY(EditAnywhere, Config, Category = "Fx") TArray<FDCFxEmitter> FxEmitters;
@@ -34,6 +38,8 @@ public:
 
 	bool IsVoxelCity() const { return Mode == TEXT("Voxel") && Recipes.Num() > 0 && Palette.Num() > 0; }
 	const FDCVoxelSectorLayout& SectorLayout(int32 Sector) const;
+	const FDCDistrictRule* District(int32 Sector) const { return Districts.Num() == 0 ? nullptr : &Districts[FMath::Clamp(Sector, 0, Districts.Num() - 1)]; }
+	const FDCPcgRuleSet* RuleSet(FName Id) const { return RuleSets.FindByPredicate([Id](const FDCPcgRuleSet& R) { return R.Id == Id; }); }
 	/** Mesher colours: index = material id (0 = air). */
 	TArray<FColor> MeshColors() const;
 	FDCVoxelCraftContext CraftContext(float BlockSizeCm) const;

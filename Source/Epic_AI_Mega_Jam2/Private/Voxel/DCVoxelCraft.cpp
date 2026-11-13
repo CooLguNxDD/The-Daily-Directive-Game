@@ -2,6 +2,7 @@
 
 #include "Voxel/DCVoxelWorld.h"
 #include "Async/ParallelFor.h"
+#include "Rules/DCPcg.h"
 
 uint8 FDCVoxelCraftContext::MaterialId(FName Id) const
 {
@@ -401,12 +402,19 @@ namespace DCVoxelCraft
 				}
 			}
 		}
-		// Every built lot gets paving and a kerb ring one voxel above the street.
-		const int32 LotHalf = FMath::RoundToInt32(LotSizeCm * 0.5f);
+		// Every built lot and plaza gets paving and a kerb ring one voxel above the street.
+		const int32 LotHalf = FMath::RoundToInt32((Plan.LotSizeCm > 0.f ? Plan.LotSizeCm : LotSizeCm) * 0.5f);
 		const int32 Z = Layers - 1;
+		TArray<FVector> Paved;
 		for (const FDCLotPlan& Lot : Plan.Buildings)
 		{
-			const FIntVector C = DCVoxelMath::ToCm(Lot.Location);
+			Paved.Add(Lot.Location);
+		}
+		Paved.Append(Plan.Plazas);
+		Paved.Append(Plan.RubbleZones);
+		for (const FVector& Where : Paved)
+		{
+			const FIntVector C = DCVoxelMath::ToCm(Where);
 			const FIntVector Lo = Out.ToLocal(FIntVector(C.X - LotHalf, C.Y - LotHalf, 0));
 			const FIntVector Hi = Out.ToLocal(FIntVector(C.X + LotHalf, C.Y + LotHalf, 0));
 			Out.Data.FillBox(FIntVector(Lo.X, Lo.Y, Z), FIntVector(Hi.X, Hi.Y, Z + 1), Paving);
@@ -419,6 +427,39 @@ namespace DCVoxelCraft
 			{
 				Out.Data.Set(FIntVector(Lo.X, Y, Z + 1), Kerb);
 				Out.Data.Set(FIntVector(Hi.X - 1, Y, Z + 1), Kerb);
+			}
+		}
+	}
+
+	void CraftRubbleZones(FDCVoxelGrid& Out, const FDCCityPlan& Plan, const FDCVoxelCraftContext& Ctx)
+	{
+		// A pre-ruined lot: a mound of rubble, highest at the centre, ragged from the hash (the war got here first).
+		const int32 V = Out.VoxelCm;
+		const int32 Half = FMath::RoundToInt32(Plan.LotSizeCm * 0.45f);
+		const uint8 Rubble = Ctx.MaterialId(TEXT("Rubble"));
+		const uint8 Char = Ctx.MaterialId(TEXT("Char"));
+		const uint8 Ink = Ctx.MaterialId(TEXT("Ink"));
+		const int32 Base = FMath::Max(1, Ctx.Tuning->GroundLayers);
+		for (const FVector& Where : Plan.RubbleZones)
+		{
+			const FIntVector C = DCVoxelMath::ToCm(Where);
+			const FIntVector Lo = Out.ToLocal(FIntVector(C.X - Half, C.Y - Half, 0));
+			const FIntVector Hi = Out.ToLocal(FIntVector(C.X + Half, C.Y + Half, 0));
+			const FIntVector Mid = (Lo + Hi) / 2;
+			const int32 R = FMath::Max(1, (Hi.X - Lo.X) / 2);
+			for (int32 Y = Lo.Y; Y < Hi.Y; ++Y)
+			{
+				for (int32 X = Lo.X; X < Hi.X; ++X)
+				{
+					const float D = FMath::Sqrt(static_cast<float>((X - Mid.X) * (X - Mid.X) + (Y - Mid.Y) * (Y - Mid.Y))) / R;
+					const uint32 H = DCPcg::Hash(static_cast<int32>(X * 7919 + Y), 0xD0B8u, 0);
+					const int32 Height = FMath::Max(0, FMath::RoundToInt32((1.f - D) * 7.f) + static_cast<int32>(H % 3) - 1);
+					for (int32 k = 0; k < Height; ++k)
+					{
+						const uint32 Hm = H >> (k + 3);
+						Out.Data.Set(FIntVector(X, Y, Base + k), (Hm % 5) == 0 ? Char : ((Hm % 7) == 0 ? Ink : Rubble));
+					}
+				}
 			}
 		}
 	}
