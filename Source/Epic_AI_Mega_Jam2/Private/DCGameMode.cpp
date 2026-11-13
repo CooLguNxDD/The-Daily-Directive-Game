@@ -495,7 +495,8 @@ void ADCGameMode::OnBuildingCollapsed(ADCBuilding* Building)
 {
 	ADCGameState* GS = GetGameState<ADCGameState>();
 	GS->AddCollapse(GS->SectorIndex, Building->GetLotIndex(), Building->GetEpicenter());
-	const FDCUpgradeDef* const* Domino = GS->ActiveMutators().FindByPredicate([](const FDCUpgradeDef* D) { return D->DominoReachCm > 0.f; });
+	const TArray<const FDCUpgradeDef*> Active = GS->ActiveMutators();
+	const FDCUpgradeDef* const* Domino = Active.FindByPredicate([](const FDCUpgradeDef* D) { return D->DominoReachCm > 0.f; });
 	if (!Domino)
 	{
 		return;
