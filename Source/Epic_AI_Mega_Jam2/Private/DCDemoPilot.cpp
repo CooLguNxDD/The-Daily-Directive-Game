@@ -316,7 +316,10 @@ void ADCDemoPilot::AddCycle(const FString& C)
 		const ADCOrbitalStrike* S = LatestStrike();
 		const ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>();
 		if (Tower.IsValid()) { AimAt(Tower->GetCenter()); }
-		return !S || !GS || GS->Now() >= S->GetDetonateTime() + PeakOffsetSeconds;
+		// -dcpeakoffset= moves the shutter (0.25 lands it while the strike's voxel op is often still on the worker).
+		float Offset = PeakOffsetSeconds;
+		FParse::Value(FCommandLine::Get(), TEXT("dcpeakoffset="), Offset);
+		return !S || !GS || GS->Now() >= S->GetDetonateTime() + Offset;
 	}, 8.f);
 	Add(0.f, [this, C] { Tap(TEXT("Fire")); Shot(C + TEXT("_peak")); return true; });
 	Add(0.35f, [this, C] { Shot(C + TEXT("_stamp")); return true; });

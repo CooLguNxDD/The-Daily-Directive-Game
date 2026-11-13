@@ -1,4 +1,5 @@
 #include "DCMenu.h"
+#include "DCFonts.h"
 #include "DCPalette.h"
 
 #include "DCAudio.h"
@@ -27,9 +28,10 @@ using namespace DCPalette;
 namespace DCMenuStyle
 {
 
-	FSlateFontInfo Font(int32 Size, const char* Weight = "Bold")
+	// Print type (R7): big sizes set in the headline face, the rest in the body face.
+	FSlateFontInfo Font(int32 Size, const char* /*Weight*/ = "Bold")
 	{
-		return FCoreStyle::GetDefaultFontStyle(Weight, Size);
+		return DCFonts::Slate(Size >= 40 ? TEXT("Headline") : TEXT("Body"), Size);
 	}
 
 	TSharedRef<SWidget> Label(const FString& Text, int32 Size, const FLinearColor& Color)

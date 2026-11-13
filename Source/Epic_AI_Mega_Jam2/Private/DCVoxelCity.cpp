@@ -125,11 +125,29 @@ float ADCVoxelCity::SurfaceZCm(const FVector& Where) const
 
 bool ADCVoxelCity::IsSolidAt(const FVector& Where) const
 {
-	if (BuiltSector == INDEX_NONE || InFlight.IsValid()) // unknown while an op writes on a worker
+	if (BuiltSector == INDEX_NONE)
 	{
 		return false;
 	}
 	const FIntVector Cm = DCVoxelMath::ToCm(Where);
+	if (InFlight.IsValid())
+	{
+		// An op writes the voxels on a worker: answer conservatively from what does not change under it, the cached
+		// street surface and each tower's crafted shell box (a falling tower still counts), so the lens still backs out.
+		if (Where.Z < SurfaceZCm(Where))
+		{
+			return true;
+		}
+		for (const FDCVoxelTower& T : Sector.Towers)
+		{
+			const FIntVector L = T.Grid.ToLocal(Cm);
+			if (L.X >= T.Min.X && L.Y >= T.Min.Y && L.Z >= 0 && L.X < T.Max.X && L.Y < T.Max.Y && L.Z < T.Max.Z)
+			{
+				return true;
+			}
+		}
+		return false;
+	}
 	if (Sector.Terrain.Data.IsSolid(Sector.Terrain.ToLocal(Cm)) || Sector.Props.Data.IsSolid(Sector.Props.ToLocal(Cm)))
 	{
 		return true;

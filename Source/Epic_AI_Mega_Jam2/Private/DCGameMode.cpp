@@ -834,6 +834,7 @@ void ADCGameMode::CheckWipe()
 		// Anyone standing, or a solo player still inside the self-revive window, keeps the run alive.
 		if (C && (!C->IsDowned() || C->CanSelfRevive()))
 		{
+			WipeGraceUntil = -1.f; // someone got up: a later all-down gets its own Last Frame grace
 			return;
 		}
 	}

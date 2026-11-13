@@ -47,7 +47,11 @@ ADCOrbitalStrike::ADCOrbitalStrike()
 
 	RootComponent = CreateDefaultSubobject<USceneComponent>(TEXT("Root"));
 	Beam = MakeFx(this, TEXT("Beam"), RootComponent);
-	Ring = MakeFx(this, TEXT("Ring"), RootComponent);
+	Ring = CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("Ring"));
+	Ring->SetupAttachment(RootComponent);
+	Ring->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	Ring->SetCastShadow(false);
+	Ring->SetMobility(EComponentMobility::Movable);
 	Beacon = MakeFx(this, TEXT("Beacon"), RootComponent);
 	Fireball = MakeFx(this, TEXT("Fireball"), RootComponent);
 	FireCubes = CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("FireCubes"));
@@ -103,15 +107,23 @@ void ADCOrbitalStrike::BeginPlay()
 	const float Radius = Def ? Def->BlastRadius : 1000.f;
 
 	Beam->SetStaticMesh(DCAssets::Cylinder());
-	BeamMat = DCAssets::MakeFlat(this, BeamColor, 4.f);
+	BeamMat = DCAssets::MakeFlatUnlit(this, BeamColor, 1.f);
 	Beam->SetMaterial(0, BeamMat);
 	Beam->SetRelativeLocation(FVector(0, 0, BeamHeightCm * 0.5f));
 
-	Ring->SetStaticMesh(DCAssets::Cylinder());
-	// The danger zone in propaganda red (art bible), dim enough to stay red instead of blooming pink.
-	Ring->SetMaterial(0, DCAssets::MakeFlat(this, UDCTuning::Get().Look.Accent, 0.35f));
-	Ring->SetRelativeLocation(FVector(0, 0, 3.f));
-	Ring->SetRelativeScale3D(FVector(Radius * 2.f / 100.f, Radius * 2.f / 100.f, 0.02f));
+	// The danger zone: a thin unlit band of propaganda red on the ground (a filled lit disc washed to salmon).
+	const FDCLookTuning& Look = UDCTuning::Get().Look;
+	Ring->SetStaticMesh(DCAssets::Cube());
+	Ring->SetMaterial(0, DCAssets::MakeFlatUnlit(this, Look.Accent, Look.DangerRingGlow));
+	Ring->ClearInstances();
+	const int32 Segments = FMath::Max(Look.DangerRingSegments, 8);
+	const float SegLen = 2.f * PI * Radius / Segments * 1.04f;
+	for (int32 i = 0; i < Segments; ++i)
+	{
+		const float A = 2.f * PI * i / Segments;
+		const FVector At(FMath::Cos(A) * Radius, FMath::Sin(A) * Radius, 3.f);
+		Ring->AddInstance(FTransform(FRotator(0.f, FMath::RadiansToDegrees(A) + 90.f, 0.f), At, FVector(SegLen / 100.f, Look.DangerRingWidthCm / 100.f, 0.04f)));
+	}
 
 	Beacon->SetStaticMesh(DCAssets::Cone());
 	Beacon->SetMaterial(0, DCAssets::MakeFlat(this, BeamColor, 30.f));
@@ -191,7 +203,7 @@ void ADCOrbitalStrike::TickTelegraph(float Now, const FDCStratagemDef& Def)
 	const float Width = FMath::Lerp(7.f, 0.35f, FMath::Pow(U, 0.7f));
 	const float Pulse = 0.5f + 0.5f * FMath::Sin(Now * FMath::Lerp(6.f, 40.f, U));
 	Beam->SetRelativeScale3D(FVector(Width, Width, BeamHeightCm / 100.f));
-	DCAssets::SetFlat(BeamMat, Def.BeamColor, FMath::Lerp(1.f, 12.f, U * U) * (0.7f + 0.3f * Pulse)); // red, not blown to magenta
+	DCAssets::SetFlat(BeamMat, Def.BeamColor, FMath::Lerp(1.f, UDCTuning::Get().Look.BeamGlowPeak, U * U) * (0.7f + 0.3f * Pulse)); // red, not blown to pink
 	Beacon->SetVisibility(Pulse > 0.3f || U > 0.8f);
 
 	if (!bChargePlayed && U > 0.f && Def.TelegraphSeconds - (Now - Start) <= 3.2f)
@@ -269,7 +281,8 @@ void ADCOrbitalStrike::TickBlast(float Now, const FDCStratagemDef& Def)
 
 	const float BeamFade = FMath::Clamp(1.f - T / 0.35f, 0.f, 1.f);
 	Beam->SetRelativeScale3D(FVector(3.f * BeamFade + 0.01f, 3.f * BeamFade + 0.01f, BeamHeightCm / 100.f));
-	DCAssets::SetFlat(BeamMat, FMath::Lerp(Def.BeamColor, FLinearColor(1.f, 0.95f, 0.76f), 0.5f), 20.f * BeamFade); // a short white-orange flash, then gone
+	const FDCLookTuning& Look = UDCTuning::Get().Look;
+	DCAssets::SetFlat(BeamMat, FMath::Lerp(Def.BeamColor, Look.BeamFlashColor, 0.5f), Look.BeamFlashGlow * BeamFade); // a short orange flash, then gone
 	Beam->SetVisibility(BeamFade > 0.f);
 	Light->SetIntensity(UDCTuning::Get().Look.BlastLightIntensity * Fade * Fade);
 }

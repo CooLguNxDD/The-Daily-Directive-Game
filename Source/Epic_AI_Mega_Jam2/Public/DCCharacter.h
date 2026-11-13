@@ -143,6 +143,9 @@ private:
 	UFUNCTION(Server, Reliable) void ServerReload();
 	UFUNCTION(Server, Reliable) void ServerCallStrike(FName StratagemId, FVector_NetQuantize Target);
 	UFUNCTION(Server, Reliable) void ServerSubmitPhoto(int32 PhotoId, FVector_NetQuantize10 CamLoc, FRotator CamRot, float FOV, float ShotTime);
+	/** Host grade of an accepted shot at its own shot time; waits a frame at a time while a voxel op is still on the
+	 *  worker (until GiveUpAt, real time), so a shutter right after a strike sees the towers it felled (C3.1). */
+	void HostGradeShot(int32 PhotoId, FVector CamLoc, FRotator CamRot, float FOV, float When, bool bLast, double GiveUpAt);
 	UFUNCTION(Server, Reliable) void ServerSetReviving(bool bHolding);
 	UFUNCTION(Client, Reliable) void ClientHitConfirm(bool bKill);
 	UFUNCTION(Client, Reliable) void ClientHurt(FVector_NetQuantize From);

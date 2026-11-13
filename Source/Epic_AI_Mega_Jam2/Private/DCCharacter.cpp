@@ -180,7 +180,7 @@ void ADCCharacter::BeginPlay()
 	BeaconMesh->SetMaterial(0, DCAssets::MakeFlat(this, Look.Accent, 12.f));
 
 	StrikeMarker->SetStaticMesh(DCAssets::Cylinder());
-	StrikeMarker->SetMaterial(0, DCAssets::MakeFlat(this, Look.Accent, 6.f));
+	StrikeMarker->SetMaterial(0, DCAssets::MakeFlatUnlit(this, Look.Accent, 1.2f)); // unlit: stays palette red, not lit to salmon
 	Tracer->SetStaticMesh(DCAssets::Cube());
 	Tracer->SetMaterial(0, DCAssets::MakeFlat(this, FLinearColor(1.f, 0.8f, 0.4f), 60.f));
 
@@ -870,11 +870,34 @@ void ADCCharacter::ServerSubmitPhoto_Implementation(int32 PhotoId, FVector_NetQu
 		return;
 	}
 	HostNextShutterTime = T + C.WindOnSeconds * 0.8f;
+	HostGradeShot(PhotoId, CamLoc, CamRot, FMath::Clamp(FOV, C.ViewfinderFOVTight, C.ViewfinderFOVWide + PS->ExtraFOV),
+		FMath::Clamp(ShotTime, T - ShotClockToleranceSeconds, T), bLast, GetWorld()->GetRealTimeSeconds() + C.GradeWaitForOpSeconds);
+}
+
+void ADCCharacter::HostGradeShot(int32 PhotoId, FVector CamLoc, FRotator CamRot, float FOV, float When, bool bLast, double GiveUpAt)
+{
+	// A strike's collapse records are written when its voxel op leaves the worker, a few frames after the blast. A
+	// shutter in that gap waits for them (graded at its own shot time; the records carry the blast time), so PEAK
+	// CINEMA and DEMOLITION see the towers the strike felled.
+	const ADCVoxelCity* City = ADCVoxelCity::Get(this);
+	if (City && City->HasPendingOps() && GetWorld()->GetRealTimeSeconds() < GiveUpAt)
+	{
+		UE_LOG(LogTemp, Display, TEXT("DCPHOTO wait-op photo=%d shot=%.2f"), PhotoId, When);
+		GetWorldTimerManager().SetTimerForNextTick(FTimerDelegate::CreateWeakLambda(this, [=, this]
+		{
+			HostGradeShot(PhotoId, CamLoc, CamRot, FOV, When, bLast, GiveUpAt);
+		}));
+		return;
+	}
+	ADCPlayerState* PS = GetPlayerState<ADCPlayerState>();
+	if (!PS)
+	{
+		return;
+	}
 	FDCShotView View;
 	View.Location = CamLoc;
 	View.Rotation = CamRot;
-	View.FOV = FMath::Clamp(FOV, C.ViewfinderFOVTight, C.ViewfinderFOVWide + PS->ExtraFOV);
-	const float When = FMath::Clamp(ShotTime, T - ShotClockToleranceSeconds, T);
+	View.FOV = FOV;
 
 	FDCPhotoRecord Record;
 	Record.PhotoId = PhotoId;
@@ -901,6 +924,7 @@ void ADCCharacter::ServerSubmitPhoto_Implementation(int32 PhotoId, FVector_NetQu
 		}
 	}
 	Record.Grade = DCPhotoRules::GradePhoto(Inputs, UDCTuning::Get().Photo);
+	UE_LOG(LogTemp, Display, TEXT("DCPHOTO graded photo=%d shot=%.2f score=%d collapses=%.0f blast=%d"), PhotoId, When, Record.Grade.Score, Inputs.Metrics.FindRef(TEXT("Collapses")), Inputs.bHasBlast ? 1 : 0);
 	ApplyStrobe(View);
 	if (ADCGameMode* GM = GetWorld()->GetAuthGameMode<ADCGameMode>())
 	{

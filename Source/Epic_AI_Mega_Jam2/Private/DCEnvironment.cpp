@@ -20,6 +20,7 @@
 #include "Components/InstancedStaticMeshComponent.h"
 #include "DCTuning.h"
 #include "Engine/World.h"
+#include "Materials/MaterialInstanceDynamic.h"
 
 ADCEnvironment::ADCEnvironment()
 {
@@ -116,6 +117,14 @@ void ADCEnvironment::BeginPlay()
 	Fog->SetFogDensity(Look.FogDensity);
 	Fog->SetFogInscatteringColor(Look.FogColor);
 
+	// Poster sky: warm, flat Rayleigh in a tall layer so the zenith stays cream (CP3 vision: it went charcoal).
+	Atmosphere->SetRayleighScattering(Look.SkyRayleighColor);
+	Atmosphere->SetRayleighScatteringScale(Look.SkyRayleighScale);
+	Atmosphere->SetRayleighExponentialDistribution(Look.SkyRayleighHeightKm);
+	Atmosphere->SetMieScatteringScale(Look.SkyMieScale);
+	Atmosphere->SetMieExponentialDistribution(Look.SkyMieHeightKm);
+	Atmosphere->SetMieScattering(Look.SkyMieAlbedo);
+
 	// Ground slab: top face at z = 0, scaled from the 100 cm engine cube.
 	Ground->SetStaticMesh(DCAssets::Cube());
 	const float Size = Look.GroundSizeCm / 100.f;
@@ -141,7 +150,19 @@ void ADCEnvironment::BeginPlay()
 	S.bOverride_AutoExposureApplyPhysicalCameraExposure = true;
 	S.AutoExposureApplyPhysicalCameraExposure = false;
 	ApplyPreset();
-	ApplyPost(ComposeLook(false, false), S);
+	if (UMaterialInterface* Ink = Cast<UMaterialInterface>(UDCTuning::Get().Assets.InkOutlineMaterial.TryLoad()))
+	{
+		const FDCLookTuning& L = UDCTuning::Get().Look;
+		OutlineMID = UMaterialInstanceDynamic::Create(Ink, this);
+		OutlineMID->SetScalarParameterValue(TEXT("Thickness"), L.OutlineThicknessPx);
+		OutlineMID->SetScalarParameterValue(TEXT("DepthThreshold"), L.OutlineDepthThreshold);
+		OutlineMID->SetScalarParameterValue(TEXT("NormalThreshold"), L.OutlineNormalThreshold);
+		OutlineMID->SetScalarParameterValue(TEXT("FadeDistance"), L.OutlineFadeCm);
+		OutlineMID->SetVectorParameterValue(TEXT("InkColor"), L.Enemy); // ink: the darkest tone of the look
+	}
+	const FDCPostResult Composed = ComposeLook(false, false);
+	ApplyPost(Composed, S);
+	ApplyOutline(Composed.Outline);
 
 	FActorSpawnParameters Params;
 	Params.Owner = this;
@@ -325,5 +346,23 @@ void ADCEnvironment::Tick(float DeltaSeconds)
 	Fog->SetFogDensity(W.FogDensity);
 	Fog->SetFogInscatteringColor(MutatorFog.A > 0.f ? MutatorFog : W.FogColor);
 	UpdatePostWeights();
-	ApplyPost(ComposeLook(false, false), Post->Settings);
+	const FDCPostResult Composed = ComposeLook(false, false);
+	ApplyPost(Composed, Post->Settings);
+	ApplyOutline(Composed.Outline);
+}
+
+void ADCEnvironment::ApplyOutline(float Strength)
+{
+	if (!OutlineMID)
+	{
+		return;
+	}
+	OutlineMID->SetScalarParameterValue(TEXT("Strength"), Strength);
+	TArray<FWeightedBlendable>& Blendables = Post->Settings.WeightedBlendables.Array;
+	FWeightedBlendable* Mine = Blendables.FindByPredicate([this](const FWeightedBlendable& B) { return B.Object == OutlineMID; });
+	if (!Mine)
+	{
+		Mine = &Blendables.Add_GetRef(FWeightedBlendable(0.f, OutlineMID));
+	}
+	Mine->Weight = Strength > 0.f ? 1.f : 0.f;
 }

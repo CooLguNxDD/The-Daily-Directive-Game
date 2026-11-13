@@ -43,6 +43,8 @@ public:
 	/** The scene's composed look, or the photo's: the scene layers plus the photo layers (exposure kept for photos). */
 	FDCPostResult ComposeLook(bool bPhoto, bool bSpotlit) const;
 	static void ApplyPost(const FDCPostResult& Look, FPostProcessSettings& Out);
+	/** The ink outline blendable on the scene volume, at the composed Outline strength (0 removes it). */
+	void ApplyOutline(float Strength);
 	int32 GetPostQuality() const { return PostQuality; }
 	const FDCWeatherState& GetWeather() const { return Weather; }
 
@@ -57,6 +59,7 @@ private:
 	UPROPERTY(VisibleAnywhere) TObjectPtr<USkyAtmosphereComponent> Atmosphere;
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UExponentialHeightFogComponent> Fog;
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UPostProcessComponent> Post;
+	UPROPERTY() TObjectPtr<class UMaterialInstanceDynamic> OutlineMID;
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UStaticMeshComponent> Ground;
 	/** The street grid read from the city tuning (same on every machine and every sector): kerbed blocks and lane dashes. */
 	UPROPERTY(VisibleAnywhere) TObjectPtr<class UInstancedStaticMeshComponent> Sidewalks;

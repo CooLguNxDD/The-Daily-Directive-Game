@@ -9,6 +9,7 @@ art) is in the game.
 | Mannequin characters (Manny/Quinn meshes, skeleton, rifle and unarmed animations, ABP_Unarmed) | `Content/Characters/Mannequins/` | Unreal Engine 5 third-person template content (Epic Games) | Unreal Engine EULA: usable in Unreal Engine projects, including commercial ones |
 | Basic shapes (cube, sphere, cylinder, cone) and BasicShapeMaterial | `/Engine/BasicShapes/` | Unreal Engine 5.9 engine content (Epic Games) | Unreal Engine EULA |
 | Roboto font (HUD and menu text) | engine fonts `/Engine/EngineFonts/` | Google Roboto, shipped with Unreal Engine | Apache License 2.0 |
+| Anton (headlines, menu title), Oswald (HUD body), UnifrakturMaguntia (masthead), Black Ops One (score stamps) | `Content/DC/Fonts/FF_*.uasset` (sources and licence texts in `Content/DC/Fonts/Source/`) | Google Fonts (github.com/google/fonts), fetched by the session 2026-11-13; imported by `tools/content/build_content.py` | SIL Open Font License 1.1 (`OFL-*.txt` beside each face) |
 
 ## Made for this game (no third-party source)
 | Asset | Path | How it is made |
@@ -31,6 +32,7 @@ art) is in the game.
 |-------|------|----------------|
 | Voxel city, terrain, rubble | spawned at run time | C++ voxel engine (`Source/.../Voxel/`) from recipes and districts in `Config/DefaultGame.ini` |
 | `M_DCVoxel` vertex-colour voxel material | `Content/DC/Materials/M_DCVoxel.uasset` | `tools/content/build_content.py` |
+| `M_DCInkOutline` ink-edge post material | `Content/DC/Materials/M_DCInkOutline.uasset` | `tools/content/build_content.py` (HLSL in the script) |
 | Enemy and prop voxel models | `Content/DC/Voxel/*.dcvox` | `tools/voxel-forge/forge.py` from `tools/voxel-forge/recipes/*.vfr` (R17) |
 | Newsprint photo print, stamp grit | at run time | C++ (`Rules/DCNewsprint.cpp`, `DCHUD::StampGrit`) |
 | Decay effects, voxel blast core, weather precipitation | at run time | C++ pooled instanced cubes (`DCVoxelFx`, `DCOrbitalStrike`) from ini rows |

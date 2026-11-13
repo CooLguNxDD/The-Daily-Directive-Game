@@ -22,7 +22,7 @@ namespace
 	}
 
 	TObjectPtr<UStaticMesh> GCube, GSphere, GCylinder, GCone;
-	TObjectPtr<UMaterialInterface> GFlat, GFallback;
+	TObjectPtr<UMaterialInterface> GFlat, GFallback, GFlatUnlit;
 
 	const FName ColorParam(TEXT("Color"));
 	const FName GlowParam(TEXT("Glow"));
@@ -57,6 +57,14 @@ namespace DCAssets
 	UMaterialInstanceDynamic* MakeFlat(UObject* Outer, const FLinearColor& Color, float Glow)
 	{
 		UMaterialInstanceDynamic* Mid = UMaterialInstanceDynamic::Create(FlatMaterial(), Outer);
+		SetFlat(Mid, Color, Glow);
+		return Mid;
+	}
+
+	UMaterialInstanceDynamic* MakeFlatUnlit(UObject* Outer, const FLinearColor& Color, float Glow)
+	{
+		UMaterialInterface* Unlit = LoadCached(UDCTuning::Get().Assets.FlatUnlitMaterial, GFlatUnlit);
+		UMaterialInstanceDynamic* Mid = UMaterialInstanceDynamic::Create(Unlit ? Unlit : FlatMaterial(), Outer);
 		SetFlat(Mid, Color, Glow);
 		return Mid;
 	}

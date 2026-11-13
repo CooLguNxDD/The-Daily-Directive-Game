@@ -104,6 +104,9 @@ struct FDCCameraTuning
 	UPROPERTY(EditAnywhere, Config, Category = "Camera") int32 PhotoWidth = 640;
 	UPROPERTY(EditAnywhere, Config, Category = "Camera") int32 PhotoHeight = 360;
 	UPROPERTY(EditAnywhere, Config, Category = "Camera") float StampHoldSeconds = 2.6f;
+	/** Host: a shot taken while a voxel op is on the worker waits up to this long (real time) for the op to land, so
+	 *  the strike's collapse records exist when it is graded (C3.1). */
+	UPROPERTY(EditAnywhere, Config, Category = "Camera") float GradeWaitForOpSeconds = 2.f;
 	/** How far the floating tag scan looks (cm). */
 	UPROPERTY(EditAnywhere, Config, Category = "Camera") float TagRangeCm = 9000.f;
 	/** Swarmers within this radius rush a photographer who raises the camera (R11). */
@@ -186,6 +189,29 @@ struct FDCLookTuning
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float MaxBloomPeak = 55.f;
 	/** Sun light-shaft bloom scale (0 = off). */
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float LightShaftBloom = 0.15f;
+	/** Strike beam glow at full charge (unlit material): well above 1 the tonemapper bleaches propaganda red to pink. */
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float BeamGlowPeak = 1.3f;
+	/** The danger ring: a thin band of this many segments, this wide (cm), at this unlit glow (1 = the palette red). */
+	UPROPERTY(EditAnywhere, Config, Category = "Look") int32 DangerRingSegments = 64;
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float DangerRingWidthCm = 60.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float DangerRingGlow = 1.f;
+	/** Detonation flash of the beam: lerped toward this colour (warm orange keeps red from turning salmon), and its glow. */
+	UPROPERTY(EditAnywhere, Config, Category = "Look") FLinearColor BeamFlashColor = FLinearColor(1.f, 0.42f, 0.02f, 1.f);
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float BeamFlashGlow = 3.f;
+	/** Poster sky (cream to the zenith, not slate): the sky atmosphere's Rayleigh colour (warm, near-flat across
+	 *  wavelengths), its scale and height (a taller layer keeps the zenith bright), and a warm Mie haze. */
+	UPROPERTY(EditAnywhere, Config, Category = "Look") FLinearColor SkyRayleighColor = FLinearColor(1.f, 0.86f, 0.62f);
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float SkyRayleighScale = 0.0331f;
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float SkyRayleighHeightKm = 24.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float SkyMieScale = 0.012f;
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float SkyMieHeightKm = 3.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Look") FLinearColor SkyMieAlbedo = FLinearColor(1.f, 0.92f, 0.78f);
+	/** Ink outline (its strength is the post stack's Outline): line width in pixels, the relative depth step and the
+	 *  normal change that count as an edge, and the distance (cm) where lines fade out (far towers stay soft). */
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float OutlineThicknessPx = 1.5f;
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float OutlineDepthThreshold = 0.03f;
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float OutlineNormalThreshold = 0.3f;
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float OutlineFadeCm = 25000.f;
 	/** Cubes in the voxel blast core (R4). */
 	UPROPERTY(EditAnywhere, Config, Category = "Look") int32 FireballCubes = 34;
 	/** Peak intensity of the blast's point light (it lights the street and the debris). */
@@ -288,6 +314,17 @@ struct FDCAssetTuning
 {
 	GENERATED_BODY()
 	UPROPERTY(EditAnywhere, Config, Category = "Assets") FSoftObjectPath FlatMaterial = FSoftObjectPath(TEXT("/Game/DC/Materials/M_DCFlat.M_DCFlat"));
+	/** Post material: ink edges from depth and normal discontinuities (R19 Outline layer field drives its strength). */
+	/** Print type by role (R7, OFL faces from Content/DC/Fonts/Source, imported by tools/content/build_content.py). */
+	UPROPERTY(EditAnywhere, Config, Category = "Assets") TMap<FName, FSoftObjectPath> FontFaces = {
+		{TEXT("Masthead"), FSoftObjectPath(TEXT("/Game/DC/Fonts/FF_UnifrakturMaguntia.FF_UnifrakturMaguntia"))},
+		{TEXT("Headline"), FSoftObjectPath(TEXT("/Game/DC/Fonts/FF_Anton.FF_Anton"))},
+		{TEXT("Body"), FSoftObjectPath(TEXT("/Game/DC/Fonts/FF_Oswald.FF_Oswald"))},
+		{TEXT("Stamp"), FSoftObjectPath(TEXT("/Game/DC/Fonts/FF_BlackOpsOne.FF_BlackOpsOne"))}};
+	/** Point size the HUD's scale 1.0 means (the engine's large font was 24). */
+	UPROPERTY(EditAnywhere, Config, Category = "Assets") int32 FontBaseSize = 24;
+	UPROPERTY(EditAnywhere, Config, Category = "Assets") FSoftObjectPath FlatUnlitMaterial = FSoftObjectPath(TEXT("/Game/DC/Materials/M_DCFlatUnlit.M_DCFlatUnlit"));
+	UPROPERTY(EditAnywhere, Config, Category = "Assets") FSoftObjectPath InkOutlineMaterial = FSoftObjectPath(TEXT("/Game/DC/Materials/M_DCInkOutline.M_DCInkOutline"));
 	UPROPERTY(EditAnywhere, Config, Category = "Assets") FSoftObjectPath FallbackMaterial = FSoftObjectPath(TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial"));
 	UPROPERTY(EditAnywhere, Config, Category = "Assets") FSoftObjectPath Cube = FSoftObjectPath(TEXT("/Engine/BasicShapes/Cube.Cube"));
 	UPROPERTY(EditAnywhere, Config, Category = "Assets") FSoftObjectPath Sphere = FSoftObjectPath(TEXT("/Engine/BasicShapes/Sphere.Sphere"));

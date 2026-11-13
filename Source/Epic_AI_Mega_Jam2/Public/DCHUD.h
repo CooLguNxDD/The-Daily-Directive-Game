@@ -27,6 +27,8 @@ public:
 
 	// Shared drawing helpers.
 	void Text(const FString& S, float X, float Y, const FLinearColor& C, float Scale = 1.f, bool bCentre = false, UFont* Font = nullptr);
+	/** Size of S drawn by Text at PixelScale (= Scale * TextBoost * UiScale). */
+	void TextSize(UFont* Font, const FString& S, float PixelScale, float& OutW, float& OutH) const;
 	void Box(float X, float Y, float W, float H, const FLinearColor& C);
 	void Frame(float X, float Y, float W, float H, float T, const FLinearColor& C);
 	float Sx(float X) const { return X * UiScale; }
@@ -75,5 +77,8 @@ private:
 	class UTexture2D* StampGrit();
 	UPROPERTY() TObjectPtr<class UTexture2D> Grit;
 	UPROPERTY() TObjectPtr<UFont> BigFont;
+	UPROPERTY() TObjectPtr<UFont> HeadFont;
+	UPROPERTY() TObjectPtr<UFont> MastFont;
+	UPROPERTY() TObjectPtr<UFont> StampFont;
 	UPROPERTY() TObjectPtr<UFont> SmallFont;
 };

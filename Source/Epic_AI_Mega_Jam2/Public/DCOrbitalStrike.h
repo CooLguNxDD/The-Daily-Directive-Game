@@ -44,7 +44,7 @@ private:
 	UPROPERTY(Replicated) float DetonateTime = 0.f;
 
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UStaticMeshComponent> Beam;
-	UPROPERTY(VisibleAnywhere) TObjectPtr<UStaticMeshComponent> Ring;
+	UPROPERTY(VisibleAnywhere) TObjectPtr<class UInstancedStaticMeshComponent> Ring;
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UStaticMeshComponent> Beacon;
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UStaticMeshComponent> Fireball;
 	/** Voxel blast core (R4): seeded chunky cubes with gaps between them, so a tower stays readable behind the peak. */
