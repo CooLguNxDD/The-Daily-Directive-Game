@@ -310,7 +310,11 @@ void ADCCharacter::OnSprintEnd(const FInputActionInstance&)
 	ServerSetSprint(false);
 }
 
-void ADCCharacter::OnCrouch(const FInputActionInstance&) { Crouch(); }
+void ADCCharacter::OnCrouch(const FInputActionInstance&)
+{
+	DCAudio::PlayAt(this, TEXT("Footstep"), GetActorLocation() - FVector(0, 0, 80.f), 0.25f, 0.7f); // gear rustle
+	Crouch();
+}
 void ADCCharacter::OnCrouchEnd(const FInputActionInstance&) { UnCrouch(); }
 
 float ADCCharacter::SelfReviveSecondsLeft() const
@@ -410,7 +414,12 @@ void ADCCharacter::OnZoom(const FInputActionInstance& I)
 	const FDCCameraTuning& C = UDCTuning::Get().Camera;
 	const ADCPlayerState* PS = GetPlayerState<ADCPlayerState>();
 	const float Wide = C.ViewfinderFOVWide + (PS ? PS->ExtraFOV : 0.f);
+	const float Before = ZoomFOV;
 	ZoomFOV = FMath::Clamp(ZoomFOV - Wheel * C.ZoomStep, C.ViewfinderFOVTight, Wide);
+	if (!FMath::IsNearlyEqual(Before, ZoomFOV))
+	{
+		DCAudio::Play2D(this, TEXT("UIClick"), 0.25f, ZoomFOV < Before ? 1.3f : 0.9f); // lens ring tick
+	}
 }
 
 void ADCCharacter::OnCycle(const FInputActionInstance&)

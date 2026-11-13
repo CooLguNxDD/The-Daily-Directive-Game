@@ -255,6 +255,18 @@ void ADCGameMode::EnterSector(float Now)
 
 void ADCGameMode::TickSectorPhase(float Now)
 {
+	// Evidence runs (-dcdownhost=S): the host player is knocked down S seconds into the first sector, so a
+	// teammate's revive can be recorded. Never active otherwise.
+	float DownAt = 0.f;
+	if (!bScriptedDownDone && FParse::Value(FCommandLine::Get(), TEXT("dcdownhost="), DownAt) && Now >= SectorStartTime + DownAt)
+	{
+		bScriptedDownDone = true;
+		const TArray<ADCPlayerState*> All = Players();
+		if (ADCCharacter* Host = All.Num() > 0 ? All[0]->GetPawn<ADCCharacter>() : nullptr)
+		{
+			Host->HostApplyHurt(10000.f, Host->GetActorLocation() + FVector(500, 0, 0));
+		}
+	}
 	CheckWipe();
 	if (GetGameState<ADCGameState>()->Phase != EDCRunPhase::Sector)
 	{
