@@ -190,9 +190,30 @@ void ADCDemoPilot::AddCycle(const FString& C)
 		return !PS || !GS || PS->CooldownReadyTime(TEXT("OrbitalLaser")) <= GS->Now();
 	}, 20.f);
 	Add(0.f, [this] { Tap(TEXT("Slot2")); return true; });
+	if (C.Contains(TEXT("_c1")) && !C.StartsWith(TEXT("s0")))
+	{
+		// Spend Propaganda Points: Q cycles to the 600-point Barrage (R6).
+		Add(0.5f, [this] { Tap(TEXT("Cycle")); return true; });
+		Add(0.3f, [this, C]
+		{
+			const APlayerController* PC = GetWorld()->GetFirstPlayerController();
+			const ADCPlayerState* PS = PC ? PC->GetPlayerState<ADCPlayerState>() : nullptr;
+			const ADCCharacter* Me = PC ? Cast<ADCCharacter>(PC->GetPawn()) : nullptr;
+			UE_LOG(LogDCDemo, Display, TEXT("DEMO stratagem selected=%s points=%d"), Me ? *Me->GetSelectedStratagem().ToString() : TEXT("?"), PS ? PS->Points : -1);
+			Shot(C + TEXT("_stratagem_selected"));
+			return true;
+		});
+	}
 	Add(0.6f, [this] { if (Tower.IsValid()) { AimAt(Tower->GetActorLocation()); } return true; });
 	Add(0.3f, [this, C] { Shot(C + TEXT("_strike_aim")); return true; });
 	Add(0.2f, [this] { Tap(TEXT("Fire")); return true; });
+	Add(0.3f, [this]
+	{
+		const APlayerController* PC = GetWorld()->GetFirstPlayerController();
+		const ADCPlayerState* PS = PC ? PC->GetPlayerState<ADCPlayerState>() : nullptr;
+		UE_LOG(LogDCDemo, Display, TEXT("DEMO strike called: points now=%d"), PS ? PS->Points : -1);
+		return true;
+	});
 	// Run toward it instead of away.
 	Add(0.4f, [this, C] { Shot(C + TEXT("_telegraph")); Press(TEXT("Move"), FVector(0, 1, 0)); Press(TEXT("Sprint")); return true; });
 	Add(1.0f, [this] { Release(TEXT("Sprint")); Release(TEXT("Move")); return true; });
