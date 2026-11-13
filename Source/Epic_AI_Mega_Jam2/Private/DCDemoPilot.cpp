@@ -615,6 +615,20 @@ void ADCDemoPilot::AddRifleOnly()
 			}
 			const int32 SectorIdx = GS ? GS->SectorIndex : -1;
 			const int32 Quota = UDCTuning::Get().Sectors.IsValidIndex(SectorIdx) ? UDCTuning::Get().Sectors[SectorIdx].QuotaPoints : 0;
+			// The nearest swarmer: where it is relative to me (a stuck pack shows here).
+			const ADCEnemy* NearSwarmer = nullptr;
+			float NearSwarmerD = 1e9f;
+			for (ADCEnemy* E : TActorRange<ADCEnemy>(GetWorld()))
+			{
+				const float D = Me && E->IsAlive() && E->GetKind() == TEXT("Swarmer") ? FVector::Dist2D(E->GetActorLocation(), Me->GetActorLocation()) : 1e9f;
+				NearSwarmer = D < NearSwarmerD ? E : NearSwarmer;
+				NearSwarmerD = FMath::Min(NearSwarmerD, D);
+			}
+			if (NearSwarmer && Me)
+			{
+				UE_LOG(LogDCDemo, Display, TEXT("DEMO rifle-only swarmer d2d=%.0fm dz=%.0fm loc=%s"), NearSwarmerD / 100.f,
+					(NearSwarmer->GetActorLocation().Z - Me->GetActorLocation().Z) / 100.f, *NearSwarmer->GetActorLocation().ToCompactString());
+			}
 			UE_LOG(LogDCDemo, Display, TEXT("DEMO rifle-only t=%ds phase=%d health=%.0f ammo=%d downed=%d enemies=%d nearest=%.0fm quota=%d/%d failed=%d"), i * 15,
 				GS ? static_cast<int32>(GS->Phase) : -1, Me ? Me->GetHealth() : -1.f, Me ? Me->GetAmmo() : -1, Me && Me->IsDowned() ? 1 : 0, Alive, Nearest / 100.f,
 				GS ? GS->SectorPhotoPoints : 0, Quota, GS && GS->bRunFailed ? 1 : 0);

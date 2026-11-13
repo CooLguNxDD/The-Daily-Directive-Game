@@ -495,9 +495,13 @@ void ADCGameMode::TickPressure(float Now)
 	{
 		const FVector Where = Centre + FVector(SectorRng.FRandRange(-400, 400), SectorRng.FRandRange(-400, 400), Def->HoverHeight);
 		const FTransform Xf(FRotator(0, SectorRng.FRandRange(0, 360), 0), Where);
-		ADCEnemy* E = GetWorld()->SpawnActorDeferred<ADCEnemy>(ADCEnemy::StaticClass(), Xf, nullptr, nullptr, ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn);
-		E->InitKind(Def->Id);
-		E->FinishSpawning(Xf);
+		// Never inside a tower: a spot that would collide is nudged clear or skipped.
+		ADCEnemy* E = GetWorld()->SpawnActorDeferred<ADCEnemy>(ADCEnemy::StaticClass(), Xf, nullptr, nullptr, ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButDontSpawnIfColliding);
+		if (E)
+		{
+			E->InitKind(Def->Id);
+			E->FinishSpawning(Xf);
+		}
 	}
 	LastPackTime = Now;
 	UE_LOG(LogTemp, Display, TEXT("DCPACK sector=%d t=%.0f pack=%d alive=%d target=%d lag=%.2f photo=%d/%d"), GS->SectorIndex + 1, In.SectorElapsed, D.PackSize, In.Alive,
