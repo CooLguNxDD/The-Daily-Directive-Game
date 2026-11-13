@@ -31,6 +31,8 @@ public:
 	void SnapSecondTake();
 	bool IsTakeRaised() const { return bTakeRaised; }
 	bool CanTakeThisClip() const;
+	/** The host refused a take of this clip: the clip is free to shoot again. */
+	void OnTakeRejected(int32 ClipIndex) { TakenClip = TakenClip == ClipIndex ? -1 : TakenClip; }
 	/** The moment of the run being replayed now, on the original server clock. */
 	float ContentTime() const;
 	int32 GetStagedIndex() const { return StagedIndex; }

@@ -5,9 +5,10 @@
 
 class ADCPlayerController;
 class SWidget;
+struct FDCLanHost;
 
 namespace DCMenu
 {
 	/** Mode 0: main menu (not connected). 1: hosting (lobby with START). 2: joined (waiting for the host). */
-	TSharedRef<SWidget> Build(ADCPlayerController* PC, uint8 Mode);
+	TSharedRef<SWidget> Build(ADCPlayerController* PC, uint8 Mode, const TArray<FDCLanHost>& LanHosts);
 }

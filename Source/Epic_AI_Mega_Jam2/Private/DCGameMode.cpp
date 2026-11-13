@@ -6,6 +6,7 @@
 #include "DCEnemy.h"
 #include "DCGameState.h"
 #include "DCHUD.h"
+#include "DCLanBeacon.h"
 #include "DCOrbitalStrike.h"
 #include "DCPlayerController.h"
 #include "DCPlayerState.h"
@@ -78,6 +79,13 @@ void ADCGameMode::BeginPlay()
 	ADCGameState* GS = GetGameState<ADCGameState>();
 	GS->RunSeed = RequestedSeed != 0 ? RequestedSeed : FMath::RandRange(1000, 999999);
 	BuildCity(0); // the lobby's backdrop is the first sector
+	if (GetNetMode() == NM_ListenServer)
+	{
+		if (UDCLanBeacon* Beacon = GetGameInstance()->GetSubsystem<UDCLanBeacon>())
+		{
+			Beacon->StartAnnouncing(UDCTuning::Get().Run.Port, TEXT("Front Page Press Corps"));
+		}
+	}
 	// Scripted co-op runs (-dcwaitplayers=N) hold the lobby until N players joined.
 	FParse::Value(FCommandLine::Get(), TEXT("dcwaitplayers="), AutoStartPlayers);
 	if (bAutoStart && AutoStartPlayers <= 1)
@@ -107,6 +115,10 @@ void ADCGameMode::PostLogin(APlayerController* NewPlayer)
 {
 	Super::PostLogin(NewPlayer);
 	const TArray<FString>& Signs = UDCTuning::Get().Run.CallSigns;
+	if (UDCLanBeacon* Beacon = GetGameInstance()->GetSubsystem<UDCLanBeacon>())
+	{
+		Beacon->SetPlayerCount(GameState->PlayerArray.Num());
+	}
 	const int32 Index = FMath::Max(0, GameState->PlayerArray.IndexOfByKey(NewPlayer->PlayerState));
 	const FString Sign = Signs.Num() > 0 ? Signs[Index % Signs.Num()] : FString::Printf(TEXT("CORRESPONDENT %d"), Index + 1);
 	ChangeName(NewPlayer, Sign, false);
@@ -147,6 +159,10 @@ void ADCGameMode::StartRun()
 	if (GS->Phase != EDCRunPhase::Lobby)
 	{
 		return;
+	}
+	if (UDCLanBeacon* Beacon = GetGameInstance()->GetSubsystem<UDCLanBeacon>())
+	{
+		Beacon->Stop(); // the lobby closed
 	}
 	GS->SectorIndex = 0;
 	// Evidence runs can start in a later sector (-dcstartsector=N) to reach its enemies sooner.

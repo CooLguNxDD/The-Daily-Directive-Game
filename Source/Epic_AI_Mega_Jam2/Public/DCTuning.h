@@ -355,6 +355,8 @@ struct FDCRunTuning
 	UPROPERTY(EditAnywhere, Config, Category = "Run") int32 PodAmmo = 90;
 	UPROPERTY(EditAnywhere, Config, Category = "Run") float PodHealth = 50.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Run") int32 Port = 7777;
+	/** UDP port of the LAN host announcements (R12). */
+	UPROPERTY(EditAnywhere, Config, Category = "Run") int32 LanBeaconPort = 7778;
 	/** War-correspondent call signs given to players in join order (machine names never show). */
 	UPROPERTY(EditAnywhere, Config, Category = "Run") TArray<FString> CallSigns;
 	/** Headline templates: {SUBJECT} {SECTOR} {PLAYER} {TIMING} are filled from the headline photo. */

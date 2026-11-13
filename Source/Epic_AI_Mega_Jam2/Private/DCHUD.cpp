@@ -365,7 +365,8 @@ void ADCHUD::DrawPhotoCard(UTexture* Image, const FDCPhotoGrade& Grade, float X,
 	const float S = FMath::Lerp(2.4f, 1.f, FMath::Clamp(StampSlam, 0.f, 1.f));
 	const float Cx = X + W * 0.62f, Cy = Y + H * 0.62f;
 	const FString Score = FString::Printf(TEXT("+%s"), *FormatPoints(Grade.Score));
-	const FString Timing = FString::Printf(TEXT("%s  %.1fx"), *Upper(Grade.TimingLabel), Grade.Multiplier);
+	// %g keeps 0.75x exact (a fixed one-decimal format showed a 0.75x blow-out as 0.8x).
+	const FString Timing = FString::Printf(TEXT("%s  %gx"), *Upper(Grade.TimingLabel), FMath::RoundToFloat(Grade.Multiplier * 100.f) / 100.f);
 	float Tw = 0.f, Th = 0.f;
 	Canvas->TextSize(BigFont, Score, Tw, Th, 1.6f * S * TextBoost * UiScale, 1.6f * S * TextBoost * UiScale);
 	Box(Cx - Tw * 0.5f - Sx(10.f), Cy - Sx(8.f), Tw + Sx(20.f), Th * 1.9f + Sx(10.f), FLinearColor(Red.R, Red.G, Red.B, 0.92f));
