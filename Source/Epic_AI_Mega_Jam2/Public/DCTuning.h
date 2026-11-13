@@ -165,7 +165,9 @@ struct FDCLookTuning
 	UPROPERTY(EditAnywhere, Config, Category = "Look") FLinearColor ColorGain = FLinearColor(1.08f, 1.0f, 0.86f);
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float FilmGrain = 0.35f;
 	/** Emissive of the fireball core and the ground shock ring at their peak (the bloom spike itself is BloomPeak). */
-	UPROPERTY(EditAnywhere, Config, Category = "Look") float FireballGlow = 45.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float FireballGlow = 20.f;
+	/** Peak intensity of the blast's point light (it lights the street and the debris). */
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float BlastLightIntensity = 1.5e7f;
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float ShockGlow = 18.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float HitstopSeconds = 0.12f;
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float HitstopDilation = 0.05f;
