@@ -227,6 +227,12 @@ FDCShotView ADCCharacter::GetShotView() const
 	View.Location = FirstCam->GetComponentLocation();
 	View.Rotation = GetControlRotation();
 	View.FOV = LensFOV();
+	if (HasLastFrame())
+	{
+		// The Last Frame lens (R21): low, along the player's aim; the capture uses the same view, so the grade matches.
+		View.Rotation.Pitch = FMath::Clamp(FRotator::NormalizeAxis(View.Rotation.Pitch), -4.f, 35.f);
+		View.Location = GetActorLocation() + FVector(0, 0, 35.f) + View.Rotation.Vector() * 60.f;
+	}
 	return View;
 }
 
@@ -810,6 +816,14 @@ void ADCCharacter::TakePhoto()
 	Capture->PostProcessBlendWeight = 1.f;
 	// Never shoot from inside a voxel (a tower's hollow, rubble, a prop): back the lens out along the view, then up.
 	const FVector Lens = Capture->GetComponentLocation();
+	const FRotator LensRot = Capture->GetComponentRotation();
+	if (HasLastFrame())
+	{
+		// R21: from the ground, looking where the player looks, never into the dirt.
+		FRotator Aim = GetControlRotation();
+		Aim.Pitch = FMath::Clamp(FRotator::NormalizeAxis(Aim.Pitch), -4.f, 35.f);
+		Capture->SetWorldLocationAndRotation(GetActorLocation() + FVector(0, 0, 35.f) + Aim.Vector() * 60.f, Aim);
+	}
 	if (const ADCVoxelCity* City = ADCVoxelCity::Get(this))
 	{
 		FVector Free = Lens;
@@ -821,7 +835,7 @@ void ADCCharacter::TakePhoto()
 		Capture->SetWorldLocation(Free);
 	}
 	Capture->CaptureScene();
-	Capture->SetWorldLocation(Lens);
+	Capture->SetWorldLocationAndRotation(Lens, LensRot);
 
 	// Instant preview grade from the same rules; the host's grade replaces it when it arrives.
 	const FDCShotView View = GetShotView();
