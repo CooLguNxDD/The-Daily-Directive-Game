@@ -194,6 +194,7 @@ void ADCEnemy::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetime
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	DOREPLIFETIME(ADCEnemy, Kind);
 	DOREPLIFETIME(ADCEnemy, Health);
+	DOREPLIFETIME(ADCEnemy, StunnedUntil);
 	DOREPLIFETIME(ADCEnemy, LightTarget);
 }
 

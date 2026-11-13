@@ -41,6 +41,20 @@ is kept from the run records (Glass Box modifier): what was decided, why, and wh
   has a photo timing window, and the reel replays them from the same records.
 - Upgrade and mutator effects became data rows (multipliers, light and fog, stun, domino reach, rogue strikes).
 
+## 2026-11-13: Checkpoints 2 to 5
+- Enemies: swarmers that rush whoever raises a camera, spotlight units that blow out a photo's exposure (BLOWN OUT
+  0.75x), and walkers that march on the nearest tower and topple it into a telegraphed collapse.
+- Revive: a teammate holds E on a downed player, who lies in the mannequin fall pose until helped.
+- Vote: one vote per player for someone else's shot, 600 points each; a vote can lift the runner-up to the headline.
+- Draw: changing slot plays a mannequin motion over the draw time; the camera has its own two-handed raise.
+- Second take (stretch): while a reel clip replays, a player raises a camera from a free angle and snaps once per
+  clip. The host grades it on its own re-staged scene at the replay clock, and it joins the final cut at its critic
+  rank (checkpoint 5 found it appended at the bottom, so the timeout pick skipped it).
+- LAN: a listen host announces itself on the local network; the title menu lists the games it hears with a JOIN
+  button, beside joining by IP.
+- Evidence tooling: scripted pilot runs for each draft option, a rifle-only sector, and a listening pass that
+  records the master mix and checks every cue played is audible (`tools/evidence/audio_cues.py`).
+
 ## Problems met
 - The engine is shared with an editor that has Live Coding on: UnrealBuildTool refuses to build. Fixed with
   `-NoHotReloadFromIDE`, and the packaging step now builds the game target itself.
@@ -51,3 +65,8 @@ is kept from the run records (Glass Box modifier): what was decided, why, and wh
   fraction of the bloom and stop down while the flash is on screen.
 - A pointer into a temporary list made the Domino chain fire with a 0.1 s warning instead of 1.2 s.
 - Per-file colour constants clashed in unity builds and broke packaging; one palette header now owns them.
+- A unity build failed on a local named like a file-scope constant (`Rate`); the gate's clean build caught it.
+- Evidence frames after a network travel overwrote the earlier ones (the new controller restarts its count); frame
+  names now carry a time stamp.
+- The DRAMA tag on a pending strike sat at a fixed 9 m and fell off the bottom of frames aimed up a tower; it now
+  rides the laser column where the view ray passes it.

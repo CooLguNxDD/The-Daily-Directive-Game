@@ -38,6 +38,8 @@ private:
 		float Timeout = 12.f;
 	};
 
+	void AddCueRoll();
+	void AddRifleOnly();
 	void BuildScript();
 	void AddCycle(const FString& Name);
 	void AddEnemyFight(const FString& Sector);

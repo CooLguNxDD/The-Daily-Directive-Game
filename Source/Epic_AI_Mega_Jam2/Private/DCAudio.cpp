@@ -1,6 +1,9 @@
 #include "DCAudio.h"
 
+#include "AudioMixerBlueprintLibrary.h"
+#include "Camera/PlayerCameraManager.h"
 #include "Components/AudioComponent.h"
+#include "GameFramework/PlayerController.h"
 #include "Engine/GameInstance.h"
 #include "Engine/World.h"
 #include "Kismet/GameplayStatics.h"
@@ -249,8 +252,43 @@ USoundWaveProcedural* UDCAudioSubsystem::MakeWave(FName Cue) const
 	return Wave;
 }
 
+void UDCAudioSubsystem::StartEvidenceRecording(const UObject* WorldContext)
+{
+	if (RecordStart >= 0.0 || !FParse::Value(FCommandLine::Get(), TEXT("dcaudiorec="), RecordDir))
+	{
+		return;
+	}
+	UAudioMixerBlueprintLibrary::StartRecordingOutput(WorldContext, 1800.f);
+	RecordStart = FPlatformTime::Seconds();
+	UE_LOG(LogTemp, Display, TEXT("DCCUE recording started to %s"), *RecordDir);
+}
+
+void UDCAudioSubsystem::StopEvidenceRecording(const UObject* WorldContext)
+{
+	if (RecordStart < 0.0)
+	{
+		return;
+	}
+	UAudioMixerBlueprintLibrary::StopRecordingOutputToAnyPath(WorldContext, EAudioRecordingExportType::WavFile, TEXT("mix"), RecordDir);
+	UE_LOG(LogTemp, Display, TEXT("DCCUE recording stopped t=%.3f"), FPlatformTime::Seconds() - RecordStart);
+	RecordStart = -1.0;
+}
+
+void UDCAudioSubsystem::LogCue(const UObject* WorldContext, FName Cue, const FVector* Location) const
+{
+	if (RecordStart < 0.0)
+	{
+		return;
+	}
+	const UWorld* World = WorldContext ? WorldContext->GetWorld() : nullptr;
+	const APlayerController* PC = World ? World->GetFirstPlayerController() : nullptr;
+	const float Dist = Location && PC && PC->PlayerCameraManager ? FVector::Dist(*Location, PC->PlayerCameraManager->GetCameraLocation()) : 0.f;
+	UE_LOG(LogTemp, Display, TEXT("DCCUE %s t=%.3f dist=%.0f"), *Cue.ToString(), FPlatformTime::Seconds() - RecordStart, Dist);
+}
+
 void UDCAudioSubsystem::PlayAt(const UObject* WorldContext, FName Cue, const FVector& Location, float Volume, float Pitch)
 {
+	LogCue(WorldContext, Cue, &Location);
 	if (USoundWaveProcedural* Wave = MakeWave(Cue))
 	{
 		UGameplayStatics::PlaySoundAtLocation(WorldContext, Wave, Location, Volume, Pitch, 0.f, Attenuation);
@@ -259,6 +297,7 @@ void UDCAudioSubsystem::PlayAt(const UObject* WorldContext, FName Cue, const FVe
 
 void UDCAudioSubsystem::Play2D(const UObject* WorldContext, FName Cue, float Volume, float Pitch)
 {
+	LogCue(WorldContext, Cue, nullptr);
 	if (USoundWaveProcedural* Wave = MakeWave(Cue))
 	{
 		UGameplayStatics::PlaySound2D(WorldContext, Wave, Volume, Pitch);

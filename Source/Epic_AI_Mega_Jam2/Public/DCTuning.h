@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "Engine/DeveloperSettings.h"
 #include "InputCoreTypes.h"
+#include "DCTypes.h"
 #include "Rules/DCPhotoRules.h"
 #include "DCTuning.generated.h"
 
@@ -267,6 +268,11 @@ struct FDCAssetTuning
 	UPROPERTY(EditAnywhere, Config, Category = "Assets") FSoftObjectPath ReelIdleAnim = FSoftObjectPath(TEXT("/Game/Characters/Mannequins/Anims/Rifle/MF_Rifle_Idle_ADS.MF_Rifle_Idle_ADS"));
 	UPROPERTY(EditAnywhere, Config, Category = "Assets") FSoftObjectPath DownedAnim = FSoftObjectPath(TEXT("/Game/Characters/Mannequins/Anims/Death/MM_Death_Back_01.MM_Death_Back_01"));
 	UPROPERTY(EditAnywhere, Config, Category = "Assets") FSoftObjectPath DrawAnim = FSoftObjectPath(TEXT("/Game/Characters/Mannequins/Anims/Rifle/MM_Rifle_Equip.MM_Rifle_Equip"));
+	/** Per-slot draw motion (R1): the camera has its own two-handed raise, distinct from the rifle equip. A slot not listed uses DrawAnim. */
+	UPROPERTY(EditAnywhere, Config, Category = "Assets") TMap<EDCSlot, FSoftObjectPath> SlotDrawAnims = {
+		{EDCSlot::Rifle, FSoftObjectPath(TEXT("/Game/Characters/Mannequins/Anims/Rifle/MM_Rifle_Equip.MM_Rifle_Equip"))},
+		{EDCSlot::Camera, FSoftObjectPath(TEXT("/Game/Characters/Mannequins/Anims/Rifle/MM_Rifle_Reload.MM_Rifle_Reload"))},
+	};
 	UPROPERTY(EditAnywhere, Config, Category = "Assets") FName DrawSlot = TEXT("DefaultSlot");
 	UPROPERTY(EditAnywhere, Config, Category = "Assets") FName HandSocket = TEXT("hand_r");
 	UPROPERTY(EditAnywhere, Config, Category = "Assets") FName HeadSocket = TEXT("head");

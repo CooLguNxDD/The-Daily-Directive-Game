@@ -1,4 +1,5 @@
 #include "DCDemoPilot.h"
+#include "DCAudio.h"
 
 #include "DCBuilding.h"
 #include "DCEnemy.h"
@@ -242,7 +243,34 @@ void ADCDemoPilot::AddCycle(const FString& C)
 		return !PS || !GS || PS->CooldownReadyTime(TEXT("OrbitalLaser")) <= GS->Now();
 	}, 20.f);
 	Add(0.f, [this] { Tap(TEXT("Slot2")); return true; });
-	if (C.Contains(TEXT("_c1")) && !C.StartsWith(TEXT("s0")))
+	FString WantedStratagem;
+	if (!C.StartsWith(TEXT("s0")) && FParse::Value(FCommandLine::Get(), TEXT("dcstratagem="), WantedStratagem))
+	{
+		// -dcstratagem=Id: Q cycles until the drafted stratagem is selected (R10 evidence), then logs and frames it.
+		for (int32 i = 0; i < 6; ++i)
+		{
+			Add(0.35f, [this, WantedStratagem]
+			{
+				const APlayerController* PC = GetWorld()->GetFirstPlayerController();
+				const ADCCharacter* Me = PC ? Cast<ADCCharacter>(PC->GetPawn()) : nullptr;
+				if (Me && Me->GetSelectedStratagem() != FName(*WantedStratagem))
+				{
+					Tap(TEXT("Cycle"));
+				}
+				return true;
+			});
+		}
+		Add(0.3f, [this, C]
+		{
+			const APlayerController* PC = GetWorld()->GetFirstPlayerController();
+			const ADCPlayerState* PS = PC ? PC->GetPlayerState<ADCPlayerState>() : nullptr;
+			const ADCCharacter* Me = PC ? Cast<ADCCharacter>(PC->GetPawn()) : nullptr;
+			UE_LOG(LogDCDemo, Display, TEXT("DEMO stratagem selected=%s points=%d"), Me ? *Me->GetSelectedStratagem().ToString() : TEXT("?"), PS ? PS->Points : -1);
+			Shot(C + TEXT("_stratagem_selected"));
+			return true;
+		});
+	}
+	else if (C.Contains(TEXT("_c1")) && !C.StartsWith(TEXT("s0")))
 	{
 		// Spend Propaganda Points: Q cycles to the 600-point Barrage (R6).
 		Add(0.5f, [this] { Tap(TEXT("Cycle")); return true; });
@@ -378,7 +406,35 @@ void ADCDemoPilot::AddEnemyFight(const FString& S)
 			return true;
 		});
 	}
-	Add(0.3f, [this] { Release(TEXT("Fire")); Target.Reset(); return true; });
+	Add(0.3f, [this] { Release(TEXT("Fire")); return true; });
+	// Camera on the swarm: the BRUTALITY tag in the viewfinder, the shot, and (with Strobe Flash) the stun after it.
+	Add(0.f, [this] { Tap(TEXT("Slot3")); return true; });
+	Add(0.7f, [this] { Press(TEXT("Aim")); return true; });
+	Add(0.4f, [this, S]
+	{
+		if (Target.IsValid() && Target->IsAlive())
+		{
+			AimAt(Target->GetActorLocation());
+		}
+		Shot(S + TEXT("_swarm_viewfinder"));
+		return true;
+	});
+	// Let the swarmer close in (rush on raise) so it fills the frame, up to 4 s, tracking it.
+	Add(0.f, [this]
+	{
+		const APlayerController* PC = GetWorld()->GetFirstPlayerController();
+		const APawn* Me = PC ? PC->GetPawn() : nullptr;
+		if (!Target.IsValid() || !Target->IsAlive() || !Me)
+		{
+			return true;
+		}
+		AimAt(Target->GetActorLocation());
+		return FVector::Dist(Target->GetActorLocation(), Me->GetActorLocation()) < 1800.f;
+	}, 4.f);
+	Add(0.f, [this] { Tap(TEXT("Fire")); return true; });
+	Add(0.35f, [this, S] { Shot(S + TEXT("_swarm_stamp")); LogPhoto(); return true; });
+	Add(0.9f, [this, S] { Shot(S + TEXT("_swarm_after")); Release(TEXT("Aim")); return true; });
+	Add(0.2f, [this] { Tap(TEXT("Slot1")); Target.Reset(); return true; });
 	// Downed: hold E through the real input path to self-revive (solo), with frames before and after.
 	Add(0.2f, [this, S]
 	{
@@ -445,10 +501,103 @@ void ADCDemoPilot::TickDefend()
 	}
 }
 
+void ADCDemoPilot::AddRifleOnly()
+{
+	// R6 play test (-dcrifleonly): a whole sector held with the rifle only, no strikes and no photos. Every 15 s the
+	// pilot logs health, ammo, enemies alive and the quota; downed, it holds E for its one self-revive.
+	for (int32 i = 0; i < 20; ++i)
+	{
+		Add(i == 0 ? 0.f : 15.f, [this, i]
+		{
+			bDefend = true;
+			const ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>();
+			const ADCCharacter* Me = Cast<ADCCharacter>(GetWorld()->GetFirstPlayerController() ? GetWorld()->GetFirstPlayerController()->GetPawn() : nullptr);
+			int32 Alive = 0;
+			for (ADCEnemy* E : TActorRange<ADCEnemy>(GetWorld()))
+			{
+				Alive += E->IsAlive() ? 1 : 0;
+			}
+			const int32 SectorIdx = GS ? GS->SectorIndex : -1;
+			const int32 Quota = UDCTuning::Get().Sectors.IsValidIndex(SectorIdx) ? UDCTuning::Get().Sectors[SectorIdx].QuotaPoints : 0;
+			UE_LOG(LogDCDemo, Display, TEXT("DEMO rifle-only t=%ds phase=%d health=%.0f ammo=%d downed=%d enemies=%d quota=%d/%d failed=%d"), i * 15,
+				GS ? static_cast<int32>(GS->Phase) : -1, Me ? Me->GetHealth() : -1.f, Me ? Me->GetAmmo() : -1, Me && Me->IsDowned() ? 1 : 0, Alive,
+				GS ? GS->SectorPhotoPoints : 0, Quota, GS && GS->bRunFailed ? 1 : 0);
+			if (Me && Me->IsDowned())
+			{
+				Press(TEXT("Interact"));
+			}
+			else
+			{
+				Release(TEXT("Interact"));
+			}
+			Shot(FString::Printf(TEXT("rifleonly_%03ds"), i * 15));
+			return true;
+		});
+	}
+	Add(0.f, [this]
+	{
+		const ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>();
+		UE_LOG(LogDCDemo, Display, TEXT("DEMO rifle-only end: phase=%d failed=%d quota results=%d met=%d"), GS ? static_cast<int32>(GS->Phase) : -1,
+			GS && GS->bRunFailed ? 1 : 0, GS ? GS->QuotaResults.Num() : 0, GS && GS->QuotaResults.Num() > 0 && GS->QuotaResults.Last() ? 1 : 0);
+		UE_LOG(LogDCDemo, Display, TEXT("DEMO end"));
+		if (bQuit)
+		{
+			FGenericPlatformMisc::RequestExit(false);
+		}
+		return true;
+	});
+}
+
+void ADCDemoPilot::AddCueRoll()
+{
+	// Listening evidence (-dccueroll): every cue in the bank once, alone over a muted music bed, then the music.
+	Add(0.f, [this]
+	{
+		if (UDCAudioSubsystem* Audio = GetGameInstance()->GetSubsystem<UDCAudioSubsystem>())
+		{
+			Audio->StartEvidenceRecording(this);
+			Audio->SetMusicVolume(0.f);
+		}
+		return true;
+	});
+	for (const FName& Cue : DCAudio::CueNames())
+	{
+		const UDCAudioSubsystem* Audio = GetGameInstance()->GetSubsystem<UDCAudioSubsystem>();
+		const float Gap = Audio ? FMath::Min(Audio->CueSeconds(Cue), 3.f) + 0.5f : 1.f;
+		Add(0.f, [this, Cue] { DCAudio::Play2D(this, Cue); return true; });
+		Add(Gap, [] { return true; });
+	}
+	Add(0.f, [this]
+	{
+		if (UDCAudioSubsystem* Audio = GetGameInstance()->GetSubsystem<UDCAudioSubsystem>())
+		{
+			Audio->SetMusicVolume(1.f);
+		}
+		return true;
+	});
+}
+
 void ADCDemoPilot::BuildScript()
 {
+	if (FParse::Param(FCommandLine::Get(), TEXT("dccueroll")))
+	{
+		AddCueRoll();
+	}
+	Add(0.f, [this]
+	{
+		if (UDCAudioSubsystem* Audio = GetGameInstance()->GetSubsystem<UDCAudioSubsystem>())
+		{
+			Audio->StartEvidenceRecording(this); // no-op without -dcaudiorec, or when the cue roll started it
+		}
+		return true;
+	});
 	AddWaitPhase(EDCRunPhase::Sector, 240.f); // co-op scripted runs wait in the lobby for the second player
 	Add(0.5f, [this] { Shot(TEXT("spawn")); return true; });
+	if (FParse::Param(FCommandLine::Get(), TEXT("dcrifleonly")))
+	{
+		AddRifleOnly();
+		return;
+	}
 
 	// Rifle: a short burst at the nearest tower's base.
 	Add(0.5f, [this] { Tower = PickTower(); if (Tower.IsValid()) { AimAt(Tower->GetActorLocation() + FVector(0, 0, 300)); } UsedTowers.Reset(); return true; });
@@ -577,6 +726,10 @@ void ADCDemoPilot::BuildScript()
 		const ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>();
 		UE_LOG(LogDCDemo, Display, TEXT("DEMO front page: headline=\"%s\" picks=%d seed=%d"), GS ? *GS->Headline : TEXT(""), GS ? GS->PagePicks.Num() : 0, GS ? GS->RunSeed : 0);
 		UE_LOG(LogDCDemo, Display, TEXT("DEMO end"));
+		if (UDCAudioSubsystem* Audio = GetGameInstance()->GetSubsystem<UDCAudioSubsystem>())
+		{
+			Audio->StopEvidenceRecording(this);
+		}
 		if (bQuit)
 		{
 			FGenericPlatformMisc::RequestExit(false);

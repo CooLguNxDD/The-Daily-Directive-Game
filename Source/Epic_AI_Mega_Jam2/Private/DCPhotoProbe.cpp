@@ -241,7 +241,13 @@ namespace DCPhotoProbe
 		for (ADCOrbitalStrike* Strike : TActorRange<ADCOrbitalStrike>(World))
 		{
 			const float Left = Strike->GetDetonateTime() - Now;
-			const FVector P = Strike->GetActorLocation() + FVector(0, 0, 900.f);
+			// The tag rides the laser column at the height nearest the view ray, so it sits on the beam in frame
+			// (a fixed 9 m tag fell off the bottom of a frame aimed up a tower).
+			const FVector F = View.Rotation.Vector();
+			const FVector W = Strike->GetActorLocation() - View.Location;
+			const float Den = 1.f - F.Z * F.Z;
+			const float Up = Den > 0.02f ? (F.Z * FVector::DotProduct(F, W) - W.Z) / Den : 900.f;
+			const FVector P = Strike->GetActorLocation() + FVector(0, 0, FMath::Clamp(Up, 300.f, 8000.f));
 			if (Left > -1.f && InFrame(View, P, 1.f))
 			{
 				Out.Add({P, Left > 0.f ? FName(TEXT("DRAMA")) : FName(TEXT("PEAK")), FMath::Clamp(1.f - Left / 3.f, 0.f, 1.f)});
@@ -252,7 +258,8 @@ namespace DCPhotoProbe
 			const FVector P = Enemy->GetActorLocation() + FVector(0, 0, 150.f);
 			if (Enemy->IsAlive() && FVector::Dist(View.Location, P) < TagRange && InFrame(View, P, 1.f))
 			{
-				Out.Add({P, Enemy->IsWalker() ? FName(TEXT("WAR MACHINE")) : FName(TEXT("BRUTALITY")), 0.5f});
+				const FName Tag = Enemy->IsStunned(Now) ? FName(TEXT("STUNNED")) : Enemy->IsWalker() ? FName(TEXT("WAR MACHINE")) : FName(TEXT("BRUTALITY"));
+				Out.Add({P, Tag, 0.5f});
 			}
 		}
 	}

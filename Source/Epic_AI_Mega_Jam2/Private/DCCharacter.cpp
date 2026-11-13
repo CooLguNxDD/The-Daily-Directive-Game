@@ -506,7 +506,8 @@ void ADCCharacter::OnRep_Slot()
 	}
 	// The draw: the mannequin plays its equip motion over DrawSeconds while the prop swings in (R1).
 	const UDCTuning& T = UDCTuning::Get();
-	UAnimSequence* Equip = Cast<UAnimSequence>(T.Assets.DrawAnim.TryLoad());
+	const FSoftObjectPath* SlotAnim = T.Assets.SlotDrawAnims.Find(Slot);
+	UAnimSequence* Equip = Cast<UAnimSequence>((SlotAnim ? *SlotAnim : T.Assets.DrawAnim).TryLoad());
 	UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance();
 	if (Equip && AnimInstance && HasActorBegunPlay() && !bDowned)
 	{
@@ -929,13 +930,16 @@ void ADCCharacter::ApplyStrobe(const FDCShotView& View)
 			continue;
 		}
 		const float Until = Now() + Gear->StunSeconds;
+		int32 Stunned = 0;
 		for (ADCEnemy* E : TActorRange<ADCEnemy>(GetWorld()))
 		{
 			if (E->IsAlive() && FVector::Dist(E->GetActorLocation(), View.Location) < Gear->StunRangeCm && DCPhotoProbe::InFrame(View, E->GetActorLocation()))
 			{
 				E->HostStun(Until);
+				++Stunned;
 			}
 		}
+		UE_LOG(LogTemp, Display, TEXT("DCSTUN %s strobe stunned %d enemies for %.1f s"), *GearId.ToString(), Stunned, Gear->StunSeconds);
 	}
 }
 
