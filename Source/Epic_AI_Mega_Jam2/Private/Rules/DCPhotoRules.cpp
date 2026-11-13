@@ -15,6 +15,16 @@ namespace DCPhotoRules
 		return Rule.bAtMost ? Value <= Rule.Threshold : Value >= Rule.Threshold;
 	}
 
+	float CoStarMultiplier(float Fill, const FDCPhotoTuning& T)
+	{
+		if (Fill < T.CoStarMinFill)
+		{
+			return 1.f;
+		}
+		const float U = FMath::Clamp((Fill - T.CoStarMinFill) / FMath::Max(T.CoStarFullFill - T.CoStarMinFill, 0.001f), 0.f, 1.f);
+		return FMath::Lerp(1.f + (T.CoStarMaxMultiplier - 1.f) * 0.25f, T.CoStarMaxMultiplier, U);
+	}
+
 	FDCPhotoGrade GradePhoto(const FDCPhotoInputs& In, const FDCPhotoTuning& Tuning)
 	{
 		FDCPhotoGrade Grade;
@@ -46,6 +56,13 @@ namespace DCPhotoRules
 		if (In.bSpotlit)
 		{
 			Grade.Categories.Insert(Tuning.SpotlitLabel, 0);
+		}
+
+		Grade.CoStarMultiplier = CoStarMultiplier(In.CoStarFill, Tuning);
+		if (Grade.CoStarMultiplier > 1.f)
+		{
+			Grade.Multiplier *= Grade.CoStarMultiplier;
+			Grade.Categories.AddUnique(Tuning.CoStarTag);
 		}
 
 		Grade.RawPoints = FMath::RoundToInt(Raw);

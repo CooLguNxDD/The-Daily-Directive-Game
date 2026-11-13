@@ -684,6 +684,21 @@ void ADCGameMode::OnPhotoGraded(ADCCharacter* Photographer, const FDCPhotoRecord
 	}
 	FDCPhotoRecord Booked = Record;
 	Booked.Sector = GS->SectorIndex;
+	// Co-star (R20): both names on the byline, and the teammate earns a share of the photo's points.
+	if (Record.Grade.CoStarMultiplier > 1.f && Inputs.CoStarPlayerId >= 0)
+	{
+		Booked.CoStar = Inputs.CoStarName;
+		for (APlayerState* Other : GS->PlayerArray)
+		{
+			ADCPlayerState* Mate = Cast<ADCPlayerState>(Other);
+			if (Mate && Mate->GetPlayerId() == Inputs.CoStarPlayerId)
+			{
+				const int32 Share = FMath::RoundToInt32(Record.Grade.Score * UDCTuning::Get().Photo.CoStarShare);
+				Mate->AddPoints(Share);
+				UE_LOG(LogTemp, Display, TEXT("DCCOSTAR photo=%d by=%s costar=%s x%.2f share=%d"), Record.PhotoId, *PS->GetPlayerName(), *Inputs.CoStarName, Record.Grade.CoStarMultiplier, Share);
+			}
+		}
+	}
 	PS->AddPhoto(Booked);
 	PhotoPoses.Add(Record.PhotoId, MoveTemp(Poses));
 	GS->SectorPhotoPoints += Record.Grade.Score;

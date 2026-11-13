@@ -5,6 +5,7 @@
 #include "Rules/DCNewsprint.h"
 #include "Rules/DCPostStack.h"
 #include "Rules/DCWeather.h"
+#include "Rules/DCPhotoRules.h"
 #include "DCVoxelCity.h"
 #include "Voxel/DCVoxelSettings.h"
 
@@ -148,6 +149,27 @@ bool FDCWeatherTest::RunTest(const FString&)
 		}
 	}
 	TestTrue(TEXT("several seasons across seeds"), SeasonsSeen.Num() >= 3);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDCCoStarTest, "Epic_AI_Mega_Jam2.Photo.CoStar", LookFlags)
+bool FDCCoStarTest::RunTest(const FString&)
+{
+	// R20: pays by frame fill, never by nearness to death; tag and multiplier only above the minimum fill.
+	const FDCPhotoTuning& P = UDCTuning::Get().Photo;
+	TestEqual(TEXT("no co-star below the minimum fill"), DCPhotoRules::CoStarMultiplier(P.CoStarMinFill * 0.5f, P), 1.f);
+	const float Small = DCPhotoRules::CoStarMultiplier(P.CoStarMinFill, P);
+	const float Big = DCPhotoRules::CoStarMultiplier(P.CoStarFullFill, P);
+	TestTrue(TEXT("a bigger co-star pays more, capped"), Small > 1.f && Big > Small && FMath::IsNearlyEqual(Big, P.CoStarMaxMultiplier) && DCPhotoRules::CoStarMultiplier(1.f, P) <= P.CoStarMaxMultiplier);
+	FDCPhotoInputs In;
+	In.Visibility = 1.f;
+	In.Centering = 1.f;
+	const FDCPhotoGrade Alone = DCPhotoRules::GradePhoto(In, P);
+	In.CoStarFill = P.CoStarFullFill;
+	In.DangerMeters = 1000.f; // far from danger: the co-star pay does not depend on it
+	const FDCPhotoGrade With = DCPhotoRules::GradePhoto(In, P);
+	TestTrue(TEXT("CO-STAR tag"), With.Categories.Contains(P.CoStarTag) && !Alone.Categories.Contains(P.CoStarTag));
+	TestTrue(TEXT("co-star multiplies the score"), With.Score > Alone.Score);
 	return true;
 }
 

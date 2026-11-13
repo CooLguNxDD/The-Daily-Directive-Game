@@ -429,7 +429,7 @@ void ADCHUD::DrawFrontPage(ADCGameState& GS, ADCCharacter* Me)
 		const float BigW = W * 0.56f;
 		const float Y = Sx(290.f);
 		DrawPhotoCard(PC->GetPhotoImage(Top.Photo.PhotoId), Top.Photo.Grade, Sx(60.f), Y, BigW, 1.f, true);
-		Text(FString::Printf(TEXT("PHOTO: %s  |  CRITIC %s  |  %d VOTE%s  |  PAGE SCORE %s"), *Top.PlayerName.ToUpper(), *FText::AsNumber(Top.Photo.Grade.Score).ToString(),
+		Text(FString::Printf(TEXT("PHOTO: %s  |  CRITIC %s  |  %d VOTE%s  |  PAGE SCORE %s"), *(Top.Photo.CoStar.IsEmpty() ? Top.PlayerName.ToUpper() : Top.PlayerName.ToUpper() + TEXT(" WITH ") + Top.Photo.CoStar.ToUpper()), *FText::AsNumber(Top.Photo.Grade.Score).ToString(),
 			Top.Votes, Top.Votes == 1 ? TEXT("") : TEXT("S"), *FText::AsNumber(Top.PageScore).ToString()), Sx(60.f), Y + BigW * 9.f / 16.f + Sx(6.f), Ink, 0.55f);
 
 		// The other picks, smaller, down the right column.
