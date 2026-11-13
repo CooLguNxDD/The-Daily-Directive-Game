@@ -386,8 +386,9 @@ void ADCHUD::DrawPhotoCard(UTexture* Image, const FDCPhotoGrade& Grade, float X,
 	const float Tilt = -7.f + static_cast<float>(Grade.Score % 5);
 	const FVector Pivot(Cx, By + Bh * 0.5f, 0.f);
 	Canvas->Canvas->PushRelativeTransform(FTranslationMatrix(-Pivot) * FRotationMatrix(FRotator(0.f, Tilt, 0.f)) * FTranslationMatrix(Pivot));
-	const FLinearColor InkStamp(Gold.R, Gold.G, Gold.B, 0.95f);
-	Box(Bx, By, Bw, Bh, FLinearColor(Ink.R, Ink.G, Ink.B, 0.3f));
+	// A signal-yellow plate with ink type and an ink double rule: legible on any print, even on small cards.
+	const FLinearColor InkStamp(Ink.R, Ink.G, Ink.B, 0.95f);
+	Box(Bx, By, Bw, Bh, FLinearColor(Gold.R, Gold.G, Gold.B, 0.95f));
 	Frame(Bx, By, Bw, Bh, Sx(4.f), InkStamp);
 	Frame(Bx + Sx(7.f), By + Sx(7.f), Bw - Sx(14.f), Bh - Sx(14.f), Sx(1.5f), InkStamp);
 	if (UTexture2D* Worn = StampGrit())
