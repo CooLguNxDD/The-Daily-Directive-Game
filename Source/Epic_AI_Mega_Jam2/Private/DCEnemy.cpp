@@ -9,6 +9,7 @@
 #include "DCCharacter.h"
 #include "DCDebrisPool.h"
 #include "DCEnvironment.h"
+#include "DCGameMode.h"
 #include "DCGameState.h"
 #include "DCPlayerState.h"
 #include "DCTuning.h"
@@ -117,7 +118,10 @@ namespace
 			const float Half = FMath::Max(S.SizeX, S.SizeY) * S.BlockSize * 0.5f;
 			if (!B->IsCollapsed() && FVector::Dist2D(B->GetActorLocation(), E.GetActorLocation()) < Half + 250.f)
 			{
-				B->Collapse(E.GetActorLocation());
+				if (ADCGameMode* GM = E.GetWorld()->GetAuthGameMode<ADCGameMode>())
+				{
+					GM->ScheduleCollapse(B, E.GetActorLocation(), TEXT("Topple"), UDCTuning::Get().City.ToppleTelegraphSeconds);
+				}
 			}
 		}
 		if (Now >= E.NextCueTime)
@@ -416,7 +420,10 @@ void ADCEnemy::Die(AController* Killer)
 		{
 			if (FVector::Dist2D(B->GetActorLocation(), FallPoint) < 2200.f)
 			{
-				B->Collapse(FallPoint);
+				if (ADCGameMode* GM = GetWorld()->GetAuthGameMode<ADCGameMode>())
+				{
+					GM->ScheduleCollapse(B, FallPoint, TEXT("Topple"), UDCTuning::Get().City.ToppleTelegraphSeconds);
+				}
 			}
 		}
 	}

@@ -19,6 +19,7 @@ public:
 
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 	virtual void BeginPlay() override;
+	virtual void Tick(float DeltaSeconds) override;
 
 	/** Host: set before FinishSpawning. */
 	void InitSpec(const FDCBuildingSpec& InSpec, int32 InLot) { Spec = InSpec; LotIndex = InLot; }
@@ -64,5 +65,6 @@ private:
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UInstancedStaticMeshComponent> Emblems;
 
 	bool bBuilt = false;
+	bool bCreakPlayed = false;
 	bool bSimulated = false;
 };

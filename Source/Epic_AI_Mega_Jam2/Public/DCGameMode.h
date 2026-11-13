@@ -34,6 +34,9 @@ public:
 	/** Fails the run when every player is down and nobody can still get up (R12). */
 	void CheckWipe();
 	void OnBuildingCollapsed(ADCBuilding* Building);
+	/** Every collapse goes through here. Delay > 0 writes a telegraphed event record (Kind) now and collapses the
+	 *  tower at its peak on the server clock; Delay 0 collapses at once (a strike's own record covers it). */
+	void ScheduleCollapse(ADCBuilding* Building, const FVector& Epicenter, FName Kind, float Delay);
 	void RequestHitstop();
 	bool IsCombatLive() const;
 
@@ -79,6 +82,7 @@ private:
 	void TickWaves(float Now);
 	void TickScoop(float Now);
 	void TickRogueStrikes(float Now);
+	void TickPendingCollapses(float Now);
 	void BeginReelClip(int32 Index);
 	void SetDilation(float Value);
 	FTransform SpawnTransformFor(int32 PlayerIndex) const;
@@ -102,4 +106,11 @@ private:
 	TMap<int32, TArray<FDCPoseSample>> PhotoPoses;
 	/** Domino Condemnation: chain generation per collapsed building. */
 	TMap<TObjectKey<ADCBuilding>, int32> DominoGeneration;
+	struct FPendingCollapse
+	{
+		TWeakObjectPtr<ADCBuilding> Building;
+		FVector Epicenter = FVector::ZeroVector;
+		float At = 0.f;
+	};
+	TArray<FPendingCollapse> PendingCollapses;
 };

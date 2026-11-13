@@ -272,7 +272,10 @@ void ADCOrbitalStrike::DetonateHost(const FDCStratagemDef& Def)
 		const float HalfFootprint = FMath::Max(Spec.SizeX, Spec.SizeY) * Spec.BlockSize * 0.5f;
 		if (FVector::Dist2D(Building->GetActorLocation(), Here) <= Def.BlastRadius + HalfFootprint)
 		{
-			Building->Collapse(Here);
+			if (ADCGameMode* GM = World->GetAuthGameMode<ADCGameMode>())
+			{
+				GM->ScheduleCollapse(Building, Here, TEXT("Strike"), 0.f); // the strike's own record is the event
+			}
 		}
 	}
 

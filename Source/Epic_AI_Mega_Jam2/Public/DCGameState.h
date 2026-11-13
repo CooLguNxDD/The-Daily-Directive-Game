@@ -20,6 +20,8 @@ public:
 
 	/** Host only: records a detonation every machine can read for scoring and tags. */
 	int32 AddBlast(const FVector& Location, float Radius, FName StratagemId);
+	/** Host only: records an event that peaks at PeakTime (server clock), telegraphed from now. */
+	int32 AddEvent(FName Kind, const FVector& Location, float Radius, float PeakTime, int32 LotIndex);
 
 	const FDCBlastRecord* FindBlast(int32 Id) const;
 

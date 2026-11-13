@@ -188,6 +188,7 @@ void ADCGameMode::ClearCity()
 		B->Destroy();
 	}
 	DominoGeneration.Reset();
+	PendingCollapses.Reset();
 }
 
 void ADCGameMode::BuildCity(int32 SectorIndex)
@@ -256,6 +257,7 @@ void ADCGameMode::TickSectorPhase(float Now)
 		return;
 	}
 	TickWaves(Now);
+	TickPendingCollapses(Now);
 	TickScoop(Now);
 	TickRogueStrikes(Now);
 	ADCGameState* GS = GetGameState<ADCGameState>();
@@ -505,9 +507,43 @@ void ADCGameMode::OnBuildingCollapsed(ADCBuilding* Building)
 			continue;
 		}
 		DominoGeneration.Add(Other, Generation + 1);
-		const FVector From = Building->GetActorLocation();
-		FTimerHandle H;
-		GetWorldTimerManager().SetTimer(H, FTimerDelegate::CreateWeakLambda(Other, [Other, From] { Other->Collapse(From); }), Delay, false);
+		ScheduleCollapse(Other, Building->GetActorLocation(), TEXT("Domino"), Delay);
+	}
+}
+
+void ADCGameMode::ScheduleCollapse(ADCBuilding* Building, const FVector& Epicenter, FName Kind, float Delay)
+{
+	ADCGameState* GS = GetGameState<ADCGameState>();
+	if (!Building || Building->IsCollapsed() || PendingCollapses.ContainsByPredicate([Building](const FPendingCollapse& P) { return P.Building == Building; }))
+	{
+		return;
+	}
+	if (Delay <= 0.f)
+	{
+		Building->Collapse(Epicenter);
+		return;
+	}
+	const FDCBuildingSpec& Spec = Building->GetSpec();
+	const float Radius = FMath::Max(Spec.SizeX, Spec.SizeY) * Spec.BlockSize;
+	const float Peak = GS->Now() + Delay;
+	GS->AddEvent(Kind, Building->GetActorLocation(), Radius, Peak, Building->GetLotIndex());
+	PendingCollapses.Add({Building, Epicenter, Peak});
+}
+
+void ADCGameMode::TickPendingCollapses(float Now)
+{
+	for (int32 i = PendingCollapses.Num() - 1; i >= 0; --i)
+	{
+		if (Now < PendingCollapses[i].At)
+		{
+			continue;
+		}
+		const FPendingCollapse Due = PendingCollapses[i];
+		PendingCollapses.RemoveAtSwap(i);
+		if (ADCBuilding* B = Due.Building.Get())
+		{
+			B->Collapse(Due.Epicenter);
+		}
 	}
 }
 

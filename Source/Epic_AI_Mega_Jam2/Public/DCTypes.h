@@ -24,7 +24,9 @@ enum class EDCRunPhase : uint8
 	FrontPage,
 };
 
-/** A detonation the host recorded. Photo scoring reads these, never debris. */
+/** A photographable event the host recorded: a strike detonation, or a collapse from a walker topple or a domino
+ *  chain. Time is the peak (detonation or the moment the tower gives way) on the server clock; TelegraphStart is when
+ *  the warning began. Photo scoring, the condemned-tower telegraph and the reel all read these, never debris. */
 USTRUCT(BlueprintType)
 struct FDCBlastRecord
 {
@@ -35,6 +37,11 @@ struct FDCBlastRecord
 	UPROPERTY() float Radius = 0.f;
 	UPROPERTY() FName StratagemId;
 	UPROPERTY() int32 Sector = 0;
+	/** Strike, Topple or Domino. */
+	UPROPERTY() FName Kind = TEXT("Strike");
+	UPROPERTY() float TelegraphStart = 0.f;
+	/** The condemned tower's lot for collapse events; -1 for strikes. */
+	UPROPERTY() int32 LotIndex = -1;
 };
 
 /** A graded photo. The image itself stays local to the photographer's machine. */

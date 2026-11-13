@@ -138,6 +138,10 @@ struct FDCCityTuning
 	UPROPERTY(EditAnywhere, Config, Category = "City") int32 DebrisPoolSize = 600;
 	/** Chance a tower hangs a propaganda banner (red cloth, cream emblem) down one face. */
 	UPROPERTY(EditAnywhere, Config, Category = "City") float BannerChance = 0.65f;
+	/** A tower a walker shoulders into shakes this long before it gives way (photographable warning). */
+	UPROPERTY(EditAnywhere, Config, Category = "City") float ToppleTelegraphSeconds = 1.5f;
+	/** Shake amplitude (cm) of a condemned tower at the end of its telegraph. */
+	UPROPERTY(EditAnywhere, Config, Category = "City") float CondemnedShakeCm = 18.f;
 };
 
 /** Flat propaganda palette and post-process look. */

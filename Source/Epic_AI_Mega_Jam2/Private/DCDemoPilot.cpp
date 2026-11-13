@@ -382,7 +382,15 @@ void ADCDemoPilot::BuildScript()
 				const ADCPlayerState* PS = PC ? PC->GetPlayerState<ADCPlayerState>() : nullptr;
 				if (PC && PS && PS->DraftOffer.Num() > 0)
 				{
-					PC->RequestPickUpgrade(PS->DraftOffer[(Sector + 1) % PS->DraftOffer.Num()]);
+					// -dcdraft=A,B picks the first listed upgrade on offer; otherwise a fixed card per sector.
+					FString Wanted;
+					TArray<FString> Prefs;
+					if (FParse::Value(FCommandLine::Get(), TEXT("dcdraft="), Wanted, false))
+					{
+						Wanted.ParseIntoArray(Prefs, TEXT(","));
+					}
+					const FString* Hit = Prefs.FindByPredicate([PS](const FString& P) { return PS->DraftOffer.Contains(FName(*P)); });
+					PC->RequestPickUpgrade(Hit ? FName(**Hit) : PS->DraftOffer[(Sector + 1) % PS->DraftOffer.Num()]);
 				}
 				return true;
 			});

@@ -35,7 +35,8 @@ namespace
 
 ADCBuilding::ADCBuilding()
 {
-	PrimaryActorTick.bCanEverTick = false;
+	PrimaryActorTick.bCanEverTick = true;
+	PrimaryActorTick.TickInterval = 0.f;
 	bReplicates = true;
 	bAlwaysRelevant = true;
 	SetNetUpdateFrequency(2.f);
@@ -72,6 +73,42 @@ void ADCBuilding::BeginPlay()
 	if (bCollapsed)
 	{
 		SimulateCollapse(LateJoinAnimates());
+	}
+}
+
+void ADCBuilding::Tick(float DeltaSeconds)
+{
+	Super::Tick(DeltaSeconds);
+	const ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>();
+	if (!GS || bCollapsed || !GetIsReplicated())
+	{
+		return; // re-staged reel copies replay collapses from the records directly
+	}
+	// Condemned: an event record names this lot. Shake harder and creak until the peak, then the host drops it.
+	const float Now = GS->Now();
+	const FDCBlastRecord* Condemned = GS->Blasts.FindByPredicate([this, GS, Now](const FDCBlastRecord& R)
+	{
+		return R.LotIndex == LotIndex && R.Sector == GS->SectorIndex && Now >= R.TelegraphStart && Now < R.Time + 0.5f;
+	});
+	const float U = Condemned ? FMath::Clamp((Now - Condemned->TelegraphStart) / FMath::Max(Condemned->Time - Condemned->TelegraphStart, 0.05f), 0.f, 1.f) : 0.f;
+	const float Amp = UDCTuning::Get().City.CondemnedShakeCm * U * U;
+	const float T = GetWorld()->GetRealTimeSeconds();
+	const FVector Offset = Amp > 0.f ? FVector(FMath::Sin(T * 41.f) * Amp, FMath::Cos(T * 37.f) * Amp, 0.f) : FVector::ZeroVector;
+	for (UInstancedStaticMeshComponent* Ism : {Walls.Get(), Windows.Get(), Trim.Get(), Banners.Get(), Emblems.Get()})
+	{
+		if (!Ism->GetRelativeLocation().Equals(Offset))
+		{
+			Ism->SetRelativeLocation(Offset);
+		}
+	}
+	if (!Condemned)
+	{
+		return;
+	}
+	if (!bCreakPlayed)
+	{
+		bCreakPlayed = true;
+		DCAudio::PlayAt(this, TEXT("Creak"), GetActorLocation() + FVector(0, 0, GetHeight() * 0.5f), 1.f);
 	}
 }
 
