@@ -38,7 +38,7 @@ stage() {  # stage <name> <log> <command...>: one line per stage, the failing st
 # A: compile the editor target (what the tests and the cook load)
 stage "tier A: compile ${project}Editor" "$out/build.log" \
   "$UE_ROOT/Engine/Build/BatchFiles/Build.bat" "${project}Editor" "$platform" "$config" \
-  -project="$uproject" -waitmutex -NoHotReload || exit 1
+  -project="$uproject" -waitmutex -NoHotReload -NoHotReloadFromIDE || exit 1
 
 # B: automation tests, no window, no GPU. The process exit code is not proof: read the report.
 rm -rf "$out/report"
@@ -53,8 +53,7 @@ d = json.load(open(sys.argv[1], encoding="utf-8-sig"))
 print(d.get("succeeded", 0) + d.get("succeededWithWarnings", 0), d.get("failed", 0) + d.get("notRun", 0))
 PY
   )
-  ok="${ok//[!0-9]/}"; failed="${failed//[!0-9]/}"  # Windows python prints CRLF: "0
-" is not a number to (( ))
+  ok="${ok//[!0-9]/}"; failed="${failed//[!0-9]/}"  # Windows python prints CRLF; "0<CR>" is not a number to (( ))
   echo "gate: tests passed=$ok failed=$failed"
   (( ok > 0 && failed == 0 )) || { echo "gate: tier B FAIL (no test ran, or one failed)"; exit 1; }
 else
@@ -65,9 +64,14 @@ fi
 
 # C: cook, or a full package when asked. Cook errors and missing references only show here.
 if [[ "${UNREAL_GATE_PACKAGE:-0}" == 1 ]]; then
+  # The game target is built here, not by BuildCookRun: its UBT call refuses to run beside any editor that has
+  # Live Coding on (the engine is shared), and -NoHotReloadFromIDE does not pass through it.
+  stage "tier C: compile $project $platform $config" "$out/build-game.log" \
+    "$UE_ROOT/Engine/Build/BatchFiles/Build.bat" "$project" "$platform" "$config" \
+    -project="$uproject" -waitmutex -NoHotReload -NoHotReloadFromIDE || exit 1
   stage "tier C: package $platform $config" "$out/package.log" \
     "$UE_ROOT/Engine/Build/BatchFiles/RunUAT.bat" BuildCookRun -project="$uproject" -noP4 -utf8output \
-    -platform="$platform" -clientconfig="$config" -build -cook -stage -pak -archive \
+    -platform="$platform" -clientconfig="$config" -skipbuild -cook -stage -pak -archive \
     -archivedirectory="$out/package" -unattended -nullrhi || exit 1
 else
   stage "tier C: cook $platform" "$out/cook.log" \
