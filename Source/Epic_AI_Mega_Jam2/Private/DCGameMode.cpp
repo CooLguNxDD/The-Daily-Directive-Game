@@ -480,6 +480,7 @@ void ADCGameMode::OnPhotoGraded(ADCCharacter* Photographer, const FDCPhotoRecord
 	}
 	Scoop.bDone = true;
 	Scoop.CompletedBy = PS->GetPlayerName();
+	UE_LOG(LogTemp, Display, TEXT("DCSCOOP %s filed by %s photo=%d reward=%d"), *Def.Id.ToString(), *Scoop.CompletedBy, Record.PhotoId, Def.RewardPoints);
 	PS->AddPoints(Def.RewardPoints);
 	ADCSupplyPod::Drop(GetWorld(), Photographer->GetActorLocation() + Photographer->GetActorForwardVector() * 250.f);
 	for (ADCPlayerState* Other : Players())
