@@ -106,6 +106,11 @@ void ADCEnvironment::BeginPlay()
 
 	Sun->SetWorldRotation(Look.SunRotation);
 	Sun->SetIntensity(Look.SunIntensityLux);
+	// Light shafts through the towers (Saltline: shafts sell scale), the cheap screen-space kind.
+	Sun->bEnableLightShaftBloom = true;
+	Sun->BloomScale = Look.LightShaftBloom;
+	Sun->BloomThreshold = 0.35f;
+	Sun->SetLightShaftOverrideDirection(FVector::ZeroVector);
 	Sun->SetLightColor(Look.SunColor);
 
 	Fog->SetFogDensity(Look.FogDensity);

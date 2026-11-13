@@ -174,6 +174,9 @@ private:
 	UPROPERTY(ReplicatedUsing = OnRep_Downed) bool bDowned = false;
 	/** Last Frame (R21): a downed player keeps one shutter, spent or lost on revive. */
 	UPROPERTY(Replicated) bool bLastFrameReady = false;
+	/** Landing spring (local camera feel): offset in cm and its velocity. */
+	float LandDip = 0.f;
+	float LandDipVel = 0.f;
 	UPROPERTY(Replicated) float SpotlitUntil = -10.f;
 	UPROPERTY(Replicated) float ReviveProgress = 0.f;
 	UPROPERTY(Replicated) int32 SelfRevivesLeft = 1;

@@ -287,40 +287,47 @@ void ADCHUD::DrawStatus(ADCGameState& GS, ADCCharacter& Me)
 	const ADCPlayerState* PS = Me.GetPlayerState<ADCPlayerState>();
 	const UDCTuning& T = UDCTuning::Get();
 
+	// Paper plates with ink type and a thin ink rule (art bible: cream and ink; Saltline HUD language): readable over
+	// a bright sky and a blast alike.
+	const FLinearColor Plate(Paper.R, Paper.G, Paper.B, 0.9f);
 	// Propaganda Points, the currency the shots buy firepower with.
-	Box(Sx(24.f), Sx(24.f), Sx(330.f), Sx(74.f), Shade);
-	Text(TEXT("PROPAGANDA POINTS"), Sx(36.f), Sx(28.f), Gold, 0.55f);
-	Text(FormatPoints(PS ? PS->Points : 0), Sx(36.f), Sx(48.f), FLinearColor::White, 1.4f);
+	Box(Sx(24.f), Sx(24.f), Sx(330.f), Sx(74.f), Plate);
+	Box(Sx(24.f), Sx(24.f), Sx(5.f), Sx(74.f), Ink);
+	Text(TEXT("PROPAGANDA POINTS"), Sx(40.f), Sx(28.f), Ink, 0.55f);
+	Text(FormatPoints(PS ? PS->Points : 0), Sx(40.f), Sx(48.f), Ink, 1.4f);
 
 	// Sector and timer.
 	const float Left = FMath::Max(0.f, GS.SectorEndTime - GS.Now());
 	const FDCSectorDef* Sector = T.Sectors.IsValidIndex(GS.SectorIndex) ? &T.Sectors[GS.SectorIndex] : nullptr;
 	const FString Name = Sector ? Sector->Name.ToString().ToUpper() : FString::Printf(TEXT("SECTOR %d"), GS.SectorIndex + 1);
-	Text(FString::Printf(TEXT("SECTOR %d/%d  %s"), GS.SectorIndex + 1, FMath::Max(T.Sectors.Num(), 1), *Name), W * 0.5f, Sx(20.f), FLinearColor::White, 0.7f, true);
-	Text(FString::Printf(TEXT("%d:%02d"), FMath::FloorToInt(Left) / 60, FMath::FloorToInt(Left) % 60), W * 0.5f, Sx(46.f), Left < 30.f ? Red : FLinearColor::White, 1.3f, true);
+	Box(W * 0.5f - Sx(200.f), Sx(14.f), Sx(400.f), Sx(118.f), Plate);
+	Text(FString::Printf(TEXT("SECTOR %d/%d  %s"), GS.SectorIndex + 1, FMath::Max(T.Sectors.Num(), 1), *Name), W * 0.5f, Sx(20.f), Ink, 0.7f, true);
+	Text(FString::Printf(TEXT("%d:%02d"), FMath::FloorToInt(Left) / 60, FMath::FloorToInt(Left) % 60), W * 0.5f, Sx(46.f), Left < 30.f ? Red : Ink, 1.3f, true);
 
 	// HQ quota (R6): the crew's photo score against this sector's target.
 	if (Sector && Sector->QuotaPoints > 0)
 	{
 		const float Q = FMath::Clamp(static_cast<float>(GS.SectorPhotoPoints) / Sector->QuotaPoints, 0.f, 1.f);
 		const float Bw = Sx(360.f), Bx = W * 0.5f - Bw * 0.5f, By = Sx(96.f);
-		Box(Bx, By, Bw, Sx(14.f), Shade);
+		Box(Bx, By, Bw, Sx(14.f), Ink);
 		Box(Bx + Sx(2.f), By + Sx(2.f), (Bw - Sx(4.f)) * Q, Sx(10.f), Q >= 1.f ? Gold : Paper);
-		Text(FString::Printf(TEXT("HQ QUOTA %s / %s"), *FormatPoints(GS.SectorPhotoPoints), *FormatPoints(Sector->QuotaPoints)), W * 0.5f, By + Sx(14.f), Q >= 1.f ? Gold : FLinearColor::White, 0.5f, true);
+		Text(FString::Printf(TEXT("HQ QUOTA %s / %s"), *FormatPoints(GS.SectorPhotoPoints), *FormatPoints(Sector->QuotaPoints)), W * 0.5f, By + Sx(14.f), Ink, 0.5f, true);
 	}
 
 	// Film counter is always visible (R7).
 	const int32 Shots = PS ? PS->ShotsLeft : 0;
 	const int32 Film = PS ? PS->FilmPerSector : 0;
-	Box(W - Sx(250.f), Sx(24.f), Sx(226.f), Sx(74.f), Shade);
-	Text(TEXT("FILM"), W - Sx(238.f), Sx(28.f), Gold, 0.55f);
-	Text(FString::Printf(TEXT("%d / %d"), Shots, Film), W - Sx(238.f), Sx(48.f), Shots > 3 ? FLinearColor::White : Red, 1.4f);
+	Box(W - Sx(250.f), Sx(24.f), Sx(226.f), Sx(74.f), Plate);
+	Box(W - Sx(250.f), Sx(24.f), Sx(5.f), Sx(74.f), Ink);
+	Text(TEXT("FILM"), W - Sx(234.f), Sx(28.f), Ink, 0.55f);
+	Text(FString::Printf(TEXT("%d / %d"), Shots, Film), W - Sx(234.f), Sx(48.f), Shots > 3 ? Ink : Red, 1.4f);
 
 	// Health.
 	const float Hp = Me.GetHealth() / FMath::Max(T.Move.MaxHealth, 1.f);
-	Box(Sx(24.f), H - Sx(60.f), Sx(300.f), Sx(22.f), Shade);
-	Box(Sx(27.f), H - Sx(57.f), Sx(294.f) * Hp, Sx(16.f), Hp > 0.3f ? FLinearColor(0.9f, 0.88f, 0.8f) : Red);
-	Text(TEXT("HEALTH"), Sx(24.f), H - Sx(88.f), FLinearColor::White, 0.55f);
+	Box(Sx(24.f), H - Sx(92.f), Sx(300.f), Sx(54.f), Plate);
+	Box(Sx(30.f), H - Sx(60.f), Sx(288.f), Sx(16.f), FLinearColor(Ink.R, Ink.G, Ink.B, 0.25f));
+	Box(Sx(30.f), H - Sx(60.f), Sx(288.f) * Hp, Sx(16.f), Hp > 0.3f ? Ink : Red);
+	Text(TEXT("HEALTH"), Sx(30.f), H - Sx(88.f), Ink, 0.55f);
 
 	// Slot bar: 1 rifle, 2 strike, 3 camera.
 	static const TCHAR* Names[] = {TEXT("1 RIFLE"), TEXT("2 STRIKE"), TEXT("3 CAMERA")};
@@ -328,8 +335,8 @@ void ADCHUD::DrawStatus(ADCGameState& GS, ADCCharacter& Me)
 	{
 		const bool bActive = static_cast<int32>(Me.GetSlot()) == i;
 		const float X = W * 0.5f - Sx(255.f) + i * Sx(170.f);
-		Box(X, H - Sx(70.f), Sx(160.f), Sx(44.f), bActive ? FLinearColor(Gold.R, Gold.G, Gold.B, 0.95f) : Shade);
-		Text(Names[i], X + Sx(80.f), H - Sx(62.f), bActive ? Ink : FLinearColor(1, 1, 1, 0.6f), 0.75f, true);
+		Box(X, H - Sx(70.f), Sx(160.f), Sx(44.f), bActive ? FLinearColor(Gold.R, Gold.G, Gold.B, 0.95f) : Plate);
+		Text(Names[i], X + Sx(80.f), H - Sx(62.f), bActive ? Ink : FLinearColor(Ink.R, Ink.G, Ink.B, 0.6f), 0.75f, true);
 	}
 	if (Me.IsDrawing())
 	{
@@ -340,9 +347,11 @@ void ADCHUD::DrawStatus(ADCGameState& GS, ADCCharacter& Me)
 	if (Me.GetSlot() == EDCSlot::Rifle)
 	{
 		const int32 Ammo = Me.GetAmmo();
-		const FLinearColor AC = Ammo > T.Rifle.LowAmmoWarning ? FLinearColor::White : Red;
+		const FLinearColor AC = Ammo > T.Rifle.LowAmmoWarning ? Ink : Red;
+		Box(W - Sx(214.f), H - Sx(104.f), Sx(190.f), Sx(80.f), FLinearColor(Paper.R, Paper.G, Paper.B, 0.9f));
+		Box(W - Sx(214.f), H - Sx(104.f), Sx(5.f), Sx(80.f), Ink);
 		Text(FString::Printf(TEXT("%d"), Ammo), W - Sx(200.f), H - Sx(100.f), AC, 2.f);
-		Text(FString::Printf(TEXT("/ %d"), Me.GetReserve()), W - Sx(110.f), H - Sx(70.f), FLinearColor::White, 0.8f);
+		Text(FString::Printf(TEXT("/ %d"), Me.GetReserve()), W - Sx(110.f), H - Sx(70.f), Ink, 0.8f);
 		if (Me.IsReloading())
 		{
 			Text(TEXT("RELOADING"), W * 0.5f, H * 0.5f + Sx(40.f), FLinearColor::White, 0.7f, true);
@@ -548,10 +557,12 @@ void ADCHUD::DrawOnboarding(ADCCharacter& Me)
 		}
 	}
 	const float W = Canvas->ClipX;
-	const float Y = Canvas->ClipY - Sx(250.f); // low centre: the top band holds the timer, quota and HQ Scoop banner
-	Box(W * 0.5f - Sx(430.f), Y - Sx(6.f), Sx(860.f), Sx(78.f), Shade);
-	Text(TEXT("ORDERS: SHOOT THE DESTRUCTION. PHOTOS PAY FOR BIGGER BOMBS."), W * 0.5f, Y, Gold, 0.65f, true);
-	Text(Next ? FString::Printf(TEXT("%d/5  %s"), Done + 1, Next->Prompt) : FString(TEXT("YOU ARE A WAR PHOTOGRAPHER NOW. GET CLOSER.")), W * 0.5f, Y + Sx(32.f), FLinearColor::White, 0.75f, true);
+	// Low centre, above the viewfinder prompts (they overlapped LMB SNAP): a paper plate with ink type.
+	const float Y = Canvas->ClipY - Sx(330.f);
+	Box(W * 0.5f - Sx(430.f), Y - Sx(6.f), Sx(860.f), Sx(78.f), FLinearColor(Paper.R, Paper.G, Paper.B, 0.9f));
+	Box(W * 0.5f - Sx(430.f), Y - Sx(6.f), Sx(5.f), Sx(78.f), Ink);
+	Text(TEXT("ORDERS: SHOOT THE DESTRUCTION. PHOTOS PAY FOR BIGGER BOMBS."), W * 0.5f, Y, Ink, 0.65f, true);
+	Text(Next ? FString::Printf(TEXT("%d/5  %s"), Done + 1, Next->Prompt) : FString(TEXT("YOU ARE A WAR PHOTOGRAPHER NOW. GET CLOSER.")), W * 0.5f, Y + Sx(32.f), Ink, 0.75f, true);
 }
 
 void ADCHUD::DrawDowned(ADCCharacter& Me)

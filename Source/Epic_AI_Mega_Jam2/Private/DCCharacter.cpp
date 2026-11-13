@@ -1162,6 +1162,9 @@ void ADCCharacter::Landed(const FHitResult& Hit)
 	if (IsLocallyControlled())
 	{
 		AddTrauma(FMath::Clamp(Impact / 3000.f, 0.f, 0.3f));
+		// The camera sinks into the landing and springs back (Saltline landing spring).
+		const FDCMoveTuning& M = UDCTuning::Get().Move;
+		LandDipVel -= M.LandDipMaxCm * M.LandDipDamping * FMath::Clamp(Impact / FMath::Max(M.LandDipFullSpeed, 1.f), 0.f, 1.f);
 	}
 }
 
@@ -1233,6 +1236,15 @@ void ADCCharacter::UpdateView(float DeltaSeconds)
 	const FRotator Jitter(FMath::PerlinNoise1D(T * 23.f) * 4.f * Shake, FMath::PerlinNoise1D(T * 19.f + 7.f) * 4.f * Shake, FMath::PerlinNoise1D(T * 17.f + 3.f) * 3.f * Shake);
 	ThirdCam->SetRelativeRotation(Jitter);
 	FirstCam->SetRelativeRotation(Jitter * 0.6f);
+
+	// Landing spring and sprint FOV kick (Saltline feel, R9), from the move tuning.
+	const FDCMoveTuning& M = UDCTuning::Get().Move;
+	const float Accel = -LandDip * M.LandDipStiffness - LandDipVel * M.LandDipDamping;
+	LandDipVel += Accel * DeltaSeconds;
+	LandDip = FMath::Clamp(LandDip + LandDipVel * DeltaSeconds, -M.LandDipMaxCm, M.LandDipMaxCm);
+	Boom->SocketOffset = M.ShoulderOffset + FVector(0.f, 0.f, LandDip);
+	const bool bSprintKick = bSprinting && !bCameraRaised && GetVelocity().Size2D() > M.WalkSpeed;
+	ThirdCam->SetFieldOfView(FMath::FInterpTo(ThirdCam->FieldOfView, M.ThirdPersonFOV + (bSprintKick ? M.SprintFOVKick : 0.f), DeltaSeconds, 6.f));
 }
 
 void ADCCharacter::Tick(float DeltaSeconds)

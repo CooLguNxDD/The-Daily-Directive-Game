@@ -34,6 +34,14 @@ struct FDCMoveTuning
 	UPROPERTY(EditAnywhere, Config, Category = "Move") float ArmLength = 260.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Move") FVector ShoulderOffset = FVector(0.f, 65.f, 65.f);
 	UPROPERTY(EditAnywhere, Config, Category = "Move") float MaxHealth = 100.f;
+	/** Landing dip as a spring (Saltline, R9): accel = -x * Stiffness - v * Damping; dip capped at LandDipMaxCm. */
+	UPROPERTY(EditAnywhere, Config, Category = "Move") float LandDipStiffness = 150.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Move") float LandDipDamping = 17.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Move") float LandDipMaxCm = 20.f;
+	/** Landing speed (cm/s) that gives the full dip. */
+	UPROPERTY(EditAnywhere, Config, Category = "Move") float LandDipFullSpeed = 1200.f;
+	/** Field of view added while sprinting (third person). */
+	UPROPERTY(EditAnywhere, Config, Category = "Move") float SprintFOVKick = 6.f;
 };
 
 USTRUCT(BlueprintType)
@@ -176,6 +184,8 @@ struct FDCLookTuning
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float FireballGlow = 20.f;
 	/** The hottest BloomPeak of any stratagem: the Flash post layer weight is a stratagem peak over this (0..1). */
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float MaxBloomPeak = 55.f;
+	/** Sun light-shaft bloom scale (0 = off). */
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float LightShaftBloom = 0.15f;
 	/** Cubes in the voxel blast core (R4). */
 	UPROPERTY(EditAnywhere, Config, Category = "Look") int32 FireballCubes = 34;
 	/** Peak intensity of the blast's point light (it lights the street and the debris). */
