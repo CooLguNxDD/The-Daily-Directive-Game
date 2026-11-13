@@ -225,7 +225,7 @@ void ADCPlayerController::UpdateMenu()
 	{
 		HostsKey += H.Address + TEXT("/") + FString::FromInt(H.Players) + TEXT(";");
 	}
-	if (Beacon && Mode == 0 && MenuMode != 0)
+	if (Beacon && Mode == 0 && !Beacon->IsListening())
 	{
 		Beacon->StartListening();
 	}
@@ -349,7 +349,10 @@ void ADCPlayerController::ServerSecondTake_Implementation(int32 PhotoId, FVector
 	if (!GS || !PS || GS->Phase != EDCRunPhase::Reel || GS->ReelIndex != ClipIndex || GS->ReelStage > 1 || SecondTakeClips.Contains(ClipIndex) || PS->FindPhoto(PhotoId)
 		|| !GS->ReelClips.IsValidIndex(ClipIndex) || FVector::Dist(CamLoc, GS->ReelClips[ClipIndex].Photo.CameraLocation) > 3000.f)
 	{
-		ClientSecondTakeRejected(PhotoId, ClipIndex); // the client may try this clip again while it still plays
+		if (!PS || !PS->FindPhoto(PhotoId))
+		{
+			ClientSecondTakeRejected(PhotoId, ClipIndex); // the client may try this clip again while it still plays
+		}
 		return;
 	}
 	SecondTakeClips.Add(ClipIndex);

@@ -1,5 +1,6 @@
 #include "DCPhotoProbe.h"
 
+#include "Algo/Find.h"
 #include "DCBuilding.h"
 #include "DCEnemy.h"
 #include "DCGameState.h"
@@ -258,8 +259,15 @@ namespace DCPhotoProbe
 			const FVector P = Enemy->GetActorLocation() + FVector(0, 0, 150.f);
 			if (Enemy->IsAlive() && FVector::Dist(View.Location, P) < TagRange && InFrame(View, P, 1.f))
 			{
-				const FName Tag = Enemy->IsStunned(Now) ? FName(TEXT("STUNNED")) : Enemy->IsWalker() ? FName(TEXT("WAR MACHINE")) : FName(TEXT("BRUTALITY"));
-				Out.Add({P, Tag, 0.5f});
+				// Tag by enemy state, first match wins (a table, not a chain).
+				using FTagRule = TPair<bool (*)(const ADCEnemy&, float), const TCHAR*>;
+				static const FTagRule Rules[] = {
+					{[](const ADCEnemy& En, float T) { return En.IsStunned(T); }, TEXT("STUNNED")},
+					{[](const ADCEnemy& En, float) { return En.IsWalker(); }, TEXT("WAR MACHINE")},
+					{[](const ADCEnemy&, float) { return true; }, TEXT("BRUTALITY")},
+				};
+				const FTagRule* Rule = Algo::FindByPredicate(Rules, [Enemy, Now](const FTagRule& R) { return R.Key(*Enemy, Now); });
+				Out.Add({P, FName(Rule->Value), 0.5f});
 			}
 		}
 	}

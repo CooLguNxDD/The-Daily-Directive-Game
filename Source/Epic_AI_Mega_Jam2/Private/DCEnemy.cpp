@@ -47,6 +47,14 @@ namespace
 			return;
 		}
 		ADCCharacter* Target = E.FindTarget(FMath::Max(Def.SenseRange, Aggro), true);
+		const ADCCharacter* Hunted = Target ? nullptr : E.FindTarget(Def.HuntRangeCm, false);
+		if (Hunted)
+		{
+			// Out of sense range: the swarm drifts toward the nearest player, so nobody can camp with the rifle.
+			E.SteerTowards(Hunted->GetActorLocation() + FVector(0, 0, 40.f), Def.Speed * Def.HuntSpeedScale, Dt, Def.HoverHeight);
+			E.bRushing = false;
+			return;
+		}
 		if (!Target)
 		{
 			E.Heading = E.Heading.RotateAngleAxis(25.f * Dt, FVector::UpVector);

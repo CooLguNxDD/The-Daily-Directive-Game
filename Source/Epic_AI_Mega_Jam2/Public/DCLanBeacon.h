@@ -32,6 +32,7 @@ public:
 	void SetPlayerCount(int32 Count) { AnnouncedPlayers = Count; }
 	/** Title menu: listen for announcements. */
 	void StartListening();
+	bool IsListening() const { return bListening; }
 	void Stop();
 
 	/** Hosts heard in the last few seconds. */
@@ -49,6 +50,7 @@ private:
 	FSocket* Socket = nullptr;
 	FTSTicker::FDelegateHandle TickHandle;
 	bool bAnnouncing = false;
+	bool bListening = false;
 	int32 AnnouncedPort = 0;
 	FString AnnouncedName;
 	int32 AnnouncedPlayers = 1;

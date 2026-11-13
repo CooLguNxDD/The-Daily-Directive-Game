@@ -111,6 +111,15 @@ TArray<ADCPlayerState*> ADCGameMode::Players() const
 	return Out;
 }
 
+void ADCGameMode::Logout(AController* Exiting)
+{
+	Super::Logout(Exiting);
+	if (UDCLanBeacon* Beacon = GetGameInstance()->GetSubsystem<UDCLanBeacon>())
+	{
+		Beacon->SetPlayerCount(GameState->PlayerArray.Num()); // the LAN list shows who is still in the lobby
+	}
+}
+
 void ADCGameMode::PostLogin(APlayerController* NewPlayer)
 {
 	Super::PostLogin(NewPlayer);
@@ -414,6 +423,7 @@ void ADCGameMode::TickRogueStrikes(float Now)
 		return;
 	}
 	NextRogueTime = Now + Interval;
+	UE_LOG(LogTemp, Display, TEXT("DCROGUE free strike due (every %.0f s)"), Interval);
 	TArray<ADCBuilding*> Standing;
 	for (ADCBuilding* B : TActorRange<ADCBuilding>(GetWorld()))
 	{

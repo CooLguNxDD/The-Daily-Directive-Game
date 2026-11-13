@@ -12,6 +12,7 @@ namespace
 	constexpr double HostTimeoutSeconds = 4.0;
 	constexpr int32 MaxPacketBytes = 256;
 	constexpr int32 MaxNameChars = 32;
+	constexpr int32 MaxHosts = 16;
 }
 
 FString UDCLanBeacon::MakePacket(int32 GamePort, const FString& Name, int32 Players)
@@ -75,6 +76,7 @@ void UDCLanBeacon::StartListening()
 		UE_LOG(LogTemp, Warning, TEXT("DCLanBeacon: cannot bind port %d; LAN list disabled (IP join still works)"), UDCTuning::Get().Run.LanBeaconPort);
 	}
 	bAnnouncing = false;
+	bListening = true;
 	TickHandle = FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateUObject(this, &UDCLanBeacon::Tick), 0.25f);
 }
 
@@ -92,6 +94,7 @@ void UDCLanBeacon::Stop()
 		Socket = nullptr;
 	}
 	bAnnouncing = false;
+	bListening = false;
 }
 
 bool UDCLanBeacon::Tick(float DeltaSeconds)
@@ -128,6 +131,14 @@ void UDCLanBeacon::Receive()
 	uint8 Buffer[MaxPacketBytes + 1];
 	int32 Read = 0;
 	uint32 Pending = 0;
+	const double Now = FPlatformTime::Seconds();
+	for (auto It = Heard.CreateIterator(); It; ++It)
+	{
+		if (Now - It.Value().LastHeard >= HostTimeoutSeconds)
+		{
+			It.RemoveCurrent(); // gone quiet: forget it
+		}
+	}
 	for (int32 Guard = 0; Guard < 16 && Socket->HasPendingData(Pending); ++Guard)
 	{
 		if (!Socket->RecvFrom(Buffer, MaxPacketBytes, Read, *From) || Read <= 0)
@@ -142,8 +153,14 @@ void UDCLanBeacon::Receive()
 		{
 			continue; // outside input is data: anything malformed is ignored
 		}
-		FDCLanHost& Host = Heard.FindOrAdd(From->ToString(false));
-		Host.Address = FString::Printf(TEXT("%s:%d"), *From->ToString(false), Port);
+		// One entry per game (address and port): two hosts on one machine both show.
+		const FString Address = FString::Printf(TEXT("%s:%d"), *From->ToString(false), Port);
+		if (!Heard.Contains(Address) && Heard.Num() >= MaxHosts)
+		{
+			continue; // a bounded list: a flood of announcements cannot grow it
+		}
+		FDCLanHost& Host = Heard.FindOrAdd(Address);
+		Host.Address = Address;
 		Host.Name = Name;
 		Host.Players = Players;
 		Host.LastHeard = FPlatformTime::Seconds();

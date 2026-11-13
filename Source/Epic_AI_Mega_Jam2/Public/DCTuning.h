@@ -216,6 +216,9 @@ struct FDCEnemyDef
 	UPROPERTY(EditAnywhere, Config, Category = "Enemy") float AttackRange = 180.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Enemy") float AttackInterval = 0.6f;
 	UPROPERTY(EditAnywhere, Config, Category = "Enemy") float SenseRange = 3500.f;
+	/** Swarm hunt (R6): beyond SenseRange the enemy drifts toward the nearest player within this range at HuntSpeedScale (0 = wander). */
+	UPROPERTY(EditAnywhere, Config, Category = "Enemy") float HuntRangeCm = 0.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Enemy") float HuntSpeedScale = 0.5f;
 	UPROPERTY(EditAnywhere, Config, Category = "Enemy") float Scale = 1.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Enemy") FLinearColor Color = FLinearColor(0.05f, 0.05f, 0.06f);
 	UPROPERTY(EditAnywhere, Config, Category = "Enemy") FLinearColor EyeColor = FLinearColor(1.f, 0.1f, 0.05f);

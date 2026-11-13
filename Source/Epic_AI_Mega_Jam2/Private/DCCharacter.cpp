@@ -215,12 +215,19 @@ void ADCCharacter::Toast(const FString& Text)
 	LocalFeedback.ToastTime = GetWorld()->GetRealTimeSeconds();
 }
 
+float ADCCharacter::LensFOV() const
+{
+	// Fisheye-type gear widens the whole zoom range by its extra degrees (R10: the view itself changes).
+	const ADCPlayerState* PS = GetPlayerState<ADCPlayerState>();
+	return ZoomFOV + (PS ? PS->ExtraFOV : 0.f);
+}
+
 FDCShotView ADCCharacter::GetShotView() const
 {
 	FDCShotView View;
 	View.Location = FirstCam->GetComponentLocation();
 	View.Rotation = GetControlRotation();
-	View.FOV = ZoomFOV;
+	View.FOV = LensFOV();
 	return View;
 }
 
@@ -436,9 +443,8 @@ void ADCCharacter::OnZoom(const FInputActionInstance& I)
 	}
 	const FDCCameraTuning& C = UDCTuning::Get().Camera;
 	const ADCPlayerState* PS = GetPlayerState<ADCPlayerState>();
-	const float Wide = C.ViewfinderFOVWide + (PS ? PS->ExtraFOV : 0.f);
 	const float Before = ZoomFOV;
-	ZoomFOV = FMath::Clamp(ZoomFOV - Wheel * C.ZoomStep, C.ViewfinderFOVTight, Wide);
+	ZoomFOV = FMath::Clamp(ZoomFOV - Wheel * C.ZoomStep, C.ViewfinderFOVTight, C.ViewfinderFOVWide);
 	if (!FMath::IsNearlyEqual(Before, ZoomFOV))
 	{
 		DCAudio::Play2D(this, TEXT("UIClick"), 0.25f, ZoomFOV < Before ? 1.3f : 0.9f); // lens ring tick
@@ -759,7 +765,7 @@ void ADCCharacter::TakePhoto()
 
 	UTextureRenderTarget2D* Photo = UKismetRenderingLibrary::CreateRenderTarget2D(this, C.PhotoWidth, C.PhotoHeight, RTF_RGBA8);
 	Capture->TextureTarget = Photo;
-	Capture->FOVAngle = ZoomFOV;
+	Capture->FOVAngle = LensFOV();
 	// The photo is exposed for the fire, not the flash.
 	FPostProcessSettings& PhotoLook = Capture->PostProcessSettings;
 	PhotoLook.bOverride_BloomIntensity = true;
@@ -1143,7 +1149,7 @@ void ADCCharacter::UpdateView(float DeltaSeconds)
 		PhotoCamMesh->SetOwnerNoSee(bFirst);
 		BeaconMesh->SetOwnerNoSee(bFirst);
 	}
-	FirstCam->SetFieldOfView(FMath::FInterpTo(FirstCam->FieldOfView, ZoomFOV, DeltaSeconds, 14.f));
+	FirstCam->SetFieldOfView(FMath::FInterpTo(FirstCam->FieldOfView, LensFOV(), DeltaSeconds, 14.f));
 
 	// Trauma shake: offsets the camera only, never the aim.
 	Trauma = FMath::Max(0.f, Trauma - DeltaSeconds * 1.6f);

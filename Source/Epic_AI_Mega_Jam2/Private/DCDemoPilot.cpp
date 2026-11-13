@@ -246,7 +246,14 @@ void ADCDemoPilot::AddCycle(const FString& C)
 	FString WantedStratagem;
 	if (!C.StartsWith(TEXT("s0")) && FParse::Value(FCommandLine::Get(), TEXT("dcstratagem="), WantedStratagem))
 	{
-		// -dcstratagem=Id: Q cycles until the drafted stratagem is selected (R10 evidence), then logs and frames it.
+		// -dcstratagem=Id: wait out its own cooldown, Q cycles until it is selected (R10 evidence), then log and frame it.
+		Add(0.f, [this, WantedStratagem]
+		{
+			const APlayerController* PC = GetWorld()->GetFirstPlayerController();
+			const ADCPlayerState* PS = PC ? PC->GetPlayerState<ADCPlayerState>() : nullptr;
+			const ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>();
+			return !PS || !GS || PS->CooldownReadyTime(FName(*WantedStratagem)) <= GS->Now();
+		}, 35.f);
 		for (int32 i = 0; i < 6; ++i)
 		{
 			Add(0.35f, [this, WantedStratagem]
@@ -424,13 +431,23 @@ void ADCDemoPilot::AddEnemyFight(const FString& S)
 	{
 		const APlayerController* PC = GetWorld()->GetFirstPlayerController();
 		const APawn* Me = PC ? PC->GetPawn() : nullptr;
-		if (!Target.IsValid() || !Target->IsAlive() || !Me)
+		if (!Me)
 		{
 			return true;
 		}
-		AimAt(Target->GetActorLocation());
-		return FVector::Dist(Target->GetActorLocation(), Me->GetActorLocation()) < 1800.f;
-	}, 4.f);
+		float Best = 1e9f;
+		for (ADCEnemy* E : TActorRange<ADCEnemy>(GetWorld()))
+		{
+			const float D = E->IsAlive() ? FVector::Dist(E->GetActorLocation(), Me->GetActorLocation()) : 1e9f;
+			Target = D < Best ? E : Target.Get();
+			Best = FMath::Min(Best, D);
+		}
+		if (Target.IsValid() && Target->IsAlive())
+		{
+			AimAt(Target->GetActorLocation());
+		}
+		return Best < 1800.f;
+	}, 6.f);
 	Add(0.f, [this] { Tap(TEXT("Fire")); return true; });
 	Add(0.35f, [this, S] { Shot(S + TEXT("_swarm_stamp")); LogPhoto(); return true; });
 	Add(0.9f, [this, S] { Shot(S + TEXT("_swarm_after")); Release(TEXT("Aim")); return true; });
@@ -540,6 +557,10 @@ void ADCDemoPilot::AddRifleOnly()
 		UE_LOG(LogDCDemo, Display, TEXT("DEMO rifle-only end: phase=%d failed=%d quota results=%d met=%d"), GS ? static_cast<int32>(GS->Phase) : -1,
 			GS && GS->bRunFailed ? 1 : 0, GS ? GS->QuotaResults.Num() : 0, GS && GS->QuotaResults.Num() > 0 && GS->QuotaResults.Last() ? 1 : 0);
 		UE_LOG(LogDCDemo, Display, TEXT("DEMO end"));
+		if (UDCAudioSubsystem* Audio = GetGameInstance()->GetSubsystem<UDCAudioSubsystem>())
+		{
+			Audio->StopEvidenceRecording(this);
+		}
 		if (bQuit)
 		{
 			FGenericPlatformMisc::RequestExit(false);
