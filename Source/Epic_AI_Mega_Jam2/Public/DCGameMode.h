@@ -31,6 +31,8 @@ public:
 	void CallStrike(const FDCStratagemDef& Def, const FVector& Target, AController* Caller);
 	void OnPhotoGraded(ADCCharacter* Photographer, const FDCPhotoRecord& Record, const FDCPhotoInputs& Inputs, TArray<FDCPoseSample>&& Poses);
 	void OnPlayerDowned(ADCCharacter* Player);
+	/** Fails the run when every player is down and nobody can still get up (R12). */
+	void CheckWipe();
 	void OnBuildingCollapsed(ADCBuilding* Building);
 	void RequestHitstop();
 	bool IsCombatLive() const;

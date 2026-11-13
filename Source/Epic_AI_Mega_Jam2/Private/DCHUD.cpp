@@ -481,7 +481,9 @@ void ADCHUD::DrawDowned(ADCCharacter& Me)
 	const float W = Canvas->ClipX, H = Canvas->ClipY;
 	Box(0, 0, W, H, FLinearColor(0.3f, 0.f, 0.f, 0.35f));
 	Text(TEXT("DOWNED"), W * 0.5f, H * 0.4f, Red, 2.f, true);
-	Text(TEXT("HOLD E TO SELF-REVIVE (SOLO, ONCE PER SECTOR) OR WAIT FOR A COMRADE"), W * 0.5f, H * 0.4f + Sx(70.f), FLinearColor::White, 0.7f, true);
+	const float Left = Me.SelfReviveSecondsLeft();
+	Text(Left > 0.f ? FString::Printf(TEXT("HOLD E TO PATCH YOURSELF UP  -  %.0fs"), Left) : FString(TEXT("HOLD ON - A COMRADE CAN REVIVE YOU (THEY HOLD E BESIDE YOU)")),
+		W * 0.5f, H * 0.4f + Sx(70.f), FLinearColor::White, 0.7f, true);
 	Box(W * 0.5f - Sx(200.f), H * 0.4f + Sx(110.f), Sx(400.f) * Me.GetReviveProgress(), Sx(12.f), FLinearColor::White);
 }
 

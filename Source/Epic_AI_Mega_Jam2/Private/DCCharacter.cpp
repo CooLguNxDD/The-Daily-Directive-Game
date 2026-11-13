@@ -122,6 +122,7 @@ void ADCCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLife
 	DOREPLIFETIME(ADCCharacter, SpotlitUntil);
 	DOREPLIFETIME(ADCCharacter, ReviveProgress);
 	DOREPLIFETIME(ADCCharacter, SelfRevivesLeft);
+	DOREPLIFETIME(ADCCharacter, DownedAt);
 }
 
 void ADCCharacter::BeginPlay()
@@ -301,6 +302,22 @@ void ADCCharacter::OnSprintEnd(const FInputActionInstance&)
 
 void ADCCharacter::OnCrouch(const FInputActionInstance&) { Crouch(); }
 void ADCCharacter::OnCrouchEnd(const FInputActionInstance&) { UnCrouch(); }
+
+float ADCCharacter::SelfReviveSecondsLeft() const
+{
+	const AGameStateBase* GS = GetWorld()->GetGameState();
+	const bool bSolo = GS && GS->PlayerArray.Num() <= 1;
+	if (!bDowned || !bSolo || SelfRevivesLeft <= 0)
+	{
+		return 0.f;
+	}
+	return FMath::Max(0.f, DownedAt + UDCTuning::Get().Run.SelfReviveWindowSeconds - Now());
+}
+
+bool ADCCharacter::CanSelfRevive() const
+{
+	return SelfReviveSecondsLeft() > 0.f;
+}
 
 bool ADCCharacter::InSector() const
 {
@@ -798,6 +815,7 @@ void ADCCharacter::HostApplyHurt(float Amount, const FVector& From)
 	if (Health <= 0.f)
 	{
 		bDowned = true;
+		DownedAt = Now();
 		bCameraRaised = false;
 		ReviveProgress = 0.f;
 		UpdateMoveSpeed();
@@ -968,7 +986,7 @@ void ADCCharacter::UpdateRevive(float DeltaSeconds)
 	}
 	const AGameStateBase* GS = GetWorld()->GetGameState();
 	const bool bSolo = GS && GS->PlayerArray.Num() <= 1;
-	if (ReviveRate <= 0.f && bSolo && bHostReviveHeld && SelfRevivesLeft > 0)
+	if (ReviveRate <= 0.f && bSolo && bHostReviveHeld && CanSelfRevive())
 	{
 		ReviveRate = 1.f / SelfReviveSeconds;
 	}

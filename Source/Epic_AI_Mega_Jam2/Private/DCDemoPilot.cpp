@@ -253,6 +253,30 @@ void ADCDemoPilot::AddEnemyFight(const FString& S)
 		});
 	}
 	Add(0.3f, [this] { Release(TEXT("Fire")); Target.Reset(); return true; });
+	// Downed: hold E through the real input path to self-revive (solo), with frames before and after.
+	Add(0.2f, [this, S]
+	{
+		const ADCCharacter* Me = Cast<ADCCharacter>(GetWorld()->GetFirstPlayerController() ? GetWorld()->GetFirstPlayerController()->GetPawn() : nullptr);
+		if (Me && Me->IsDowned())
+		{
+			Shot(S + TEXT("_downed"));
+			Press(TEXT("Interact"));
+		}
+		return true;
+	});
+	Add(0.f, [this]
+	{
+		const ADCCharacter* Me = Cast<ADCCharacter>(GetWorld()->GetFirstPlayerController() ? GetWorld()->GetFirstPlayerController()->GetPawn() : nullptr);
+		return !Me || !Me->IsDowned();
+	}, 8.f);
+	Add(0.3f, [this, S]
+	{
+		Release(TEXT("Interact"));
+		const ADCCharacter* Me = Cast<ADCCharacter>(GetWorld()->GetFirstPlayerController() ? GetWorld()->GetFirstPlayerController()->GetPawn() : nullptr);
+		UE_LOG(LogDCDemo, Display, TEXT("DEMO revive check: downed=%d"), Me && Me->IsDowned() ? 1 : 0);
+		Shot(S + TEXT("_after_revive_check"));
+		return true;
+	});
 }
 
 void ADCDemoPilot::AddWaitPhase(EDCRunPhase Phase, float Timeout)
@@ -372,6 +396,16 @@ void ADCDemoPilot::Tick(float DeltaSeconds)
 		return;
 	}
 	const double Real = GetWorld()->GetRealTimeSeconds();
+	// Whenever the pilot is downed, it holds E (the real Interact action) to self-revive, framing both ends.
+	const ADCCharacter* Me = Cast<ADCCharacter>(GetWorld()->GetFirstPlayerController() ? GetWorld()->GetFirstPlayerController()->GetPawn() : nullptr);
+	const bool bDown = Me && Me->IsDowned();
+	if (bDown != bAutoReviving)
+	{
+		bAutoReviving = bDown;
+		Shot(bDown ? TEXT("downed_holding_E") : TEXT("revived"));
+		UE_LOG(LogDCDemo, Display, TEXT("DEMO %s"), bDown ? TEXT("downed: holding E") : TEXT("revived"));
+		(bDown ? Press(TEXT("Interact")) : Release(TEXT("Interact")));
+	}
 	if (Real < StepReadyReal)
 	{
 		return;

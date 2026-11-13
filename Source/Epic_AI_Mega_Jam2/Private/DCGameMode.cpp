@@ -250,6 +250,11 @@ void ADCGameMode::EnterSector(float Now)
 
 void ADCGameMode::TickSectorPhase(float Now)
 {
+	CheckWipe();
+	if (GetGameState<ADCGameState>()->Phase != EDCRunPhase::Sector)
+	{
+		return;
+	}
 	TickWaves(Now);
 	TickScoop(Now);
 	TickRogueStrikes(Now);
@@ -508,11 +513,21 @@ void ADCGameMode::OnBuildingCollapsed(ADCBuilding* Building)
 
 void ADCGameMode::OnPlayerDowned(ADCCharacter* Player)
 {
+	CheckWipe();
+}
+
+void ADCGameMode::CheckWipe()
+{
 	ADCGameState* GS = GetGameState<ADCGameState>();
+	if (GS->Phase != EDCRunPhase::Sector)
+	{
+		return;
+	}
 	for (ADCPlayerState* PS : Players())
 	{
 		const ADCCharacter* C = PS->GetPawn<ADCCharacter>();
-		if (C && !C->IsDowned())
+		// Anyone standing, or a solo player still inside the self-revive window, keeps the run alive.
+		if (C && (!C->IsDowned() || C->CanSelfRevive()))
 		{
 			return;
 		}

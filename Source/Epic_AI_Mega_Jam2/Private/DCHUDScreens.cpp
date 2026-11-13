@@ -119,40 +119,55 @@ void ADCHUD::DrawDraft(ADCGameState& GS, ADCCharacter* Me)
 	{
 		return;
 	}
-	const int32 N = PS->DraftOffer.Num();
-	const float CardW = Sx(500.f), CardH = Sx(420.f), Gap = Sx(40.f);
-	const float X0 = W * 0.5f - (N * CardW + (N - 1) * Gap) * 0.5f;
-	for (int32 i = 0; i < N; ++i)
+	// Three columns, one per pool; each column lists that pool's open options.
+	TArray<FName> Pools;
+	for (const FName& Id : PS->DraftOffer)
 	{
-		const FDCUpgradeDef* Def = T.FindUpgrade(PS->DraftOffer[i]);
-		if (!Def)
+		if (const FDCUpgradeDef* Def = T.FindUpgrade(Id))
 		{
-			continue;
+			Pools.AddUnique(Def->Pool);
 		}
-		const bool bPicked = PS->Upgrades.Contains(Def->Id);
-		const float X = X0 + i * (CardW + Gap), Y = Sx(260.f);
-		Box(X, Y, CardW, CardH, bPicked ? Gold : Paper);
-		Box(X, Y, CardW, Sx(50.f), Red);
-		Text(PoolLabel(Def->Pool), X + CardW * 0.5f, Y + Sx(10.f), Paper, 0.65f, true);
-		Text(Def->DisplayName.ToString().ToUpper(), X + CardW * 0.5f, Y + Sx(80.f), Ink, 0.85f, true);
-		// Description wrapped by words into short lines.
-		TArray<FString> Words;
-		Def->Description.ToString().ParseIntoArray(Words, TEXT(" "));
-		FString Line;
-		float Ly = Y + Sx(150.f);
-		for (const FString& Word : Words)
+	}
+	const float ColW = Sx(560.f), Gap = Sx(30.f), CardH = Sx(150.f);
+	const float X0 = W * 0.5f - (Pools.Num() * ColW + (Pools.Num() - 1) * Gap) * 0.5f;
+	for (int32 Col = 0; Col < Pools.Num(); ++Col)
+	{
+		const float X = X0 + Col * (ColW + Gap);
+		Box(X, Sx(230.f), ColW, Sx(44.f), Red);
+		Text(PoolLabel(Pools[Col]), X + ColW * 0.5f, Sx(236.f), Paper, 0.7f, true);
+		int32 Row = 0;
+		for (const FName& Id : PS->DraftOffer)
 		{
-			if (Line.Len() + Word.Len() > 30)
+			const FDCUpgradeDef* Def = T.FindUpgrade(Id);
+			if (!Def || Def->Pool != Pools[Col])
 			{
-				Text(Line, X + CardW * 0.5f, Ly, Ink, 0.6f, true);
-				Ly += Sx(34.f);
-				Line.Reset();
+				continue;
 			}
-			Line += (Line.IsEmpty() ? TEXT("") : TEXT(" ")) + Word;
+			const bool bPicked = PS->Upgrades.Contains(Def->Id);
+			const float Y = Sx(290.f) + Row++ * (CardH + Sx(14.f));
+			Box(X, Y, ColW, CardH, bPicked ? Gold : Paper);
+			Text(Def->DisplayName.ToString().ToUpper(), X + Sx(16.f), Y + Sx(10.f), Ink, 0.7f);
+			// Description wrapped by words into short lines.
+			TArray<FString> Words;
+			Def->Description.ToString().ParseIntoArray(Words, TEXT(" "));
+			FString Line;
+			float Ly = Y + Sx(52.f);
+			for (const FString& Word : Words)
+			{
+				if (Line.Len() + Word.Len() > 52)
+				{
+					Text(Line, X + Sx(16.f), Ly, Ink, 0.5f);
+					Ly += Sx(26.f);
+					Line.Reset();
+				}
+				Line += (Line.IsEmpty() ? TEXT("") : TEXT(" ")) + Word;
+			}
+			Text(Line, X + Sx(16.f), Ly, Ink, 0.5f);
+			if (!PS->bDraftDone)
+			{
+				AddHitBox(FVector2D(X, Y), FVector2D(ColW, CardH), FName(*FString::Printf(TEXT("pick|%s"), *Def->Id.ToString())), true);
+			}
 		}
-		Text(Line, X + CardW * 0.5f, Ly, Ink, 0.6f, true);
-		Button(bPicked ? TEXT("DRAFTED") : TEXT("DRAFT"), FName(*FString::Printf(TEXT("pick|%s"), *Def->Id.ToString())),
-			X + Sx(40.f), Y + CardH - Sx(80.f), CardW - Sx(80.f), Sx(60.f), !PS->bDraftDone, bPicked);
 	}
 	int32 Done = 0;
 	for (const APlayerState* P : GS.PlayerArray)
@@ -160,8 +175,8 @@ void ADCHUD::DrawDraft(ADCGameState& GS, ADCCharacter* Me)
 		const ADCPlayerState* D = Cast<ADCPlayerState>(P);
 		Done += D && D->bDraftDone ? 1 : 0;
 	}
-	Text(PS->bDraftDone ? FString::Printf(TEXT("WAITING FOR THE CREW  %d/%d"), Done, GS.PlayerArray.Num()) : FString(TEXT("CLICK A CARD. EACH UPGRADE CHANGES HOW YOU PLAY.")),
-		W * 0.5f, Sx(740.f), Paper, 0.75f, true);
+	Text(PS->bDraftDone ? FString::Printf(TEXT("WAITING FOR THE CREW  %d/%d"), Done, GS.PlayerArray.Num()) : FString(TEXT("CLICK ONE CARD. EACH UPGRADE CHANGES HOW YOU PLAY.")),
+		W * 0.5f, Sx(830.f), Paper, 0.75f, true);
 	FString Owned;
 	for (const FName& Id : PS->Upgrades)
 	{
@@ -170,7 +185,7 @@ void ADCHUD::DrawDraft(ADCGameState& GS, ADCCharacter* Me)
 	}
 	if (!Owned.IsEmpty())
 	{
-		Text(TEXT("YOUR KIT: ") + Owned.ToUpper(), W * 0.5f, Sx(800.f), Gold, 0.6f, true);
+		Text(TEXT("YOUR KIT: ") + Owned.ToUpper(), W * 0.5f, Sx(880.f), Gold, 0.6f, true);
 	}
 }
 

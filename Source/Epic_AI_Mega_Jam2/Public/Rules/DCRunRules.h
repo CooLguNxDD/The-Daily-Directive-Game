@@ -10,8 +10,9 @@ struct FDCScoopDef;
 
 namespace DCRunRules
 {
-	/** One option per pool (pools in declared order), seeded, skipping ids in Taken. */
-	EPIC_AI_MEGA_JAM2_API TArray<FName> DraftOffer(int32 Seed, const TArray<FDCUpgradeDef>& Upgrades, const TArray<FName>& Taken);
+	/** The draft (R10): every option still open, grouped by pool in declared order, at most PerPool per pool
+	 *  (a seeded pick when a pool has more). Skips ids in Taken. */
+	EPIC_AI_MEGA_JAM2_API TArray<FName> DraftOffer(int32 Seed, const TArray<FDCUpgradeDef>& Upgrades, const TArray<FName>& Taken, int32 PerPool = 3);
 
 	/** Does this graded photo satisfy the scoop? */
 	EPIC_AI_MEGA_JAM2_API bool ScoopMet(const FDCScoopDef& Scoop, const FDCPhotoInputs& In, const FDCPhotoGrade& Grade);

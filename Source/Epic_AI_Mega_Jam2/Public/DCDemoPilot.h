@@ -62,4 +62,5 @@ private:
 	TWeakObjectPtr<class ADCEnemy> Target;
 	TSet<TObjectKey<ADCBuilding>> UsedTowers;
 	int32 ShotIndex = 0;
+	bool bAutoReviving = false;
 };

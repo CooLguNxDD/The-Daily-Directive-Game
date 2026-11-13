@@ -8,6 +8,7 @@
 #include "Components/StaticMeshComponent.h"
 #include "DCAssets.h"
 #include "DCDebrisPool.h"
+#include "DCGameState.h"
 #include "Components/InstancedStaticMeshComponent.h"
 #include "DCTuning.h"
 #include "Engine/World.h"
@@ -43,7 +44,7 @@ ADCEnvironment::ADCEnvironment()
 
 	Ground = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Ground"));
 	Ground->SetupAttachment(Root);
-	Ground->SetMobility(EComponentMobility::Static);
+	Ground->SetMobility(EComponentMobility::Movable); // placed at run time (top face at z = 0); Static refused the move
 	Ground->SetCollisionProfileName(TEXT("BlockAll"));
 
 	for (TObjectPtr<UInstancedStaticMeshComponent>* Ism : {&Sidewalks, &Dashes})
@@ -109,6 +110,8 @@ void ADCEnvironment::BeginPlay()
 	Ground->SetWorldLocation(FVector(0.f, 0.f, -50.f));
 	Ground->SetMaterial(0, DCAssets::MakeFlat(this, Look.Street));
 	BuildStreets();
+	UE_LOG(LogTemp, Display, TEXT("DCENV streets: sidewalks=%d dashes=%d registered=%d visible=%d"), Sidewalks->GetInstanceCount(), Dashes->GetInstanceCount(),
+		Sidewalks->IsRegistered() ? 1 : 0, Sidewalks->IsVisible() ? 1 : 0);
 
 	FPostProcessSettings& S = Post->Settings;
 	S.bOverride_AutoExposureMethod = true;
@@ -161,5 +164,17 @@ void ADCEnvironment::Tick(float DeltaSeconds)
 	const float T = FMath::Clamp(static_cast<float>(Elapsed) / FMath::Max(Look.FlashDecaySeconds, 0.01f), 0.f, 1.f);
 	// Instant peak, fast fall, long tail: readable as "the bloom peak" then "the decay window".
 	FlashAlpha = FMath::Pow(1.f - T, 2.5f);
+
+	// Solar Eclipse (City Mutator): the sky goes dark, so every blast blazes against it.
+	const ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>();
+	const bool bEclipse = GS && GS->HasMutator(TEXT("Eclipse"));
+	if (bEclipse != bEclipseApplied)
+	{
+		bEclipseApplied = bEclipse;
+		const float Light = bEclipse ? Look.EclipseLight : 1.f;
+		Sun->SetIntensity(Look.SunIntensityLux * Light);
+		SkyLight->SetIntensity(Light);
+		Fog->SetFogInscatteringColor(bEclipse ? Look.EclipseFog : Look.FogColor);
+	}
 	ApplyLook(Look.BaseBloom + FlashPeak * FlashAlpha, Look.ExposureBias + FlashKick * FlashAlpha);
 }

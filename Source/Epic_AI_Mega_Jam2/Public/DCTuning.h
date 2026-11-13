@@ -159,6 +159,9 @@ struct FDCLookTuning
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float FilmGrain = 0.35f;
 	/** Emissive of the fireball core and the ground shock ring at their peak (the bloom spike itself is BloomPeak). */
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float FireballGlow = 45.f;
+	/** Solar Eclipse mutator: sun and sky light fraction, and the fog colour of the dark sky. */
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float EclipseLight = 0.12f;
+	UPROPERTY(EditAnywhere, Config, Category = "Look") FLinearColor EclipseFog = FLinearColor(0.12f, 0.05f, 0.08f);
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float ShockGlow = 18.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float HitstopSeconds = 0.12f;
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float HitstopDilation = 0.05f;
@@ -297,6 +300,8 @@ struct FDCRunTuning
 {
 	GENERATED_BODY()
 	UPROPERTY(EditAnywhere, Config, Category = "Run") float DraftSeconds = 25.f;
+	/** Solo (R12): how long a downed player has to finish the self-revive hold before the run fails. */
+	UPROPERTY(EditAnywhere, Config, Category = "Run") float SelfReviveWindowSeconds = 12.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Run") int32 ReelClipsPerPlayer = 2;
 	/** Seconds of recorded pose before the shutter (the clip length in game time). */
 	UPROPERTY(EditAnywhere, Config, Category = "Run") float ClipSeconds = 2.f;
