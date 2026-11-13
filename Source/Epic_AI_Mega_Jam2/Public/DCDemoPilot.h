@@ -39,6 +39,8 @@ private:
 	void BuildScript();
 	void AddCycle(const FString& Name);
 	void AddEnemyFight(const FString& Sector);
+	/** -dcwatchwalker: frame the walker through the viewfinder, snap it, then frame the tower it condemns. */
+	void AddWalkerWatch();
 	void AddWaitPhase(EDCRunPhase Phase, float Timeout);
 	void Add(float Delay, TFunction<bool()> Do, float Timeout = 12.f);
 	void Press(FName Action, const FVector& Value = FVector(1, 0, 0));
@@ -65,6 +67,7 @@ private:
 	bool bAutoReviving = false;
 	/** While waiting for the sector to end, the pilot shoots the nearest enemy (rifle, real input). */
 	bool bDefend = false;
+	TSet<TObjectKey<class ADCSupplyPod>> FramedPods;
 	bool bDefendFiring = false;
 	void TickDefend();
 };

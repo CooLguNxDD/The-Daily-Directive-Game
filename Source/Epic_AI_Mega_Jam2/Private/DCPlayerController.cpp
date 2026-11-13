@@ -122,6 +122,29 @@ void ADCPlayerController::PlayerTick(float DeltaTime)
 		UpdateCursor();
 		UpdateReel();
 		UpdateEvidenceShots();
+		UpdateAutoVote();
+	}
+}
+
+void ADCPlayerController::UpdateAutoVote()
+{
+	// Scripted co-op evidence (-dcautovote): this player votes for the first shot that is not theirs.
+	const ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>();
+	const ADCPlayerState* Mine = GetPlayerState<ADCPlayerState>();
+	if (!FParse::Param(FCommandLine::Get(), TEXT("dcautovote")) || !GS || !Mine || GS->Phase != EDCRunPhase::Vote || Mine->VotedFor != 0 || bAutoVoted)
+	{
+		return;
+	}
+	for (const APlayerState* P : GS->PlayerArray)
+	{
+		const ADCPlayerState* Other = Cast<ADCPlayerState>(P);
+		if (Other && Other != Mine && Other->FinalCut.Num() > 0)
+		{
+			bAutoVoted = true;
+			UE_LOG(LogTemp, Display, TEXT("DCVOTE %s votes for photo %d by %s"), *Mine->GetPlayerName(), Other->FinalCut.Last(), *Other->GetPlayerName());
+			RequestVote(Other->FinalCut.Last()); // the critic's lowest pick, so the vote visibly changes the order
+			return;
+		}
 	}
 }
 

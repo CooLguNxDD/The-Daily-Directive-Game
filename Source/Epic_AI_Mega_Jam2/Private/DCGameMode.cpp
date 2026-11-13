@@ -139,12 +139,6 @@ float ADCGameMode::RogueInterval() const
 	return Interval;
 }
 
-float ADCGameMode::FindUpgradeParam(FName UpgradeId, bool bSecond) const
-{
-	const FDCUpgradeDef* Def = UDCTuning::Get().FindUpgrade(UpgradeId);
-	return Def ? (bSecond ? Def->Param2 : Def->Param) : 0.f;
-}
-
 // ---------------------------------------------------------------- run start / restart
 
 void ADCGameMode::StartRun()
@@ -155,6 +149,9 @@ void ADCGameMode::StartRun()
 		return;
 	}
 	GS->SectorIndex = 0;
+	// Evidence runs can start in a later sector (-dcstartsector=N) to reach its enemies sooner.
+	FParse::Value(FCommandLine::Get(), TEXT("dcstartsector="), GS->SectorIndex);
+	GS->SectorIndex = FMath::Clamp(GS->SectorIndex, 0, FMath::Max(UDCTuning::Get().Sectors.Num() - 1, 0));
 	EnterPhase(EDCRunPhase::Sector);
 }
 
@@ -360,6 +357,12 @@ void ADCGameMode::TickScoop(float Now)
 		return;
 	}
 	Scoop.Index = DCRunRules::PickScoop(SectorRng, T.Scoops.Num(), LastScoop);
+	FString Forced;
+	if (FParse::Value(FCommandLine::Get(), TEXT("dcscoop="), Forced)) // evidence runs: force one template
+	{
+		const int32 ForcedIndex = T.Scoops.IndexOfByPredicate([&Forced](const FDCScoopDef& D) { return D.Id == FName(*Forced); });
+		Scoop.Index = ForcedIndex != INDEX_NONE ? ForcedIndex : Scoop.Index;
+	}
 	LastScoop = Scoop.Index;
 	Scoop.bDone = false;
 	Scoop.CompletedBy.Reset();
@@ -480,8 +483,9 @@ void ADCGameMode::OnPhotoGraded(ADCCharacter* Photographer, const FDCPhotoRecord
 	}
 	Scoop.bDone = true;
 	Scoop.CompletedBy = PS->GetPlayerName();
+	UE_LOG(LogTemp, Display, TEXT("DCSCOOP %s filed by %s photo=%d reward=%d"), *Def.Id.ToString(), *Scoop.CompletedBy, Record.PhotoId, Def.RewardPoints);
 	PS->AddPoints(Def.RewardPoints);
-	ADCSupplyPod::Drop(GetWorld(), Photographer->GetActorLocation() + Photographer->GetActorForwardVector() * 250.f);
+	ADCSupplyPod::Drop(GetWorld(), Photographer->GetActorLocation() + Photographer->GetActorForwardVector() * 700.f);
 	for (ADCPlayerState* Other : Players())
 	{
 		if (ADCCharacter* C = Other->GetPawn<ADCCharacter>())
@@ -523,13 +527,19 @@ void ADCGameMode::OnBuildingCollapsed(ADCBuilding* Building)
 void ADCGameMode::ScheduleCollapse(ADCBuilding* Building, const FVector& Epicenter, FName Kind, float Delay)
 {
 	ADCGameState* GS = GetGameState<ADCGameState>();
-	if (!Building || Building->IsCollapsed() || PendingCollapses.ContainsByPredicate([Building](const FPendingCollapse& P) { return P.Building == Building; }))
+	if (!Building || Building->IsCollapsed())
 	{
 		return;
 	}
 	if (Delay <= 0.f)
 	{
+		// Immediate (a strike's own record is the event): beats any telegraphed collapse still pending on it.
+		PendingCollapses.RemoveAll([Building](const FPendingCollapse& P) { return P.Building == Building; });
 		Building->Collapse(Epicenter);
+		return;
+	}
+	if (PendingCollapses.ContainsByPredicate([Building](const FPendingCollapse& P) { return P.Building == Building; }))
+	{
 		return;
 	}
 	const FDCBuildingSpec& Spec = Building->GetSpec();
@@ -837,6 +847,11 @@ void ADCGameMode::EnterFrontPage(float Now)
 		}
 	}
 	GS->HeadlineIndex = DCRunRules::HeadlineIndex(GS->PagePicks);
+	for (const FDCPagePick& Pick : GS->PagePicks)
+	{
+		UE_LOG(LogTemp, Display, TEXT("DCPAGE photo=%d by=%s critic=%d votes=%d page=%d%s"), Pick.Photo.PhotoId, *Pick.PlayerName, Pick.Photo.Grade.Score, Pick.Votes, Pick.PageScore,
+			GS->PagePicks.IsValidIndex(GS->HeadlineIndex) && &GS->PagePicks[GS->HeadlineIndex] == &Pick ? TEXT(" HEADLINE") : TEXT(""));
+	}
 	if (GS->PagePicks.IsValidIndex(GS->HeadlineIndex))
 	{
 		const FDCPagePick& Top = GS->PagePicks[GS->HeadlineIndex];

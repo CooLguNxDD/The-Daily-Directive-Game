@@ -102,6 +102,7 @@ struct FDCCameraTuning
 	UPROPERTY(EditAnywhere, Config, Category = "Camera") float PhotoFlashStopDown = 2.f;
 	/** Stops a spotlit photo is pushed over (R11: spotlight units blow out exposure). */
 	UPROPERTY(EditAnywhere, Config, Category = "Camera") float SpotlitPhotoStops = 3.5f;
+	UPROPERTY(EditAnywhere, Config, Category = "Camera") float SpotlitPhotoBloom = 8.f;
 };
 
 USTRUCT(BlueprintType)
@@ -281,6 +282,12 @@ struct FDCUpgradeDef
 	UPROPERTY(EditAnywhere, Config, Category = "Run") float Param2 = 0.f;
 
 	// What an owned upgrade (gear) or an active mutator does, as data. Zero / one means "no effect".
+	/** Film per sector this gear sets (0 = unchanged), and the multiplier it puts on every photo (gear). */
+	UPROPERTY(EditAnywhere, Config, Category = "Run") int32 FilmShots = 0;
+	UPROPERTY(EditAnywhere, Config, Category = "Run") float PhotoMultiplier = 1.f;
+	/** Danger bonus multiplier and extra viewfinder field of view in degrees (gear). */
+	UPROPERTY(EditAnywhere, Config, Category = "Run") float DangerMultiplier = 1.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Run") float ExtraFOV = 0.f;
 	/** Photos with a blast in frame score this much more (mutators). */
 	UPROPERTY(EditAnywhere, Config, Category = "Run") float BlastPhotoMultiplier = 1.f;
 	/** Sun and sky light scale while active (mutators; 1 = unchanged). */

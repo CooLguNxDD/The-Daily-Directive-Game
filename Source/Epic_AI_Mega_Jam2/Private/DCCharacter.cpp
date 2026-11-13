@@ -283,7 +283,17 @@ void ADCCharacter::OnLook(const FInputActionInstance& I)
 	AddControllerPitchInput(V.Y * Sens);
 }
 
-void ADCCharacter::OnJump(const FInputActionInstance&) { if (!bDowned) { Jump(); } }
+void ADCCharacter::OnJump(const FInputActionInstance&)
+{
+	if (!bDowned && CanJump())
+	{
+		DCAudio::PlayAt(this, TEXT("Jump"), GetActorLocation() - FVector(0, 0, 80.f), 0.5f, FMath::FRandRange(0.9f, 1.1f));
+	}
+	if (!bDowned)
+	{
+		Jump();
+	}
+}
 void ADCCharacter::OnJumpEnd(const FInputActionInstance&) { StopJumping(); }
 
 void ADCCharacter::OnSprint(const FInputActionInstance&)
@@ -721,7 +731,7 @@ void ADCCharacter::TakePhoto()
 	{
 		// A spotlight in the lens blows the frame out: the photo shows it, not just the score.
 		PhotoLook.AutoExposureBias += C.SpotlitPhotoStops;
-		PhotoLook.BloomIntensity += 8.f;
+		PhotoLook.BloomIntensity += C.SpotlitPhotoBloom;
 	}
 	Capture->PostProcessBlendWeight = 1.f;
 	Capture->CaptureScene();

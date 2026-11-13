@@ -21,6 +21,7 @@ public:
 	virtual void Tick(float DeltaSeconds) override;
 
 	static ADCSupplyPod* Drop(UWorld* World, const FVector& Where);
+	bool HasLanded() const { return bLanded; }
 
 private:
 	UPROPERTY(Replicated) float LandTime = 0.f;

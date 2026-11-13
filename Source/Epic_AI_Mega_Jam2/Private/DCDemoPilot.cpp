@@ -2,6 +2,7 @@
 
 #include "DCBuilding.h"
 #include "DCEnemy.h"
+#include "DCSupplyPod.h"
 #include "DCCharacter.h"
 #include "DCGameState.h"
 #include "DCInput.h"
@@ -236,6 +237,58 @@ void ADCDemoPilot::AddCycle(const FString& C)
 	Add(0.5f, [this] { Tap(TEXT("Slot1")); return true; });
 }
 
+void ADCDemoPilot::AddWalkerWatch()
+{
+	auto FindWalker = [this]() -> ADCEnemy*
+	{
+		for (ADCEnemy* E : TActorRange<ADCEnemy>(GetWorld()))
+		{
+			if (E->IsAlive() && E->IsWalker())
+			{
+				return E;
+			}
+		}
+		return nullptr;
+	};
+	Add(0.f, [this, FindWalker] { bDefend = true; return FindWalker() != nullptr; }, 120.f);
+	Add(0.f, [this] { bDefend = false; Release(TEXT("Fire")); bDefendFiring = false; Tap(TEXT("Slot3")); return true; });
+	Add(0.6f, [this] { Press(TEXT("Aim")); return true; });
+	for (int32 i = 0; i < 3; ++i)
+	{
+		Add(0.6f, [this, FindWalker, i]
+		{
+			if (ADCEnemy* W = FindWalker())
+			{
+				AimAt(W->GetActorLocation());
+			}
+			Shot(FString::Printf(TEXT("walker_view%d"), i));
+			return true;
+		});
+	}
+	Add(0.2f, [this] { Tap(TEXT("Fire")); return true; });
+	Add(0.4f, [this] { Shot(TEXT("walker_snap")); LogPhoto(); return true; });
+	// Wait until the walker condemns a tower, then frame the shaking tower and snap its fall.
+	Add(0.f, [this]
+	{
+		const ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>();
+		const FDCBlastRecord* Topple = GS ? GS->Blasts.FindByPredicate([](const FDCBlastRecord& R) { return R.Kind == TEXT("Topple"); }) : nullptr;
+		if (Topple)
+		{
+			AimAt(Topple->Location + FVector(0, 0, 1200.f));
+		}
+		return Topple != nullptr && GS->Now() >= Topple->TelegraphStart + 0.5f;
+	}, 120.f);
+	Add(0.f, [this] { Shot(TEXT("walker_condemned_tower")); return true; });
+	Add(0.f, [this]
+	{
+		const ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>();
+		const FDCBlastRecord* Topple = GS ? GS->Blasts.FindByPredicate([](const FDCBlastRecord& R) { return R.Kind == TEXT("Topple"); }) : nullptr;
+		return !Topple || GS->Now() >= Topple->Time + 0.4f;
+	}, 10.f);
+	Add(0.f, [this] { Tap(TEXT("Fire")); Shot(TEXT("walker_topple_peak")); return true; });
+	Add(0.4f, [this] { Shot(TEXT("walker_topple_stamp")); LogPhoto(); Release(TEXT("Aim")); return true; });
+}
+
 void ADCDemoPilot::AddEnemyFight(const FString& S)
 {
 	// Wait for an enemy, then hold the rifle on it: frames of the enemy, the tracer and the hit marker.
@@ -351,6 +404,20 @@ void ADCDemoPilot::BuildScript()
 	Add(0.5f, [this] { Shot(TEXT("rifle")); return true; });
 	Add(0.6f, [this] { Release(TEXT("Fire")); return true; });
 
+	if (FParse::Param(FCommandLine::Get(), TEXT("dcwatchwalker")))
+	{
+		AddWalkerWatch();
+		Add(1.f, [this]
+		{
+			UE_LOG(LogDCDemo, Display, TEXT("DEMO end"));
+			if (bQuit)
+			{
+				FGenericPlatformMisc::RequestExit(false);
+			}
+			return true;
+		});
+		return;
+	}
 	const int32 Sectors = FMath::Max(1, UDCTuning::Get().Sectors.Num());
 	for (int32 Sector = 0; Sector < Sectors; ++Sector)
 	{
@@ -360,7 +427,9 @@ void ADCDemoPilot::BuildScript()
 			AddWaitPhase(EDCRunPhase::Sector, 120.f);
 			Add(1.5f, [this, S] { UsedTowers.Reset(); Shot(S + TEXT("_start")); return true; });
 		}
-		for (int32 Cycle = 0; Cycle < CyclesPerSector; ++Cycle)
+		int32 Cycles = CyclesPerSector;
+		FParse::Value(FCommandLine::Get(), TEXT("dccycles="), Cycles); // more strike-and-snap cycles per sector
+		for (int32 Cycle = 0; Cycle < Cycles; ++Cycle)
 		{
 			AddCycle(FString::Printf(TEXT("%s_c%d"), *S, Cycle));
 		}
@@ -468,6 +537,17 @@ void ADCDemoPilot::Tick(float DeltaSeconds)
 		(bDown ? Press(TEXT("Interact")) : Release(TEXT("Interact")));
 	}
 	TickDefend();
+	// Any supply pod that lands gets framed once (HQ Scoop reward evidence).
+	for (ADCSupplyPod* Pod : TActorRange<ADCSupplyPod>(GetWorld()))
+	{
+		if (!FramedPods.Contains(Pod) && Pod->HasLanded())
+		{
+			FramedPods.Add(Pod);
+			AimAt(Pod->GetActorLocation() + FVector(0, 0, 100.f));
+			Shot(TEXT("supply_pod_landed"));
+			UE_LOG(LogDCDemo, Display, TEXT("DEMO supply pod landed"));
+		}
+	}
 	if (Real < StepReadyReal)
 	{
 		return;
