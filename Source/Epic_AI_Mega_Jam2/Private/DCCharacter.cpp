@@ -1,5 +1,6 @@
 #include "DCCharacter.h"
 
+#include "Animation/AnimSequence.h"
 #include "Camera/CameraComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/SceneCaptureComponent2D.h"
@@ -509,7 +510,7 @@ void ADCCharacter::UpdateMoveSpeed()
 	const FDCMoveTuning& M = UDCTuning::Get().Move;
 	float Speed = bSprinting && !bCameraRaised ? M.SprintSpeed : M.WalkSpeed;
 	Speed = bCameraRaised ? M.CameraAimSpeed : Speed;
-	Speed = bDowned ? 90.f : Speed;
+	Speed = bDowned ? 0.f : Speed; // down on the ground in the fall pose: no sliding
 	GetCharacterMovement()->MaxWalkSpeed = Speed;
 }
 
@@ -963,13 +964,24 @@ void ADCCharacter::HostResupply(int32 Film, int32 AmmoAdd, float Heal)
 void ADCCharacter::OnRep_Downed()
 {
 	UpdateMoveSpeed();
+	const UDCTuning& T = UDCTuning::Get();
 	if (bDowned)
 	{
 		DCAudio::PlayAt(this, TEXT("Down"), GetActorLocation());
 		bCameraRaised = false;
+		// Down on the ground: the mannequin plays its fall and holds the last frame until revived.
+		if (UAnimSequence* Fall = Cast<UAnimSequence>(T.Assets.DownedAnim.TryLoad()))
+		{
+			GetMesh()->PlayAnimation(Fall, false);
+		}
 		return;
 	}
 	DCAudio::PlayAt(this, TEXT("Revive"), GetActorLocation());
+	if (UClass* Anim = T.Assets.PlayerAnimClass.TryLoadClass<UAnimInstance>())
+	{
+		GetMesh()->SetAnimationMode(EAnimationMode::AnimationBlueprint);
+		GetMesh()->SetAnimInstanceClass(Anim);
+	}
 }
 
 void ADCCharacter::ServerSetReviving_Implementation(bool bHolding) { bHostReviveHeld = bHolding; }
