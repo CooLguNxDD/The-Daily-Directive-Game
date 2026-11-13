@@ -107,6 +107,7 @@ namespace
 
 	constexpr int32 MaxSlides = 24;
 
+
 	/** Top (highest solid z + 1) of a terrain column, counting standing towers and stumps as blockers. Cached per op. */
 	struct FColumnTops
 	{
@@ -136,8 +137,7 @@ namespace
 			{
 				if (InFootprint(Tower, Xcm, Ycm))
 				{
-					const int32 Blocker = DCVoxelMath::FloorDiv(Tower.TopCm() - T.OriginCm.Z + T.VoxelCm - 1, T.VoxelCm);
-					Top = FMath::Max(Top, Blocker);
+					Top = FMath::Max(Top, DCVoxelOps::TowerTopCells(Tower, T, C.X, C.Y));
 				}
 			}
 			Tops.Add(C, Top);
@@ -149,20 +149,22 @@ namespace
 
 namespace
 {
-	/** Rubble that settled on a tower's roof drops onto its stump when the tower falls (columns in x, y order). */
-	void DropTerrainOver(FDCVoxelSector& Sector, const FDCVoxelTower& T)
+	/** Rubble lying over a touched tower drops onto what is left of it, column by column (x, y order): a carved roof
+	 *  or a fallen top never leaves a rubble sheet hanging where the voxels were. */
+	void DropTerrainOver(FDCVoxelSector& Sector, const FDCVoxelTower& T, int32 GroundLayers)
 	{
 		FDCVoxelGrid& G = Sector.Terrain;
 		const int32 V = G.VoxelCm;
 		const FIntVector Lo = G.ToLocal(T.FootMinCm());
 		const FIntVector Hi = G.ToLocal(T.FootMaxCm() - FIntVector(1));
-		const int32 Floor = DCVoxelMath::FloorDiv(T.TopCm() - G.OriginCm.Z + V - 1, V);
 		const int32 Ceil = DCVoxelMath::FloorDiv(T.Grid.OriginCm.Z + T.ScanMax.Z * T.Grid.VoxelCm - G.OriginCm.Z, V) + 2;
+		const int32 Ground = FMath::Max(GroundLayers, 1);
 		TArray<uint8> Fallen;
 		for (int32 Y = Lo.Y; Y <= Hi.Y; ++Y)
 		{
 			for (int32 X = Lo.X; X <= Hi.X; ++X)
 			{
+				const int32 Floor = FMath::Max(DCVoxelOps::TowerTopCells(T, G, X, Y), Ground);
 				Fallen.Reset();
 				for (int32 Z = Floor; Z <= Ceil; ++Z)
 				{
@@ -197,6 +199,38 @@ namespace
 
 namespace DCVoxelOps
 {
+	/** The tower's real top over one terrain column, in terrain cells (0 = no tower voxel there): the highest solid
+	 *  tower voxel under the column's square, so rubble rests on what is left, never on the uncarved roof prism. */
+	int32 TowerTopCells(const FDCVoxelTower& T, const FDCVoxelGrid& G, int32 X, int32 Y)
+	{
+		const int32 V = G.VoxelCm;
+		const int32 Tv = T.Grid.VoxelCm;
+		const int32 X0 = G.OriginCm.X + X * V, Y0 = G.OriginCm.Y + Y * V;
+		const int32 Lx0 = FMath::Max(DCVoxelMath::FloorDiv(X0 - T.Grid.OriginCm.X, Tv), T.ScanMin.X);
+		const int32 Ly0 = FMath::Max(DCVoxelMath::FloorDiv(Y0 - T.Grid.OriginCm.Y, Tv), T.ScanMin.Y);
+		const int32 Lx1 = FMath::Min(DCVoxelMath::FloorDiv(X0 + V - 1 - T.Grid.OriginCm.X, Tv), T.ScanMax.X - 1);
+		const int32 Ly1 = FMath::Min(DCVoxelMath::FloorDiv(Y0 + V - 1 - T.Grid.OriginCm.Y, Tv), T.ScanMax.Y - 1);
+		if (Lx0 > Lx1 || Ly0 > Ly1)
+		{
+			return 0;
+		}
+		for (int32 Z = T.ScanMax.Z - 1; Z >= 0; --Z)
+		{
+			for (int32 Ly = Ly0; Ly <= Ly1; ++Ly)
+			{
+				for (int32 Lx = Lx0; Lx <= Lx1; ++Lx)
+				{
+					if (T.Grid.Data.IsSolid(FIntVector(Lx, Ly, Z)))
+					{
+						const int32 TopCm = T.Grid.OriginCm.Z + (Z + 1) * Tv;
+						return FMath::Max(0, DCVoxelMath::FloorDiv(TopCm - G.OriginCm.Z + V - 1, V));
+					}
+				}
+			}
+		}
+		return 0;
+	}
+
 	uint32 Hash(const FIntVector& P, uint32 Salt)
 	{
 		uint32 H = Salt * 0x9E3779B1u;
@@ -211,7 +245,7 @@ namespace DCVoxelOps
 		return H;
 	}
 
-	int32 CarveSphere(FDCVoxelGrid& Grid, const FIntVector& CenterCm, int32 RadiusCm)
+	int32 CarveSphere(FDCVoxelGrid& Grid, const FIntVector& CenterCm, int32 RadiusCm, int32 MinZ)
 	{
 		if (RadiusCm <= 0)
 		{
@@ -220,7 +254,7 @@ namespace DCVoxelOps
 		const int64 R2 = static_cast<int64>(RadiusCm) * RadiusCm;
 		const FIntVector Lo = Grid.ToLocal(CenterCm - FIntVector(RadiusCm));
 		const FIntVector Hi = Grid.ToLocal(CenterCm + FIntVector(RadiusCm)) + FIntVector(1);
-		return Grid.Data.EditBox(FIntVector(Lo.X, Lo.Y, FMath::Max(Lo.Z, 0)), Hi, true, [&Grid, &CenterCm, R2](const FIntVector& P, uint8 Old) -> uint8
+		return Grid.Data.EditBox(FIntVector(Lo.X, Lo.Y, FMath::Max(Lo.Z, MinZ)), Hi, true, [&Grid, &CenterCm, R2](const FIntVector& P, uint8 Old) -> uint8
 		{
 			if (Old == 0)
 			{
@@ -587,7 +621,8 @@ namespace DCVoxelOps
 					Out.TouchedLots.Add(i);
 				}
 			}
-			Out.Carved += CarveSphere(Sector.Terrain, C, Carve.CraterRadiusCm);
+			// The crater never punches through the bedrock layers (a hole to the void read as a checkerboard).
+			Out.Carved += CarveSphere(Sector.Terrain, C, Carve.CraterRadiusCm, FMath::Max(Ctx.Tuning->BedrockLayers, 0));
 			// Props in the blast are gone, top to bottom (a sphere left their tops floating: review CP2).
 			Out.Carved += CarveColumn(Sector.Props, C, Carve.SphereRadiusCm, Sector.Props.ToLocal(FIntVector(0, 0, 4000)).Z);
 		}
@@ -609,9 +644,9 @@ namespace DCVoxelOps
 				Out.Pieces.Add(MoveTemp(Piece));
 			}
 		}
-		for (int32 Lot : Out.FallenLots)
+		for (int32 Lot : Out.TouchedLots)
 		{
-			DropTerrainOver(Sector, Sector.Towers[Lot]); // nothing left floating where the roof was
+			DropTerrainOver(Sector, Sector.Towers[Lot], Ctx.Tuning->GroundLayers); // nothing left floating where a roof or a top was (lot order)
 		}
 		Out.StructureMs = Lap();
 		for (FDCVoxelPiece& Piece : Out.Pieces)

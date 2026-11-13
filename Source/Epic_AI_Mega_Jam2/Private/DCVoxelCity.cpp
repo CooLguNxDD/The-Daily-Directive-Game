@@ -105,7 +105,7 @@ float ADCVoxelCity::SurfaceZCm(const FVector& Where) const
 		return 0.f;
 	}
 	const FIntVector C = T.ToLocal(DCVoxelMath::ToCm(FVector(Where.X, Where.Y, 0.f)));
-	if (InFlight.IsValid())
+	if (InFlight.IsValid() && !InFlightTask.IsCompleted())
 	{
 		// An op is writing the sector on a worker: answer from the cache (or the street) until it lands.
 		const float* Cached = SurfaceCache.Find(FIntPoint(C.X, C.Y));
@@ -121,6 +121,15 @@ float ADCVoxelCity::SurfaceZCm(const FVector& Where) const
 		}
 	}
 	return 0.f;
+}
+
+bool ADCVoxelCity::HasPendingOpsAt(float Time) const
+{
+	if (InFlight.IsValid() && InFlight->Op.Time <= Time)
+	{
+		return true;
+	}
+	return QueuedOps.ContainsByPredicate([Time](const FQueuedOp& Q) { return Q.Op.Time <= Time; });
 }
 
 bool ADCVoxelCity::IsSolidAt(const FVector& Where) const
@@ -521,8 +530,11 @@ void ADCVoxelCity::FinishOp(const FDCVoxelOp& Op, FDCVoxelOpResult& Result, bool
 	{
 		DeferredTerrain.Add({Now, C});
 	}
-	UE_LOG(LogTemp, Display, TEXT("DCVOXEL op seq=%d kind=%s lot=%d carved=%d fallen=%d pieces=%d rubble=%d %.0f ms off-thread=%d hash=%08x%s"), Op.Seq, *Op.Kind.ToString(), Op.Lot,
-		Result.Carved, Result.FallenLots.Num(), Result.Pieces.Num(), Result.Rubble.Num(), ApplyMs, bOffThread ? 1 : 0, Hash,
+	// commit-late: seconds between the op's apply time (a strike's detonation) and this commit (0 = on time).
+	const ADCGameState* OpState = GetWorld()->GetGameState<ADCGameState>();
+	const float Late = OpState ? OpState->Now() - Op.Time : 0.f;
+	UE_LOG(LogTemp, Display, TEXT("DCVOXEL op seq=%d kind=%s lot=%d carved=%d fallen=%d pieces=%d rubble=%d %.0f ms off-thread=%d commit-late=%.3f hash=%08x%s"), Op.Seq, *Op.Kind.ToString(), Op.Lot,
+		Result.Carved, Result.FallenLots.Num(), Result.Pieces.Num(), Result.Rubble.Num(), ApplyMs, bOffThread ? 1 : 0, Late, Hash,
 		Op.ResultHash == 0 ? TEXT("") : (Op.ResultHash == Hash ? TEXT(" match=host") : TEXT(" MISMATCH=host")));
 }
 
@@ -866,7 +878,9 @@ void ADCVoxelCity::Tick(float DeltaSeconds)
 	{
 		FollowGameState();
 	}
-	if (InFlight.IsValid() && InFlightTask.IsCompleted())
+	// Two-phase ops: a planned op is held until its apply time (a strike's detonation), then committed.
+	const ADCGameState* State = GetWorld()->GetGameState<ADCGameState>();
+	if (InFlight.IsValid() && InFlightTask.IsCompleted() && (!State || State->Now() >= InFlight->Op.Time))
 	{
 		FinishInFlight();
 		StartNextOp();

@@ -3,6 +3,7 @@
 #include "DCTuning.h"
 #include "Engine/StaticMesh.h"
 #include "Materials/MaterialInstanceDynamic.h"
+#include "Components/InstancedStaticMeshComponent.h"
 #include "Materials/MaterialInterface.h"
 
 namespace
@@ -34,6 +35,25 @@ namespace DCAssets
 	UStaticMesh* Sphere() { return LoadCached(UDCTuning::Get().Assets.Sphere, GSphere); }
 	UStaticMesh* Cylinder() { return LoadCached(UDCTuning::Get().Assets.Cylinder, GCylinder); }
 	UStaticMesh* Cone() { return LoadCached(UDCTuning::Get().Assets.Cone, GCone); }
+
+	void BuildRing(UInstancedStaticMeshComponent* Ism, float RadiusCm)
+	{
+		if (!Ism)
+		{
+			return;
+		}
+		const FDCLookTuning& Look = UDCTuning::Get().Look;
+		Ism->SetStaticMesh(Cube());
+		Ism->ClearInstances();
+		const int32 Segments = FMath::Max(Look.DangerRingSegments, 8);
+		const float SegLen = 2.f * PI * RadiusCm / Segments * 1.04f;
+		for (int32 i = 0; i < Segments; ++i)
+		{
+			const float A = 2.f * PI * i / Segments;
+			const FVector At(FMath::Cos(A) * RadiusCm, FMath::Sin(A) * RadiusCm, 0.f);
+			Ism->AddInstance(FTransform(FRotator(0.f, FMath::RadiansToDegrees(A) + 90.f, 0.f), At, FVector(SegLen / 100.f, Look.DangerRingWidthCm / 100.f, 0.04f)));
+		}
+	}
 
 	UMaterialInterface* FlatMaterial()
 	{

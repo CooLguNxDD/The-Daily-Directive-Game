@@ -34,7 +34,8 @@ public:
 	ADCVoxelCity* GetVoxelCity() const { return VoxelCity; }
 
 	/** Host: appends a voxel op for the current city build (Seq and Build filled in) and returns it. */
-	FDCVoxelOp& AddVoxelOp(const FDCVoxelOp& Op);
+	/** Appends a voxel op (host). ApplyTime: when every city commits it (a strike's detonation); default now. */
+	FDCVoxelOp& AddVoxelOp(const FDCVoxelOp& Op, float ApplyTime = -1.f);
 
 	/** Voxel city (R1-R3): which sector is built (-1 = none) and the build serial; every machine crafts from these. */
 	UPROPERTY(Replicated) int32 CitySector = -1;

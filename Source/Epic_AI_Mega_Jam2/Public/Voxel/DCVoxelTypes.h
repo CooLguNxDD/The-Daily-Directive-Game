@@ -97,6 +97,8 @@ struct FDCVoxelTuning
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 PropVoxelCm = 5;
 	/** Terrain: ground layers below the street surface, and how far the ground reaches past the outer streets. */
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 GroundLayers = 2;
+	/** Bottom terrain layers no crater carves (the street never opens onto the void). */
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 BedrockLayers = 1;
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 TerrainMarginCm = 2000;
 	/** Render cell edge (cm): storage chunks are grouped into one mesh component per cell. */
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 RenderCellCm = 960;
@@ -118,6 +120,12 @@ struct FDCVoxelTuning
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 ReposeStep = 2;
 	/** Seconds a falling piece takes to hit the street (cosmetic; the settled rubble is decided at the op). */
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float FallSeconds = 1.6f;
+	/** Two-phase strike ops: the host appends a strike's op this long before detonation (every machine plans it on
+	 *  the worker), and each city commits it at the detonation time, crater and collapse records in that frame. */
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float PlanLeadSeconds = 0.8f;
+	/** Fx puffs closer than FxNearHideCm to the local camera are hidden, and grow back over FxNearFadeCm. */
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float FxNearHideCm = 150.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float FxNearFadeCm = 350.f;
 	/** Gravity of the cosmetic fall (cm/s^2, exaggerated so a collapse reads at a glance). */
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float FallGravityCm = 2400.f;
 	/** Degrees a toppling piece leans before it breaks apart (cosmetic). */

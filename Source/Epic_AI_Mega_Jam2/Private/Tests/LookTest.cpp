@@ -199,4 +199,25 @@ bool FDCLastFrameTest::RunTest(const FString&)
 	return true;
 }
 
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDCScreenOnlyLayersTest, "Epic_AI_Mega_Jam2.Look.ScreenOnlyLayers", LookFlags)
+bool FDCScreenOnlyLayersTest::RunTest(const FString&)
+{
+	// The player's screen layers never reach a print (a dying vignette once blackened Last Frame photos): the rows
+	// carry the flag, and the photo composition reads it, not a hand-kept name list.
+	const TArray<FDCPostLayer>& Layers = UDCTuning::Get().PostLayers;
+	for (const TCHAR* Id : {TEXT("Viewfinder"), TEXT("Damage"), TEXT("LastFrame"), TEXT("FlashKick")})
+	{
+		const FDCPostLayer* Row = Layers.FindByPredicate([Id](const FDCPostLayer& L) { return L.Id == FName(Id); });
+		TestTrue(FString::Printf(TEXT("%s row ships"), Id), Row != nullptr);
+		TestTrue(FString::Printf(TEXT("%s is screen-only"), Id), Row && Row->bScreenOnly);
+	}
+	for (const TCHAR* Id : {TEXT("Base"), TEXT("Photo"), TEXT("Weather")})
+	{
+		const FDCPostLayer* Row = Layers.FindByPredicate([Id](const FDCPostLayer& L) { return L.Id == FName(Id); });
+		TestTrue(FString::Printf(TEXT("%s reaches the print"), Id), Row && !Row->bScreenOnly);
+	}
+	return true;
+}
+
 #endif

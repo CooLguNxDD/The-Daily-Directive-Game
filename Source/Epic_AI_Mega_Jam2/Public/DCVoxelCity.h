@@ -64,8 +64,8 @@ public:
 	uint32 GetHash() const { return Sector.Hash(); }
 	const FDCVoxelSector& GetSector() const { return Sector; }
 	bool IsMeshing() const { return Jobs.Num() > 0 || DirtyCells.Num() > 0; }
-	/** An op is on the worker or queued: its results (collapse records) have not landed yet. */
-	bool HasPendingOps() const { return InFlight.IsValid() || QueuedOps.Num() > 0; }
+	/** An op due by Time (its apply time) is still planning, held or queued: its results have not landed yet. */
+	bool HasPendingOpsAt(float Time) const;
 
 private:
 	struct FMeshJob;

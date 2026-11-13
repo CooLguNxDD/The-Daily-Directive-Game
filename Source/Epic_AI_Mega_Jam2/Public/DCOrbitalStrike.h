@@ -63,6 +63,9 @@ private:
 
 	bool bRestage = false;
 	bool bLocalDetonated = false;
+	/** Host: the strike's voxel op is appended (PlanLeadSeconds before detonation, so it is planned by then). */
+	bool bOpQueued = false;
+	void QueueVoxelOp(const struct FDCStratagemDef& Def);
 	bool bChargePlayed = false;
 	float NextBeepTime = 0.f;
 };

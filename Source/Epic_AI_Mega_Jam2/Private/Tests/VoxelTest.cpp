@@ -153,16 +153,28 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDCVoxelNoFloatTest, "Epic_AI_Mega_Jam2.Voxel.R
 bool FDCVoxelNoFloatTest::RunTest(const FString&)
 {
 	// Strike every tower in turn (rubble lands on neighbours' roofs, then those neighbours fall): afterwards every
-	// rubble cell rests on something - the cell below, or a tower still standing under it.
+	// rubble cell rests on something - the cell below, or a tower voxel right under it (its real column top, never the
+	// uncarved roof prism: a carved roof leaves no rubble sheet hanging).
 	const FDCVoxelOpContext Ctx = UDCVoxelSettings::Get().OpContext(UDCTuning::Get().City.BlockSizeCm);
 	FDCVoxelSector S;
 	Craft(S, VoxelPlan(DCCityRules::SectorSeed(31337, 2), 2));
+	TArray<FIntVector> Craters;
 	for (int32 i = 0; i < S.Towers.Num(); ++i)
 	{
-		DCVoxelOps::Apply(S, StrikeAt(S.Towers[i], i + 1, 1300), Ctx);
+		const FDCVoxelOp Op = StrikeAt(S.Towers[i], i + 1, 1300);
+		Craters.Add(Op.CenterCm);
+		DCVoxelOps::Apply(S, Op, Ctx);
 	}
 	const FDCVoxelGrid& G = S.Terrain;
 	const int32 Ground = UDCVoxelSettings::Get().Tuning.GroundLayers;
+	// No crater opens onto the void: the bedrock layers under every blast centre stay solid.
+	const int32 Bedrock = UDCVoxelSettings::Get().Tuning.BedrockLayers;
+	TestTrue(TEXT("bedrock is below the street"), Bedrock >= 1 && Bedrock < Ground);
+	for (const FIntVector& C : Craters)
+	{
+		const FIntVector L = G.ToLocal(C);
+		TestTrue(FString::Printf(TEXT("bedrock under the crater at %s"), *C.ToString()), G.Data.IsSolid(FIntVector(L.X, L.Y, 0)));
+	}
 	int32 Floating = 0;
 	int32 Checked = 0;
 	G.Data.ForEachChunk([&](const FIntVector& Key, const FDCVoxelChunk& C)
@@ -183,10 +195,9 @@ bool FDCVoxelNoFloatTest::RunTest(const FString&)
 			{
 				continue;
 			}
-			const FIntVector Cm = G.CenterCm(P);
-			const bool bOnTower = S.Towers.ContainsByPredicate([&Cm](const FDCVoxelTower& T)
+			const bool bOnTower = S.Towers.ContainsByPredicate([&G, &P](const FDCVoxelTower& T)
 			{
-				return Cm.X >= T.FootMinCm().X && Cm.X < T.FootMaxCm().X && Cm.Y >= T.FootMinCm().Y && Cm.Y < T.FootMaxCm().Y && Cm.Z >= T.TopCm() - 100;
+				return DCVoxelOps::TowerTopCells(T, G, P.X, P.Y) == P.Z;
 			});
 			Floating += bOnTower ? 0 : 1;
 		}

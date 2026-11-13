@@ -3,6 +3,8 @@
 #include "Components/InstancedStaticMeshComponent.h"
 #include "DCAssets.h"
 #include "Engine/World.h"
+#include "Camera/PlayerCameraManager.h"
+#include "GameFramework/PlayerController.h"
 #include "Voxel/DCVoxelSettings.h"
 
 ADCVoxelFx::ADCVoxelFx()
@@ -125,6 +127,11 @@ void ADCVoxelFx::Tick(float DeltaSeconds)
 	}
 	const TArray<FDCFxKind>& Kinds = UDCVoxelSettings::Get().FxKinds;
 	TArray<FTransform> Xf;
+	// Puffs shrink away near the local camera: a smoke cube never fills the lens (CP4 frames: the view went brown).
+	const APlayerController* PC = GetWorld()->GetFirstPlayerController();
+	const bool bHaveEye = PC && PC->PlayerCameraManager;
+	const FVector Eye = bHaveEye ? PC->PlayerCameraManager->GetCameraLocation() : FVector::ZeroVector;
+	const FDCVoxelTuning& Tn = UDCVoxelSettings::Get().Tuning;
 	for (int32 k = 0; k < Puffs.Num() && k < Meshes.Num(); ++k)
 	{
 		const FDCFxKind& K = Kinds[k];
@@ -140,7 +147,8 @@ void ADCVoxelFx::Tick(float DeltaSeconds)
 			const float U = FMath::Clamp((Now - P.Born) / P.Life, 0.f, 1.f);
 			// Pop in, grow toward the end size, shrink away in the last fifth: chunky, never a fade.
 			const float Pop = FMath::Min(U * 8.f, 1.f) * FMath::Min((1.f - U) * 5.f, 1.f);
-			const float Size = FMath::Lerp(K.SizeStart, K.SizeEnd, U) * Pop;
+			const float Near = bHaveEye ? FMath::Clamp((FVector::Dist(P.Pos, Eye) - Tn.FxNearHideCm) / FMath::Max(Tn.FxNearFadeCm, 1.f), 0.f, 1.f) : 1.f;
+			const float Size = FMath::Lerp(K.SizeStart, K.SizeEnd, U) * Pop * Near;
 			Xf.Add(FTransform(K.Stretch > 1.f ? FRotator::ZeroRotator : P.Spin, P.Pos, FVector(Size / 100.f, Size / 100.f, Size * K.Stretch / 100.f)));
 		}
 		const int32 Pool = Meshes[k]->GetInstanceCount();

@@ -20,6 +20,7 @@
 #include "DCPlayerState.h"
 #include "DCReelDirector.h"
 #include "DCTuning.h"
+#include "Components/InstancedStaticMeshComponent.h"
 #include "Engine/TextureRenderTarget2D.h"
 #include "EnhancedInputComponent.h"
 #include "Engine/World.h"
@@ -95,7 +96,7 @@ ADCCharacter::ADCCharacter()
 	PhotoCamMesh = MakeProp(TEXT("PhotoCam"));
 	BeaconMesh = MakeProp(TEXT("Beacon"));
 
-	StrikeMarker = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("StrikeMarker"));
+	StrikeMarker = CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("StrikeMarker"));
 	StrikeMarker->SetupAttachment(RootComponent);
 	StrikeMarker->SetUsingAbsoluteLocation(true);
 	StrikeMarker->SetUsingAbsoluteRotation(true);
@@ -179,7 +180,6 @@ void ADCCharacter::BeginPlay()
 	BeaconMesh->SetStaticMesh(DCAssets::Cylinder());
 	BeaconMesh->SetMaterial(0, DCAssets::MakeFlat(this, Look.Accent, 12.f));
 
-	StrikeMarker->SetStaticMesh(DCAssets::Cylinder());
 	StrikeMarker->SetMaterial(0, DCAssets::MakeFlatUnlit(this, Look.Accent, 1.2f)); // unlit: stays palette red, not lit to salmon
 	Tracer->SetStaticMesh(DCAssets::Cube());
 	Tracer->SetMaterial(0, DCAssets::MakeFlat(this, FLinearColor(1.f, 0.8f, 0.4f), 60.f));
@@ -732,9 +732,13 @@ void ADCCharacter::UpdateStrikeAim()
 	StrikeMarker->SetVisibility(bStrikeAimValid && Def);
 	if (bStrikeAimValid && Def)
 	{
-		const float D = Def->BlastRadius * 2.f / 100.f;
+		// A thin ring at the blast radius (a filled disc hid the street it marks), rebuilt only when the radius changes.
+		if (Def->BlastRadius != StrikeMarkerRadius)
+		{
+			StrikeMarkerRadius = Def->BlastRadius;
+			DCAssets::BuildRing(StrikeMarker, StrikeMarkerRadius);
+		}
 		StrikeMarker->SetWorldLocation(StrikeAimPoint + FVector(0, 0, 8.f));
-		StrikeMarker->SetWorldScale3D(FVector(D, D, 0.03f));
 	}
 }
 
@@ -880,7 +884,7 @@ void ADCCharacter::HostGradeShot(int32 PhotoId, FVector CamLoc, FRotator CamRot,
 	// shutter in that gap waits for them (graded at its own shot time; the records carry the blast time), so PEAK
 	// CINEMA and DEMOLITION see the towers the strike felled.
 	const ADCVoxelCity* City = ADCVoxelCity::Get(this);
-	if (City && City->HasPendingOps() && GetWorld()->GetRealTimeSeconds() < GiveUpAt)
+	if (City && City->HasPendingOpsAt(When) && GetWorld()->GetRealTimeSeconds() < GiveUpAt)
 	{
 		UE_LOG(LogTemp, Display, TEXT("DCPHOTO wait-op photo=%d shot=%.2f"), PhotoId, When);
 		GetWorldTimerManager().SetTimerForNextTick(FTimerDelegate::CreateWeakLambda(this, [=, this]

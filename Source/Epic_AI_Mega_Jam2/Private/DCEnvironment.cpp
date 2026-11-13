@@ -219,10 +219,13 @@ FDCPostResult ADCEnvironment::ComposeLook(bool bPhoto, bool bSpotlit) const
 	// spike and a stop-down while the flash is on screen: the target stays readable at the peak (R5).
 	const FDCCameraTuning& C = T.Camera;
 	TMap<FName, float> W = PostWeights;
-	W.Add(TEXT("Viewfinder"), 0.f);
-	W.Add(TEXT("Damage"), 0.f);
-	W.Add(TEXT("LastFrame"), 0.f); // the dying look is the player's screen, not the print
-	W.Add(TEXT("FlashKick"), 0.f);
+	for (const FDCPostLayer& Row : Stack)
+	{
+		if (Row.bScreenOnly)
+		{
+			W.Add(Row.Id, 0.f); // marked on the layer row: the print never carries the player's screen layers
+		}
+	}
 	W.Add(TEXT("Flash"), FlashPeak * FlashAlpha / FMath::Max(T.Look.MaxBloomPeak, 1.f) * C.PhotoBloomFraction);
 	W.Add(TEXT("Photo"), 1.f);
 	W.Add(TEXT("PhotoFlash"), FlashAlpha * C.PhotoFlashStopDown);

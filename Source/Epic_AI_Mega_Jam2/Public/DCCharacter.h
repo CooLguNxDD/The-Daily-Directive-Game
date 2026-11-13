@@ -165,7 +165,8 @@ private:
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UStaticMeshComponent> RifleMesh;
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UStaticMeshComponent> PhotoCamMesh;
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UStaticMeshComponent> BeaconMesh;
-	UPROPERTY(VisibleAnywhere) TObjectPtr<UStaticMeshComponent> StrikeMarker;
+	UPROPERTY(VisibleAnywhere) TObjectPtr<class UInstancedStaticMeshComponent> StrikeMarker;
+	float StrikeMarkerRadius = -1.f;
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UStaticMeshComponent> Tracer;
 
 	UPROPERTY(ReplicatedUsing = OnRep_Slot) EDCSlot Slot = EDCSlot::Rifle;

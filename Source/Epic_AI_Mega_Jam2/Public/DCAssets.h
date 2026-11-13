@@ -7,6 +7,7 @@
 class UStaticMesh;
 class UMaterialInterface;
 class UMaterialInstanceDynamic;
+class UInstancedStaticMeshComponent;
 
 namespace DCAssets
 {
@@ -14,6 +15,8 @@ namespace DCAssets
 	EPIC_AI_MEGA_JAM2_API UStaticMesh* Sphere();
 	EPIC_AI_MEGA_JAM2_API UStaticMesh* Cylinder();
 	EPIC_AI_MEGA_JAM2_API UStaticMesh* Cone();
+	/** A thin ground ring of cube segments (the danger zone and the aim marker), sized from the Look tuning. */
+	EPIC_AI_MEGA_JAM2_API void BuildRing(UInstancedStaticMeshComponent* Ism, float RadiusCm);
 	EPIC_AI_MEGA_JAM2_API UMaterialInterface* FlatMaterial();
 
 	/** Flat colour, optional glow (emissive = Color * Glow; needs the project's M_DCFlat). */

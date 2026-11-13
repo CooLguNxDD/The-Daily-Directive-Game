@@ -68,7 +68,11 @@ struct EPIC_AI_MEGA_JAM2_API FDCVoxelSector
 namespace DCVoxelOps
 {
 	/** Removes every solid voxel of a grid within RadiusCm of CenterCm (voxel centres, integer). Returns how many. */
-	EPIC_AI_MEGA_JAM2_API int32 CarveSphere(FDCVoxelGrid& Grid, const FIntVector& CenterCm, int32 RadiusCm);
+	/** The highest solid tower voxel under terrain column (X, Y), as a terrain cell index (0 = none): rubble rests on
+	 *  what is left of a tower, not on its uncarved roof prism. */
+	EPIC_AI_MEGA_JAM2_API int32 TowerTopCells(const struct FDCVoxelTower& T, const FDCVoxelGrid& G, int32 X, int32 Y);
+	/** MinZ: local layers below it are never carved (the terrain's bedrock). */
+	EPIC_AI_MEGA_JAM2_API int32 CarveSphere(FDCVoxelGrid& Grid, const FIntVector& CenterCm, int32 RadiusCm, int32 MinZ = 0);
 	/** Removes a vertical cylinder from the ground up to the grid's top. */
 	EPIC_AI_MEGA_JAM2_API int32 CarveColumn(FDCVoxelGrid& Grid, const FIntVector& CenterCm, int32 RadiusCm, int32 TopZ);
 	/** Bites the base of a tower on the side facing FromCm: BiteFloors tall, BitePercent of the footprint deep, ragged. */

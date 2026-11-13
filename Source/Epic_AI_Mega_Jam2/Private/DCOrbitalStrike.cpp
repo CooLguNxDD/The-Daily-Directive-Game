@@ -8,6 +8,7 @@
 #include "DCBuilding.h"
 #include "DCVoxelCity.h"
 #include "Voxel/DCVoxelGrid.h"
+#include "Voxel/DCVoxelSettings.h"
 #include "DCCharacter.h"
 #include "DCEnemy.h"
 #include "DCEnvironment.h"
@@ -113,17 +114,9 @@ void ADCOrbitalStrike::BeginPlay()
 
 	// The danger zone: a thin unlit band of propaganda red on the ground (a filled lit disc washed to salmon).
 	const FDCLookTuning& Look = UDCTuning::Get().Look;
-	Ring->SetStaticMesh(DCAssets::Cube());
+	DCAssets::BuildRing(Ring, Radius);
 	Ring->SetMaterial(0, DCAssets::MakeFlatUnlit(this, Look.Accent, Look.DangerRingGlow));
-	Ring->ClearInstances();
-	const int32 Segments = FMath::Max(Look.DangerRingSegments, 8);
-	const float SegLen = 2.f * PI * Radius / Segments * 1.04f;
-	for (int32 i = 0; i < Segments; ++i)
-	{
-		const float A = 2.f * PI * i / Segments;
-		const FVector At(FMath::Cos(A) * Radius, FMath::Sin(A) * Radius, 3.f);
-		Ring->AddInstance(FTransform(FRotator(0.f, FMath::RadiansToDegrees(A) + 90.f, 0.f), At, FVector(SegLen / 100.f, Look.DangerRingWidthCm / 100.f, 0.04f)));
-	}
+	Ring->SetRelativeLocation(FVector(0, 0, 3.f));
 
 	Beacon->SetStaticMesh(DCAssets::Cone());
 	Beacon->SetMaterial(0, DCAssets::MakeFlat(this, BeamColor, 30.f));
@@ -173,6 +166,10 @@ void ADCOrbitalStrike::Tick(float DeltaSeconds)
 	if (Now < DetonateTime)
 	{
 		TickTelegraph(Now, *Def);
+		if (HasAuthority() && !bRestage && !bOpQueued && Now >= DetonateTime - UDCVoxelSettings::Get().Tuning.PlanLeadSeconds)
+		{
+			QueueVoxelOp(*Def);
+		}
 		if (HasAuthority() && !bRestage)
 		{
 			const float U = 1.f - (DetonateTime - Now) / FMath::Max(Def->TelegraphSeconds, 0.01f);
@@ -311,48 +308,62 @@ void ADCOrbitalStrike::TickBehaviour(const FDCStratagemDef& Def, float U, float 
 	}
 }
 
+void ADCOrbitalStrike::QueueVoxelOp(const FDCStratagemDef& Def)
+{
+	bOpQueued = true;
+	ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>();
+	ADCVoxelCity* City = GS && ADCVoxelCity::IsEnabled() ? GS->GetVoxelCity() : nullptr;
+	if (!City)
+	{
+		return;
+	}
+	// Voxel city (R3): the strike is one op every machine applies; the structure pass decides which towers fall, and
+	// those become the usual collapse records (scoring, domino, reel). Two-phase (C3.1): appended PlanLeadSeconds
+	// before detonation, planned on the worker, committed by every city at the detonation time, so the crater, the
+	// falls and the host's collapse records land in the detonation frame.
+	const FVector Here = GetActorLocation();
+	FDCVoxelOp Op;
+	Op.Kind = TEXT("Strike");
+	Op.Stratagem = Def.Id;
+	Op.CenterCm = DCVoxelMath::ToCm(FVector(Here.X, Here.Y, 0.f));
+	Op.BlastRadiusCm = FMath::RoundToInt32(Def.BlastRadius);
+	const int32 Seq = GS->AddVoxelOp(Op, FMath::Max(DetonateTime, GS->Now())).Seq;
+	TWeakObjectPtr<ADCGameState> WeakGS(GS);
+	const FVector Epicenter = Here;
+	const float OpTime = GS->VoxelOps.Last().Time;
+	City->ApplyOpAsync(GS->VoxelOps.Last(), true, [WeakGS, Seq, Epicenter, OpTime](const FDCVoxelOpResult& Result, uint32 Hash)
+	{
+		ADCGameState* State = WeakGS.Get();
+		if (!State)
+		{
+			return;
+		}
+		if (FDCVoxelOp* Rec = State->VoxelOps.FindByPredicate([Seq](const FDCVoxelOp& O) { return O.Seq == Seq; }))
+		{
+			Rec->ResultHash = Hash;
+		}
+		ADCGameMode* GM = State->GetWorld()->GetAuthGameMode<ADCGameMode>();
+		for (ADCBuilding* Building : TActorRange<ADCBuilding>(State->GetWorld()))
+		{
+			if (GM && Result.FallenLots.Contains(Building->GetLotIndex()))
+			{
+				GM->ScheduleCollapse(Building, Epicenter, TEXT("Strike"), 0.f, OpTime); // at the blast, not when the worker finished
+			}
+		}
+	});
+}
+
 void ADCOrbitalStrike::DetonateHost(const FDCStratagemDef& Def)
 {
 	UWorld* World = GetWorld();
 	ADCGameState* GS = World->GetGameState<ADCGameState>();
 	const FVector Here = GetActorLocation();
 	GS->AddBlast(Here, Def.BlastRadius, Def.Id);
-
-	if (ADCVoxelCity* City = ADCVoxelCity::IsEnabled() ? GS->GetVoxelCity() : nullptr)
+	if (!bOpQueued)
 	{
-		// Voxel city (R3): the strike is one op every machine applies; the structure pass decides which towers fall,
-		// and those become the usual collapse records (scoring, domino, reel).
-		FDCVoxelOp Op;
-		Op.Kind = TEXT("Strike");
-		Op.Stratagem = Def.Id;
-		Op.CenterCm = DCVoxelMath::ToCm(FVector(Here.X, Here.Y, 0.f));
-		Op.BlastRadiusCm = FMath::RoundToInt32(Def.BlastRadius);
-		const int32 Seq = GS->AddVoxelOp(Op).Seq;
-		// The op runs on a worker; the collapse records follow when it lands (a frame or a few later).
-		TWeakObjectPtr<ADCGameState> WeakGS(GS);
-		const FVector Epicenter = Here;
-		const float OpTime = GS->VoxelOps.Last().Time;
-		City->ApplyOpAsync(GS->VoxelOps.Last(), true, [WeakGS, Seq, Epicenter, OpTime](const FDCVoxelOpResult& Result, uint32 Hash)
-		{
-			ADCGameState* State = WeakGS.Get();
-			if (!State)
-			{
-				return;
-			}
-			if (FDCVoxelOp* Rec = State->VoxelOps.FindByPredicate([Seq](const FDCVoxelOp& O) { return O.Seq == Seq; }))
-			{
-				Rec->ResultHash = Hash;
-			}
-			ADCGameMode* GM = State->GetWorld()->GetAuthGameMode<ADCGameMode>();
-			for (ADCBuilding* Building : TActorRange<ADCBuilding>(State->GetWorld()))
-			{
-				if (GM && Result.FallenLots.Contains(Building->GetLotIndex()))
-				{
-					GM->ScheduleCollapse(Building, Epicenter, TEXT("Strike"), 0.f, OpTime); // at the blast, not when the worker finished
-				}
-			}
-		});
+		QueueVoxelOp(Def); // a telegraph shorter than the plan lead: plan now, commit as soon as it is ready
 	}
+
 	for (ADCBuilding* Building : TActorRange<ADCBuilding>(World))
 	{
 		if (ADCVoxelCity::IsEnabled())

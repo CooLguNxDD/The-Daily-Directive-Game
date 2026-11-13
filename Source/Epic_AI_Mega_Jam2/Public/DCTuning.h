@@ -321,8 +321,8 @@ struct FDCAssetTuning
 		{TEXT("Headline"), FSoftObjectPath(TEXT("/Game/DC/Fonts/FF_Anton.FF_Anton"))},
 		{TEXT("Body"), FSoftObjectPath(TEXT("/Game/DC/Fonts/FF_Oswald.FF_Oswald"))},
 		{TEXT("Stamp"), FSoftObjectPath(TEXT("/Game/DC/Fonts/FF_BlackOpsOne.FF_BlackOpsOne"))}};
-	/** Point size the HUD's scale 1.0 means (the engine's large font was 24). */
-	UPROPERTY(EditAnywhere, Config, Category = "Assets") int32 FontBaseSize = 24;
+	/** Point size the HUD's scale 1.0 means; 0 = the engine large font's size (every layout was tuned on it). */
+	UPROPERTY(EditAnywhere, Config, Category = "Assets") int32 FontBaseSize = 0;
 	UPROPERTY(EditAnywhere, Config, Category = "Assets") FSoftObjectPath FlatUnlitMaterial = FSoftObjectPath(TEXT("/Game/DC/Materials/M_DCFlatUnlit.M_DCFlatUnlit"));
 	UPROPERTY(EditAnywhere, Config, Category = "Assets") FSoftObjectPath InkOutlineMaterial = FSoftObjectPath(TEXT("/Game/DC/Materials/M_DCInkOutline.M_DCInkOutline"));
 	UPROPERTY(EditAnywhere, Config, Category = "Assets") FSoftObjectPath FallbackMaterial = FSoftObjectPath(TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial"));

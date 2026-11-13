@@ -29,14 +29,14 @@ void ADCGameState::BeginPlay()
 	}
 }
 
-FDCVoxelOp& ADCGameState::AddVoxelOp(const FDCVoxelOp& Op)
+FDCVoxelOp& ADCGameState::AddVoxelOp(const FDCVoxelOp& Op, float ApplyTime)
 {
 	check(HasAuthority());
 	FDCVoxelOp& Rec = VoxelOps.Add_GetRef(Op);
 	Rec.Seq = NextVoxelSeq++;
 	Rec.Build = CityBuildId;
 	Rec.Sector = CitySector;
-	Rec.Time = Now();
+	Rec.Time = ApplyTime >= 0.f ? ApplyTime : Now();
 	return Rec;
 }
 

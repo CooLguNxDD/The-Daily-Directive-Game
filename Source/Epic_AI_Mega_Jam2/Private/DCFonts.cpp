@@ -32,7 +32,10 @@ namespace DCFonts
 		// A runtime font over the one face: the canvas rasterises glyphs at the drawn size (crisp at any scale).
 		UFont* Font = NewObject<UFont>(GetTransientPackage(), *FString::Printf(TEXT("DCFont_%s"), *Role.ToString()));
 		Font->FontCacheType = EFontCacheType::Runtime;
-		Font->LegacyFontSize = UDCTuning::Get().Assets.FontBaseSize;
+		const int32 Base = UDCTuning::Get().Assets.FontBaseSize;
+		const UFont* Engine = GEngine ? GEngine->GetLargeFont() : nullptr;
+		Font->LegacyFontSize = Base > 0 ? Base : (Engine ? Engine->LegacyFontSize : 24);
+		UE_LOG(LogTemp, Display, TEXT("DCFONT %s face=%s size=%d"), *Role.ToString(), *Face->GetName(), Font->LegacyFontSize);
 		FTypefaceEntry& Entry = Font->GetMutableInternalCompositeFont().DefaultTypeface.Fonts.AddDefaulted_GetRef();
 		Entry.Name = TEXT("Regular");
 		Entry.Font = FFontData(Face);
