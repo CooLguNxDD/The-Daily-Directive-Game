@@ -8,6 +8,8 @@
 #include "DCTypes.h"
 #include "Rules/DCPhotoRules.h"
 #include "Rules/DCPressureRules.h"
+#include "Rules/DCNewsprint.h"
+#include "Rules/DCPostStack.h"
 #include "DCTuning.generated.h"
 
 USTRUCT(BlueprintType)
@@ -105,6 +107,8 @@ struct FDCCameraTuning
 	/** Stops a spotlit photo is pushed over (R11: spotlight units blow out exposure). */
 	UPROPERTY(EditAnywhere, Config, Category = "Camera") float SpotlitPhotoStops = 3.5f;
 	UPROPERTY(EditAnywhere, Config, Category = "Camera") float SpotlitPhotoBloom = 8.f;
+	/** Newsprint treatment of every photo (R5). */
+	UPROPERTY(EditAnywhere, Config, Category = "Camera") FDCPrintTuning Print;
 };
 
 USTRUCT(BlueprintType)
@@ -416,6 +420,11 @@ public:
 	UPROPERTY(EditAnywhere, Config, Category = "Run") FDCRunTuning Run;
 	UPROPERTY(EditAnywhere, Config, Category = "Run") TArray<FDCUpgradeDef> Upgrades;
 	UPROPERTY(EditAnywhere, Config, Category = "Run") TArray<FDCScoopDef> Scoops;
+	/** Post-process layer stack (R19): every layer of the scene and the photo look; code only sets weights by id. */
+	UPROPERTY(EditAnywhere, Config, Category = "Post") TArray<FDCPostLayer> PostLayers;
+	UPROPERTY(EditAnywhere, Config, Category = "Post") TArray<FDCPostPreset> PostPresets;
+	/** Preset applied at start (-dcpost=<Id> on the command line wins). */
+	UPROPERTY(EditAnywhere, Config, Category = "Post") FName PostPreset = TEXT("High");
 
 	const FDCStratagemDef* FindStratagem(FName Id) const
 	{
