@@ -27,6 +27,10 @@ struct FDCPostLayer
 	UPROPERTY(EditAnywhere, Config, Category = "Post") float Saturation = 1.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Post") float Contrast = 1.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Post") FLinearColor Gain = FLinearColor::White;
+	/** While this layer is on, the composed bloom and exposure never exceed these (0 = no cap): the photo keeps a
+	 *  readable peak however hot the blast (min-op, applied after every layer). */
+	UPROPERTY(EditAnywhere, Config, Category = "Post") float BloomCap = 0.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Post") float ExposureCap = 0.f;
 };
 
 /** A scalability preset: the quality level layers check, plus engine settings applied once. */

@@ -1,6 +1,11 @@
 #include "DCVoxelCity.h"
 
 #include "DCVoxelFx.h"
+#include "DCCharacter.h"
+#include "Components/CapsuleComponent.h"
+#include "Camera/CameraActor.h"
+#include "Camera/CameraComponent.h"
+#include "UnrealClient.h"
 
 #include "DCAssets.h"
 #include "DCAudio.h"
@@ -14,6 +19,7 @@
 #include "Tasks/Task.h"
 #include "Voxel/DCVoxelCraft.h"
 #include "Voxel/DCVoxelSettings.h"
+#include "Voxel/DCVoxelModel.h"
 
 struct ADCVoxelCity::FMeshJob
 {
@@ -75,13 +81,133 @@ ADCVoxelCity* ADCVoxelCity::Get(const UObject* WorldContext)
 FDCCityPlan ADCVoxelCity::PlanSector(int32 RunSeed, int32 SectorIndex)
 {
 	const UDCTuning& T = UDCTuning::Get();
-	FDCCityPlan Plan = DCCityRules::PlanCity(DCCityRules::SectorSeed(RunSeed, SectorIndex), T.City, T.Look.BuildingColors.Num());
+	const int32 Seed = DCCityRules::SectorSeed(RunSeed, SectorIndex);
 	if (IsEnabled())
 	{
 		const UDCVoxelSettings& V = UDCVoxelSettings::Get();
+		// The city builder (R16) when the sector has a district row; recipes on the block grid otherwise.
+		if (const FDCDistrictRule* D = V.District(SectorIndex))
+		{
+			return DCVoxelCraft::PlanDistrict(Seed, *D, V.RuleSet(D->Rules), V.RuleSet(D->Props), V.SectorLayout(SectorIndex), V.Recipes, T.City.BlockSizeCm);
+		}
+		FDCCityPlan Plan = DCCityRules::PlanCity(Seed, T.City, T.Look.BuildingColors.Num());
 		DCVoxelCraft::ApplyRecipes(Plan, V.SectorLayout(SectorIndex), V.Recipes, FMath::FloorToInt(T.City.LotSizeCm / T.City.BlockSizeCm));
+		return Plan;
 	}
-	return Plan;
+	return DCCityRules::PlanCity(Seed, T.City, T.Look.BuildingColors.Num());
+}
+
+float ADCVoxelCity::SurfaceZCm(const FVector& Where) const
+{
+	const FDCVoxelGrid& T = Sector.Terrain;
+	if (BuiltSector == INDEX_NONE)
+	{
+		return 0.f;
+	}
+	const FIntVector C = T.ToLocal(DCVoxelMath::ToCm(FVector(Where.X, Where.Y, 0.f)));
+	if (InFlight.IsValid())
+	{
+		// An op is writing the sector on a worker: answer from the cache (or the street) until it lands.
+		const float* Cached = SurfaceCache.Find(FIntPoint(C.X, C.Y));
+		return Cached ? *Cached : 0.f;
+	}
+	for (int32 Z = UDCVoxelSettings::Get().Tuning.GroundLayers + 60; Z >= 0; --Z)
+	{
+		if (T.Data.IsSolid(FIntVector(C.X, C.Y, Z)))
+		{
+			const float Top = static_cast<float>(T.OriginCm.Z + (Z + 1) * T.VoxelCm);
+			SurfaceCache.Add(FIntPoint(C.X, C.Y), Top);
+			return Top;
+		}
+	}
+	return 0.f;
+}
+
+bool ADCVoxelCity::IsSolidAt(const FVector& Where) const
+{
+	if (BuiltSector == INDEX_NONE || InFlight.IsValid()) // unknown while an op writes on a worker
+	{
+		return false;
+	}
+	const FIntVector Cm = DCVoxelMath::ToCm(Where);
+	if (Sector.Terrain.Data.IsSolid(Sector.Terrain.ToLocal(Cm)) || Sector.Props.Data.IsSolid(Sector.Props.ToLocal(Cm)))
+	{
+		return true;
+	}
+	for (const FDCVoxelTower& T : Sector.Towers)
+	{
+		const FIntVector L = T.Grid.ToLocal(Cm);
+		const bool bInBox = L.X >= T.ScanMin.X && L.Y >= T.ScanMin.Y && L.Z >= 0 && L.X < T.ScanMax.X && L.Y < T.ScanMax.Y && L.Z < T.ScanMax.Z;
+		// Inside the shell counts as inside: the hollow interior photographs as a dark box.
+		if (bInBox && (T.Grid.Data.IsSolid(L) || (!T.bFallen && L.X >= T.Min.X && L.Y >= T.Min.Y && L.X < T.Max.X && L.Y < T.Max.Y && L.Z < T.Max.Z)))
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
+const FDCSeasonDef* ADCVoxelCity::SeasonFor(int32 RunSeed, int32 SectorIndex)
+{
+	const UDCVoxelSettings& V = UDCVoxelSettings::Get();
+	const FDCDistrictRule* D = V.District(SectorIndex);
+	return DCWeather::SeasonFor(UDCTuning::Get().Seasons, D ? V.RuleSet(D->Weather) : nullptr, DCCityRules::SectorSeed(RunSeed, SectorIndex));
+}
+
+FDCWeatherState ADCVoxelCity::WeatherAt(int32 RunSeed, int32 SectorIndex, float Fraction)
+{
+	const FDCSeasonDef* Season = SeasonFor(RunSeed, SectorIndex);
+	const FDCWeatherArc* Arc = Season ? DCWeather::ArcFor(*Season, DCCityRules::SectorSeed(RunSeed, SectorIndex)) : nullptr;
+	return Season && Arc ? DCWeather::At(UDCTuning::Get().WeatherProfiles, *Season, *Arc, Fraction) : FDCWeatherState();
+}
+
+namespace
+{
+	/** Winter: a layer of snow on exposed street tops and roof slabs, by hash (same on every machine). */
+	void LaySnow(FDCVoxelSector& Sector, float Cover, uint8 Snow, int32 Seed)
+	{
+		if (Cover <= 0.f || Snow == 0)
+		{
+			return;
+		}
+		const uint32 Threshold = static_cast<uint32>(FMath::Clamp(Cover, 0.f, 1.f) * 1000.f);
+		FDCVoxelGrid& T = Sector.Terrain;
+		const int32 Top = UDCVoxelSettings::Get().Tuning.GroundLayers - 1;
+		const FIntVector Lo = T.ToLocal(T.OriginCm);
+		const int32 N = 2 * FMath::Abs(T.OriginCm.X) / FMath::Max(T.VoxelCm, 1);
+		for (int32 Y = 0; Y < N; ++Y)
+		{
+			for (int32 X = 0; X < N; ++X)
+			{
+				const FIntVector P(Lo.X + X, Lo.Y + Y, Top);
+				// Organic drifts: smooth value noise over 3 m cells (bilinear between hashed corners), not a checkerboard.
+				constexpr int32 Cell = 6;
+				auto Corner = [Seed](int32 Cx, int32 Cy) { return static_cast<float>(DCPcg::Hash(Seed, 0x5A0Du, Cx * 4099 + Cy) % 1000) / 1000.f; };
+				const int32 Cx = X / Cell, Cy = Y / Cell;
+				const float Fx = FMath::SmoothStep(0.f, 1.f, static_cast<float>(X % Cell) / Cell), Fy = FMath::SmoothStep(0.f, 1.f, static_cast<float>(Y % Cell) / Cell);
+				const float Noise = FMath::Lerp(FMath::Lerp(Corner(Cx, Cy), Corner(Cx + 1, Cy), Fx), FMath::Lerp(Corner(Cx, Cy + 1), Corner(Cx + 1, Cy + 1), Fx), Fy);
+				if (T.Data.IsSolid(P) && !T.Data.IsSolid(P + FIntVector(0, 0, 1)) && Noise * 1000.f < Threshold)
+				{
+					T.Data.Set(P, Snow); // the street top whitens (50 cm cells stay flush)
+				}
+			}
+		}
+		for (FDCVoxelTower& Tw : Sector.Towers)
+		{
+			const int32 Roof = Tw.Max.Z;
+			for (int32 Y = Tw.ScanMin.Y; Y < Tw.ScanMax.Y; ++Y)
+			{
+				for (int32 X = Tw.ScanMin.X; X < Tw.ScanMax.X; ++X)
+				{
+					const FIntVector P(X, Y, Roof);
+					if (Tw.Grid.Data.IsSolid(P) && !Tw.Grid.Data.IsSolid(P + FIntVector(0, 0, 1)) && DCPcg::Hash(Seed, 0x5A0Eu, X * 4099 + Y) % 1000 < Threshold)
+					{
+						Tw.Grid.Data.Set(P + FIntVector(0, 0, 1), Snow);
+					}
+				}
+			}
+		}
+	}
 }
 
 UMaterialInterface* ADCVoxelCity::VoxelMaterial()
@@ -107,6 +233,11 @@ void ADCVoxelCity::BeginPlay()
 
 void ADCVoxelCity::EndPlay(const EEndPlayReason::Type Reason)
 {
+	if (InFlight.IsValid())
+	{
+		InFlightTask.Wait();
+		InFlight.Reset();
+	}
 	for (const TSharedPtr<FMeshJob>& Job : Jobs)
 	{
 		Job->Task.Wait(); // jobs only touch their own data, but must not outlive the actor
@@ -117,12 +248,17 @@ void ADCVoxelCity::EndPlay(const EEndPlayReason::Type Reason)
 
 FDCVoxelGrid& ADCVoxelCity::GridAt(int32 GridIndex)
 {
-	return GridIndex == 0 ? Sector.Terrain : Sector.Towers[GridIndex - 1].Grid;
+	return const_cast<FDCVoxelGrid&>(static_cast<const ADCVoxelCity*>(this)->GridAt(GridIndex));
 }
 
 const FDCVoxelGrid& ADCVoxelCity::GridAt(int32 GridIndex) const
 {
-	return GridIndex == 0 ? Sector.Terrain : Sector.Towers[GridIndex - 1].Grid;
+	// 0 = terrain, 1..N = towers, N + 1 = props.
+	if (GridIndex == 0)
+	{
+		return Sector.Terrain;
+	}
+	return Sector.Towers.IsValidIndex(GridIndex - 1) ? Sector.Towers[GridIndex - 1].Grid : Sector.Props;
 }
 
 FIntVector ADCVoxelCity::CellOf(int32 GridIndex, const FIntVector& Chunk) const
@@ -148,6 +284,13 @@ UProceduralMeshComponent* ADCVoxelCity::NewMesh(bool bCollision)
 
 void ADCVoxelCity::Clear()
 {
+	if (InFlight.IsValid())
+	{
+		InFlightTask.Wait();
+		InFlight.Reset();
+	}
+	QueuedOps.Reset();
+	SurfaceCache.Reset();
 	for (const TSharedPtr<FMeshJob>& Job : Jobs)
 	{
 		Job->Task.Wait();
@@ -173,6 +316,7 @@ void ADCVoxelCity::Clear()
 	}
 	Sector.Towers.Reset();
 	Sector.Terrain.Data.Reset();
+	Sector.Props.Data.Reset();
 	BuiltSector = INDEX_NONE;
 	AppliedSeq = 0;
 }
@@ -184,9 +328,22 @@ void ADCVoxelCity::Build(int32 RunSeed, int32 SectorIndex, int32 BuildId)
 	const UDCTuning& T = UDCTuning::Get();
 	const double Start = FPlatformTime::Seconds();
 	const FDCCityPlan Plan = PlanSector(RunSeed, SectorIndex);
-	const FDCVoxelCraftContext Craft = V.CraftContext(T.City.BlockSizeCm);
+	FDCVoxelCraftContext Craft = V.CraftContext(T.City.BlockSizeCm);
+	for (const FDCPropPlan& Prop : Plan.Props)
+	{
+		if (!Craft.Models.Contains(Prop.Model))
+		{
+			Craft.Models.Add(Prop.Model, DCVoxelModels::Parsed(Prop.Model)); // file reads stay on the game thread
+		}
+	}
 	DCVoxelCraft::CraftCity(Plan, Craft, Sector.Towers);
 	DCVoxelCraft::CraftTerrain(Sector.Terrain, Plan, T.City.LotSizeCm, Craft);
+	DCVoxelCraft::CraftRubbleZones(Sector.Terrain, Plan, Craft);
+	DCVoxelCraft::CraftProps(Sector.Props, Plan, Craft);
+	if (const FDCSeasonDef* Season = SeasonFor(RunSeed, SectorIndex))
+	{
+		LaySnow(Sector, Season->SnowCover, Craft.MaterialId(TEXT("Snow")), DCCityRules::SectorSeed(RunSeed, SectorIndex));
+	}
 	OpCtx = V.OpContext(T.City.BlockSizeCm);
 	Colors = V.MeshColors();
 	BuiltSector = SectorIndex;
@@ -202,19 +359,103 @@ FDCVoxelOpResult ADCVoxelCity::ApplyOp(const FDCVoxelOp& Op, bool bAnimate)
 {
 	if (BuiltSector == INDEX_NONE || !OpCtx.Tuning)
 	{
-		FollowGameState(); // the host may call before the first tick built the city
+		SyncBuild(); // build only: following would also apply this very op, and the caller applies it again below
 	}
 	if (BuiltSector == INDEX_NONE || !OpCtx.Tuning)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("DCVOXEL op seq=%d skipped: no city built"), Op.Seq);
 		return FDCVoxelOpResult();
 	}
+	WaitInFlight(); // the synchronous path (reel re-staging) never overlaps a queued op
 	const double Start = FPlatformTime::Seconds();
 	FDCVoxelOpResult Result = DCVoxelOps::Apply(Sector, Op, OpCtx);
 	AppliedSeq = FMath::Max(AppliedSeq, Op.Seq);
+	const uint32 Hash = Sector.Hash();
+	FinishOp(Op, Result, bAnimate, static_cast<float>((FPlatformTime::Seconds() - Start) * 1000.0), Hash, false);
+	return Result;
+}
+
+void ADCVoxelCity::ApplyOpAsync(const FDCVoxelOp& Op, bool bAnimate, TFunction<void(const FDCVoxelOpResult&, uint32)> OnDone)
+{
+	if (BuiltSector == INDEX_NONE || !OpCtx.Tuning)
+	{
+		SyncBuild();
+	}
+	if (BuiltSector == INDEX_NONE || !OpCtx.Tuning)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("DCVOXEL op seq=%d skipped: no city built"), Op.Seq);
+		return;
+	}
+	AppliedSeq = FMath::Max(AppliedSeq, Op.Seq); // queued: following never queues it twice
+	FQueuedOp& Q = QueuedOps.AddDefaulted_GetRef();
+	Q.Op = Op;
+	Q.bAnimate = bAnimate;
+	Q.OnDone = MoveTemp(OnDone);
+	StartNextOp();
+}
+
+void ADCVoxelCity::StartNextOp()
+{
+	if (InFlight.IsValid() || QueuedOps.Num() == 0)
+	{
+		return;
+	}
+	// One writer: the op runs on a worker while the game thread leaves the sector alone (readers use caches), so a
+	// collapse costs the game thread only the uploads (impact hitch, R13). Ops stay strictly in Seq order.
+	InFlight = MakeShared<FQueuedOp>(MoveTemp(QueuedOps[0]));
+	QueuedOps.RemoveAt(0);
+	TSharedPtr<FQueuedOp> Job = InFlight;
+	FDCVoxelSector* Target = &Sector;
+	const FDCVoxelOpContext* Ctx = &OpCtx;
+	InFlightTask = UE::Tasks::Launch(TEXT("DCVoxelOp"), [Job, Target, Ctx]()
+	{
+		const double Start = FPlatformTime::Seconds();
+		Job->Result = DCVoxelOps::Apply(*Target, Job->Op, *Ctx);
+		Job->Hash = Target->Hash();
+		Job->ApplyMs = static_cast<float>((FPlatformTime::Seconds() - Start) * 1000.0);
+	});
+}
+
+void ADCVoxelCity::WaitInFlight()
+{
+	if (!InFlight.IsValid())
+	{
+		return;
+	}
+	InFlightTask.Wait();
+	FinishInFlight();
+}
+
+void ADCVoxelCity::FinishInFlight()
+{
+	TSharedPtr<FQueuedOp> Done = InFlight;
+	InFlight.Reset();
+	SurfaceCache.Reset();
+	FinishOp(Done->Op, Done->Result, Done->bAnimate, Done->ApplyMs, Done->Hash, true);
+	if (Done->OnDone)
+	{
+		Done->OnDone(Done->Result, Done->Hash);
+	}
+}
+
+void ADCVoxelCity::FinishOp(const FDCVoxelOp& Op, FDCVoxelOpResult& Result, bool bAnimate, float ApplyMs, uint32 Hash, bool bOffThread)
+{
 	for (int32 Lot : Result.FallenLots)
 	{
 		SetTowerOffset(Lot, FVector::ZeroVector); // the stump stops shaking
+	}
+	// Host: nobody ends up inside the new rubble; lift them onto it (movement replicates to clients).
+	if (HasAuthority() && GetNetMode() != NM_Client && bFollowGameState)
+	{
+		for (ADCCharacter* C : TActorRange<ADCCharacter>(GetWorld()))
+		{
+			const float Half = C->GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
+			const float Surface = SurfaceZCm(C->GetActorLocation());
+			if (C->GetActorLocation().Z - Half < Surface - 10.f)
+			{
+				C->SetActorLocation(FVector(C->GetActorLocation().X, C->GetActorLocation().Y, Surface + Half + 5.f), false, nullptr, ETeleportType::TeleportPhysics);
+			}
+		}
 	}
 	const float Now = GetWorld()->GetTimeSeconds();
 
@@ -262,10 +503,9 @@ FDCVoxelOpResult ADCVoxelCity::ApplyOp(const FDCVoxelOp& Op, bool bAnimate)
 	{
 		DeferredTerrain.Add({Now, C});
 	}
-	UE_LOG(LogTemp, Display, TEXT("DCVOXEL op seq=%d kind=%s lot=%d carved=%d fallen=%d pieces=%d rubble=%d %.0f ms hash=%08x%s"), Op.Seq, *Op.Kind.ToString(), Op.Lot,
-		Result.Carved, Result.FallenLots.Num(), Result.Pieces.Num(), Result.Rubble.Num(), (FPlatformTime::Seconds() - Start) * 1000.0, Sector.Hash(),
-		Op.ResultHash == 0 ? TEXT("") : (Op.ResultHash == Sector.Hash() ? TEXT(" match=host") : TEXT(" MISMATCH=host")));
-	return Result;
+	UE_LOG(LogTemp, Display, TEXT("DCVOXEL op seq=%d kind=%s lot=%d carved=%d fallen=%d pieces=%d rubble=%d %.0f ms off-thread=%d hash=%08x%s"), Op.Seq, *Op.Kind.ToString(), Op.Lot,
+		Result.Carved, Result.FallenLots.Num(), Result.Pieces.Num(), Result.Rubble.Num(), ApplyMs, bOffThread ? 1 : 0, Hash,
+		Op.ResultHash == 0 ? TEXT("") : (Op.ResultHash == Hash ? TEXT(" match=host") : TEXT(" MISMATCH=host")));
 }
 
 void ADCVoxelCity::StartFall(const FDCVoxelPiece& Piece, float Now, const TArray<FIntVector>& Deferred, const FVector& LandAt)
@@ -279,8 +519,8 @@ void ADCVoxelCity::StartFall(const FDCVoxelPiece& Piece, float Now, const TArray
 	// Leans over away from the blast: rotation about the horizontal axis perpendicular to the fall direction.
 	F->Axis = FVector::CrossProduct(FVector::UpVector, FVector(Piece.Dir)).GetSafeNormal();
 	F->MaxAngle = Piece.bTopple ? Tn.ToppleDegrees : 0.f;
-	const float PivotHeight = F->Pivot.Z;
-	F->DropCm = Piece.bTopple ? FMath::Max(PivotHeight * 0.5f, 400.f) : FMath::Max(PivotHeight, 300.f);
+	// The piece falls the whole way to where its rubble lies, then breaks: it never stops in the air.
+	F->DropCm = FMath::Max(F->Pivot.Z - LandAt.Z, 300.f);
 	F->LandCenter = LandAt;
 	const uint8 Mat = Piece.Materials.Num() > 0 ? Piece.Materials[0] : 1;
 	F->Color = Colors.IsValidIndex(Mat) ? FLinearColor::FromSRGBColor(Colors[Mat]) : FLinearColor::Black;
@@ -510,7 +750,14 @@ void ADCVoxelCity::TickFalling(float Now)
 			DeferredTerrain.RemoveAtSwap(i);
 		}
 	}
-	if (Show.Num() > 0)
+	if (Show.Num() > 0 && InFlight.IsValid())
+	{
+		for (const FIntVector& C : Show)
+		{
+			DeferredTerrain.Add({Now, C}); // the worker is writing: show next frame
+		}
+	}
+	else if (Show.Num() > 0)
 	{
 		QueueDirty(0, Show);
 	}
@@ -554,10 +801,10 @@ void ADCVoxelCity::Land(FFalling& F)
 	DCAudio::PlayAt(this, TEXT("Collapse"), Where, 1.f);
 }
 
-void ADCVoxelCity::FollowGameState()
+void ADCVoxelCity::SyncBuild()
 {
 	const ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>();
-	if (!GS)
+	if (!GS || !bFollowGameState)
 	{
 		return;
 	}
@@ -573,7 +820,13 @@ void ADCVoxelCity::FollowGameState()
 			Build(GS->RunSeed, GS->CitySector, GS->CityBuildId);
 		}
 	}
-	if (BuiltSector == INDEX_NONE)
+}
+
+void ADCVoxelCity::FollowGameState()
+{
+	SyncBuild();
+	const ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>();
+	if (!GS || BuiltSector == INDEX_NONE)
 	{
 		return;
 	}
@@ -583,7 +836,7 @@ void ADCVoxelCity::FollowGameState()
 	{
 		if (Op.Build == BuiltId && Op.Seq > AppliedSeq)
 		{
-			ApplyOp(Op, Now - Op.Time < 2.f);
+			ApplyOpAsync(Op, Now - Op.Time < 2.f, nullptr);
 		}
 	}
 }
@@ -595,7 +848,56 @@ void ADCVoxelCity::Tick(float DeltaSeconds)
 	{
 		FollowGameState();
 	}
+	if (InFlight.IsValid() && InFlightTask.IsCompleted())
+	{
+		FinishInFlight();
+		StartNextOp();
+	}
 	PollJobs();
 	UploadCells();
 	TickFalling(GetWorld()->GetTimeSeconds());
+	TickCityShot();
+}
+
+void ADCVoxelCity::TickCityShot()
+{
+	// City builder preview (R16): -dccityshot=<dir> frames the built, fully meshed sector from three aerial cameras
+	// through the player's view (real render), then quits. Never active in normal play.
+	static FString Dir;
+	static const bool bWanted = FParse::Value(FCommandLine::Get(), TEXT("dccityshot="), Dir);
+	if (!bWanted || BuiltSector == INDEX_NONE || IsMeshing() || ShotStep >= 4)
+	{
+		return;
+	}
+	APlayerController* PC = GetWorld()->GetFirstPlayerController();
+	const double Real = GetWorld()->GetRealTimeSeconds();
+	if (!PC || Real < NextShotReal)
+	{
+		return;
+	}
+	const float Half = Sector.Terrain.OriginCm.X < 0 ? -static_cast<float>(Sector.Terrain.OriginCm.X) : 10000.f;
+	static const FVector Eyes[3] = {FVector(-1.1f, -1.1f, 0.55f), FVector(1.15f, -0.4f, 0.35f), FVector(-1.2f, 0.f, 0.06f)};
+	if (ShotStep > 0)
+	{
+		FScreenshotRequest::RequestScreenshot(Dir / FString::Printf(TEXT("cityshot_sector%d_%d.png"), BuiltSector, ShotStep - 1), false, false);
+	}
+	if (ShotStep < 3)
+	{
+		if (!ShotCamera)
+		{
+			ShotCamera = GetWorld()->SpawnActor<ACameraActor>(ACameraActor::StaticClass(), FTransform::Identity);
+			ShotCamera->GetCameraComponent()->SetFieldOfView(70.f);
+		}
+		const FVector Eye = Eyes[ShotStep] * Half + FVector(0, 0, 200.f);
+		const FVector Look = FVector(0, 0, ShotStep == 2 ? 1500.f : 0.f);
+		ShotCamera->SetActorLocationAndRotation(Eye, (Look - Eye).Rotation());
+		PC->SetViewTargetWithBlend(ShotCamera, 0.f);
+	}
+	else
+	{
+		UE_LOG(LogTemp, Display, TEXT("DCCITYSHOT sector=%d frames written to %s"), BuiltSector, *Dir);
+		FGenericPlatformMisc::RequestExit(false);
+	}
+	++ShotStep;
+	NextShotReal = Real + 1.5;
 }

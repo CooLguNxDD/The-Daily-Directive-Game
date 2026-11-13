@@ -203,4 +203,34 @@ bool FDCRunDataTest::RunTest(const FString&)
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDCHeadlineTest, "Epic_AI_Mega_Jam2.Run.FullEditionHeadlines", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FDCHeadlineTest::RunTest(const FString&)
+{
+	// R22: rows for every photo category, ANY and CORRECTION; a session never repeats a line until its row runs dry.
+	const TArray<FDCHeadlineRow>& Rows = UDCTuning::Get().HeadlineRows;
+	for (const FDCCategoryRule& Cat : UDCTuning::Get().Photo.Categories)
+	{
+		TestTrue(FString::Printf(TEXT("rows for %s"), *Cat.Tag.ToString()), Rows.ContainsByPredicate([&Cat](const FDCHeadlineRow& R) { return R.Category == Cat.Tag && R.Lines.Num() >= 4; }));
+	}
+	for (const TCHAR* Id : {TEXT("ANY"), TEXT("CORRECTION"), TEXT("CO-STAR"), TEXT("LAST FRAME")})
+	{
+		TestTrue(FString::Printf(TEXT("rows for %s"), Id), Rows.ContainsByPredicate([Id](const FDCHeadlineRow& R) { return R.Category == FName(Id) && R.Lines.Num() >= 4; }));
+	}
+	const FDCHeadlineRow* Demo = Rows.FindByPredicate([](const FDCHeadlineRow& R) { return R.Category == TEXT("DEMOLITION"); });
+	TSet<FString> Used;
+	TSet<FString> Printed;
+	for (int32 i = 0; Demo && i < Demo->Lines.Num(); ++i)
+	{
+		const FString L = DCRunRules::PickHeadline(1000 + i, Rows, {FName(TEXT("DEMOLITION"))}, TEXT("Sgt. Shutter"), TEXT("Old Town"), FString(), Used);
+		TestFalse(TEXT("no line twice before the row runs dry"), Printed.Contains(L));
+		Printed.Add(L);
+		TestFalse(TEXT("tokens filled"), L.Contains(TEXT("{")));
+	}
+	const FString Next = DCRunRules::PickHeadline(77, Rows, {FName(TEXT("DEMOLITION"))}, TEXT("A"), TEXT("B"), FString(), Used);
+	TestFalse(TEXT("a dry row starts over"), Next.IsEmpty());
+	const FString Fallback = DCRunRules::PickHeadline(5, Rows, {FName(TEXT("NO SUCH TAG"))}, TEXT("A"), TEXT("B"), FString(), Used);
+	TestFalse(TEXT("unknown category falls back to ANY"), Fallback.IsEmpty() || Fallback.StartsWith(TEXT("VICTORY IN")));
+	return true;
+}
+
 #endif

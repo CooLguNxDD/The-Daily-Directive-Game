@@ -6,9 +6,11 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
+#include "Tasks/Task.h"
 #include "Rules/DCCityPlan.h"
 #include "Voxel/DCVoxelMesher.h"
 #include "Voxel/DCVoxelOps.h"
+#include "Rules/DCWeather.h"
 #include "DCVoxelCity.generated.h"
 
 class UProceduralMeshComponent;
@@ -37,6 +39,9 @@ public:
 
 	/** Applies one op now (host: right after appending it; reel: at its replay time). Animate plays the fall. */
 	FDCVoxelOpResult ApplyOp(const FDCVoxelOp& Op, bool bAnimate);
+	/** Queues an op for the worker (play): ops run one at a time in Seq order; OnDone gets the result and the voxel hash
+	 *  on the game thread when it lands. */
+	void ApplyOpAsync(const FDCVoxelOp& Op, bool bAnimate, TFunction<void(const FDCVoxelOpResult&, uint32)> OnDone);
 
 	/** Condemned-tower shake: offsets every mesh of a lot (cosmetic). */
 	void SetTowerOffset(int32 Lot, const FVector& Offset);
@@ -45,6 +50,16 @@ public:
 	void SetFollowGameState(bool bFollow) { bFollowGameState = bFollow; }
 
 	int32 GetBuiltSector() const { return BuiltSector; }
+	class ADCVoxelFx* GetFx() const { return Fx; }
+
+	/** Top of the street, rubble included, at a point (cm): what walkers stand on and players are lifted onto. */
+	float SurfaceZCm(const FVector& Where) const;
+	/** Is this world point inside a solid voxel (towers, terrain, props)? Photos never shoot from inside one. */
+	bool IsSolidAt(const FVector& Where) const;
+
+	/** The sector's season (rolled from the run seed by the district's weather rules) and its arc (R18). */
+	static const struct FDCSeasonDef* SeasonFor(int32 RunSeed, int32 Sector);
+	static struct FDCWeatherState WeatherAt(int32 RunSeed, int32 Sector, float Fraction);
 	int32 GetBuildId() const { return BuiltId; }
 	uint32 GetHash() const { return Sector.Hash(); }
 	const FDCVoxelSector& GetSector() const { return Sector; }
@@ -55,6 +70,8 @@ private:
 	struct FFalling;
 
 	void FollowGameState();
+	/** Builds or clears to match the game state, without applying ops. */
+	void SyncBuild();
 	void QueueDirty(int32 GridIndex, const TSet<FIntVector>& Chunks);
 	void QueueAllDirty(TSet<FIntVector>* DeferTerrain);
 	void PollJobs();
@@ -62,10 +79,31 @@ private:
 	void TickFalling(float Now);
 	void StartFall(const FDCVoxelPiece& Piece, float Now, const TArray<FIntVector>& DeferredTerrain, const FVector& LandAt);
 	void Land(FFalling& F);
+	void TickCityShot();
+	void StartNextOp();
+	void WaitInFlight();
+	void FinishInFlight();
+	void FinishOp(const FDCVoxelOp& Op, FDCVoxelOpResult& Result, bool bAnimate, float ApplyMs, uint32 Hash, bool bOffThread);
+	struct FQueuedOp
+	{
+		FDCVoxelOp Op;
+		bool bAnimate = true;
+		TFunction<void(const FDCVoxelOpResult&, uint32)> OnDone;
+		FDCVoxelOpResult Result;
+		uint32 Hash = 0;
+		float ApplyMs = 0.f;
+	};
+	TArray<FQueuedOp> QueuedOps;
+	TSharedPtr<FQueuedOp> InFlight;
+	UE::Tasks::FTask InFlightTask;
+	mutable TMap<FIntPoint, float> SurfaceCache;
+	int32 ShotStep = 0;
+	double NextShotReal = 0.0;
+	UPROPERTY() TObjectPtr<class ACameraActor> ShotCamera;
 
 	FDCVoxelGrid& GridAt(int32 GridIndex);
 	const FDCVoxelGrid& GridAt(int32 GridIndex) const;
-	int32 NumGrids() const { return Sector.Towers.Num() + 1; }
+	int32 NumGrids() const { return Sector.Towers.Num() + 2; }
 	FIntVector CellOf(int32 GridIndex, const FIntVector& Chunk) const;
 	UProceduralMeshComponent* NewMesh(bool bCollision);
 	UMaterialInterface* VoxelMaterial();

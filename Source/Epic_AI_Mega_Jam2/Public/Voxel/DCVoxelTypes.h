@@ -106,6 +106,10 @@ struct FDCVoxelTuning
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") FName KerbMaterial = TEXT("Kerb");
 	/** A layer of a tower stands while it keeps this percent of its intact solid voxels; below it everything above falls. */
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 SupportPercent = 45;
+	/** Island connectivity runs on blocks of this many voxels per edge; a block holds weight only with at least
+	 *  IslandBlockFill solid voxels (thin links break). */
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 IslandBlockVoxels = 5;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 IslandBlockFill = 18;
 	/** Percent of a fallen piece's voxels that land as rubble (the rest is dust). */
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 RubbleKeepPercent = 35;
 	/** How far a toppling piece is thrown: voxels of drift per 100 voxels of height above the break. */
@@ -130,6 +134,31 @@ struct FDCVoxelTuning
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float DecaySeconds = 9.f;
 };
 
+/** District rules for one sector (R16): the street grid, which lot kinds the PCG rules roll, the landmark, the sight
+ *  line, and the prop rule set. The city builder turns these into the plan; the crafter turns the plan into voxels. */
+USTRUCT(BlueprintType)
+struct FDCDistrictRule
+{
+	GENERATED_BODY()
+	UPROPERTY(EditAnywhere, Config, Category = "District") FName Id;
+	UPROPERTY(EditAnywhere, Config, Category = "District") int32 GridX = 4;
+	UPROPERTY(EditAnywhere, Config, Category = "District") int32 GridY = 4;
+	UPROPERTY(EditAnywhere, Config, Category = "District") float LotSizeCm = 2600.f;
+	UPROPERTY(EditAnywhere, Config, Category = "District") float StreetWidthCm = 1600.f;
+	/** PCG rule set: slot Lot (kinds: Tower, Low, Plaza, Rubble), LandmarkFloors (range), LowFloors (range),
+	 *  LowRecipe (choices). */
+	UPROPERTY(EditAnywhere, Config, Category = "District") FName Rules;
+	/** PCG rule set: slots Street / StreetCount, Plaza / PlazaCount, Rubble / RubbleCount (model choices and ranges). */
+	UPROPERTY(EditAnywhere, Config, Category = "District") FName Props;
+	UPROPERTY(EditAnywhere, Config, Category = "District") FName LandmarkRecipe = TEXT("Landmark");
+	/** Lot kind forced along the sight line from the spawn street to the landmark (open or low, so it stays in view). */
+	UPROPERTY(EditAnywhere, Config, Category = "District") FName SightLineKind = TEXT("Low");
+	/** PCG rule set with slot Season: the sector's season (and so its weather arcs and snow), rolled per run (R18). */
+	UPROPERTY(EditAnywhere, Config, Category = "District") FName Weather;
+	/** Never fewer towers than this (a quota needs things to knock down). */
+	UPROPERTY(EditAnywhere, Config, Category = "District") int32 MinTowers = 8;
+};
+
 /** A puff kind for the decay effects (R4): a chunky voxel cube that moves, spins, grows or shrinks and dies. */
 USTRUCT(BlueprintType)
 struct FDCFxKind
@@ -151,6 +180,8 @@ struct FDCFxKind
 	UPROPERTY(EditAnywhere, Config, Category = "Fx") float Gravity = 0.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Fx") float Drag = 1.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Fx") float SpinDeg = 60.f;
+	/** Height multiplier (rain streaks). */
+	UPROPERTY(EditAnywhere, Config, Category = "Fx") float Stretch = 1.f;
 };
 
 USTRUCT(BlueprintType)

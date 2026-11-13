@@ -4,12 +4,28 @@
 
 #include "CoreMinimal.h"
 #include "DCTypes.h"
+#include "DCRunRules.generated.h"
 
 struct FDCUpgradeDef;
 struct FDCScoopDef;
 
+/** Satirical headline rows (R22): lines for one photo category (ANY = fallback, CORRECTION = a wiped run). Tokens:
+ *  {PLAYER}, {SECTOR}, {COSTAR}. */
+USTRUCT(BlueprintType)
+struct FDCHeadlineRow
+{
+	GENERATED_BODY()
+	UPROPERTY(EditAnywhere, Config, Category = "Run") FName Category;
+	UPROPERTY(EditAnywhere, Config, Category = "Run") TArray<FString> Lines;
+};
+
 namespace DCRunRules
 {
+	/** A headline for a photo (R22): the first of its categories with rows (else ANY), a seeded line not in Used
+	 *  (the session's printed lines; a category whose lines are all used starts over), tokens filled. Adds it to Used. */
+	EPIC_AI_MEGA_JAM2_API FString PickHeadline(int32 Seed, const TArray<FDCHeadlineRow>& Rows, const TArray<FName>& Categories, const FString& Player,
+		const FString& Sector, const FString& CoStar, TSet<FString>& Used);
+
 	/** The draft (R10): every option still open, grouped by pool in declared order, at most PerPool per pool
 	 *  (a seeded pick when a pool has more). Skips ids in Taken. */
 	EPIC_AI_MEGA_JAM2_API TArray<FName> DraftOffer(int32 Seed, const TArray<FDCUpgradeDef>& Upgrades, const TArray<FName>& Taken, int32 PerPool = 3);

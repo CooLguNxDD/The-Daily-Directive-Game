@@ -380,17 +380,20 @@ void ADCHUD::DrawPhotoCard(UTexture* Image, const FDCPhotoGrade& Grade, float X,
 	const FString Timing = FString::Printf(TEXT("%s  %gx"), *Upper(Grade.TimingLabel), FMath::RoundToFloat(Grade.Multiplier * 100.f) / 100.f);
 	float Tw = 0.f, Th = 0.f;
 	Canvas->TextSize(BigFont, Score, Tw, Th, 1.6f * S * TextBoost * UiScale, 1.6f * S * TextBoost * UiScale);
-	const float Bw = Tw + Sx(30.f), Bh = Th * 1.9f + Sx(14.f);
+	float TimingW = 0.f, TimingH = 0.f;
+	Canvas->TextSize(BigFont, Timing, TimingW, TimingH, 0.8f * S * TextBoost * UiScale, 0.8f * S * TextBoost * UiScale);
+	const float Bw = FMath::Max(Tw, TimingW) + Sx(30.f), Bh = Th * 1.9f + Sx(14.f); // fits both lines (review CP2)
 	const float Bx = Cx - Bw * 0.5f, By = Cy - Sx(10.f);
 	// Tilt: a per-photo angle from the score, so the same photo always lands the same way.
 	const float Tilt = -7.f + static_cast<float>(Grade.Score % 5);
 	const FVector Pivot(Cx, By + Bh * 0.5f, 0.f);
 	Canvas->Canvas->PushRelativeTransform(FTranslationMatrix(-Pivot) * FRotationMatrix(FRotator(0.f, Tilt, 0.f)) * FTranslationMatrix(Pivot));
-	const FLinearColor InkStamp(Gold.R, Gold.G, Gold.B, 0.95f);
-	Box(Bx, By, Bw, Bh, FLinearColor(Ink.R, Ink.G, Ink.B, 0.3f));
+	// A signal-yellow plate with ink type and an ink double rule: legible on any print, even on small cards.
+	const FLinearColor InkStamp(Ink.R, Ink.G, Ink.B, 0.95f);
+	Box(Bx, By, Bw, Bh, FLinearColor(Gold.R, Gold.G, Gold.B, 0.95f));
 	Frame(Bx, By, Bw, Bh, Sx(4.f), InkStamp);
 	Frame(Bx + Sx(7.f), By + Sx(7.f), Bw - Sx(14.f), Bh - Sx(14.f), Sx(1.5f), InkStamp);
-	if (UTexture2D* Worn = StampGrit())
+	if (UTexture2D* Worn = Bh > Sx(70.f) ? StampGrit() : nullptr) // small stamps skip the grit: it aliases into noise
 	{
 		// Paper-coloured speckle over the frame ink (under the type, so small stamps stay legible): pressed by hand.
 		DrawTexture(Worn, Bx, By, Bw, Bh, 0, 0, Bw / Sx(256.f), Bh / Sx(128.f), FLinearColor(Paper.R, Paper.G, Paper.B, 0.35f), BLEND_Translucent);
@@ -398,11 +401,19 @@ void ADCHUD::DrawPhotoCard(UTexture* Image, const FDCPhotoGrade& Grade, float X,
 	Text(Score, Cx, By + Sx(4.f), InkStamp, 1.6f * S, true);
 	Text(Timing, Cx, By + Sx(4.f) + Th * 1.0f, InkStamp, 0.8f * S, true);
 	Canvas->Canvas->PopTransform();
-	float Ty = Y + Sx(8.f);
+	float Ty = Y + Sx(16.f);
+	// Category words as ink type on signal-yellow tags, inset inside the print's border (a blown-out spotlit shot keeps
+	// a red tag: that one is a warning).
+	const float TagScale = FMath::Clamp(W / Sx(640.f), 0.45f, 1.f);
 	for (const FName& Category : Grade.Categories)
 	{
-		Text(Upper(Category), X + Sx(10.f), Ty, Grade.bSpotlit && Category == Grade.Categories[0] ? Red : Gold, 0.8f);
-		Ty += Sx(28.f);
+		const FString Word = Upper(Category);
+		float Cw = 0.f, Ch = 0.f;
+		Canvas->TextSize(BigFont, Word, Cw, Ch, 0.8f * TagScale * TextBoost * UiScale, 0.8f * TagScale * TextBoost * UiScale);
+		const bool bWarn = Grade.bSpotlit && Category == Grade.Categories[0];
+		Box(X + Sx(14.f), Ty, Cw + Sx(12.f), Ch + Sx(2.f), bWarn ? Red : Gold);
+		Text(Word, X + Sx(20.f), Ty, bWarn ? Paper : Ink, 0.8f * TagScale);
+		Ty += Ch + Sx(6.f);
 	}
 }
 
@@ -550,12 +561,19 @@ void ADCHUD::DrawDowned(ADCCharacter& Me)
 		return;
 	}
 	const float W = Canvas->ClipX, H = Canvas->ClipY;
-	Box(0, 0, W, H, FLinearColor(0.3f, 0.f, 0.f, 0.35f));
+	Box(0, 0, W, H, FLinearColor(0.3f, 0.f, 0.f, 0.12f)); // a light wash: the HUD and the last frame stay readable
 	Text(TEXT("DOWNED"), W * 0.5f, H * 0.4f, Red, 2.f, true);
 	const float Left = Me.SelfReviveSecondsLeft();
 	Text(Left > 0.f ? FString::Printf(TEXT("HOLD E TO PATCH YOURSELF UP  -  %.0fs"), Left) : FString(TEXT("HOLD ON - A COMRADE CAN REVIVE YOU (THEY HOLD E BESIDE YOU)")),
 		W * 0.5f, H * 0.4f + Sx(70.f), FLinearColor::White, 0.7f, true);
 	Box(W * 0.5f - Sx(200.f), H * 0.4f + Sx(110.f), Sx(400.f) * Me.GetReviveProgress(), Sx(12.f), FLinearColor::White);
+	if (Me.HasLastFrame())
+	{
+		// R21: one last shutter from where they fell.
+		const float Pulse = 0.75f + 0.25f * FMath::Sin(RealNow * 6.f);
+		Box(W * 0.5f - Sx(230.f), H * 0.62f, Sx(460.f), Sx(56.f), FLinearColor(Gold.R, Gold.G, Gold.B, 0.95f * Pulse));
+		Text(TEXT("LAST FRAME  -  LMB"), W * 0.5f, H * 0.62f + Sx(8.f), Ink, 1.f, true);
+	}
 }
 
 void ADCHUD::DrawToast(ADCCharacter& Me)

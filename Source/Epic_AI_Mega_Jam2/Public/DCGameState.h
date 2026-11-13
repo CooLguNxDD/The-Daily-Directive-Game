@@ -46,6 +46,8 @@ public:
 	UPROPERTY(Replicated) EDCRunPhase Phase = EDCRunPhase::Lobby;
 	UPROPERTY(Replicated) int32 SectorIndex = 0;
 	UPROPERTY(Replicated) float SectorEndTime = 0.f;
+	/** Server time the sector began: with the run seed it drives the weather arc on every machine (R18). */
+	UPROPERTY(Replicated) float SectorStartTime = 0.f;
 	UPROPERTY(Replicated) int32 RunSeed = 0;
 	/** Server time the current timed phase (draft, final cut, vote) ends. */
 	UPROPERTY(Replicated) float PhaseEndTime = 0.f;
@@ -79,7 +81,7 @@ public:
 	bool HasMutator(FName Id) const { return Mutators.Contains(Id); }
 	/** The active mutators' definitions (data drives their effects; code never names a mutator). */
 	TArray<const struct FDCUpgradeDef*> ActiveMutators() const;
-	void AddCollapse(int32 Sector, int32 Lot, const FVector& Epicenter);
+	void AddCollapse(int32 Sector, int32 Lot, const FVector& Epicenter, float Time = -1.f);
 
 private:
 	UPROPERTY() TObjectPtr<ADCEnvironment> Environment;

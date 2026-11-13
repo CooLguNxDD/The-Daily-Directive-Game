@@ -15,6 +15,16 @@ namespace DCPhotoRules
 		return Rule.bAtMost ? Value <= Rule.Threshold : Value >= Rule.Threshold;
 	}
 
+	float CoStarMultiplier(float Fill, const FDCPhotoTuning& T)
+	{
+		if (Fill < T.CoStarMinFill)
+		{
+			return 1.f;
+		}
+		const float U = FMath::Clamp((Fill - T.CoStarMinFill) / FMath::Max(T.CoStarFullFill - T.CoStarMinFill, 0.001f), 0.f, 1.f);
+		return FMath::Lerp(1.f + (T.CoStarMaxMultiplier - 1.f) * 0.25f, T.CoStarMaxMultiplier, U);
+	}
+
 	FDCPhotoGrade GradePhoto(const FDCPhotoInputs& In, const FDCPhotoTuning& Tuning)
 	{
 		FDCPhotoGrade Grade;
@@ -48,8 +58,28 @@ namespace DCPhotoRules
 			Grade.Categories.Insert(Tuning.SpotlitLabel, 0);
 		}
 
+		Grade.CoStarMultiplier = CoStarMultiplier(In.CoStarFill, Tuning);
+		if (Grade.CoStarMultiplier > 1.f)
+		{
+			Grade.Multiplier *= Grade.CoStarMultiplier;
+			Grade.Categories.AddUnique(Tuning.CoStarTag);
+		}
+
+		if (In.bLastFrame)
+		{
+			Grade.bLastFrame = true;
+			Grade.Multiplier *= Tuning.LastFrameMultiplier;
+			Grade.Categories.Insert(Tuning.LastFrameTag, 0);
+		}
+
 		Grade.RawPoints = FMath::RoundToInt(Raw);
 		Grade.Score = FMath::Max(0, FMath::RoundToInt(Raw * Grade.Multiplier));
+		if (In.bLastFrame)
+		{
+			// It can match the best living shot of the sector, never beat it: dying is never the best strategy.
+			const int32 Cap = In.LastFrameCap > 0 ? In.LastFrameCap : Grade.RawPoints;
+			Grade.Score = FMath::Min(Grade.Score, Cap);
+		}
 		return Grade;
 	}
 }

@@ -100,7 +100,8 @@ bool FDCVoxelStrikeTest::RunTest(const FString&)
 
 	const double T0 = FPlatformTime::Seconds();
 	const FDCVoxelOpResult R = DCVoxelOps::Apply(S, StrikeAt(S.Towers[Lot], 1, 1300), Ctx);
-	AddInfo(FString::Printf(TEXT("DCVOXEL strike op: carved %d, pieces %d, rubble %d, %.0f ms"), R.Carved, R.Pieces.Num(), R.Rubble.Num(), (FPlatformTime::Seconds() - T0) * 1000.0));
+	AddInfo(FString::Printf(TEXT("DCVOXEL strike op: carved %d, pieces %d, rubble %d, %.0f ms (carve %.0f, structure %.0f, settle %.0f)"), R.Carved, R.Pieces.Num(), R.Rubble.Num(),
+		(FPlatformTime::Seconds() - T0) * 1000.0, R.CarveMs, R.StructureMs, R.SettleMs));
 	TestTrue(TEXT("the strike carved voxels"), R.Carved > 0);
 	TestTrue(TEXT("the tower in the blast fell (structure pass)"), R.FallenLots.Contains(Lot));
 	TestTrue(TEXT("a toppled piece broke off"), R.Pieces.ContainsByPredicate([Lot](const FDCVoxelPiece& P) { return P.bTopple && P.Lot == Lot && P.Cells.Num() > 1000; }));

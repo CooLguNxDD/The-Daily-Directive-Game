@@ -238,7 +238,7 @@ void ADCBuilding::GetSamplePoints(TArray<FVector>& Out) const
 	Out.Add(C + FVector(-Hx, Hy, H * 0.7f));
 }
 
-void ADCBuilding::Collapse(const FVector& InEpicenter)
+void ADCBuilding::Collapse(const FVector& InEpicenter, float AtTime)
 {
 	if (!HasAuthority() || bCollapsed)
 	{
@@ -247,7 +247,7 @@ void ADCBuilding::Collapse(const FVector& InEpicenter)
 	bCollapsed = true;
 	Epicenter = InEpicenter;
 	ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>();
-	CollapseTime = GS ? GS->Now() : GetWorld()->GetTimeSeconds();
+	CollapseTime = AtTime >= 0.f ? AtTime : (GS ? GS->Now() : GetWorld()->GetTimeSeconds());
 	// Voxel city: a collapse the voxels have not already made (walker topple, domino) becomes a Fell op that bites the
 	// base on the epicentre side, so the structure pass drops the tower the same way on every machine.
 	ADCVoxelCity* City = ADCVoxelCity::IsEnabled() ? ADCVoxelCity::Get(this) : nullptr;
@@ -257,10 +257,18 @@ void ADCBuilding::Collapse(const FVector& InEpicenter)
 		Op.Kind = TEXT("Fell");
 		Op.Lot = LotIndex;
 		Op.CenterCm = DCVoxelMath::ToCm(FVector(InEpicenter.X, InEpicenter.Y, 0.f));
-		const int32 Index = GS->VoxelOps.Num();
-		GS->AddVoxelOp(Op);
-		City->ApplyOp(GS->VoxelOps[Index], true);
-		GS->VoxelOps[Index].ResultHash = City->GetHash();
+		const int32 Seq = GS->AddVoxelOp(Op).Seq;
+		TWeakObjectPtr<ADCGameState> WeakGS(GS);
+		City->ApplyOpAsync(GS->VoxelOps.Last(), true, [WeakGS, Seq](const FDCVoxelOpResult&, uint32 Hash)
+		{
+			if (ADCGameState* State = WeakGS.Get())
+			{
+				if (FDCVoxelOp* Rec = State->VoxelOps.FindByPredicate([Seq](const FDCVoxelOp& O) { return O.Seq == Seq; }))
+				{
+					Rec->ResultHash = Hash;
+				}
+			}
+		});
 	}
 	ForceNetUpdate();
 	SimulateCollapse(true);

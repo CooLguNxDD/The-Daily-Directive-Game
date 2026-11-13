@@ -61,6 +61,8 @@ struct FDCPhotoRecord
 	UPROPERTY() int32 BlastId = 0;
 	/** Taken during the reel from a free angle on the re-staged moment (R16). */
 	UPROPERTY() bool bSecondTake = false;
+	/** Co-star credit (R20): the teammate who shares the photo's byline. */
+	UPROPERTY() FString CoStar;
 };
 
 /** A building the host collapsed: the reel rebuilds the sector from its seed and replays these. */
@@ -117,4 +119,6 @@ struct FDCPagePick
 	UPROPERTY() FString PlayerName;
 	UPROPERTY() int32 Votes = 0;
 	UPROPERTY() int32 PageScore = 0;
+	/** Its column's headline (R22): the winner and up to two runner-ups get one. */
+	UPROPERTY() FString Headline;
 };

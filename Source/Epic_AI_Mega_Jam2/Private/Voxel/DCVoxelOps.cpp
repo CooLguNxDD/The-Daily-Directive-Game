@@ -1,6 +1,7 @@
 #include "Voxel/DCVoxelOps.h"
 
 #include "Voxel/DCVoxelWorld.h"
+#include "Async/ParallelFor.h"
 
 const FDCVoxelCarveDef& FDCVoxelOpContext::CarveFor(FName Stratagem) const
 {
@@ -10,7 +11,7 @@ const FDCVoxelCarveDef& FDCVoxelOpContext::CarveFor(FName Stratagem) const
 
 uint32 FDCVoxelSector::Hash() const
 {
-	uint32 H = Terrain.Data.ContentHash();
+	uint32 H = HashCombine(Terrain.Data.ContentHash(), Props.Data.ContentHash());
 	for (const FDCVoxelTower& T : Towers)
 	{
 		H = HashCombine(H, T.Grid.Data.ContentHash());
@@ -216,27 +217,18 @@ namespace DCVoxelOps
 		{
 			return 0;
 		}
-		int32 N = 0;
 		const int64 R2 = static_cast<int64>(RadiusCm) * RadiusCm;
 		const FIntVector Lo = Grid.ToLocal(CenterCm - FIntVector(RadiusCm));
-		const FIntVector Hi = Grid.ToLocal(CenterCm + FIntVector(RadiusCm));
-		for (int32 Z = FMath::Max(Lo.Z, 0); Z <= Hi.Z; ++Z)
+		const FIntVector Hi = Grid.ToLocal(CenterCm + FIntVector(RadiusCm)) + FIntVector(1);
+		return Grid.Data.EditBox(FIntVector(Lo.X, Lo.Y, FMath::Max(Lo.Z, 0)), Hi, true, [&Grid, &CenterCm, R2](const FIntVector& P, uint8 Old) -> uint8
 		{
-			for (int32 Y = Lo.Y; Y <= Hi.Y; ++Y)
+			if (Old == 0)
 			{
-				for (int32 X = Lo.X; X <= Hi.X; ++X)
-				{
-					const FIntVector P(X, Y, Z);
-					const FIntVector D = Grid.CenterCm(P) - CenterCm;
-					if (static_cast<int64>(D.X) * D.X + static_cast<int64>(D.Y) * D.Y + static_cast<int64>(D.Z) * D.Z <= R2 && Grid.Data.IsSolid(P))
-					{
-						Grid.Data.Set(P, 0);
-						++N;
-					}
-				}
+				return 0;
 			}
-		}
-		return N;
+			const FIntVector D = Grid.CenterCm(P) - CenterCm;
+			return static_cast<int64>(D.X) * D.X + static_cast<int64>(D.Y) * D.Y + static_cast<int64>(D.Z) * D.Z <= R2 ? 0 : Old;
+		});
 	}
 
 	int32 CarveColumn(FDCVoxelGrid& Grid, const FIntVector& CenterCm, int32 RadiusCm, int32 TopZ)
@@ -245,33 +237,20 @@ namespace DCVoxelOps
 		{
 			return 0;
 		}
-		int32 N = 0;
 		const int64 R2 = static_cast<int64>(RadiusCm) * RadiusCm;
 		const FIntVector Lo = Grid.ToLocal(CenterCm - FIntVector(RadiusCm, RadiusCm, 0));
 		const FIntVector Hi = Grid.ToLocal(CenterCm + FIntVector(RadiusCm, RadiusCm, 0));
-		for (int32 Y = Lo.Y; Y <= Hi.Y; ++Y)
+		return Grid.Data.EditBox(FIntVector(Lo.X, Lo.Y, 0), FIntVector(Hi.X + 1, Hi.Y + 1, TopZ), true, [&Grid, &CenterCm, R2](const FIntVector& P, uint8 Old) -> uint8
 		{
-			for (int32 X = Lo.X; X <= Hi.X; ++X)
+			if (Old == 0)
 			{
-				const FIntVector C = Grid.CenterCm(FIntVector(X, Y, 0));
-				const int64 Dx = C.X - CenterCm.X;
-				const int64 Dy = C.Y - CenterCm.Y;
-				if (Dx * Dx + Dy * Dy > R2)
-				{
-					continue;
-				}
-				for (int32 Z = 0; Z < TopZ; ++Z)
-				{
-					const FIntVector P(X, Y, Z);
-					if (Grid.Data.IsSolid(P))
-					{
-						Grid.Data.Set(P, 0);
-						++N;
-					}
-				}
+				return 0;
 			}
-		}
-		return N;
+			const FIntVector C = Grid.CenterCm(FIntVector(P.X, P.Y, 0));
+			const int64 Dx = C.X - CenterCm.X;
+			const int64 Dy = C.Y - CenterCm.Y;
+			return Dx * Dx + Dy * Dy <= R2 ? 0 : Old;
+		});
 	}
 
 	int32 Bite(FDCVoxelTower& T, const FIntVector& FromCm, int32 BiteFloors, int32 BitePercent, int32 BayCm)
@@ -288,27 +267,21 @@ namespace DCVoxelOps
 		const int32 Depth = (T.Max[Axis] - T.Min[Axis]) * FMath::Clamp(BitePercent, 0, 100) / 100;
 		const int32 Top = BiteFloors * B;
 		const int32 Ragged = FMath::Max(1, B / 2);
-		int32 N = 0;
-		for (int32 Z = 1; Z <= Top; ++Z)
+		const int32 KStart = T.ScanMin[Axis] - T.Min[Axis];
+		// The bitten region in voxels: from the blast-side face inward Depth (minus the ragged hash), full width.
+		FIntVector Lo = T.ScanMin, Hi = T.ScanMax;
+		Lo.Z = 1;
+		Hi.Z = Top + 1;
+		return World.EditBox(Lo, Hi, true, [&](const FIntVector& P, uint8 Old) -> uint8
 		{
-			for (int32 V = T.ScanMin[Other]; V < T.ScanMax[Other]; ++V)
+			if (Old == 0)
 			{
-				// Ragged inner edge: the depth varies per column and layer, from the hash, never from RNG state.
-				const int32 D = Depth - static_cast<int32>(Hash(FIntVector(V, Z, Axis), 0xB17E) % Ragged);
-				for (int32 K = T.ScanMin[Axis] - T.Min[Axis]; K < D; ++K)
-				{
-					FIntVector P(0, 0, Z);
-					P[Axis] = Dir[Axis] > 0 ? T.Max[Axis] - 1 - K : T.Min[Axis] + K;
-					P[Other] = V;
-					if (World.IsSolid(P))
-					{
-						World.Set(P, 0);
-						++N;
-					}
-				}
+				return 0;
 			}
-		}
-		return N;
+			const int32 K = Dir[Axis] > 0 ? T.Max[Axis] - 1 - P[Axis] : P[Axis] - T.Min[Axis];
+			const int32 D = Depth - static_cast<int32>(Hash(FIntVector(P[Other], P.Z, Axis), 0xB17E) % Ragged);
+			return K >= KStart && K < D ? 0 : Old;
+		});
 	}
 
 	void Structure(FDCVoxelTower& T, const FIntVector& Dir, const FDCVoxelOpContext& Ctx, FDCVoxelOpResult& Out)
@@ -327,9 +300,12 @@ namespace DCVoxelOps
 			Typical = FMath::Max(Typical, Count);
 		}
 		int32 Break = INDEX_NONE;
-		if (!T.bFallen)
+		// A stump is checked again on every op (only below its old break): a later blast can bring it down further.
+		const bool bWasFallen = T.bFallen;
 		{
-			for (int32 Z = Size.Z - 1; Z >= 1; --Z)
+			// A stump's bitten band is weak by design: it only breaks again under fresh damage (half the support).
+			const int32 Need = bWasFallen ? Support / 2 : Support;
+			for (int32 Z = (bWasFallen ? FMath::Min(T.BreakZ - 1, Size.Z - 1) : Size.Z - 1); Z >= 1; --Z)
 			{
 				const int32 Intact = T.IntactLayers.IsValidIndex(Z) ? T.IntactLayers[Z] : 0;
 				if (Intact * 4 < Typical)
@@ -341,7 +317,7 @@ namespace DCVoxelOps
 				{
 					Now += Box.V[I] != 0 ? 1 : 0;
 				}
-				if (static_cast<int64>(Now) * 100 < static_cast<int64>(Intact) * Support)
+				if (static_cast<int64>(Now) * 100 < static_cast<int64>(Intact) * Need)
 				{
 					Break = Z;
 					break;
@@ -349,9 +325,12 @@ namespace DCVoxelOps
 			}
 		}
 
-		auto TakePiece = [&](FDCVoxelPiece& Piece, TFunctionRef<bool(int32, int32, int32)> Pick)
+		// Takes cells from layer ZFrom up that Pick selects; clears them in the grid with one chunk-wise pass over the
+		// same layers (only when something was taken).
+		auto TakePiece = [&](FDCVoxelPiece& Piece, int32 ZFrom, TFunctionRef<bool(int32, int32, int32)> Pick)
 		{
-			for (int32 Z = 0; Z < Size.Z; ++Z)
+			const int32 Before = Piece.Cells.Num();
+			for (int32 Z = FMath::Max(ZFrom, 0); Z < Size.Z; ++Z)
 			{
 				for (int32 Y = 0; Y < Size.Y; ++Y)
 				{
@@ -363,11 +342,19 @@ namespace DCVoxelOps
 							const FIntVector P = Box.Min + FIntVector(X, Y, Z);
 							Piece.Cells.Add(P);
 							Piece.Materials.Add(Cell);
-							World.Set(P, 0);
 							Cell = 0;
 						}
 					}
 				}
+			}
+			if (Piece.Cells.Num() > Before)
+			{
+				// The box copy is cleared already; clear the grid in one chunk-wise pass (taken cells now read 0 in Box).
+				World.EditBox(FIntVector(T.ScanMin.X, T.ScanMin.Y, Box.Min.Z + FMath::Max(ZFrom, 0)), T.ScanMax, true, [&Box](const FIntVector& P, uint8 Old) -> uint8
+				{
+					const FIntVector L = P - Box.Min;
+					return Box.V[Box.Index(L.X, L.Y, L.Z)] == 0 ? 0 : Old;
+				});
 			}
 		};
 
@@ -381,26 +368,47 @@ namespace DCVoxelOps
 			Piece.Pivot = FIntVector((T.Min.X + T.Max.X) / 2, (T.Min.Y + T.Max.Y) / 2, Break);
 			Piece.Pivot[Axis] = Dir[Axis] > 0 ? T.Max[Axis] : T.Min[Axis];
 			const int32 LocalBreak = Break; // Box.Min.Z is 0
-			TakePiece(Piece, [LocalBreak](int32, int32, int32 Z) { return Z > LocalBreak; });
+			TakePiece(Piece, LocalBreak + 1, [](int32, int32, int32) { return true; });
 			T.bFallen = true;
 			T.BreakZ = Break;
-			Out.FallenLots.Add(T.Lot);
+			if (!bWasFallen)
+			{
+				Out.FallenLots.Add(T.Lot); // the gameplay collapse record is one-shot
+			}
 			if (Piece.Cells.Num() == 0)
 			{
 				Out.Pieces.Pop();
 			}
 		}
 
-		// 2. Islands: anything not 6-connected to the ground (inside the scan box) drops straight down.
-		TBitArray<> Reached(false, Box.V.Num());
-		TArray<FIntVector> Stack;
-		for (int32 Y = 0; Y < Size.Y; ++Y)
+		// 2. Islands: anything not connected to the ground drops straight down. Connectivity runs on coarse blocks (K^3
+		//    voxels, solid only above a fill count), so a floor never hangs on a single 10 cm voxel (critic: floating
+		//    slabs). Cells in blocks that are not reached from the ground fall.
+		const int32 K = FMath::Max(1, Ctx.Tuning->IslandBlockVoxels);
+		const int32 MinFill = FMath::Max(1, Ctx.Tuning->IslandBlockFill);
+		const FIntVector BSize(FMath::DivideAndRoundUp(Size.X, K), FMath::DivideAndRoundUp(Size.Y, K), FMath::DivideAndRoundUp(Size.Z, K));
+		auto BIndex = [&BSize](int32 X, int32 Y, int32 Z) { return X + BSize.X * (Y + BSize.Y * Z); };
+		TArray<int32> Fill;
+		Fill.SetNumZeroed(BSize.X * BSize.Y * BSize.Z);
+		for (int32 Z = 0; Z < Size.Z; ++Z)
 		{
-			for (int32 X = 0; X < Size.X; ++X)
+			for (int32 Y = 0; Y < Size.Y; ++Y)
 			{
-				if (Box.V[Box.Index(X, Y, 0)] != 0)
+				for (int32 X = 0; X < Size.X; ++X)
 				{
-					Reached[Box.Index(X, Y, 0)] = true;
+					Fill[BIndex(X / K, Y / K, Z / K)] += Box.V[Box.Index(X, Y, Z)] != 0 ? 1 : 0;
+				}
+			}
+		}
+		TBitArray<> Reached(false, Fill.Num());
+		TArray<FIntVector> Stack;
+		for (int32 Y = 0; Y < BSize.Y; ++Y)
+		{
+			for (int32 X = 0; X < BSize.X; ++X)
+			{
+				if (Fill[BIndex(X, Y, 0)] >= MinFill)
+				{
+					Reached[BIndex(X, Y, 0)] = true;
 					Stack.Add(FIntVector(X, Y, 0));
 				}
 			}
@@ -412,12 +420,12 @@ namespace DCVoxelOps
 			for (const FIntVector& S : Steps)
 			{
 				const FIntVector Q = P + S;
-				if (!Box.Inside(Q.X, Q.Y, Q.Z))
+				if (Q.X < 0 || Q.Y < 0 || Q.Z < 0 || Q.X >= BSize.X || Q.Y >= BSize.Y || Q.Z >= BSize.Z)
 				{
 					continue;
 				}
-				const int32 I = Box.Index(Q.X, Q.Y, Q.Z);
-				if (Box.V[I] != 0 && !Reached[I])
+				const int32 I = BIndex(Q.X, Q.Y, Q.Z);
+				if (Fill[I] >= MinFill && !Reached[I])
 				{
 					Reached[I] = true;
 					Stack.Add(Q);
@@ -427,7 +435,16 @@ namespace DCVoxelOps
 		FDCVoxelPiece Drop;
 		Drop.Lot = T.Lot;
 		Drop.Dir = Dir;
-		TakePiece(Drop, [&Box, &Reached](int32 X, int32 Y, int32 Z) { return !Reached[Box.Index(X, Y, Z)]; });
+		// Only when some block with voxels was not reached is there anything to drop.
+		bool bAnyLoose = false;
+		for (int32 b = 0; b < Fill.Num() && !bAnyLoose; ++b)
+		{
+			bAnyLoose = Fill[b] > 0 && !Reached[b];
+		}
+		if (bAnyLoose)
+		{
+			TakePiece(Drop, 0, [&Reached, &BIndex, K](int32 X, int32 Y, int32 Z) { return !Reached[BIndex(X / K, Y / K, Z / K)]; });
+		}
 		if (Drop.Cells.Num() > 0)
 		{
 			Drop.Pivot = Drop.Cells[0];
@@ -533,6 +550,8 @@ namespace DCVoxelOps
 	FDCVoxelOpResult Apply(FDCVoxelSector& Sector, const FDCVoxelOp& Op, const FDCVoxelOpContext& Ctx)
 	{
 		FDCVoxelOpResult Out;
+		double Clock = FPlatformTime::Seconds();
+		auto Lap = [&Clock]() { const double Now = FPlatformTime::Seconds(); const float Ms = static_cast<float>((Now - Clock) * 1000.0); Clock = Now; return Ms; };
 		const bool bFell = Op.Kind == TEXT("Fell");
 		const FDCVoxelCarveDef& Carve = bFell ? Ctx.Tuning->DefaultCarve : Ctx.CarveFor(Op.Stratagem);
 		const FIntVector C = Op.CenterCm;
@@ -569,20 +588,37 @@ namespace DCVoxelOps
 				}
 			}
 			Out.Carved += CarveSphere(Sector.Terrain, C, Carve.CraterRadiusCm);
+			// Props in the blast are gone, top to bottom (a sphere left their tops floating: review CP2).
+			Out.Carved += CarveColumn(Sector.Props, C, Carve.SphereRadiusCm, Sector.Props.ToLocal(FIntVector(0, 0, 4000)).Z);
 		}
-		for (int32 Lot : Out.TouchedLots)
+		Out.CarveMs = Lap();
+		// Towers are independent grids: their structure passes run in parallel, and the results merge in lot order
+		// (the same order on every machine), so the op stays deterministic.
+		TArray<FDCVoxelOpResult> PerTower;
+		PerTower.SetNum(Out.TouchedLots.Num());
+		ParallelFor(Out.TouchedLots.Num(), [&](int32 k)
 		{
-			FDCVoxelTower& T = Sector.Towers[Lot];
-			Structure(T, DominantDir(C, TowerCenterCm(T)), Ctx, Out); // falls away from the blast
+			FDCVoxelTower& T = Sector.Towers[Out.TouchedLots[k]];
+			Structure(T, DominantDir(C, TowerCenterCm(T)), Ctx, PerTower[k]); // falls away from the blast
+		});
+		for (FDCVoxelOpResult& R : PerTower)
+		{
+			Out.FallenLots.Append(R.FallenLots);
+			for (FDCVoxelPiece& Piece : R.Pieces)
+			{
+				Out.Pieces.Add(MoveTemp(Piece));
+			}
 		}
 		for (int32 Lot : Out.FallenLots)
 		{
 			DropTerrainOver(Sector, Sector.Towers[Lot]); // nothing left floating where the roof was
 		}
+		Out.StructureMs = Lap();
 		for (FDCVoxelPiece& Piece : Out.Pieces)
 		{
 			Settle(Sector, Piece, Ctx, Out);
 		}
+		Out.SettleMs = Lap();
 		return Out;
 	}
 }

@@ -52,6 +52,24 @@ struct FDCPhotoTuning
 	/** Multiplier applied when a spotlight unit lights the photographer (blown-out exposure). */
 	UPROPERTY(EditAnywhere, Config, Category = "Photo") float SpotlitMultiplier = 0.25f;
 	UPROPERTY(EditAnywhere, Config, Category = "Photo") FName SpotlitLabel = TEXT("BLOWN OUT");
+	/** Co-star (R20): a living, unoccluded teammate in frame near the blast. Pays by how much of the frame height
+	 *  they fill (from CoStarMinFill to CoStarFullFill), never by how close they are to dying. */
+	UPROPERTY(EditAnywhere, Config, Category = "Photo") FName CoStarTag = TEXT("CO-STAR");
+	UPROPERTY(EditAnywhere, Config, Category = "Photo") float CoStarMinFill = 0.08f;
+	UPROPERTY(EditAnywhere, Config, Category = "Photo") float CoStarFullFill = 0.45f;
+	UPROPERTY(EditAnywhere, Config, Category = "Photo") float CoStarMaxMultiplier = 1.5f;
+	/** The co-star must stand within this of the blast or collapse in frame (metres). */
+	UPROPERTY(EditAnywhere, Config, Category = "Photo") float CoStarBlastMeters = 40.f;
+	/** Share of the photo's score paid to the co-star as Propaganda Points. */
+	UPROPERTY(EditAnywhere, Config, Category = "Photo") float CoStarShare = 0.25f;
+	/** Last Frame (R21): the downed player's one shutter from the ground. Capped at the sector's best living shot. */
+	UPROPERTY(EditAnywhere, Config, Category = "Photo") FName LastFrameTag = TEXT("LAST FRAME");
+	UPROPERTY(EditAnywhere, Config, Category = "Photo") float LastFrameMultiplier = 1.6f;
+	/** Solo only: world slow motion while the dying player frames the shot (co-op: a local look, no world slow-mo). */
+	UPROPERTY(EditAnywhere, Config, Category = "Photo") float LastFrameSlowMo = 0.35f;
+	UPROPERTY(EditAnywhere, Config, Category = "Photo") float LastFrameSlowMoSeconds = 2.f;
+	/** A wipe waits this long for the last downed player to take a Last Frame. */
+	UPROPERTY(EditAnywhere, Config, Category = "Photo") float LastFrameWipeGraceSeconds = 3.f;
 };
 
 /** What the gameplay layer measured at the shutter moment. Metric keys are named in the tuning. */
@@ -74,6 +92,15 @@ struct FDCPhotoInputs
 	UPROPERTY() float ExtraMultiplier = 1.f;
 	/** Scales the danger bonus (Fisheye Danger Lens). */
 	UPROPERTY() float DangerScale = 1.f;
+	/** Last Frame (R21): taken from the ground while downed; its score never beats LastFrameCap (the sector's best
+	 *  living shot; with none yet, the raw points before multipliers). */
+	UPROPERTY() bool bLastFrame = false;
+	UPROPERTY() int32 LastFrameCap = 0;
+	/** Co-star (R20): fraction of the frame the best qualifying teammate fills (0 = none). */
+	UPROPERTY() float CoStarFill = 0.f;
+	/** Who that teammate is (for the credit and their share); empty when none. */
+	UPROPERTY() FString CoStarName;
+	UPROPERTY() int32 CoStarPlayerId = -1;
 	/** Named counts for category rules: Collapses, Debris, Enemies, Blasts, Walkers... */
 	UPROPERTY() TMap<FName, float> Metrics;
 };
@@ -89,6 +116,9 @@ struct FDCPhotoGrade
 	UPROPERTY(BlueprintReadOnly, Category = "Photo") FName TimingLabel;
 	UPROPERTY(BlueprintReadOnly, Category = "Photo") TArray<FName> Categories;
 	UPROPERTY(BlueprintReadOnly, Category = "Photo") bool bSpotlit = false;
+	UPROPERTY(BlueprintReadOnly, Category = "Photo") bool bLastFrame = false;
+	/** Co-star multiplier applied (1 = none). */
+	UPROPERTY(BlueprintReadOnly, Category = "Photo") float CoStarMultiplier = 1.f;
 };
 
 namespace DCPhotoRules
@@ -98,4 +128,6 @@ namespace DCPhotoRules
 
 	/** Pure: same inputs, same grade, on host and client. */
 	EPIC_AI_MEGA_JAM2_API FDCPhotoGrade GradePhoto(const FDCPhotoInputs& In, const FDCPhotoTuning& Tuning);
+	/** Co-star multiplier for a frame fill (1 below the minimum, rising linearly to the maximum at full fill). */
+	EPIC_AI_MEGA_JAM2_API float CoStarMultiplier(float Fill, const FDCPhotoTuning& Tuning);
 }

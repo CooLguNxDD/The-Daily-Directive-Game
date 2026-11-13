@@ -338,6 +338,7 @@ void ADCGameMode::EnterSector(float Now)
 	float Duration = Sector ? Sector->DurationSeconds : 240.f;
 	FParse::Value(FCommandLine::Get(), TEXT("dcsectorseconds="), Duration); // short sectors for scripted test runs
 	GS->SectorEndTime = SectorStartTime + Duration;
+	GS->SectorStartTime = SectorStartTime;
 	const int32 Waves = Sector ? Sector->Waves.Num() : 0;
 	WaveSpawned.Init(0, Waves);
 	WaveNextTime.Init(0.f, Waves);
@@ -683,6 +684,21 @@ void ADCGameMode::OnPhotoGraded(ADCCharacter* Photographer, const FDCPhotoRecord
 	}
 	FDCPhotoRecord Booked = Record;
 	Booked.Sector = GS->SectorIndex;
+	// Co-star (R20): both names on the byline, and the teammate earns a share of the photo's points.
+	if (Record.Grade.CoStarMultiplier > 1.f && Inputs.CoStarPlayerId >= 0)
+	{
+		Booked.CoStar = Inputs.CoStarName;
+		for (APlayerState* Other : GS->PlayerArray)
+		{
+			ADCPlayerState* Mate = Cast<ADCPlayerState>(Other);
+			if (Mate && Mate->GetPlayerId() == Inputs.CoStarPlayerId)
+			{
+				const int32 Share = FMath::RoundToInt32(Record.Grade.Score * UDCTuning::Get().Photo.CoStarShare);
+				Mate->AddPoints(Share);
+				UE_LOG(LogTemp, Display, TEXT("DCCOSTAR photo=%d by=%s costar=%s x%.2f share=%d"), Record.PhotoId, *PS->GetPlayerName(), *Inputs.CoStarName, Record.Grade.CoStarMultiplier, Share);
+			}
+		}
+	}
 	PS->AddPhoto(Booked);
 	PhotoPoses.Add(Record.PhotoId, MoveTemp(Poses));
 	GS->SectorPhotoPoints += Record.Grade.Score;
@@ -716,7 +732,7 @@ void ADCGameMode::OnPhotoGraded(ADCCharacter* Photographer, const FDCPhotoRecord
 void ADCGameMode::OnBuildingCollapsed(ADCBuilding* Building)
 {
 	ADCGameState* GS = GetGameState<ADCGameState>();
-	GS->AddCollapse(GS->SectorIndex, Building->GetLotIndex(), Building->GetEpicenter());
+	GS->AddCollapse(GS->SectorIndex, Building->GetLotIndex(), Building->GetEpicenter(), Building->GetCollapseTime());
 	const TArray<const FDCUpgradeDef*> Active = GS->ActiveMutators();
 	const FDCUpgradeDef* const* Domino = Active.FindByPredicate([](const FDCUpgradeDef* D) { return D->DominoReachCm > 0.f; });
 	if (!Domino)
@@ -742,7 +758,7 @@ void ADCGameMode::OnBuildingCollapsed(ADCBuilding* Building)
 	}
 }
 
-void ADCGameMode::ScheduleCollapse(ADCBuilding* Building, const FVector& Epicenter, FName Kind, float Delay)
+void ADCGameMode::ScheduleCollapse(ADCBuilding* Building, const FVector& Epicenter, FName Kind, float Delay, float AtTime)
 {
 	ADCGameState* GS = GetGameState<ADCGameState>();
 	if (!Building || Building->IsCollapsed())
@@ -760,7 +776,7 @@ void ADCGameMode::ScheduleCollapse(ADCBuilding* Building, const FVector& Epicent
 			const int32 Sector = GS->SectorIndex;
 			GS->Blasts.RemoveAll([Now, Lot, Sector](const FDCBlastRecord& R) { return R.LotIndex == Lot && R.Sector == Sector && R.Time > Now; });
 		}
-		Building->Collapse(Epicenter);
+		Building->Collapse(Epicenter, AtTime);
 		return;
 	}
 	if (PendingCollapses.ContainsByPredicate([Building](const FPendingCollapse& P) { return P.Building == Building; }))
@@ -795,6 +811,13 @@ void ADCGameMode::TickPendingCollapses(float Now)
 void ADCGameMode::OnPlayerDowned(ADCCharacter* Player)
 {
 	LastDownTime = GetGameState<ADCGameState>()->Now(); // pressure relief: no pack right after a down
+	// Last Frame (R21): slow motion only for the dying player, so only when they are the only player.
+	const FDCPhotoTuning& P = UDCTuning::Get().Photo;
+	if (GetNumPlayers() == 1 && P.LastFrameSlowMo > 0.f)
+	{
+		SetDilation(P.LastFrameSlowMo);
+		HitstopEndReal = GetWorld()->GetRealTimeSeconds() + P.LastFrameSlowMoSeconds;
+	}
 	CheckWipe();
 }
 
@@ -814,6 +837,25 @@ void ADCGameMode::CheckWipe()
 			return;
 		}
 	}
+	// Everyone is down. A downed player still holding a Last Frame (R21) gets a short grace to take it first.
+	bool bLastFramePending = false;
+	for (ADCPlayerState* PS : Players())
+	{
+		const ADCCharacter* C = PS->GetPawn<ADCCharacter>();
+		bLastFramePending |= C && C->HasLastFrame();
+	}
+	const float Now = GS->Now();
+	if (bLastFramePending && (WipeGraceUntil < 0.f || Now < WipeGraceUntil))
+	{
+		if (WipeGraceUntil < 0.f)
+		{
+			WipeGraceUntil = Now + UDCTuning::Get().Photo.LastFrameWipeGraceSeconds;
+			FTimerHandle Recheck;
+			GetWorldTimerManager().SetTimer(Recheck, FTimerDelegate::CreateWeakLambda(this, [this] { CheckWipe(); }), UDCTuning::Get().Photo.LastFrameWipeGraceSeconds + 0.05f, false);
+		}
+		return;
+	}
+	WipeGraceUntil = -1.f;
 	// Everyone is down: the run fails, but the reel still plays (R12).
 	UE_LOG(LogTemp, Display, TEXT("DCWIPE all %d players down in sector %d: run failed, rolling the reel"), Players().Num(), GS->SectorIndex + 1);
 	GS->bRunFailed = true;
@@ -1079,16 +1121,41 @@ void ADCGameMode::EnterFrontPage(float Now)
 		UE_LOG(LogTemp, Display, TEXT("DCPAGE photo=%d by=%s critic=%d votes=%d page=%d%s"), Pick.Photo.PhotoId, *Pick.PlayerName, Pick.Photo.Grade.Score, Pick.Votes, Pick.PageScore,
 			GS->PagePicks.IsValidIndex(GS->HeadlineIndex) && &GS->PagePicks[GS->HeadlineIndex] == &Pick ? TEXT(" HEADLINE") : TEXT(""));
 	}
+	// Full edition (R22): the winner and up to two runner-ups each get a satirical headline from the data rows, never a
+	// line this session already printed; a wiped run prints the mock-heroic CORRECTION edition.
+	static TSet<FString> PrintedThisSession;
+	TArray<int32> Order;
+	for (int32 i = 0; i < GS->PagePicks.Num(); ++i)
+	{
+		Order.Add(i);
+	}
+	Order.StableSort([GS](int32 A, int32 B) { return GS->PagePicks[A].PageScore > GS->PagePicks[B].PageScore; });
+	Order.Remove(GS->HeadlineIndex);
 	if (GS->PagePicks.IsValidIndex(GS->HeadlineIndex))
 	{
-		const FDCPagePick& Top = GS->PagePicks[GS->HeadlineIndex];
-		const FString SectorName = T.Sectors.IsValidIndex(Top.Photo.Sector) ? T.Sectors[Top.Photo.Sector].Name.ToString() : TEXT("THE FRONT");
-		GS->Headline = DCRunRules::MakeHeadline(GS->RunSeed ^ Top.Photo.PhotoId, T.Run.Headlines, T.Run.Subjects, Top.Photo.Grade, SectorName, Top.PlayerName);
+		Order.Insert(GS->HeadlineIndex, 0);
+	}
+	for (int32 k = 0; k < FMath::Min(3, Order.Num()); ++k)
+	{
+		FDCPagePick& Pick = GS->PagePicks[Order[k]];
+		const FString SectorName = T.Sectors.IsValidIndex(Pick.Photo.Sector) ? T.Sectors[Pick.Photo.Sector].Name.ToString() : TEXT("THE FRONT");
+		Pick.Headline = DCRunRules::PickHeadline(GS->RunSeed ^ Pick.Photo.PhotoId, T.HeadlineRows, Pick.Photo.Grade.Categories, Pick.PlayerName, SectorName, Pick.Photo.CoStar, PrintedThisSession);
+	}
+	if (GS->bRunFailed)
+	{
+		const FString Correction = DCRunRules::PickHeadline(GS->RunSeed, T.HeadlineRows, {FName(TEXT("CORRECTION"))}, GS->PagePicks.IsValidIndex(GS->HeadlineIndex) ? GS->PagePicks[GS->HeadlineIndex].PlayerName : FString(TEXT("OUR CORRESPONDENTS")),
+			TEXT("THE CITY"), FString(), PrintedThisSession);
+		GS->Headline = TEXT("CORRECTION: ") + Correction;
+	}
+	else if (GS->PagePicks.IsValidIndex(GS->HeadlineIndex))
+	{
+		GS->Headline = GS->PagePicks[GS->HeadlineIndex].Headline;
 	}
 	else
 	{
 		GS->Headline = TEXT("CAMERAS SILENT AS CITY STANDS: NO PHOTOS FILED");
 	}
+	UE_LOG(LogTemp, Display, TEXT("DCPAGE headline=\"%s\"%s"), *GS->Headline, GS->bRunFailed ? TEXT(" CORRECTION EDITION") : TEXT(""));
 	const int32 QuotasMet = GS->QuotaResults.FilterByPredicate([](bool b) { return b; }).Num();
 	GS->Subhead = FString::Printf(TEXT("%s  |  %d PHOTOGRAPHER%s  |  %s PROPAGANDA POINTS RAISED  |  QUOTAS MET %d/%d  |  RUN SEED %d"),
 		GS->bRunFailed ? TEXT("UNIT LOST IN ACTION, REEL RECOVERED") : TEXT("ALL SECTORS LIBERATED"),

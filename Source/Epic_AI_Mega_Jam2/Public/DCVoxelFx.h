@@ -25,6 +25,10 @@ public:
 	/** Keeps an emitter row going at a point for Seconds (smoke and fire over the rubble in the decay window). */
 	void Burn(FName Emitter, const FVector& Where, float Radius, float Seconds);
 	void ClearAll();
+	/** Spawns Count puffs of a kind by id (weather precipitation around the camera). */
+	void SpawnKind(FName Kind, const FVector& Where, float Radius, int32 Count);
+	/** Wind (cm/s) every puff drifts with (weather, R18). */
+	void SetWind(const FVector& InWind) { Wind = InWind; }
 
 private:
 	struct FPuff
@@ -53,4 +57,5 @@ private:
 	TArray<TArray<FPuff>> Puffs;
 	TArray<FBurn> Burns;
 	FRandomStream Rng;
+	FVector Wind = FVector::ZeroVector;
 };

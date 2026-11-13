@@ -1,5 +1,7 @@
 #include "DCCharacter.h"
 
+#include "DCVoxelCity.h"
+
 #include "Animation/AnimSequence.h"
 #include "Camera/CameraComponent.h"
 #include "Components/CapsuleComponent.h"
@@ -121,6 +123,7 @@ void ADCCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLife
 	DOREPLIFETIME(ADCCharacter, bSprinting);
 	DOREPLIFETIME(ADCCharacter, Health);
 	DOREPLIFETIME(ADCCharacter, bDowned);
+	DOREPLIFETIME(ADCCharacter, bLastFrameReady);
 	DOREPLIFETIME(ADCCharacter, SpotlitUntil);
 	DOREPLIFETIME(ADCCharacter, ReviveProgress);
 	DOREPLIFETIME(ADCCharacter, SelfRevivesLeft);
@@ -224,6 +227,12 @@ FDCShotView ADCCharacter::GetShotView() const
 	View.Location = FirstCam->GetComponentLocation();
 	View.Rotation = GetControlRotation();
 	View.FOV = LensFOV();
+	if (HasLastFrame())
+	{
+		// The Last Frame lens (R21): low, along the player's aim; the capture uses the same view, so the grade matches.
+		View.Rotation.Pitch = FMath::Clamp(FRotator::NormalizeAxis(View.Rotation.Pitch), -4.f, 35.f);
+		View.Location = GetActorLocation() + FVector(0, 0, 35.f) + View.Rotation.Vector() * 60.f;
+	}
 	return View;
 }
 
@@ -362,6 +371,11 @@ void ADCCharacter::OnFire(const FInputActionInstance&)
 	if (ADCReelDirector* Director = ReelDirector())
 	{
 		Director->SnapSecondTake(); // R16: second take during the reel
+		return;
+	}
+	if (HasLastFrame() && InSector())
+	{
+		TakePhoto(); // R21: one last shutter from the ground, whatever was in hand
 		return;
 	}
 	if (bDowned || IsDrawing() || !InSector())
@@ -786,7 +800,7 @@ void ADCCharacter::TakePhoto()
 	{
 		return;
 	}
-	if (PS->ShotsLeft <= 0)
+	if (PS->ShotsLeft <= 0 && !HasLastFrame()) // the Last Frame needs no film (R21)
 	{
 		Toast(TEXT("OUT OF FILM"));
 		DCAudio::Play2D(this, TEXT("DryFire"));
@@ -800,7 +814,29 @@ void ADCCharacter::TakePhoto()
 	Capture->FOVAngle = LensFOV();
 	ApplyPhotoLook(GetWorld(), Capture->PostProcessSettings, IsSpotlit());
 	Capture->PostProcessBlendWeight = 1.f;
+	// Never shoot from inside a voxel (a tower's hollow, rubble, a prop): back the lens out along the view, then up.
+	const FVector Lens = Capture->GetComponentLocation();
+	const FRotator LensRot = Capture->GetComponentRotation();
+	if (HasLastFrame())
+	{
+		// R21: from the ground, looking where the player looks, never into the dirt.
+		FRotator Aim = GetControlRotation();
+		Aim.Pitch = FMath::Clamp(FRotator::NormalizeAxis(Aim.Pitch), -4.f, 35.f);
+		Capture->SetWorldLocationAndRotation(GetActorLocation() + FVector(0, 0, 35.f) + Aim.Vector() * 60.f, Aim);
+	}
+	if (const ADCVoxelCity* City = ADCVoxelCity::Get(this))
+	{
+		const FVector From = Capture->GetComponentLocation(); // the Last Frame lens when downed, else the camera
+		FVector Free = From;
+		const FVector Back = -Capture->GetForwardVector();
+		for (int32 Step = 1; Step <= 24 && City->IsSolidAt(Free); ++Step)
+		{
+			Free = From + Back * (Step * 25.f) + FVector(0, 0, Step * 10.f);
+		}
+		Capture->SetWorldLocation(Free);
+	}
 	Capture->CaptureScene();
+	Capture->SetWorldLocationAndRotation(Lens, LensRot);
 
 	// Instant preview grade from the same rules; the host's grade replaces it when it arrives.
 	const FDCShotView View = GetShotView();
@@ -823,11 +859,13 @@ void ADCCharacter::ServerSubmitPhoto_Implementation(int32 PhotoId, FVector_NetQu
 	ADCPlayerState* PS = GetPlayerState<ADCPlayerState>();
 	const FDCCameraTuning& C = UDCTuning::Get().Camera;
 	const float T = Now();
-	if (!PS || bDowned || !InSector() || Slot != EDCSlot::Camera || T < HostNextShutterTime || FVector::Dist(CamLoc, GetActorLocation()) > 400.f)
+	const bool bLast = HasLastFrame();
+	if (!PS || (bDowned && !bLast) || !InSector() || (Slot != EDCSlot::Camera && !bLast) || T < HostNextShutterTime || FVector::Dist(CamLoc, GetActorLocation()) > 400.f)
 	{
 		return;
 	}
-	if (!PS->ConsumeShot())
+	bLastFrameReady = bLastFrameReady && !bLast; // spent
+	if (!bLast && !PS->ConsumeShot())
 	{
 		return;
 	}
@@ -845,7 +883,23 @@ void ADCCharacter::ServerSubmitPhoto_Implementation(int32 PhotoId, FVector_NetQu
 	Record.CameraLocation = CamLoc;
 	Record.CameraRotation = CamRot;
 	Record.FOV = View.FOV;
-	const FDCPhotoInputs Inputs = MeasureShot(View, When, Record.BlastId);
+	FDCPhotoInputs Inputs = MeasureShot(View, When, Record.BlastId);
+	if (bLast)
+	{
+		// Capped at the best living shot of this sector, every photographer's (R21).
+		Inputs.bLastFrame = true;
+		const ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>();
+		for (const APlayerState* Other : GS ? GS->PlayerArray : TArray<TObjectPtr<APlayerState>>())
+		{
+			if (const ADCPlayerState* OtherPS = Cast<ADCPlayerState>(Other))
+			{
+				for (const FDCPhotoRecord& P : OtherPS->Photos)
+				{
+					Inputs.LastFrameCap = P.Sector == GS->SectorIndex && !P.Grade.bLastFrame ? FMath::Max(Inputs.LastFrameCap, P.Grade.Score) : Inputs.LastFrameCap;
+				}
+			}
+		}
+	}
 	Record.Grade = DCPhotoRules::GradePhoto(Inputs, UDCTuning::Get().Photo);
 	ApplyStrobe(View);
 	if (ADCGameMode* GM = GetWorld()->GetAuthGameMode<ADCGameMode>())
@@ -897,6 +951,7 @@ void ADCCharacter::HostApplyHurt(float Amount, const FVector& From)
 	if (Health <= 0.f)
 	{
 		bDowned = true;
+		bLastFrameReady = true; // R21
 		DownedAt = Now();
 		bCameraRaised = false;
 		ReviveProgress = 0.f;
@@ -1048,6 +1103,7 @@ void ADCCharacter::ServerSetReviving_Implementation(bool bHolding) { bHostRevive
 void ADCCharacter::HostRevive()
 {
 	bDowned = false;
+	bLastFrameReady = false;
 	Health = UDCTuning::Get().Move.MaxHealth * 0.6f;
 	ReviveProgress = 0.f;
 	OnRep_Downed();

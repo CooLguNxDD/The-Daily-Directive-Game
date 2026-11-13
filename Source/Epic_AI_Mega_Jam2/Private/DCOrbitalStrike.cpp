@@ -1,5 +1,6 @@
 #include "DCOrbitalStrike.h"
 
+#include "Components/InstancedStaticMeshComponent.h"
 #include "Components/PointLightComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "DCAssets.h"
@@ -49,6 +50,11 @@ ADCOrbitalStrike::ADCOrbitalStrike()
 	Ring = MakeFx(this, TEXT("Ring"), RootComponent);
 	Beacon = MakeFx(this, TEXT("Beacon"), RootComponent);
 	Fireball = MakeFx(this, TEXT("Fireball"), RootComponent);
+	FireCubes = CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("FireCubes"));
+	FireCubes->SetupAttachment(RootComponent);
+	FireCubes->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	FireCubes->SetCastShadow(false);
+	FireCubes->SetMobility(EComponentMobility::Movable);
 	Shock = MakeFx(this, TEXT("Shock"), RootComponent);
 	Light = CreateDefaultSubobject<UPointLightComponent>(TEXT("Light"));
 	Light->SetupAttachment(RootComponent);
@@ -102,7 +108,8 @@ void ADCOrbitalStrike::BeginPlay()
 	Beam->SetRelativeLocation(FVector(0, 0, BeamHeightCm * 0.5f));
 
 	Ring->SetStaticMesh(DCAssets::Cylinder());
-	Ring->SetMaterial(0, DCAssets::MakeFlat(this, BeamColor * 0.35f, 1.5f));
+	// The danger zone in propaganda red (art bible), dim enough to stay red instead of blooming pink.
+	Ring->SetMaterial(0, DCAssets::MakeFlat(this, UDCTuning::Get().Look.Accent, 0.35f));
 	Ring->SetRelativeLocation(FVector(0, 0, 3.f));
 	Ring->SetRelativeScale3D(FVector(Radius * 2.f / 100.f, Radius * 2.f / 100.f, 0.02f));
 
@@ -115,6 +122,22 @@ void ADCOrbitalStrike::BeginPlay()
 	FireMat = DCAssets::MakeFlat(this, UDCTuning::Get().Look.Fire, 80.f);
 	Fireball->SetMaterial(0, FireMat);
 	Fireball->SetVisibility(false);
+	// The core's cubes, seeded from where the strike landed: every machine sees the same burst.
+	FireCubes->SetStaticMesh(DCAssets::Cube());
+	FireCubes->SetMaterial(0, FireMat);
+	FRandomStream CubeRng(GetTypeHash(FIntVector(GetActorLocation() / 10.f)));
+	const int32 NumCubes = FMath::Max(UDCTuning::Get().Look.FireballCubes, 1);
+	CubeSeeds.Reset();
+	TArray<FTransform> Hidden;
+	for (int32 i = 0; i < NumCubes; ++i)
+	{
+		const FVector Dir = CubeRng.VRand() * FVector(1.f, 1.f, 0.7f);
+		CubeSeeds.Add(FVector4f(FVector3f(Dir * CubeRng.FRandRange(0.25f, 1.f)), CubeRng.FRandRange(0.12f, 0.3f)));
+		Hidden.Add(FTransform(FQuat::Identity, FVector::ZeroVector, FVector::ZeroVector));
+	}
+	FireCubes->ClearInstances();
+	FireCubes->AddInstances(Hidden, false);
+	FireCubes->SetVisibility(false);
 
 	Shock->SetStaticMesh(DCAssets::Cylinder());
 	ShockMat = DCAssets::MakeFlat(this, FLinearColor(1.f, 0.9f, 0.7f), 40.f);
@@ -168,7 +191,7 @@ void ADCOrbitalStrike::TickTelegraph(float Now, const FDCStratagemDef& Def)
 	const float Width = FMath::Lerp(7.f, 0.35f, FMath::Pow(U, 0.7f));
 	const float Pulse = 0.5f + 0.5f * FMath::Sin(Now * FMath::Lerp(6.f, 40.f, U));
 	Beam->SetRelativeScale3D(FVector(Width, Width, BeamHeightCm / 100.f));
-	DCAssets::SetFlat(BeamMat, Def.BeamColor, FMath::Lerp(2.f, 60.f, U * U) * (0.7f + 0.3f * Pulse));
+	DCAssets::SetFlat(BeamMat, Def.BeamColor, FMath::Lerp(1.f, 12.f, U * U) * (0.7f + 0.3f * Pulse)); // red, not blown to magenta
 	Beacon->SetVisibility(Pulse > 0.3f || U > 0.8f);
 
 	if (!bChargePlayed && U > 0.f && Def.TelegraphSeconds - (Now - Start) <= 3.2f)
@@ -207,8 +230,8 @@ void ADCOrbitalStrike::DetonateLocal(const FDCStratagemDef& Def)
 	}
 	DCAudio::PlayAt(this, TEXT("Detonation"), Here, 1.f, FMath::FRandRange(0.9f, 1.05f));
 	DCAudio::Play2D(this, TEXT("Detonation"), 0.35f * Proximity, 0.8f);
-	Fireball->SetVisibility(true);
-	Shock->SetVisibility(true);
+	FireCubes->SetVisibility(true);
+	Shock->SetVisibility(false); // the filled shock disc read as a white bar edge-on (critic); the voxel core carries the peak
 	Ring->SetVisibility(false);
 	Beacon->SetVisibility(false);
 }
@@ -219,22 +242,34 @@ void ADCOrbitalStrike::TickBlast(float Now, const FDCStratagemDef& Def)
 	const float Grow = FMath::Clamp(T / FireballGrowSeconds, 0.f, 1.f);
 	const float Fade = FMath::Clamp(1.f - (T - FireballGrowSeconds) / FireballLifeSeconds, 0.f, 1.f);
 	const float Scale = Def.FireballScale * FMath::Sqrt(Grow) * (0.6f + 0.4f * Fade);
-	Fireball->SetRelativeScale3D(FVector(Scale));
-	Fireball->SetRelativeLocation(FVector(0, 0, Scale * 35.f + T * 300.f));
+	// Voxel burst: cubes fly out from the core, rise with the heat and shrink as the fire cools; the gaps between
+	// them keep the target readable at the peak (the smooth sphere hid it).
+	const FVector Core(0, 0, Scale * 35.f + T * 300.f);
+	TArray<FTransform> Xf;
+	Xf.Reserve(CubeSeeds.Num());
+	for (int32 i = 0; i < CubeSeeds.Num(); ++i)
+	{
+		const FVector4f& C = CubeSeeds[i];
+		const float Out = 0.35f + 0.65f * FMath::Sqrt(Grow) + 0.25f * (1.f - Fade);
+		const FVector Pos = Core + FVector(C.X, C.Y, C.Z) * Scale * 50.f * Out + FVector(0, 0, T * 120.f * (1.f + C.W));
+		const float Size = Scale * C.W * FMath::Max(Fade, 0.f) * (0.6f + 0.4f * Grow);
+		Xf.Add(FTransform(FRotator(i * 37.f + T * 90.f, i * 53.f, i * 11.f), Pos, FVector(Size)));
+	}
+	FireCubes->BatchUpdateInstancesTransforms(0, Xf, false, true, true);
 	// Blast white-orange only at the first instant, then orange to ember red: the peak reads as fire, not a white dome.
 	const FLinearColor Hot = FMath::Lerp(FLinearColor(1.f, 0.48f, 0.1f), FLinearColor(1.f, 0.95f, 0.76f), FMath::Clamp(1.f - T / 0.25f, 0.f, 1.f));
 	DCAssets::SetFlat(FireMat, FMath::Lerp(FLinearColor(0.25f, 0.05f, 0.02f), Hot, Fade * Fade), 1.f + UDCTuning::Get().Look.FireballGlow * Fade * Fade * Fade);
-	Fireball->SetVisibility(Fade > 0.02f);
+	FireCubes->SetVisibility(Fade > 0.02f);
 
 	const float ShockR = Def.BlastRadius * 2.4f * FMath::Clamp(T / 0.6f, 0.f, 1.f) / 100.f;
 	Shock->SetRelativeScale3D(FVector(ShockR, ShockR, 0.04f));
 	Shock->SetRelativeLocation(FVector(0, 0, 40.f));
 	DCAssets::SetFlat(ShockMat, FLinearColor(1.f, 0.85f, 0.6f), UDCTuning::Get().Look.ShockGlow * FMath::Clamp(1.f - T / 0.6f, 0.f, 1.f));
-	Shock->SetVisibility(T < 0.6f);
+	Shock->SetVisibility(false);
 
 	const float BeamFade = FMath::Clamp(1.f - T / 0.35f, 0.f, 1.f);
 	Beam->SetRelativeScale3D(FVector(3.f * BeamFade + 0.01f, 3.f * BeamFade + 0.01f, BeamHeightCm / 100.f));
-	DCAssets::SetFlat(BeamMat, FLinearColor::White, 200.f * BeamFade);
+	DCAssets::SetFlat(BeamMat, FMath::Lerp(Def.BeamColor, FLinearColor(1.f, 0.95f, 0.76f), 0.5f), 20.f * BeamFade); // a short white-orange flash, then gone
 	Beam->SetVisibility(BeamFade > 0.f);
 	Light->SetIntensity(UDCTuning::Get().Look.BlastLightIntensity * Fade * Fade);
 }
@@ -279,18 +314,31 @@ void ADCOrbitalStrike::DetonateHost(const FDCStratagemDef& Def)
 		Op.Stratagem = Def.Id;
 		Op.CenterCm = DCVoxelMath::ToCm(FVector(Here.X, Here.Y, 0.f));
 		Op.BlastRadiusCm = FMath::RoundToInt32(Def.BlastRadius);
-		const int32 Index = GS->VoxelOps.Num();
-		GS->AddVoxelOp(Op);
-		const FDCVoxelOpResult Result = City->ApplyOp(GS->VoxelOps[Index], true);
-		GS->VoxelOps[Index].ResultHash = City->GetHash();
-		for (ADCBuilding* Building : TActorRange<ADCBuilding>(World))
+		const int32 Seq = GS->AddVoxelOp(Op).Seq;
+		// The op runs on a worker; the collapse records follow when it lands (a frame or a few later).
+		TWeakObjectPtr<ADCGameState> WeakGS(GS);
+		const FVector Epicenter = Here;
+		const float OpTime = GS->VoxelOps.Last().Time;
+		City->ApplyOpAsync(GS->VoxelOps.Last(), true, [WeakGS, Seq, Epicenter, OpTime](const FDCVoxelOpResult& Result, uint32 Hash)
 		{
-			ADCGameMode* GM = World->GetAuthGameMode<ADCGameMode>();
-			if (GM && Result.FallenLots.Contains(Building->GetLotIndex()))
+			ADCGameState* State = WeakGS.Get();
+			if (!State)
 			{
-				GM->ScheduleCollapse(Building, Here, TEXT("Strike"), 0.f);
+				return;
 			}
-		}
+			if (FDCVoxelOp* Rec = State->VoxelOps.FindByPredicate([Seq](const FDCVoxelOp& O) { return O.Seq == Seq; }))
+			{
+				Rec->ResultHash = Hash;
+			}
+			ADCGameMode* GM = State->GetWorld()->GetAuthGameMode<ADCGameMode>();
+			for (ADCBuilding* Building : TActorRange<ADCBuilding>(State->GetWorld()))
+			{
+				if (GM && Result.FallenLots.Contains(Building->GetLotIndex()))
+				{
+					GM->ScheduleCollapse(Building, Epicenter, TEXT("Strike"), 0.f, OpTime); // at the blast, not when the worker finished
+				}
+			}
+		});
 	}
 	for (ADCBuilding* Building : TActorRange<ADCBuilding>(World))
 	{

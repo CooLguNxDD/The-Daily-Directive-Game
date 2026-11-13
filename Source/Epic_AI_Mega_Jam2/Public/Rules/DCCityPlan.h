@@ -28,11 +28,36 @@ struct FDCLotPlan
 	UPROPERTY() FDCBuildingSpec Spec;
 };
 
+/** A voxel-forge model placed in the city (R16): a street prop, plaza dressing or a wreck in a rubble zone. */
+USTRUCT()
+struct FDCPropPlan
+{
+	GENERATED_BODY()
+	UPROPERTY() FName Model;
+	/** Sector-local cm, on the street surface. */
+	UPROPERTY() FVector Location = FVector::ZeroVector;
+	/** Quarter turns (0-3), so the voxels stay on the grid. */
+	UPROPERTY() int32 Turns = 0;
+};
+
 USTRUCT()
 struct FDCCityPlan
 {
 	GENERATED_BODY()
 	UPROPERTY() TArray<FDCLotPlan> Buildings;
+	/** District builder (R16): open lots, pre-ruined lots, the landmark's index in Buildings, props, and the sight
+	 *  line kept open from the players' spawn street to the landmark. */
+	UPROPERTY() TArray<FVector> Plazas;
+	UPROPERTY() TArray<FVector> RubbleZones;
+	UPROPERTY() TArray<FDCPropPlan> Props;
+	UPROPERTY() int32 Landmark = -1;
+	UPROPERTY() FVector SightFrom = FVector::ZeroVector;
+	UPROPERTY() FVector SightTo = FVector::ZeroVector;
+	/** Kind of every lot of the grid (row-major), for previews and tests. */
+	UPROPERTY() TArray<FName> LotKinds;
+	UPROPERTY() int32 GridX = 0;
+	UPROPERTY() int32 GridY = 0;
+	UPROPERTY() float LotSizeCm = 0.f;
 	/** Street intersections, used for player spawns, enemy spawns and supply pods. */
 	UPROPERTY() TArray<FVector> StreetPoints;
 	UPROPERTY() float HalfExtent = 0.f;

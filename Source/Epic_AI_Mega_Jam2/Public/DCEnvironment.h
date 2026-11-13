@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 #include "Rules/DCPostStack.h"
+#include "Rules/DCWeather.h"
 #include "DCEnvironment.generated.h"
 
 class UDirectionalLightComponent;
@@ -43,9 +44,11 @@ public:
 	FDCPostResult ComposeLook(bool bPhoto, bool bSpotlit) const;
 	static void ApplyPost(const FDCPostResult& Look, FPostProcessSettings& Out);
 	int32 GetPostQuality() const { return PostQuality; }
+	const FDCWeatherState& GetWeather() const { return Weather; }
 
 private:
 	void ApplyPreset();
+	void UpdateWeather(float DeltaSeconds);
 	void UpdatePostWeights();
 	void BuildStreets();
 
@@ -66,5 +69,7 @@ private:
 	float FlashAlpha = 0.f;
 	int32 AppliedMutatorCount = 0;
 	TMap<FName, float> PostWeights;
+	FDCWeatherState Weather;
+	float PrecipitationCarry = 0.f;
 	int32 PostQuality = 2;
 };

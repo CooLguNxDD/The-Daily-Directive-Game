@@ -40,7 +40,7 @@ public:
 	void OnBuildingCollapsed(ADCBuilding* Building);
 	/** Every collapse goes through here. Delay > 0 writes a telegraphed event record (Kind) now and collapses the
 	 *  tower at its peak on the server clock; Delay 0 collapses at once (a strike's own record covers it). */
-	void ScheduleCollapse(ADCBuilding* Building, const FVector& Epicenter, FName Kind, float Delay);
+	void ScheduleCollapse(ADCBuilding* Building, const FVector& Epicenter, FName Kind, float Delay, float AtTime = -1.f);
 	void RequestHitstop();
 	bool IsCombatLive() const;
 
@@ -99,6 +99,8 @@ private:
 	int32 AutoStartPlayers = 1;
 	bool bScriptedDownDone = false;
 	double HitstopEndReal = 0.0;
+	/** Server time a wipe waits until, while a downed player can still take a Last Frame (-1 = none). */
+	float WipeGraceUntil = -1.f;
 	float SectorStartTime = 0.f;
 	TArray<int32> WaveSpawned;
 	TArray<float> WaveNextTime;

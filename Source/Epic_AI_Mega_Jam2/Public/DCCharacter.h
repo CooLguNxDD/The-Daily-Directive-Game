@@ -50,6 +50,7 @@ public:
 	EDCSlot GetSlot() const { return Slot; }
 	bool IsCameraRaised() const { return bCameraRaised; }
 	bool IsDowned() const { return bDowned; }
+	bool HasLastFrame() const { return bDowned && bLastFrameReady; }
 	bool IsDrawing() const;
 	bool IsReloading() const;
 	bool IsSpotlit() const;
@@ -171,6 +172,8 @@ private:
 	UPROPERTY(Replicated) bool bSprinting = false;
 	UPROPERTY(Replicated) float Health = 100.f;
 	UPROPERTY(ReplicatedUsing = OnRep_Downed) bool bDowned = false;
+	/** Last Frame (R21): a downed player keeps one shutter, spent or lost on revive. */
+	UPROPERTY(Replicated) bool bLastFrameReady = false;
 	UPROPERTY(Replicated) float SpotlitUntil = -10.f;
 	UPROPERTY(Replicated) float ReviveProgress = 0.f;
 	UPROPERTY(Replicated) int32 SelfRevivesLeft = 1;

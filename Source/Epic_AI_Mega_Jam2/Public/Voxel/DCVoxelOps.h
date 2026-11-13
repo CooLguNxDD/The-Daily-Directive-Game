@@ -36,6 +36,10 @@ struct EPIC_AI_MEGA_JAM2_API FDCVoxelOpResult
 	TArray<FIntVector> Rubble;
 	TArray<uint8> RubbleMaterials;
 	int32 Carved = 0;
+	/** Where the op's time went (ms): carve and bite, structure pass, settle (evidence for the impact hitch, R13). */
+	float CarveMs = 0.f;
+	float StructureMs = 0.f;
+	float SettleMs = 0.f;
 };
 
 /** Settings the ops read, resolved once. */
@@ -55,6 +59,8 @@ struct EPIC_AI_MEGA_JAM2_API FDCVoxelSector
 {
 	TArray<FDCVoxelTower> Towers;
 	FDCVoxelGrid Terrain;
+	/** Street props, plaza dressing and wrecks from voxel-forge models (R16, R17), 5 cm. */
+	FDCVoxelGrid Props;
 	/** Content hash over every grid (determinism evidence: host and clients compare after each op). */
 	uint32 Hash() const;
 };

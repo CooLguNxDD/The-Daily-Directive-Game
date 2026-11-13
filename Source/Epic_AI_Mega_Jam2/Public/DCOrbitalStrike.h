@@ -47,6 +47,10 @@ private:
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UStaticMeshComponent> Ring;
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UStaticMeshComponent> Beacon;
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UStaticMeshComponent> Fireball;
+	/** Voxel blast core (R4): seeded chunky cubes with gaps between them, so a tower stays readable behind the peak. */
+	UPROPERTY(VisibleAnywhere) TObjectPtr<class UInstancedStaticMeshComponent> FireCubes;
+	/** Per cube: direction * reach (0..1 of the fireball) in XYZ, size (0..1 of the fireball) in W. */
+	TArray<FVector4f> CubeSeeds;
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UStaticMeshComponent> Shock;
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UPointLightComponent> Light;
 	UPROPERTY() TObjectPtr<UMaterialInstanceDynamic> BeamMat;

@@ -1,5 +1,7 @@
 #include "DCEnemy.h"
 
+#include "DCVoxelCity.h"
+
 #include "ProceduralMeshComponent.h"
 #include "Voxel/DCVoxelModel.h"
 #include "Voxel/DCVoxelSettings.h"
@@ -131,7 +133,8 @@ namespace
 			E.Heading = FMath::VInterpNormalRotationTo(E.Heading, Want, Dt, 12.f);
 		}
 		const FVector Next = E.GetActorLocation() + E.Heading * Def.Speed * Dt;
-		E.SetActorLocation(FVector(Next.X, Next.Y, Def.HoverHeight));
+		const ADCVoxelCity* City = ADCVoxelCity::Get(&E);
+		E.SetActorLocation(FVector(Next.X, Next.Y, (City ? City->SurfaceZCm(Next) : 0.f) + Def.HoverHeight)); // stands on the street and its rubble
 		E.SetActorRotation(E.Heading.Rotation());
 		// A walker shoulders straight through towers: every tower it touches comes down.
 		for (ADCBuilding* B : TActorRange<ADCBuilding>(E.GetWorld()))

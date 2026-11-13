@@ -67,6 +67,7 @@ private:
 	FString ShotDir;
 	bool bQuit = false;
 	TWeakObjectPtr<ADCBuilding> Tower;
+	double LastFrameAtReal = -1.0;
 	TWeakObjectPtr<class ADCEnemy> Target;
 	TSet<TObjectKey<ADCBuilding>> UsedTowers;
 	int32 ShotIndex = 0;

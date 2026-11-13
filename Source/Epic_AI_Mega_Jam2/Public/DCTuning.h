@@ -10,6 +10,8 @@
 #include "Rules/DCPressureRules.h"
 #include "Rules/DCNewsprint.h"
 #include "Rules/DCPostStack.h"
+#include "Rules/DCRunRules.h"
+#include "Rules/DCWeather.h"
 #include "DCTuning.generated.h"
 
 USTRUCT(BlueprintType)
@@ -172,6 +174,10 @@ struct FDCLookTuning
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float FilmGrain = 0.35f;
 	/** Emissive of the fireball core and the ground shock ring at their peak (the bloom spike itself is BloomPeak). */
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float FireballGlow = 20.f;
+	/** The hottest BloomPeak of any stratagem: the Flash post layer weight is a stratagem peak over this (0..1). */
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float MaxBloomPeak = 55.f;
+	/** Cubes in the voxel blast core (R4). */
+	UPROPERTY(EditAnywhere, Config, Category = "Look") int32 FireballCubes = 34;
 	/** Peak intensity of the blast's point light (it lights the street and the debris). */
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float BlastLightIntensity = 1.5e7f;
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float ShockGlow = 18.f;
@@ -296,6 +302,8 @@ struct FDCAssetTuning
 	UPROPERTY(EditAnywhere, Config, Category = "Assets") FVector HolsterLocation = FVector(18.f, -22.f, 0.f);
 	UPROPERTY(EditAnywhere, Config, Category = "Assets") FRotator HolsterRotation = FRotator(0.f, 25.f, 90.f);
 	UPROPERTY(EditAnywhere, Config, Category = "Assets") FName HeadSocket = TEXT("head");
+	/** Title menu key art (generated via media.sh, R11; ASSETS.md). */
+	UPROPERTY(EditAnywhere, Config, Category = "Assets") FSoftObjectPath MenuKeyArt = FSoftObjectPath(TEXT("/Game/DC/Art/T_MenuKeyArt.T_MenuKeyArt"));
 };
 
 /** A draft option (R10). Pool groups it; Effect is resolved by id in the upgrade registry (DCUpgrades.cpp). */
@@ -420,9 +428,14 @@ public:
 	UPROPERTY(EditAnywhere, Config, Category = "Run") FDCRunTuning Run;
 	UPROPERTY(EditAnywhere, Config, Category = "Run") TArray<FDCUpgradeDef> Upgrades;
 	UPROPERTY(EditAnywhere, Config, Category = "Run") TArray<FDCScoopDef> Scoops;
+	/** Full edition front page (R22): satirical headline rows per photo category. */
+	UPROPERTY(EditAnywhere, Config, Category = "Run") TArray<FDCHeadlineRow> HeadlineRows;
 	/** Post-process layer stack (R19): every layer of the scene and the photo look; code only sets weights by id. */
 	UPROPERTY(EditAnywhere, Config, Category = "Post") TArray<FDCPostLayer> PostLayers;
 	UPROPERTY(EditAnywhere, Config, Category = "Post") TArray<FDCPostPreset> PostPresets;
+	/** Seasonal weather (R18): profiles the arcs blend, and seasons with their arcs and snow cover. */
+	UPROPERTY(EditAnywhere, Config, Category = "Weather") TArray<FDCWeatherProfile> WeatherProfiles;
+	UPROPERTY(EditAnywhere, Config, Category = "Weather") TArray<FDCSeasonDef> Seasons;
 	/** Preset applied at start (-dcpost=<Id> on the command line wins). */
 	UPROPERTY(EditAnywhere, Config, Category = "Post") FName PostPreset = TEXT("High");
 

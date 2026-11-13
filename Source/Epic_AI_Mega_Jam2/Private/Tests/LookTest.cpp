@@ -4,6 +4,10 @@
 #include "Misc/AutomationTest.h"
 #include "Rules/DCNewsprint.h"
 #include "Rules/DCPostStack.h"
+#include "Rules/DCWeather.h"
+#include "Rules/DCPhotoRules.h"
+#include "DCVoxelCity.h"
+#include "Voxel/DCVoxelSettings.h"
 
 #if WITH_DEV_AUTOMATION_TESTS
 
@@ -26,11 +30,16 @@ bool FDCPostStackTest::RunTest(const FString&)
 	const FDCPostResult Base = DCPostStack::Compose(T.PostLayers, None, 2);
 	TestTrue(TEXT("base grade is on by default"), Base.Bloom > 0.f && Base.Saturation < 1.f);
 
-	// The bloom peak reads: a blast adds its full peak, then decays with the weight.
+	// The bloom peak reads: the hottest blast (weight 1) adds the Flash row's bloom, then decays with the weight.
+	const FDCPostLayer* FlashRow = T.PostLayers.FindByPredicate([](const FDCPostLayer& L) { return L.Id == TEXT("Flash"); });
 	TMap<FName, float> Peak;
-	Peak.Add(TEXT("Flash"), 60.f);
+	Peak.Add(TEXT("Flash"), 1.f);
 	const FDCPostResult AtPeak = DCPostStack::Compose(T.PostLayers, Peak, 2);
-	TestTrue(TEXT("flash layer carries the bloom peak"), FMath::IsNearlyEqual(AtPeak.Bloom, Base.Bloom + 60.f, 0.01f));
+	TestTrue(TEXT("flash layer carries the bloom peak"), FlashRow && FMath::IsNearlyEqual(AtPeak.Bloom, Base.Bloom + FlashRow->Bloom, 0.01f) && AtPeak.Bloom > Base.Bloom * 4.f);
+	// The photo caps the bloom at full flash (R5: the target stays readable).
+	Peak.Add(TEXT("Photo"), 1.f);
+	const FDCPostLayer* PhotoRow = T.PostLayers.FindByPredicate([](const FDCPostLayer& L) { return L.Id == TEXT("Photo"); });
+	TestTrue(TEXT("photo bloom capped at full flash"), PhotoRow && PhotoRow->BloomCap > 0.f && DCPostStack::Compose(T.PostLayers, Peak, 2).Bloom <= PhotoRow->BloomCap + 0.001f);
 
 	// The photo stops down under the flash: exposure falls as the flash weight rises.
 	TMap<FName, float> Photo;
@@ -92,6 +101,101 @@ bool FDCNewsprintTest::RunTest(const FString&)
 	TestTrue(TEXT("halftone shows dots"), Max - Min > 40);
 	TestTrue(TEXT("the dim tower beside the white blast is lifted (R5)"), Sum / FMath::Max(1, W - 28) > 60);
 	AddInfo(FString::Printf(TEXT("DCPRINT tower row mean %lld (source 34), min %d max %d, gamma %.2f"), Sum / FMath::Max(1, W - 28), Min, Max, DCNewsprint::MidGamma(Px, P, Gain, Offset)));
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDCWeatherTest, "Epic_AI_Mega_Jam2.Look.SeasonalWeather", LookFlags)
+bool FDCWeatherTest::RunTest(const FString&)
+{
+	const UDCTuning& T = UDCTuning::Get();
+	const UDCVoxelSettings& V = UDCVoxelSettings::Get();
+	TestTrue(TEXT("profiles and seasons shipped"), T.WeatherProfiles.Num() >= 4 && T.Seasons.Num() >= 3);
+	for (const FDCWeatherProfile& P : T.WeatherProfiles)
+	{
+		// Readable for blasts and photos in every profile (R18): never a dark, foggy or blown sky.
+		TestTrue(FString::Printf(TEXT("%s keeps the sun"), *P.Id.ToString()), P.SunScale >= 0.4f);
+		TestTrue(FString::Printf(TEXT("%s fog stays light"), *P.Id.ToString()), P.FogDensity <= 0.03f);
+		TestTrue(FString::Printf(TEXT("%s exposure mild"), *P.Id.ToString()), FMath::Abs(P.Exposure) <= 0.6f);
+		TestTrue(FString::Printf(TEXT("%s precipitation kind exists"), *P.Id.ToString()), P.Precipitation.IsNone() || V.FxKinds.ContainsByPredicate([&P](const FDCFxKind& K) { return K.Id == P.Precipitation; }));
+	}
+	for (const FDCSeasonDef& S : T.Seasons)
+	{
+		for (const FDCWeatherArc& A : S.Arcs)
+		{
+			for (const FDCWeatherKey& K : A.Keys)
+			{
+				TestTrue(FString::Printf(TEXT("%s/%s key %s is a profile"), *S.Id.ToString(), *A.Id.ToString(), *K.Profile.ToString()),
+					T.WeatherProfiles.ContainsByPredicate([&K](const FDCWeatherProfile& P) { return P.Id == K.Profile; }));
+			}
+		}
+	}
+	TestTrue(TEXT("snow palette for winter sectors"), V.Palette.ContainsByPredicate([](const FDCVoxelMaterial& M) { return M.Id == TEXT("Snow"); }));
+	TSet<FName> SeasonsSeen;
+	for (int32 Seed = 1; Seed < 40; ++Seed)
+	{
+		for (int32 Sector = 0; Sector < 3; ++Sector)
+		{
+			const FDCWeatherState A = ADCVoxelCity::WeatherAt(Seed * 977, Sector, 0.37f);
+			const FDCWeatherState B = ADCVoxelCity::WeatherAt(Seed * 977, Sector, 0.37f);
+			TestTrue(TEXT("same seed and clock, same weather"), A.Arc == B.Arc && A.Blend.FogDensity == B.Blend.FogDensity && A.Blend.SunScale == B.Blend.SunScale);
+			SeasonsSeen.Add(A.Season);
+			// The arc changes during play, and smoothly: no jump between two moments 1% apart.
+			const FDCWeatherState Start = ADCVoxelCity::WeatherAt(Seed * 977, Sector, 0.f);
+			const FDCWeatherState End = ADCVoxelCity::WeatherAt(Seed * 977, Sector, 1.f);
+			TestTrue(TEXT("weather changes over the sector"), Start.From != End.To || Start.Blend.SunScale != End.Blend.SunScale);
+			float MaxStep = 0.f;
+			for (int32 i = 0; i < 100; ++i)
+			{
+				const FDCWeatherState X = ADCVoxelCity::WeatherAt(Seed * 977, Sector, i / 100.f);
+				const FDCWeatherState Y = ADCVoxelCity::WeatherAt(Seed * 977, Sector, (i + 1) / 100.f);
+				MaxStep = FMath::Max(MaxStep, FMath::Abs(X.Blend.SunScale - Y.Blend.SunScale));
+			}
+			TestTrue(TEXT("blend is continuous"), MaxStep < 0.1f);
+		}
+	}
+	TestTrue(TEXT("several seasons across seeds"), SeasonsSeen.Num() >= 3);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDCCoStarTest, "Epic_AI_Mega_Jam2.Photo.CoStar", LookFlags)
+bool FDCCoStarTest::RunTest(const FString&)
+{
+	// R20: pays by frame fill, never by nearness to death; tag and multiplier only above the minimum fill.
+	const FDCPhotoTuning& P = UDCTuning::Get().Photo;
+	TestEqual(TEXT("no co-star below the minimum fill"), DCPhotoRules::CoStarMultiplier(P.CoStarMinFill * 0.5f, P), 1.f);
+	const float Small = DCPhotoRules::CoStarMultiplier(P.CoStarMinFill, P);
+	const float Big = DCPhotoRules::CoStarMultiplier(P.CoStarFullFill, P);
+	TestTrue(TEXT("a bigger co-star pays more, capped"), Small > 1.f && Big > Small && FMath::IsNearlyEqual(Big, P.CoStarMaxMultiplier) && DCPhotoRules::CoStarMultiplier(1.f, P) <= P.CoStarMaxMultiplier);
+	FDCPhotoInputs In;
+	In.Visibility = 1.f;
+	In.Centering = 1.f;
+	const FDCPhotoGrade Alone = DCPhotoRules::GradePhoto(In, P);
+	In.CoStarFill = P.CoStarFullFill;
+	In.DangerMeters = 1000.f; // far from danger: the co-star pay does not depend on it
+	const FDCPhotoGrade With = DCPhotoRules::GradePhoto(In, P);
+	TestTrue(TEXT("CO-STAR tag"), With.Categories.Contains(P.CoStarTag) && !Alone.Categories.Contains(P.CoStarTag));
+	TestTrue(TEXT("co-star multiplies the score"), With.Score > Alone.Score);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDCLastFrameTest, "Epic_AI_Mega_Jam2.Photo.LastFrame", LookFlags)
+bool FDCLastFrameTest::RunTest(const FString&)
+{
+	// R21: tagged, multiplied, and capped so it can match but never beat the sector's best living shot.
+	const FDCPhotoTuning& P = UDCTuning::Get().Photo;
+	FDCPhotoInputs In;
+	In.Visibility = 1.f;
+	In.Centering = 1.f;
+	In.DangerMeters = 0.f;
+	const FDCPhotoGrade Living = DCPhotoRules::GradePhoto(In, P);
+	In.bLastFrame = true;
+	In.LastFrameCap = 1000000;
+	const FDCPhotoGrade Uncapped = DCPhotoRules::GradePhoto(In, P);
+	TestTrue(TEXT("LAST FRAME tag and multiplier"), Uncapped.bLastFrame && Uncapped.Categories.Contains(P.LastFrameTag) && Uncapped.Score > Living.Score);
+	In.LastFrameCap = Living.Score - 10;
+	TestEqual(TEXT("capped at the best living shot"), DCPhotoRules::GradePhoto(In, P).Score, Living.Score - 10);
+	In.LastFrameCap = 0;
+	TestTrue(TEXT("no living shot yet: no gain over the raw points"), DCPhotoRules::GradePhoto(In, P).Score <= DCPhotoRules::GradePhoto(In, P).RawPoints);
 	return true;
 }
 

@@ -136,37 +136,55 @@ void FDCVoxelModel::BuildMesh(const TArray<FName>& PaletteNames, const TArray<FC
 
 namespace DCVoxelModels
 {
-	const FDCVoxelMeshData* Mesh(FName Model)
+	const FDCVoxelModel* Parsed(FName Model)
 	{
 		check(IsInGameThread());
-		static TMap<FName, TOptional<FDCVoxelMeshData>> Cache;
+		static TMap<FName, TOptional<FDCVoxelModel>> Cache;
 		if (Model.IsNone())
 		{
 			return nullptr;
 		}
+		if (const TOptional<FDCVoxelModel>* Found = Cache.Find(Model))
+		{
+			return Found->IsSet() ? &Found->GetValue() : nullptr;
+		}
+		TOptional<FDCVoxelModel>& Slot = Cache.Add(Model);
+		const FString Path = FPaths::ProjectContentDir() / TEXT("DC/Voxel") / (Model.ToString() + TEXT(".dcvox"));
+		FString Text;
+		FDCVoxelModel M;
+		FString Error;
+		if (!FFileHelper::LoadFileToString(Text, *Path) || !FDCVoxelModel::Parse(Text, M, Error))
+		{
+			UE_LOG(LogTemp, Warning, TEXT("DCVOXEL model %s not loaded (%s): %s"), *Model.ToString(), *Path, *Error);
+			return nullptr;
+		}
+		Slot.Emplace(MoveTemp(M));
+		return &Slot.GetValue();
+	}
+
+	const FDCVoxelMeshData* Mesh(FName Model)
+	{
+		check(IsInGameThread());
+		static TMap<FName, TOptional<FDCVoxelMeshData>> Cache;
 		if (const TOptional<FDCVoxelMeshData>* Found = Cache.Find(Model))
 		{
 			return Found->IsSet() ? &Found->GetValue() : nullptr;
 		}
 		TOptional<FDCVoxelMeshData>& Slot = Cache.Add(Model);
-		const FString Path = FPaths::ProjectContentDir() / TEXT("DC/Voxel") / (Model.ToString() + TEXT(".dcvox"));
-		FString Text;
-		FDCVoxelModel Parsed;
-		FString Error;
-		if (!FFileHelper::LoadFileToString(Text, *Path) || !FDCVoxelModel::Parse(Text, Parsed, Error))
+		const FDCVoxelModel* M = Parsed(Model);
+		if (!M)
 		{
-			UE_LOG(LogTemp, Warning, TEXT("DCVOXEL model %s not loaded (%s): %s"), *Model.ToString(), *Path, *Error);
 			return nullptr;
 		}
 		const UDCVoxelSettings& V = UDCVoxelSettings::Get();
 		TArray<FName> Names;
-		for (const FDCVoxelMaterial& M : V.Palette)
+		for (const FDCVoxelMaterial& P : V.Palette)
 		{
-			Names.Add(M.Id);
+			Names.Add(P.Id);
 		}
 		Slot.Emplace();
-		Parsed.BuildMesh(Names, V.MeshColors(), Slot.GetValue());
-		UE_LOG(LogTemp, Display, TEXT("DCVOXEL model %s: %dx%dx%d @ %d cm, %d triangles"), *Model.ToString(), Parsed.Size.X, Parsed.Size.Y, Parsed.Size.Z, Parsed.GridCm, Slot->Indices.Num() / 3);
+		M->BuildMesh(Names, V.MeshColors(), Slot.GetValue());
+		UE_LOG(LogTemp, Display, TEXT("DCVOXEL model %s: %dx%dx%d @ %d cm, %d triangles"), *Model.ToString(), M->Size.X, M->Size.Y, M->Size.Z, M->GridCm, Slot->Indices.Num() / 3);
 		return &Slot.GetValue();
 	}
 }

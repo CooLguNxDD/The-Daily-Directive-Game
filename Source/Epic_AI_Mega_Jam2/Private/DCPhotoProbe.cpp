@@ -1,5 +1,8 @@
 #include "DCPhotoProbe.h"
 
+#include "DCCharacter.h"
+#include "GameFramework/PlayerState.h"
+
 #include "Algo/Find.h"
 #include "DCBuilding.h"
 #include "DCEnemy.h"
@@ -215,6 +218,38 @@ namespace DCPhotoProbe
 		In.Metrics.Add(MDanger, In.DangerMeters);
 		In.Metrics.Add(MBlastMeters, NearestBlast == TNumericLimits<float>::Max() ? 1000.f : NearestBlast / 100.f);
 		In.Metrics.Add(MCentering, In.Centering);
+		// Co-star (R20): the living teammate who fills most of the frame near the framed blast, unoccluded.
+		const FDCBlastRecord* Subject = OutBlastId != 0 ? GS->FindBlast(OutBlastId) : nullptr;
+		const FDCPhotoTuning& PT = UDCTuning::Get().Photo;
+		for (ADCCharacter* Mate : TActorRange<ADCCharacter>(World))
+		{
+			if (!Subject || Mate == Photographer || Mate->IsDowned() || FVector::Dist(Mate->GetActorLocation(), Subject->Location) > PT.CoStarBlastMeters * 100.f)
+			{
+				continue;
+			}
+			FVector2D Head, Feet;
+			const FVector Mid = Mate->GetActorLocation();
+			if (!ProjectToFrame(View, Mid + FVector(0, 0, 90.f), Head) || !ProjectToFrame(View, Mid - FVector(0, 0, 90.f), Feet) || !InFrame(View, Mid, 1.f))
+			{
+				continue;
+			}
+			FHitResult Hit;
+			FCollisionQueryParams Q(TEXT("DCCoStar"), false);
+			Q.AddIgnoredActor(Photographer);
+			Q.AddIgnoredActor(Mate);
+			if (World->LineTraceSingleByChannel(Hit, View.Location, Mid, ECC_Visibility, Q))
+			{
+				continue; // hidden behind something: no co-star
+			}
+			const float Fill = FMath::Abs(Head.Y - Feet.Y) * 0.5f; // fraction of the frame height
+			if (Fill > In.CoStarFill)
+			{
+				In.CoStarFill = Fill;
+				const APlayerState* MatePS = Mate->GetPlayerState();
+				In.CoStarName = MatePS ? MatePS->GetPlayerName() : FString();
+				In.CoStarPlayerId = MatePS ? MatePS->GetPlayerId() : -1;
+			}
+		}
 		return In;
 	}
 

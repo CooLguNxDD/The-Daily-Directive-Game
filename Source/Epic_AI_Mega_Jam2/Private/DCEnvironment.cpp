@@ -1,6 +1,8 @@
 #include "DCEnvironment.h"
 
 #include "DCVoxelCity.h"
+#include "DCVoxelFx.h"
+#include "Camera/PlayerCameraManager.h"
 #include "DCCharacter.h"
 #include "HAL/IConsoleManager.h"
 #include "Rules/DCPostStack.h"
@@ -173,9 +175,19 @@ void ADCEnvironment::ApplyPreset()
 FDCPostResult ADCEnvironment::ComposeLook(bool bPhoto, bool bSpotlit) const
 {
 	const UDCTuning& T = UDCTuning::Get();
+	// The weather layer (R18) is the blended profile's grade, always on, in the stack at the Weather row's priority.
+	TArray<FDCPostLayer> Stack = T.PostLayers;
+	if (FDCPostLayer* Row = Stack.FindByPredicate([](const FDCPostLayer& L) { return L.Id == TEXT("Weather"); }))
+	{
+		Row->DefaultWeight = 1.f;
+		Row->Exposure = Weather.Blend.Exposure;
+		Row->Saturation = Weather.Blend.Saturation;
+		Row->Contrast = Weather.Blend.Contrast;
+		Row->Gain = Weather.Blend.Gain;
+	}
 	if (!bPhoto)
 	{
-		return DCPostStack::Compose(T.PostLayers, PostWeights, PostQuality);
+		return DCPostStack::Compose(Stack, PostWeights, PostQuality);
 	}
 	// The photo keeps the scene's grade and sector look, none of the screen-only layers, a fraction of the bloom
 	// spike and a stop-down while the flash is on screen: the target stays readable at the peak (R5).
@@ -183,12 +195,13 @@ FDCPostResult ADCEnvironment::ComposeLook(bool bPhoto, bool bSpotlit) const
 	TMap<FName, float> W = PostWeights;
 	W.Add(TEXT("Viewfinder"), 0.f);
 	W.Add(TEXT("Damage"), 0.f);
+	W.Add(TEXT("LastFrame"), 0.f); // the dying look is the player's screen, not the print
 	W.Add(TEXT("FlashKick"), 0.f);
-	W.Add(TEXT("Flash"), FlashPeak * FlashAlpha * C.PhotoBloomFraction);
+	W.Add(TEXT("Flash"), FlashPeak * FlashAlpha / FMath::Max(T.Look.MaxBloomPeak, 1.f) * C.PhotoBloomFraction);
 	W.Add(TEXT("Photo"), 1.f);
 	W.Add(TEXT("PhotoFlash"), FlashAlpha * C.PhotoFlashStopDown);
 	W.Add(TEXT("Spotlit"), bSpotlit ? 1.f : 0.f);
-	return DCPostStack::Compose(T.PostLayers, W, PostQuality);
+	return DCPostStack::Compose(Stack, W, PostQuality);
 }
 
 void ADCEnvironment::ApplyPost(const FDCPostResult& L, FPostProcessSettings& S)
@@ -213,7 +226,8 @@ void ADCEnvironment::UpdatePostWeights()
 {
 	// Code sets weights by id; what each layer does is data.
 	const ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>();
-	SetPostWeight(TEXT("Flash"), FlashPeak * FlashAlpha);
+	// The flash weight is 0..1 of the hottest stratagem's peak; the Flash row says how much bloom that is.
+	SetPostWeight(TEXT("Flash"), FlashPeak * FlashAlpha / FMath::Max(UDCTuning::Get().Look.MaxBloomPeak, 1.f));
 	SetPostWeight(TEXT("FlashKick"), FlashKick * FlashAlpha);
 	for (int32 i = 0; i < 3; ++i)
 	{
@@ -224,6 +238,7 @@ void ADCEnvironment::UpdatePostWeights()
 	SetPostWeight(TEXT("Viewfinder"), Me && Me->IsCameraRaised() && Me->GetSlot() == EDCSlot::Camera ? 1.f : 0.f);
 	const float SinceHurt = Me ? GetWorld()->GetRealTimeSeconds() - Me->Feedback().HurtTime : 100.f;
 	SetPostWeight(TEXT("Damage"), FMath::Clamp(1.f - SinceHurt / 0.6f, 0.f, 1.f));
+	SetPostWeight(TEXT("LastFrame"), Me && Me->HasLastFrame() ? 1.f : 0.f); // the dying player's own view only
 }
 
 void ADCEnvironment::Flash(float BloomPeak, float ExposureKick)
@@ -238,6 +253,44 @@ float ADCEnvironment::GetPhotoBloom(float Fraction) const
 	return ComposeLook(true, false).Bloom;
 }
 
+void ADCEnvironment::UpdateWeather(float DeltaSeconds)
+{
+	// Seasonal weather (R18): a pure function of the run seed, the sector and the server clock, so every machine
+	// shows the same sky without sending any weather over the wire.
+	const ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>();
+	const FDCLookTuning& Look = UDCTuning::Get().Look;
+	FDCWeatherState Now;
+	Now.Blend.FogDensity = Look.FogDensity;
+	Now.Blend.FogColor = Look.FogColor;
+	if (GS && GS->Phase == EDCRunPhase::Sector && GS->SectorEndTime > GS->SectorStartTime)
+	{
+		const float Fraction = (GS->Now() - GS->SectorStartTime) / (GS->SectorEndTime - GS->SectorStartTime);
+		const FDCWeatherState Rolled = ADCVoxelCity::WeatherAt(GS->RunSeed, GS->SectorIndex, Fraction);
+		Now = Rolled.Arc.IsNone() ? Now : Rolled;
+	}
+	if (Now.From != Weather.From || Now.To != Weather.To)
+	{
+		UE_LOG(LogTemp, Display, TEXT("DCWEATHER sector=%d season=%s arc=%s %s -> %s"), GS ? GS->SectorIndex : -1, *Now.Season.ToString(), *Now.Arc.ToString(), *Now.From.ToString(), *Now.To.ToString());
+	}
+	Weather = Now;
+	ADCVoxelCity* City = ADCVoxelCity::Get(this);
+	ADCVoxelFx* Fx = City ? City->GetFx() : nullptr;
+	if (!Fx)
+	{
+		return;
+	}
+	Fx->SetWind(Weather.Blend.Wind);
+	// Precipitation falls in a column around the local camera (cosmetic and local).
+	PrecipitationCarry += Weather.Blend.PrecipitationRate * DeltaSeconds;
+	const int32 Count = FMath::FloorToInt32(PrecipitationCarry);
+	PrecipitationCarry -= Count;
+	const APlayerController* PC = GetWorld()->GetFirstPlayerController();
+	if (Count > 0 && PC && PC->PlayerCameraManager && !Weather.Blend.Precipitation.IsNone())
+	{
+		Fx->SpawnKind(Weather.Blend.Precipitation, PC->PlayerCameraManager->GetCameraLocation() + FVector(0, 0, 900.f), 3200.f, Count);
+	}
+}
+
 void ADCEnvironment::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
@@ -249,21 +302,23 @@ void ADCEnvironment::Tick(float DeltaSeconds)
 
 	// Mutator look overrides (Solar Eclipse: the sky goes dark so every blast blazes against it), from data.
 	const ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>();
-	const int32 MutatorCount = GS ? GS->Mutators.Num() : 0;
-	if (MutatorCount != AppliedMutatorCount)
+	float Light = 1.f;
+	FLinearColor MutatorFog = FLinearColor::Transparent;
+	if (GS)
 	{
-		AppliedMutatorCount = MutatorCount;
-		float Light = 1.f;
-		FLinearColor FogColor = Look.FogColor;
 		for (const FDCUpgradeDef* Mutator : GS->ActiveMutators())
 		{
 			Light *= Mutator->LightScale;
-			FogColor = Mutator->bOverrideFog ? Mutator->FogColor : FogColor;
+			MutatorFog = Mutator->bOverrideFog ? Mutator->FogColor : MutatorFog;
 		}
-		Sun->SetIntensity(Look.SunIntensityLux * Light);
-		SkyLight->SetIntensity(Light);
-		Fog->SetFogInscatteringColor(FogColor);
 	}
+	UpdateWeather(DeltaSeconds);
+	const FDCWeatherProfile& W = Weather.Blend;
+	Sun->SetIntensity(Look.SunIntensityLux * Light * W.SunScale);
+	Sun->SetLightColor(Look.SunColor * W.SunTint);
+	SkyLight->SetIntensity(Light * W.SkyScale);
+	Fog->SetFogDensity(W.FogDensity);
+	Fog->SetFogInscatteringColor(MutatorFog.A > 0.f ? MutatorFog : W.FogColor);
 	UpdatePostWeights();
 	ApplyPost(ComposeLook(false, false), Post->Settings);
 }
