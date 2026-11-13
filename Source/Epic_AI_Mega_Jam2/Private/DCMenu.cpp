@@ -3,6 +3,7 @@
 
 #include "DCAudio.h"
 #include "DCGameState.h"
+#include "DCLanBeacon.h"
 #include "DCPlayerController.h"
 #include "DCTuning.h"
 #include "Engine/World.h"
@@ -62,7 +63,7 @@ namespace DCMenu
 {
 	using namespace DCMenuStyle;
 
-	TSharedRef<SWidget> Build(ADCPlayerController* PC, uint8 Mode)
+	TSharedRef<SWidget> Build(ADCPlayerController* PC, uint8 Mode, const TArray<FDCLanHost>& LanHosts)
 	{
 		TWeakObjectPtr<ADCPlayerController> Weak(PC);
 		auto Click = [Weak](void (ADCPlayerController::*Fn)())
@@ -101,6 +102,23 @@ namespace DCMenu
 					P->MenuJoin(Address->GetText().ToString());
 				}
 			})];
+			// LAN games heard on the local network (R12), one JOIN button each.
+			Column->AddSlot().AutoHeight().HAlign(HAlign_Center).Padding(0, 14, 0, 0)
+				[Label(LanHosts.Num() > 0 ? TEXT("GAMES ON YOUR NETWORK") : TEXT("LOOKING FOR GAMES ON YOUR NETWORK..."), 14, Ink)];
+			for (const FDCLanHost& Host : LanHosts)
+			{
+				const FString HostAddress = Host.Address;
+				Column->AddSlot().AutoHeight().HAlign(HAlign_Center).Padding(0, 6, 0, 0)
+					[Label(FString::Printf(TEXT("%s  at  %s"), *Host.Name.ToUpper(), *HostAddress), 12, Ink)];
+				Column->AddSlot().AutoHeight().HAlign(HAlign_Center)[Button(FString::Printf(TEXT("JOIN  (%d/%d PLAYERS)"), Host.Players, UDCTuning::Get().Run.MaxPlayers), [Weak, HostAddress]()
+				{
+					if (ADCPlayerController* P = Weak.Get())
+					{
+						DCAudio::Play2D(P, TEXT("UIClick"));
+						P->MenuJoin(HostAddress);
+					}
+				})];
+			}
 			Column->AddSlot().AutoHeight().HAlign(HAlign_Center).Padding(0, 14, 0, 0)[Button(TEXT("QUIT"), Click(&ADCPlayerController::MenuQuit), Ink)];
 		},
 		[&]()

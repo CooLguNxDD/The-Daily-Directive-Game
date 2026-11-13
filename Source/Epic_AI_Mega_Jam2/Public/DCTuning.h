@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "Engine/DeveloperSettings.h"
 #include "InputCoreTypes.h"
+#include "DCTypes.h"
 #include "Rules/DCPhotoRules.h"
 #include "DCTuning.generated.h"
 
@@ -215,6 +216,9 @@ struct FDCEnemyDef
 	UPROPERTY(EditAnywhere, Config, Category = "Enemy") float AttackRange = 180.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Enemy") float AttackInterval = 0.6f;
 	UPROPERTY(EditAnywhere, Config, Category = "Enemy") float SenseRange = 3500.f;
+	/** Swarm hunt (R6): beyond SenseRange the enemy drifts toward the nearest player within this range at HuntSpeedScale (0 = wander). */
+	UPROPERTY(EditAnywhere, Config, Category = "Enemy") float HuntRangeCm = 0.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Enemy") float HuntSpeedScale = 0.5f;
 	UPROPERTY(EditAnywhere, Config, Category = "Enemy") float Scale = 1.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Enemy") FLinearColor Color = FLinearColor(0.05f, 0.05f, 0.06f);
 	UPROPERTY(EditAnywhere, Config, Category = "Enemy") FLinearColor EyeColor = FLinearColor(1.f, 0.1f, 0.05f);
@@ -267,8 +271,17 @@ struct FDCAssetTuning
 	UPROPERTY(EditAnywhere, Config, Category = "Assets") FSoftObjectPath ReelIdleAnim = FSoftObjectPath(TEXT("/Game/Characters/Mannequins/Anims/Rifle/MF_Rifle_Idle_ADS.MF_Rifle_Idle_ADS"));
 	UPROPERTY(EditAnywhere, Config, Category = "Assets") FSoftObjectPath DownedAnim = FSoftObjectPath(TEXT("/Game/Characters/Mannequins/Anims/Death/MM_Death_Back_01.MM_Death_Back_01"));
 	UPROPERTY(EditAnywhere, Config, Category = "Assets") FSoftObjectPath DrawAnim = FSoftObjectPath(TEXT("/Game/Characters/Mannequins/Anims/Rifle/MM_Rifle_Equip.MM_Rifle_Equip"));
+	/** Per-slot draw motion (R1): the camera has its own two-handed raise, distinct from the rifle equip. A slot not listed uses DrawAnim. */
+	UPROPERTY(EditAnywhere, Config, Category = "Assets") TMap<EDCSlot, FSoftObjectPath> SlotDrawAnims = {
+		{EDCSlot::Rifle, FSoftObjectPath(TEXT("/Game/Characters/Mannequins/Anims/Rifle/MM_Rifle_Equip.MM_Rifle_Equip"))},
+		{EDCSlot::Camera, FSoftObjectPath(TEXT("/Game/Characters/Mannequins/Anims/Rifle/MM_Rifle_Reload.MM_Rifle_Reload"))},
+	};
 	UPROPERTY(EditAnywhere, Config, Category = "Assets") FName DrawSlot = TEXT("DefaultSlot");
 	UPROPERTY(EditAnywhere, Config, Category = "Assets") FName HandSocket = TEXT("hand_r");
+	/** Holster (R1): with another slot out, the rifle rides on the back at this bone and offset instead of vanishing. */
+	UPROPERTY(EditAnywhere, Config, Category = "Assets") FName HolsterSocket = TEXT("spine_03");
+	UPROPERTY(EditAnywhere, Config, Category = "Assets") FVector HolsterLocation = FVector(18.f, -22.f, 0.f);
+	UPROPERTY(EditAnywhere, Config, Category = "Assets") FRotator HolsterRotation = FRotator(0.f, 25.f, 90.f);
 	UPROPERTY(EditAnywhere, Config, Category = "Assets") FName HeadSocket = TEXT("head");
 };
 
@@ -338,6 +351,11 @@ struct FDCRunTuning
 	UPROPERTY(EditAnywhere, Config, Category = "Run") int32 ReelClipsPerPlayer = 2;
 	/** Seconds of recorded pose before the shutter (the clip length in game time). */
 	UPROPERTY(EditAnywhere, Config, Category = "Run") float ClipSeconds = 2.f;
+	/** Second take (R16): the camera dollies (WASD) this fast, at most this far from the original shot's camera. */
+	UPROPERTY(EditAnywhere, Config, Category = "Run") float SecondTakeDollyCmPerSec = 700.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Run") float SecondTakeRadiusCm = 2800.f;
+	/** Co-op cap (R12): a listen server refuses a join beyond this many players. */
+	UPROPERTY(EditAnywhere, Config, Category = "Run") int32 MaxPlayers = 4;
 	UPROPERTY(EditAnywhere, Config, Category = "Run") float PoseSampleHz = 12.f;
 	/** Playback speed of the clip (0.4 = slow motion). */
 	UPROPERTY(EditAnywhere, Config, Category = "Run") float ReelSlowMo = 0.4f;
@@ -355,6 +373,8 @@ struct FDCRunTuning
 	UPROPERTY(EditAnywhere, Config, Category = "Run") int32 PodAmmo = 90;
 	UPROPERTY(EditAnywhere, Config, Category = "Run") float PodHealth = 50.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Run") int32 Port = 7777;
+	/** UDP port of the LAN host announcements (R12). */
+	UPROPERTY(EditAnywhere, Config, Category = "Run") int32 LanBeaconPort = 7778;
 	/** War-correspondent call signs given to players in join order (machine names never show). */
 	UPROPERTY(EditAnywhere, Config, Category = "Run") TArray<FString> CallSigns;
 	/** Headline templates: {SUBJECT} {SECTOR} {PLAYER} {TIMING} are filled from the headline photo. */

@@ -29,6 +29,8 @@ public:
 	void InitKind(FName InKind) { Kind = InKind; }
 
 	bool IsAlive() const { return Health > 0.f; }
+	/** Strobe Flash stun (replicated so every machine tags it STUNNED). */
+	bool IsStunned(float Now) const { return Now < StunnedUntil; }
 	bool IsWalker() const;
 	FName GetKind() const { return Kind; }
 	const FDCEnemyDef* GetDef() const;
@@ -48,7 +50,9 @@ public:
 	float NextAttackTime = 0.f;
 	float NextCueTime = 0.f;
 	bool bRushing = false;
-	float StunnedUntil = 0.f;
+	/** Local clock until which steering keeps climbing after a wall hit (host). */
+	float ClimbUntil = 0.f;
+	UPROPERTY(Replicated) float StunnedUntil = 0.f;
 
 	UPROPERTY(VisibleAnywhere) TObjectPtr<USphereComponent> Body;
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UStaticMeshComponent> Visual;

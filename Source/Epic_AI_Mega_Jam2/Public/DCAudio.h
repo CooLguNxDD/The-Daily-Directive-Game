@@ -29,6 +29,10 @@ public:
 
 	static constexpr int32 SampleRate = 44100;
 
+	/** Listening evidence (-dcaudiorec=Dir): records the master mix to a wav and logs every cue with its time (DCCUE). */
+	void StartEvidenceRecording(const UObject* WorldContext);
+	void StopEvidenceRecording(const UObject* WorldContext);
+
 private:
 	class USoundWaveProcedural* MakeWave(FName Cue) const;
 
@@ -36,6 +40,9 @@ private:
 	UPROPERTY() TObjectPtr<USoundAttenuation> Attenuation;
 	UPROPERTY() TObjectPtr<UAudioComponent> Music;
 	FName MusicCue;
+	void LogCue(const UObject* WorldContext, FName Cue, const FVector* Location) const;
+	double RecordStart = -1.0;
+	FString RecordDir;
 };
 
 namespace DCAudio

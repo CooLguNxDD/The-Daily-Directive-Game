@@ -279,6 +279,14 @@ void ADCOrbitalStrike::DetonateHost(const FDCStratagemDef& Def)
 		}
 	}
 
+	// Evidence: how many enemies the blast caught (Decoy lures and Singularity pulls show up as larger counts).
+	int32 Caught = 0;
+	for (ADCEnemy* E : TActorRange<ADCEnemy>(World))
+	{
+		Caught += E->IsAlive() && FVector::Dist(E->GetActorLocation(), Here) < Def.BlastRadius ? 1 : 0;
+	}
+	UE_LOG(LogTemp, Display, TEXT("DCBLAST %s radius=%.0f enemies caught=%d"), *Def.Id.ToString(), Def.BlastRadius, Caught);
+
 	TArray<AActor*> Ignore;
 	UGameplayStatics::ApplyRadialDamage(this, Def.Damage, Here, Def.BlastRadius, UDamageType::StaticClass(), Ignore, this, InstigatorController, true, ECC_WorldStatic);
 

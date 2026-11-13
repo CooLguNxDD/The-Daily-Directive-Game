@@ -23,6 +23,9 @@ namespace DCRunRules
 	/** Photo indices, best critic score first (stable: earlier shot wins a tie). */
 	EPIC_AI_MEGA_JAM2_API TArray<int32> CriticOrder(const TArray<FDCPhotoRecord>& Photos);
 
+	/** Adds NewId to a critic-sorted list of photo ids at its critic rank (a late second take is ranked, not appended). */
+	EPIC_AI_MEGA_JAM2_API void InsertByCritic(TArray<int32>& Choices, const TArray<FDCPhotoRecord>& Photos, int32 NewId);
+
 	EPIC_AI_MEGA_JAM2_API int32 PageScore(int32 CriticScore, int32 Votes, int32 VoteBonus);
 
 	/** Index of the headline pick (highest page score, earliest on a tie); -1 when empty. */

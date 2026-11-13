@@ -54,7 +54,9 @@ public:
 	float GetHealth() const { return Health; }
 	int32 GetAmmo() const { return Ammo; }
 	int32 GetReserve() const { return Reserve; }
-	float GetZoomFOV() const { return ZoomFOV; }
+	float GetZoomFOV() const { return LensFOV(); }
+	/** Viewfinder FOV: the wheel zoom plus lens gear (Fisheye ExtraFOV). */
+	float LensFOV() const;
 	float GetWindOnLeft() const;
 	FName GetSelectedStratagem() const { return SelectedStratagem; }
 	bool GetStrikeAim(FVector& Out) const { Out = StrikeAimPoint; return bStrikeAimValid; }

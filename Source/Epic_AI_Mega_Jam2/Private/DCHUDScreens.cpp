@@ -298,8 +298,9 @@ void ADCHUD::DrawFinalCut(ADCGameState& GS, ADCCharacter* Me)
 		return;
 	}
 	const TArray<int32>& Picks = PS->bFinalCutDone ? PS->FinalCut : PC->GetLocalPicks();
-	const int32 Cols = 4;
-	const float CardW = Sx(400.f), Gap = Sx(40.f);
+	// Two rows always: second takes add cards, so more columns of smaller cards instead of a third row off screen.
+	const int32 Cols = FMath::Max(4, FMath::DivideAndRoundUp(PS->FinalCutChoices.Num(), 2));
+	const float Gap = Sx(40.f), CardW = Sx(FMath::Min(400.f, (1760.f - (Cols - 1) * 40.f) / Cols));
 	const float X0 = W * 0.5f - (Cols * CardW + (Cols - 1) * Gap) * 0.5f;
 	for (int32 i = 0; i < PS->FinalCutChoices.Num(); ++i)
 	{
@@ -310,7 +311,7 @@ void ADCHUD::DrawFinalCut(ADCGameState& GS, ADCCharacter* Me)
 			continue;
 		}
 		const float X = X0 + (i % Cols) * (CardW + Gap);
-		const float Y = Sx(180.f) + (i / Cols) * Sx(330.f);
+		const float Y = Sx(180.f) + (i / Cols) * (CardW * 9.f / 16.f + Sx(105.f));
 		const int32 Order = Picks.IndexOfByKey(Id);
 		DrawPhotoCard(PC->GetPhotoImage(Id), Photo->Grade, X, Y, CardW, 1.f, true);
 		Text(FString::Printf(TEXT("CRITIC #%d"), i + 1), X, Y + CardW * 9.f / 16.f + Sx(2.f), Ink, 0.6f);

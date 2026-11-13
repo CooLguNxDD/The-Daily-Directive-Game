@@ -2,6 +2,7 @@
 // score, headlines, and that every upgrade, scoop and stratagem row resolves. Runs under -nullrhi.
 #include "DCTuning.h"
 #include "DCUpgrades.h"
+#include "DCLanBeacon.h"
 #include "Misc/AutomationTest.h"
 #include "Rules/DCPhotoRules.h"
 #include "Rules/DCRunRules.h"
@@ -87,6 +88,18 @@ bool FDCPageRulesTest::RunTest(const FString&)
 	const TArray<int32> Order = DCRunRules::CriticOrder(Photos);
 	TestEqual(TEXT("critic: best first, earlier shot wins a tie"), Order, TArray<int32>({1, 2, 0, 3}));
 
+	// A second take shot after the reel started is ranked into the final-cut list, not appended (C5.1).
+	TArray<FDCPhotoRecord> WithTake = Photos;
+	WithTake.Add(Shot(9, 600));
+	TArray<int32> Choices = {2, 3, 1, 4};
+	DCRunRules::InsertByCritic(Choices, WithTake, 9);
+	TestEqual(TEXT("second take lands at its critic rank"), Choices, TArray<int32>({2, 3, 9, 1, 4}));
+	DCRunRules::InsertByCritic(Choices, WithTake, 9);
+	TestEqual(TEXT("no duplicate"), Choices.Num(), 5);
+	WithTake.Add(Shot(10, 2000));
+	DCRunRules::InsertByCritic(Choices, WithTake, 10);
+	TestEqual(TEXT("best second take goes first, so the auto-pick sends it"), Choices[0], 10);
+
 	TArray<FDCPagePick> Picks;
 	Picks.AddDefaulted(2);
 	Picks[0].PageScore = DCRunRules::PageScore(900, 0, 600);
@@ -99,6 +112,22 @@ bool FDCPageRulesTest::RunTest(const FString&)
 	Grade.TimingLabel = TEXT("PEAK CINEMA");
 	const FString Line = DCRunRules::MakeHeadline(1, {TEXT("{PLAYER} TOPPLES {SUBJECT} IN {SECTOR} AT {TIMING}")}, {{TEXT("DEMOLITION"), TEXT("TOWER")}}, Grade, TEXT("Old Town"), TEXT("Ana"));
 	TestEqual(TEXT("headline fills every slot"), Line, FString(TEXT("ANA TOPPLES TOWER IN OLD TOWN AT PEAK CINEMA")));
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDCLanPacketTest, "Epic_AI_Mega_Jam2.Net.LanPacket",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FDCLanPacketTest::RunTest(const FString&)
+{
+	int32 Port = 0, Players = 0;
+	FString Name;
+	TestTrue(TEXT("round trip"), UDCLanBeacon::ParsePacket(UDCLanBeacon::MakePacket(7777, TEXT("Press|Corps"), 2), Port, Name, Players));
+	TestEqual(TEXT("port"), Port, 7777);
+	TestEqual(TEXT("players"), Players, 2);
+	TestEqual(TEXT("separator in a name is neutralised"), Name, FString(TEXT("Press Corps")));
+	TestFalse(TEXT("foreign packet ignored"), UDCLanBeacon::ParsePacket(TEXT("HELLO|1|2|x"), Port, Name, Players));
+	TestFalse(TEXT("bad port ignored"), UDCLanBeacon::ParsePacket(TEXT("DCHOST1|99999|1|x"), Port, Name, Players));
+	TestFalse(TEXT("non-numeric ignored"), UDCLanBeacon::ParsePacket(TEXT("DCHOST1|abc|1|x"), Port, Name, Players));
 	return true;
 }
 

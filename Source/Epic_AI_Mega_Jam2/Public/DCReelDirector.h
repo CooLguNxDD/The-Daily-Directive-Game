@@ -29,8 +29,13 @@ public:
 	// Second take (R16): while a clip replays, the local player raises a camera from a free angle and snaps.
 	void SetTakeRaised(bool bRaised);
 	void SnapSecondTake();
+	/** Second take: move the raised camera (input axes, real seconds) and zoom it, within the take radius. */
+	void DollyTake(const FVector2D& Axes);
+	void ZoomTake(float Wheel);
 	bool IsTakeRaised() const { return bTakeRaised; }
 	bool CanTakeThisClip() const;
+	/** The host refused a take of this clip: the clip is free to shoot again. */
+	void OnTakeRejected(int32 ClipIndex) { TakenClip = TakenClip == ClipIndex ? -1 : TakenClip; }
 	/** The moment of the run being replayed now, on the original server clock. */
 	float ContentTime() const;
 	int32 GetStagedIndex() const { return StagedIndex; }
@@ -68,4 +73,7 @@ private:
 	bool bTakeRaised = false;
 	int32 TakenClip = -1;
 	int32 TakeCounter = 0;
+	/** Second take camera: position and lens while raised. */
+	FVector TakeLocation = FVector::ZeroVector;
+	float TakeFOV = 60.f;
 };

@@ -106,6 +106,7 @@ private:
 	UFUNCTION(Server, Reliable) void ServerVote(int32 PhotoId);
 	UFUNCTION(Server, Reliable) void ServerSecondTake(int32 PhotoId, FVector_NetQuantize10 CamLoc, FRotator CamRot, float FOV, int32 ClipIndex);
 	UFUNCTION(Client, Reliable) void ClientSecondTakeGraded(int32 PhotoId, FDCPhotoGrade Grade);
+	UFUNCTION(Client, Reliable) void ClientSecondTakeRejected(int32 PhotoId, int32 ClipIndex);
 	/** Clips this player already took a second take of (host side). */
 	TSet<int32> SecondTakeClips;
 	UFUNCTION(Server, Reliable) void ServerPhotoChunk(int32 PhotoId, int32 Index, int32 Count, const TArray<uint8>& Bytes);
@@ -121,6 +122,9 @@ private:
 	TSharedPtr<SWidget> MenuWidget;
 	UPROPERTY() TObjectPtr<class ADCReelDirector> Director;
 	uint8 MenuMode = 255;
+	/** The LAN hosts the current menu shows ("" = none), to rebuild the menu when the list changes. */
+	FString MenuHostsKey;
+	bool bLanJoinSent = false;
 	float Sensitivity = 1.f;
 	double NextEvidenceShotReal = 0.0;
 	int32 EvidenceShotIndex = 0;

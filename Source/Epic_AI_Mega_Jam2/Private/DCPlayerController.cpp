@@ -4,9 +4,11 @@
 #include "DCGameMode.h"
 #include "DCGameState.h"
 #include "DCInput.h"
+#include "DCLanBeacon.h"
 #include "DCMenu.h"
 #include "DCPlayerState.h"
 #include "Rules/DCPhotoRules.h"
+#include "Rules/DCRunRules.h"
 #include "DCReelDirector.h"
 #include "DCDemoPilot.h"
 #include "DCTuning.h"
@@ -182,7 +184,8 @@ void ADCPlayerController::UpdateEvidenceShots()
 	}
 	NextEvidenceShotReal = Real + Every;
 	const ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>();
-	const FString File = Dir / FString::Printf(TEXT("%03d_phase%d.png"), EvidenceShotIndex++, GS ? static_cast<int32>(GS->Phase) : -1);
+	// The real-time stamp keeps frames apart across a travel (a new controller restarts the index).
+	const FString File = Dir / FString::Printf(TEXT("%03d_t%04d_phase%d.png"), EvidenceShotIndex++, static_cast<int32>(FPlatformTime::Seconds()) % 10000, GS ? static_cast<int32>(GS->Phase) : -1);
 	FScreenshotRequest::RequestScreenshot(File, true, false);
 	UE_LOG(LogTemp, Display, TEXT("DCSHOT %s net=%d players=%d collapses=%d blasts=%d"), *File, static_cast<int32>(GetNetMode()), GS ? GS->PlayerArray.Num() : 0,
 		GS ? GS->Collapses.Num() : 0, GS ? GS->Blasts.Num() : 0);
@@ -214,10 +217,36 @@ void ADCPlayerController::UpdateMenu()
 	const ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>();
 	const bool bWant = GS && GS->Phase == EDCRunPhase::Lobby && !FParse::Param(FCommandLine::Get(), TEXT("dcdemo"));
 	const uint8 Mode = bWant ? MenuModeFor(*this) : 255;
-	if (Mode == MenuMode || !GEngine || !GEngine->GameViewport)
+	// The title menu listens for LAN hosts and rebuilds when the list changes.
+	UDCLanBeacon* Beacon = GetGameInstance()->GetSubsystem<UDCLanBeacon>();
+	TArray<FDCLanHost> Hosts = Mode == 0 && Beacon ? Beacon->GetHosts() : TArray<FDCLanHost>();
+	FString HostsKey;
+	for (const FDCLanHost& H : Hosts)
+	{
+		HostsKey += H.Address + TEXT("/") + FString::FromInt(H.Players) + TEXT(";");
+	}
+	if (Beacon && Mode == 0 && !Beacon->IsListening())
+	{
+		Beacon->StartListening();
+	}
+	// Evidence runs (-dclanjoin=S) press the first LAN game's JOIN after S real seconds, the same path as the button.
+	float LanJoinAfter = 0.f;
+	if (Mode == 0 && MenuMode == 0 && Hosts.Num() > 0 && FParse::Value(FCommandLine::Get(), TEXT("dclanjoin="), LanJoinAfter)
+		&& GetWorld()->GetRealTimeSeconds() >= LanJoinAfter && !bLanJoinSent)
+	{
+		bLanJoinSent = true;
+		UE_LOG(LogTemp, Display, TEXT("DCLAN joining %s heard on the LAN"), *Hosts[0].Address);
+		MenuJoin(Hosts[0].Address);
+	}
+	if ((Mode == MenuMode && HostsKey == MenuHostsKey) || !GEngine || !GEngine->GameViewport)
 	{
 		return;
 	}
+	if (Beacon && Mode != 0 && MenuMode == 0)
+	{
+		Beacon->Stop();
+	}
+	MenuHostsKey = HostsKey;
 	if (MenuWidget.IsValid())
 	{
 		GEngine->GameViewport->RemoveViewportWidgetContent(MenuWidget.ToSharedRef());
@@ -226,7 +255,7 @@ void ADCPlayerController::UpdateMenu()
 	MenuMode = Mode;
 	if (Mode != 255)
 	{
-		MenuWidget = DCMenu::Build(this, Mode);
+		MenuWidget = DCMenu::Build(this, Mode, Hosts);
 		GEngine->GameViewport->AddViewportWidgetContent(MenuWidget.ToSharedRef(), 10);
 	}
 }
@@ -318,8 +347,12 @@ void ADCPlayerController::ServerSecondTake_Implementation(int32 PhotoId, FVector
 	// One second take per clip per player, only while that clip plays, from near the replayed scene; graded by
 	// the host on its own re-staged scene at the host's replay clock.
 	if (!GS || !PS || GS->Phase != EDCRunPhase::Reel || GS->ReelIndex != ClipIndex || GS->ReelStage > 1 || SecondTakeClips.Contains(ClipIndex) || PS->FindPhoto(PhotoId)
-		|| !GS->ReelClips.IsValidIndex(ClipIndex) || FVector::Dist(CamLoc, GS->ReelClips[ClipIndex].Photo.CameraLocation) > 3000.f)
+		|| !GS->ReelClips.IsValidIndex(ClipIndex) || FVector::Dist(CamLoc, GS->ReelClips[ClipIndex].Photo.CameraLocation) > UDCTuning::Get().Run.SecondTakeRadiusCm + 100.f)
 	{
+		if (!PS || !PS->FindPhoto(PhotoId))
+		{
+			ClientSecondTakeRejected(PhotoId, ClipIndex); // the client may try this clip again while it still plays
+		}
 		return;
 	}
 	SecondTakeClips.Add(ClipIndex);
@@ -341,8 +374,9 @@ void ADCPlayerController::ServerSecondTake_Implementation(int32 PhotoId, FVector
 	Record.bSecondTake = true;
 	Record.Grade = DCPhotoRules::GradePhoto(DCPhotoProbe::Measure(GetWorld(), View, When, nullptr, false, Record.BlastId), UDCTuning::Get().Photo);
 	PS->AddPhoto(Record);
-	PS->FinalCutChoices.Add(PhotoId); // second takes can enter the ranking
-	UE_LOG(LogTemp, Display, TEXT("DCTAKE %s second take photo=%d clip=%d score=%d timing=%s"), *PS->GetPlayerName(), PhotoId, ClipIndex, Record.Grade.Score, *Record.Grade.TimingLabel.ToString());
+	DCRunRules::InsertByCritic(PS->FinalCutChoices, PS->Photos, PhotoId); // second takes enter the ranking at their critic rank
+	UE_LOG(LogTemp, Display, TEXT("DCTAKE %s second take photo=%d clip=%d score=%d timing=%s camera %.0f cm from the original shot, fov %.0f"), *PS->GetPlayerName(), PhotoId, ClipIndex,
+		Record.Grade.Score, *Record.Grade.TimingLabel.ToString(), FVector::Dist(CamLoc, Clip.Photo.CameraLocation), View.FOV);
 	ClientSecondTakeGraded(PhotoId, Record.Grade);
 }
 
@@ -350,6 +384,15 @@ void ADCPlayerController::ClientSecondTakeGraded_Implementation(int32 PhotoId, F
 {
 	ConfirmLocalPhoto(PhotoId, Grade);
 	ClientUploadPhotos_Implementation({PhotoId}); // every machine gets the image for the final cut and vote
+}
+
+void ADCPlayerController::ClientSecondTakeRejected_Implementation(int32 PhotoId, int32 ClipIndex)
+{
+	Album.RemoveAll([PhotoId](const FDCLocalPhoto& P) { return P.PhotoId == PhotoId; });
+	if (Director)
+	{
+		Director->OnTakeRejected(ClipIndex);
+	}
 }
 
 void ADCPlayerController::ToggleFinalCutPick(int32 PhotoId)

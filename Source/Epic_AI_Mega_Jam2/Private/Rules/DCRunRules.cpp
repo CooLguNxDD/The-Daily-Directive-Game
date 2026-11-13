@@ -75,6 +75,26 @@ namespace DCRunRules
 		return Order;
 	}
 
+	void InsertByCritic(TArray<int32>& Choices, const TArray<FDCPhotoRecord>& Photos, int32 NewId)
+	{
+		auto ScoreOf = [&Photos](int32 Id)
+		{
+			const FDCPhotoRecord* P = Photos.FindByPredicate([Id](const FDCPhotoRecord& R) { return R.PhotoId == Id; });
+			return P ? P->Grade.Score : 0;
+		};
+		if (Choices.Contains(NewId))
+		{
+			return;
+		}
+		const int32 NewScore = ScoreOf(NewId);
+		int32 At = 0;
+		while (At < Choices.Num() && ScoreOf(Choices[At]) >= NewScore)
+		{
+			++At; // an earlier shot keeps its place on a tie
+		}
+		Choices.Insert(NewId, At);
+	}
+
 	int32 PageScore(int32 CriticScore, int32 Votes, int32 VoteBonus)
 	{
 		return CriticScore + Votes * VoteBonus;

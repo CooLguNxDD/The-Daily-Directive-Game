@@ -1,4 +1,5 @@
 #include "DCReelDirector.h"
+#include "Misc/App.h"
 
 #include "Animation/AnimSequence.h"
 #include "Camera/CameraComponent.h"
@@ -248,12 +249,12 @@ void ADCReelDirector::TickCamera(float ClipTime, float Progress)
 	const FVector Subject = ShotLoc + Clip.Photo.CameraRotation.Vector() * 3000.f;
 	if (bTakeRaised)
 	{
-		// Second take: the player aims freely from the behind-the-scenes position.
+		// Second take: the player aims, dollies (WASD) and zooms (wheel) freely around the replayed moment.
 		if (const APlayerController* PC = GetWorld()->GetFirstPlayerController())
 		{
-			Camera->SetWorldRotation(PC->GetControlRotation());
+			Camera->SetWorldLocationAndRotation(TakeLocation, PC->GetControlRotation());
 		}
-		Camera->SetFieldOfView(UDCTuning::Get().Camera.ViewfinderFOVWide);
+		Camera->SetFieldOfView(TakeFOV);
 		return;
 	}
 	if (GS->ReelStage > 0 || Clip.Poses.Num() == 0)
@@ -297,9 +298,37 @@ void ADCReelDirector::SetTakeRaised(bool bRaised)
 		if (APlayerController* PC = GetWorld()->GetFirstPlayerController())
 		{
 			PC->SetControlRotation(Camera->GetComponentRotation()); // continue from the orbit's framing
+			// Start where the orbit is, inside the take radius around the original camera.
+			const ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>();
+			const FVector Origin = GS && GS->ReelClips.IsValidIndex(StagedIndex) ? FVector(GS->ReelClips[StagedIndex].Photo.CameraLocation) : Camera->GetComponentLocation();
+			TakeLocation = Origin + (Camera->GetComponentLocation() - Origin).GetClampedToMaxSize(UDCTuning::Get().Run.SecondTakeRadiusCm);
+			TakeFOV = UDCTuning::Get().Camera.ViewfinderFOVWide;
 		}
 		DCAudio::Play2D(this, TEXT("Draw"), 0.6f, 1.3f);
 	}
+}
+
+void ADCReelDirector::DollyTake(const FVector2D& Axes)
+{
+	const ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>();
+	const APlayerController* PC = GetWorld()->GetFirstPlayerController();
+	if (!bTakeRaised || !PC || !GS || !GS->ReelClips.IsValidIndex(StagedIndex))
+	{
+		return;
+	}
+	const FDCRunTuning& Run = UDCTuning::Get().Run;
+	const FRotator View = PC->GetControlRotation();
+	// Real seconds: the reel runs on a dilated clock, the camera crew does not.
+	const float Dt = FApp::GetDeltaTime();
+	const FVector Move = (FRotationMatrix(View).GetUnitAxis(EAxis::X) * Axes.Y + FRotationMatrix(View).GetUnitAxis(EAxis::Y) * Axes.X) * Run.SecondTakeDollyCmPerSec * Dt;
+	const FVector Origin = GS->ReelClips[StagedIndex].Photo.CameraLocation;
+	TakeLocation = Origin + (TakeLocation + Move - Origin).GetClampedToMaxSize(Run.SecondTakeRadiusCm);
+}
+
+void ADCReelDirector::ZoomTake(float Wheel)
+{
+	const FDCCameraTuning& C = UDCTuning::Get().Camera;
+	TakeFOV = FMath::Clamp(TakeFOV - Wheel * C.ZoomStep, C.ViewfinderFOVTight, C.ViewfinderFOVWide);
 }
 
 void ADCReelDirector::SnapSecondTake()

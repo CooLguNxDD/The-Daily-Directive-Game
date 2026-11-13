@@ -6,6 +6,7 @@
 #include "DCEnemy.h"
 #include "DCGameState.h"
 #include "DCHUD.h"
+#include "DCLanBeacon.h"
 #include "DCOrbitalStrike.h"
 #include "DCPlayerController.h"
 #include "DCPlayerState.h"
@@ -78,6 +79,13 @@ void ADCGameMode::BeginPlay()
 	ADCGameState* GS = GetGameState<ADCGameState>();
 	GS->RunSeed = RequestedSeed != 0 ? RequestedSeed : FMath::RandRange(1000, 999999);
 	BuildCity(0); // the lobby's backdrop is the first sector
+	if (GetNetMode() == NM_ListenServer)
+	{
+		if (UDCLanBeacon* Beacon = GetGameInstance()->GetSubsystem<UDCLanBeacon>())
+		{
+			Beacon->StartAnnouncing(UDCTuning::Get().Run.Port, TEXT("Front Page Press Corps"));
+		}
+	}
 	// Scripted co-op runs (-dcwaitplayers=N) hold the lobby until N players joined.
 	FParse::Value(FCommandLine::Get(), TEXT("dcwaitplayers="), AutoStartPlayers);
 	if (bAutoStart && AutoStartPlayers <= 1)
@@ -103,10 +111,33 @@ TArray<ADCPlayerState*> ADCGameMode::Players() const
 	return Out;
 }
 
+void ADCGameMode::PreLogin(const FString& Options, const FString& Address, const FUniqueNetIdRepl& UniqueId, FString& ErrorMessage)
+{
+	Super::PreLogin(Options, Address, UniqueId, ErrorMessage);
+	// Co-op is 1-4 (R12): a full crew refuses the join with a reason the client logs.
+	if (ErrorMessage.IsEmpty() && GameState && GameState->PlayerArray.Num() >= UDCTuning::Get().Run.MaxPlayers)
+	{
+		ErrorMessage = FString::Printf(TEXT("The crew is full (%d photographers)."), UDCTuning::Get().Run.MaxPlayers);
+	}
+}
+
+void ADCGameMode::Logout(AController* Exiting)
+{
+	Super::Logout(Exiting);
+	if (UDCLanBeacon* Beacon = GetGameInstance()->GetSubsystem<UDCLanBeacon>())
+	{
+		Beacon->SetPlayerCount(GameState->PlayerArray.Num()); // the LAN list shows who is still in the lobby
+	}
+}
+
 void ADCGameMode::PostLogin(APlayerController* NewPlayer)
 {
 	Super::PostLogin(NewPlayer);
 	const TArray<FString>& Signs = UDCTuning::Get().Run.CallSigns;
+	if (UDCLanBeacon* Beacon = GetGameInstance()->GetSubsystem<UDCLanBeacon>())
+	{
+		Beacon->SetPlayerCount(GameState->PlayerArray.Num());
+	}
 	const int32 Index = FMath::Max(0, GameState->PlayerArray.IndexOfByKey(NewPlayer->PlayerState));
 	const FString Sign = Signs.Num() > 0 ? Signs[Index % Signs.Num()] : FString::Printf(TEXT("CORRESPONDENT %d"), Index + 1);
 	ChangeName(NewPlayer, Sign, false);
@@ -147,6 +178,10 @@ void ADCGameMode::StartRun()
 	if (GS->Phase != EDCRunPhase::Lobby)
 	{
 		return;
+	}
+	if (UDCLanBeacon* Beacon = GetGameInstance()->GetSubsystem<UDCLanBeacon>())
+	{
+		Beacon->Stop(); // the lobby closed
 	}
 	GS->SectorIndex = 0;
 	// Evidence runs can start in a later sector (-dcstartsector=N) to reach its enemies sooner.
@@ -398,6 +433,7 @@ void ADCGameMode::TickRogueStrikes(float Now)
 		return;
 	}
 	NextRogueTime = Now + Interval;
+	UE_LOG(LogTemp, Display, TEXT("DCROGUE free strike due (every %.0f s)"), Interval);
 	TArray<ADCBuilding*> Standing;
 	for (ADCBuilding* B : TActorRange<ADCBuilding>(GetWorld()))
 	{
@@ -409,7 +445,17 @@ void ADCGameMode::TickRogueStrikes(float Now)
 	const FDCStratagemDef* Def = UDCTuning::Get().FindStratagem(TEXT("OrbitalLaser"));
 	if (Standing.Num() > 0 && Def)
 	{
-		CallStrike(*Def, Standing[SectorRng.RandRange(0, Standing.Num() - 1)]->GetActorLocation(), nullptr);
+		const FVector Target = Standing[SectorRng.RandRange(0, Standing.Num() - 1)]->GetActorLocation();
+		CallStrike(*Def, Target, nullptr);
+		// Every player hears where the free strike lands, so it reads as a photo chance, not noise off camera.
+		for (ADCPlayerState* PS : Players())
+		{
+			if (ADCCharacter* C = PS->GetPawn<ADCCharacter>())
+			{
+				const float Metres = FVector::Dist2D(C->GetActorLocation(), Target) / 100.f;
+				C->HostToast(FString::Printf(TEXT("ROGUE ORBITAL STRIKE INBOUND  %.0f M"), Metres));
+			}
+		}
 	}
 }
 
