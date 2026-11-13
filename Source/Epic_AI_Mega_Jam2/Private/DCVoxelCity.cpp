@@ -484,12 +484,15 @@ void ADCVoxelCity::TickFalling(float Now)
 	for (int32 i = Falling.Num() - 1; i >= 0; --i)
 	{
 		FFalling& F = *Falling[i];
-		const float U = FMath::Clamp((Now - F.Start) / F.Duration, 0.f, 1.f);
-		const float Ease = U * U; // gravity: slow lean, fast crash
+		const float Age = FMath::Max(Now - F.Start, 0.f);
+		const float U = FMath::Clamp(Age / F.Duration, 0.f, 1.f);
 		if (F.Comp)
 		{
-			F.Comp->SetWorldRotation(FQuat(F.Axis, FMath::DegreesToRadians(F.MaxAngle * Ease)));
-			F.Comp->SetWorldLocation(F.Pivot - FVector(0, 0, F.DropCm * Ease));
+			// Drops from the first frame under (exaggerated) gravity, so the top never hangs over the bitten floors,
+			// and leans away from the blast as it goes.
+			const float Drop = FMath::Min(0.5f * UDCVoxelSettings::Get().Tuning.FallGravityCm * Age * Age, F.DropCm);
+			F.Comp->SetWorldRotation(FQuat(F.Axis, FMath::DegreesToRadians(F.MaxAngle * U * U)));
+			F.Comp->SetWorldLocation(F.Pivot - FVector(0, 0, Drop));
 		}
 		if (U >= 1.f)
 		{

@@ -114,6 +114,8 @@ struct FDCVoxelTuning
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 ReposeStep = 2;
 	/** Seconds a falling piece takes to hit the street (cosmetic; the settled rubble is decided at the op). */
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float FallSeconds = 1.6f;
+	/** Gravity of the cosmetic fall (cm/s^2, exaggerated so a collapse reads at a glance). */
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float FallGravityCm = 2400.f;
 	/** Degrees a toppling piece leans before it breaks apart (cosmetic). */
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float ToppleDegrees = 38.f;
 	/** Chunk mesh uploads per frame (time slicing on the game thread; meshing itself runs on worker threads). */
