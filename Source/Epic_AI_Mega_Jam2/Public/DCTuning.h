@@ -249,7 +249,9 @@ struct FDCLookTuning
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float OutlineNormalThreshold = 0.3f;
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float OutlineFadeCm = 25000.f;
 	/** Cubes in the voxel blast core (R4). */
-	UPROPERTY(EditAnywhere, Config, Category = "Look") int32 FireballCubes = 34;
+	UPROPERTY(EditAnywhere, Config, Category = "Look") int32 FireballCubes = 90;
+	/** Fireball cube edge as a fraction of the stratagem's FireballScale (m): small chunks read as voxels (V5.3). */
+	UPROPERTY(EditAnywhere, Config, Category = "Look") FVector2D FireballCubeSize = FVector2D(0.05f, 0.14f);
 	/** Peak intensity of the blast's point light (it lights the street and the debris). */
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float BlastLightIntensity = 1.5e7f;
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float ShockGlow = 18.f;

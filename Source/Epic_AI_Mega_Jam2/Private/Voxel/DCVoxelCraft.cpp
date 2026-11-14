@@ -279,6 +279,8 @@ namespace DCVoxelCraft
 		const FString Upper = R->Facade.IsEmpty() ? FString(TEXT("W")) : R->Facade;
 		const FString Ground = R->Base.IsEmpty() ? Upper : R->Base;
 		const FBayFn Solid = Bays()[TEXT('P')];
+		const int32 Rib = R->PilasterCm > 0 ? FMath::Max(1, R->PilasterCm / Vcm) : 0;
+		const int32 Lintel = R->LintelCm > 0 ? FMath::Max(1, R->LintelCm / Vcm) : 0;
 
 		FFaceFrame Frame{Tower.Min, Tower.Max};
 		int32 Top = 0;
@@ -317,6 +319,16 @@ namespace DCVoxelCraft
 						if (!bCorner && H > 0 && H + 1 == Sill && Bay(U % B, Sill, B, Sill, Win) == EOpening::Window)
 						{
 							World.Set(F.Cell(Face, -1, U, Z0 + H), Ids.Trim);
+						}
+						// Lintel: a proud cap over each opening (relief, V5.3).
+						if (!bCorner && Lintel > 0 && H >= Sill + Win && H < Sill + Win + Lintel && Bay(U % B, Sill, B, Sill, Win) == EOpening::Window)
+						{
+							World.Set(F.Cell(Face, -1, U, Z0 + H), Ids.Wall);
+						}
+						// Pier ribs at each bay start and the corners stand one voxel proud, floor to floor.
+						if (Rib > 0 && (bCorner || U % B < Rib))
+						{
+							World.Set(F.Cell(Face, -1, U, Z0 + H), Ids.Wall);
 						}
 					}
 				}

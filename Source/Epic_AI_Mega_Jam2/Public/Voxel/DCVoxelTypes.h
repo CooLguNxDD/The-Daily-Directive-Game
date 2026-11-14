@@ -46,6 +46,10 @@ struct FDCVoxelRecipe
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 BandEvery = 0;
 	/** Chance a face carries a paper poster (cream, never red: red is danger only). */
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float PosterChance = 0.f;
+	/** Facade relief (V5.3): a pier rib this wide (cm) stands one voxel proud at the start of every bay and at the
+	 *  corners, and a lintel this tall (cm) caps each window one voxel proud, so walls read as stepped voxel shells. */
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 PilasterCm = 0;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 LintelCm = 0;
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") FName Wall = TEXT("Ink");
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") FName Window = TEXT("Window");
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") FName Trim = TEXT("Trim");

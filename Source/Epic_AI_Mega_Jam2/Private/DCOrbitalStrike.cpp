@@ -142,7 +142,8 @@ void ADCOrbitalStrike::BeginPlay()
 	for (int32 i = 0; i < NumCubes; ++i)
 	{
 		const FVector Dir = CubeRng.VRand() * FVector(1.f, 1.f, 0.7f);
-		CubeSeeds.Add(FVector4f(FVector3f(Dir * CubeRng.FRandRange(0.25f, 1.f)), CubeRng.FRandRange(0.12f, 0.3f)));
+		const FVector2D CubeSize = UDCTuning::Get().Look.FireballCubeSize;
+		CubeSeeds.Add(FVector4f(FVector3f(Dir * CubeRng.FRandRange(0.25f, 1.f)), CubeRng.FRandRange(CubeSize.X, CubeSize.Y)));
 		Hidden.Add(FTransform(FQuat::Identity, FVector::ZeroVector, FVector::ZeroVector));
 	}
 	FireCubes->ClearInstances();
