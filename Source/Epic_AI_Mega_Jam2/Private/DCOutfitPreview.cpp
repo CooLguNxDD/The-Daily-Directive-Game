@@ -1,5 +1,6 @@
 #include "DCOutfitPreview.h"
 
+#include "Components/PointLightComponent.h"
 #include "Components/SceneCaptureComponent2D.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
@@ -60,6 +61,24 @@ void ADCOutfitPreview::BeginPlay()
 	// Full length, slightly from above, the way the street camera sees a teammate.
 	Capture->SetRelativeLocationAndRotation(FVector(420.f, 0, 30.f), FRotator(-6.f, 180.f, 0));
 	Capture->ShowOnlyActors.Add(this);
+	// Key and rim lights of its own (the noir world light leaves a dark coat black in the menu).
+	auto AddLight = [this](const FVector& At, const FLinearColor& Color, float Candela)
+	{
+		UPointLightComponent* L = NewObject<UPointLightComponent>(this);
+		L->SetupAttachment(RootComponent);
+		L->SetRelativeLocation(At);
+		L->SetIntensityUnits(ELightUnits::Candelas);
+		L->SetIntensity(Candela);
+		L->SetLightColor(Color);
+		L->SetAttenuationRadius(900.f);
+		L->SetCastShadows(false);
+		L->RegisterComponent();
+	};
+	const FDCLookTuning& Look = T.Look;
+	AddLight(FVector(320.f, 140.f, 120.f), Look.OutfitKeyColor, Look.OutfitKeyCandela);
+	AddLight(FVector(-120.f, -160.f, 160.f), Look.OutfitRimColor, Look.OutfitRimCandela);
+	Capture->PostProcessSettings.bOverride_AutoExposureBias = true;
+	Capture->PostProcessSettings.AutoExposureBias = Look.OutfitExposureBias;
 }
 
 void ADCOutfitPreview::Tick(float DeltaSeconds)

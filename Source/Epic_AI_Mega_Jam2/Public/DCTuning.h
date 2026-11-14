@@ -202,6 +202,13 @@ struct FDCLookTuning
 	 *  its own target zone instead of ending on a flat disc), and its reach as a fraction of the blast radius. */
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float BeamContactLight = 40000.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float BeamContactReach = 1.4f;
+	/** Builder turntable (R23) under the noir night: a soft key from the front and a cyan rim from behind (cd), plus
+	 *  the capture's exposure bias, so the photographer reads in the menu. */
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float OutfitKeyCandela = 120.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Look") FLinearColor OutfitKeyColor = FLinearColor(1.f, 0.9f, 0.8f);
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float OutfitRimCandela = 300.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Look") FLinearColor OutfitRimColor = FLinearColor(0.024f, 0.552f, 0.687f);
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float OutfitExposureBias = 0.f;
 	/** Impact flare where the beam meets the street (blast white-orange, only on strikes): width x beam, peak glow. */
 	UPROPERTY(EditAnywhere, Config, Category = "Look") FLinearColor ImpactFlareColor = FLinearColor(1.f, 0.89f, 0.54f);
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float ImpactFlareWidthScale = 2.6f;
@@ -215,6 +222,8 @@ struct FDCLookTuning
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float BeamFlashGlow = 3.f;
 	/** Beam diameter (cm) at the detonation flash; it shrinks to nothing over the flash. */
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float BeamFlashWidthCm = 300.f;
+	/** Brightest albedo channel of an unlit debris chip (0 = no cap). */
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float DebrisAlbedoCap = 0.f;
 	/** Poster sky (cream to the zenith, not slate): the sky atmosphere's Rayleigh colour (warm, near-flat across
 	 *  wavelengths), its scale and height (a taller layer keeps the zenith bright), and a warm Mie haze. */
 	UPROPERTY(EditAnywhere, Config, Category = "Look") FLinearColor SkyRayleighColor = FLinearColor(1.f, 0.86f, 0.62f);
@@ -301,6 +310,8 @@ struct FDCLookTuning
 	/** Shutter feedback over the screen when a photo is taken (colour, alpha at the click), over this many seconds. */
 	UPROPERTY(EditAnywhere, Config, Category = "Look") FLinearColor ShutterBlink = FLinearColor(1.f, 1.f, 1.f, 0.9f);
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float ShutterBlinkSeconds = 0.18f;
+	/** The reel's freeze at the shutter builds toward this tint (colour, alpha at the end of the freeze). */
+	UPROPERTY(EditAnywhere, Config, Category = "Look") FLinearColor ReelFreezeFlash = FLinearColor(1.f, 1.f, 1.f, 0.95f);
 	/** Sector title card type: the title and the lines above and below it, light on the dark glass (V9.6). */
 	UPROPERTY(EditAnywhere, Config, Category = "Look") FLinearColor SectorCardTitle = FLinearColor(0.791f, 0.815f, 0.887f, 1.f);
 	UPROPERTY(EditAnywhere, Config, Category = "Look") FLinearColor SectorCardRule = FLinearColor(0.024f, 0.552f, 0.687f, 1.f);
