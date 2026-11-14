@@ -36,6 +36,8 @@ struct FDCPrintTuning
 	/** News-feed treatment (R25): every Nth row darkened by ScanlineDark (0 = no scanlines). */
 	UPROPERTY(EditAnywhere, Config, Category = "Print") int32 ScanlineEvery = 0;
 	UPROPERTY(EditAnywhere, Config, Category = "Print") float ScanlineDark = 0.f;
+	/** News-feed chromatic split (R25): red sampled this many pixels to the left, blue to the right (0 = none). */
+	UPROPERTY(EditAnywhere, Config, Category = "Print") int32 ChromaSplitPx = 0;
 };
 
 namespace DCNewsprint

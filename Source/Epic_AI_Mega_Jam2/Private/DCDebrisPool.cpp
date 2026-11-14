@@ -43,8 +43,13 @@ void ADCDebrisPool::BeginPlay()
 	}
 }
 
-UMaterialInstanceDynamic* ADCDebrisPool::MaterialFor(const FLinearColor& Color, float Glow)
+UMaterialInstanceDynamic* ADCDebrisPool::MaterialFor(const FLinearColor& InColor, float Glow)
 {
+	// Unlit chips keep their hue but never a paint-bright albedo: under the moon and the blast light a pale chip read as
+	// a cream cube against the lens (peak glare). Glowing chips (enemy eyes) keep their colour.
+	const float Cap = UDCTuning::Get().Look.DebrisAlbedoCap;
+	const float Max = InColor.GetMax();
+	const FLinearColor Color = (Glow <= 0.f && Cap > 0.f && Max > Cap) ? InColor * (Cap / Max) : InColor;
 	const uint32 Key = HashCombine(GetTypeHash(Color.ToFColor(true)), GetTypeHash(FMath::RoundToInt(Glow * 10.f)));
 	if (TObjectPtr<UMaterialInstanceDynamic>* Found = Materials.Find(Key))
 	{

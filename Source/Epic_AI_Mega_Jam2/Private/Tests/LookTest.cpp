@@ -110,6 +110,27 @@ bool FDCNewsprintTest::RunTest(const FString&)
 		TestTrue(TEXT("feed scanlines darken every Nth row"), RowMean(ScanY) < RowMean(ScanY + 1) * (1.f - P.ScanlineDark * 0.5f));
 	}
 	TestTrue(TEXT("the dim tower beside the white blast is lifted (R5)"), Sum / FMath::Max(1, W - 28) > 60);
+	if (P.ChromaSplitPx > 0)
+	{
+		// A white bar on a dark frame: just left of it blue leads (blue is read from the right), just right red trails.
+		FDCPrintTuning Clean = P;
+		Clean.Grain = 0.f;
+		Clean.ScanlineEvery = 0;
+		TArray<FColor> Bar;
+		Bar.Init(FColor(20, 20, 20, 255), W * H);
+		for (int32 Y = 0; Y < H; ++Y)
+		{
+			for (int32 X = 30; X < 34; ++X)
+			{
+				Bar[Y * W + X] = FColor(240, 240, 240, 255);
+			}
+		}
+		DCNewsprint::Print(Bar, W, H, Clean, 7);
+		const FColor Left = Bar[(H / 2) * W + 30 - Clean.ChromaSplitPx];
+		const FColor Right = Bar[(H / 2) * W + 33 + Clean.ChromaSplitPx];
+		TestTrue(TEXT("feed chroma split: blue fringe on the left"), Left.B > Left.R + 40);
+		TestTrue(TEXT("feed chroma split: red fringe on the right"), Right.R > Right.B + 40);
+	}
 	AddInfo(FString::Printf(TEXT("DCPRINT tower row mean %lld (source 34), min %d max %d, gamma %.2f"), Sum / FMath::Max(1, W - 28), Min, Max, DCNewsprint::MidGamma(Px, P, Gain, Offset)));
 	return true;
 }

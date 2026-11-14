@@ -465,7 +465,13 @@ void ADCHUD::DrawStatus(ADCGameState& GS, ADCCharacter& Me)
 	}
 }
 
-void ADCHUD::DrawPhotoCard(UTexture* Image, const FDCPhotoGrade& Grade, float X, float Y, float W, float StampSlam, bool bShowStamp)
+FString ADCHUD::FeedStamp(int32 PhotoId, float ShotTime)
+{
+	const int32 Centis = FMath::Max(0, FMath::RoundToInt32(ShotTime * 100.f));
+	return FString::Printf(TEXT("LIVE  FEED %04d  T+%02d:%02d.%02d"), PhotoId % 10000, Centis / 6000, (Centis / 100) % 60, Centis % 100);
+}
+
+void ADCHUD::DrawPhotoCard(UTexture* Image, const FDCPhotoGrade& Grade, float X, float Y, float W, float StampSlam, bool bShowStamp, const FString& Feed)
 {
 	const float H = W * 9.f / 16.f;
 	const float Border = Sx(10.f);
@@ -477,7 +483,19 @@ void ADCHUD::DrawPhotoCard(UTexture* Image, const FDCPhotoGrade& Grade, float X,
 	else
 	{
 		Box(X, Y, W, H, FLinearColor(0.15f, 0.14f, 0.13f));
-		Text(TEXT("DEVELOPING..."), X + W * 0.5f, Y + H * 0.45f, Paper, 0.7f, true);
+		Text(TEXT("DEVELOPING..."), X + W * 0.5f, Y + H * 0.45f, Ink, 0.7f, true);
+	}
+	if (!Feed.IsEmpty())
+	{
+		// Feed timestamp (R25 news feed): a cyan live dot and the clock on a dark strip at the print's lower left.
+		const float FeedScale = FMath::Clamp(W / Sx(640.f), 0.4f, 1.f) * 0.5f;
+		float Fw = 0.f, Fh = 0.f;
+		TextSize(SmallFont, Feed, FeedScale * 1.6f * TextBoost * UiScale, Fw, Fh);
+		const float Fx = X + Sx(14.f), Fy = Y + H - Fh - Sx(14.f);
+		Box(Fx - Sx(4.f), Fy - Sx(2.f), Fw + Fh + Sx(14.f), Fh + Sx(4.f), FLinearColor(Night.R, Night.G, Night.B, 0.7f));
+		const float Blink = FMath::Fmod(static_cast<float>(RealNow), 1.f) < 0.6f ? 1.f : 0.35f;
+		Box(Fx, Fy + Fh * 0.25f, Fh * 0.5f, Fh * 0.5f, FLinearColor(Cyan.R, Cyan.G, Cyan.B, Blink));
+		Text(Feed, Fx + Fh * 0.8f, Fy, Cyan, FeedScale * 1.6f, false, SmallFont);
 	}
 	if (!bShowStamp)
 	{
@@ -499,16 +517,21 @@ void ADCHUD::DrawPhotoCard(UTexture* Image, const FDCPhotoGrade& Grade, float X,
 	const float Tilt = -7.f + static_cast<float>(Grade.Score % 5);
 	const FVector Pivot(Cx, By + Bh * 0.5f, 0.f);
 	Canvas->Canvas->PushRelativeTransform(FTranslationMatrix(-Pivot) * FRotationMatrix(FRotator(0.f, Tilt, 0.f)) * FTranslationMatrix(Pivot));
-	// A signal-yellow plate with ink type and an ink double rule: legible on any print, even on small cards.
-	const FLinearColor InkStamp(Night.R, Night.G, Night.B, 0.95f); // night type on the lime stamp
-	// Holographic stamp (R25): a lime plate with a soft glow halo (a few widening translucent rules).
+	// Holographic stamp (R25, V9.1: no opaque yellow plate): dark glass lit lime, a glowing lime double rule with a
+	// soft halo, lime type with a slight magenta/cyan split, and faint scan bands across it.
+	const FLinearColor InkStamp(Gold.R, Gold.G, Gold.B, 1.f);
 	for (int32 k = 3; k >= 1; --k)
 	{
-		Frame(Bx - k * Sx(5.f), By - k * Sx(5.f), Bw + 2.f * k * Sx(5.f), Bh + 2.f * k * Sx(5.f), Sx(5.f), FLinearColor(Gold.R, Gold.G, Gold.B, 0.10f * (4 - k)));
+		Frame(Bx - k * Sx(5.f), By - k * Sx(5.f), Bw + 2.f * k * Sx(5.f), Bh + 2.f * k * Sx(5.f), Sx(5.f), FLinearColor(Gold.R, Gold.G, Gold.B, 0.09f * (4 - k)));
 	}
-	Box(Bx, By, Bw, Bh, FLinearColor(Gold.R, Gold.G, Gold.B, 0.95f));
+	Box(Bx, By, Bw, Bh, FLinearColor(Night.R, Night.G, Night.B, 0.72f));
+	Box(Bx, By, Bw, Bh, FLinearColor(Gold.R, Gold.G, Gold.B, 0.16f));
+	for (float Sy = By + Sx(3.f); Sy < By + Bh; Sy += Sx(5.f))
+	{
+		Box(Bx, Sy, Bw, Sx(1.f), FLinearColor(Gold.R, Gold.G, Gold.B, 0.08f));
+	}
 	Frame(Bx, By, Bw, Bh, Sx(4.f), InkStamp);
-	Frame(Bx + Sx(7.f), By + Sx(7.f), Bw - Sx(14.f), Bh - Sx(14.f), Sx(1.5f), InkStamp);
+	Frame(Bx + Sx(7.f), By + Sx(7.f), Bw - Sx(14.f), Bh - Sx(14.f), Sx(1.5f), FLinearColor(Gold.R, Gold.G, Gold.B, 0.7f));
 	if (UTexture2D* Worn = Bh > Sx(70.f) ? StampGrit() : nullptr) // small stamps skip the grit: it aliases into noise
 	{
 		// Paper-coloured speckle over the frame ink (under the type, so small stamps stay legible): pressed by hand.
@@ -516,6 +539,9 @@ void ADCHUD::DrawPhotoCard(UTexture* Image, const FDCPhotoGrade& Grade, float X,
 		const bool bWhole = Worn->GetSizeX() == Worn->GetSizeY();
 		DrawTexture(Worn, Bx, By, Bw, Bh, 0, 0, bWhole ? 1.f : Bw / Sx(256.f), bWhole ? 1.f : Bh / Sx(128.f), FLinearColor(Paper.R, Paper.G, Paper.B, bWhole ? 0.8f : 0.35f), BLEND_Translucent);
 	}
+	const float Split = Sx(2.f);
+	Text(Score, Cx - Split, By + Sx(4.f), FLinearColor(Magenta.R, Magenta.G, Magenta.B, 0.55f), 1.6f * S, true, StampFont);
+	Text(Score, Cx + Split, By + Sx(4.f), FLinearColor(Cyan.R, Cyan.G, Cyan.B, 0.55f), 1.6f * S, true, StampFont);
 	Text(Score, Cx, By + Sx(4.f), InkStamp, 1.6f * S, true, StampFont);
 	Text(Timing, Cx, By + Sx(4.f) + Th * 1.0f, InkStamp, 0.8f * S, true, StampFont);
 	Canvas->Canvas->PopTransform();
@@ -618,7 +644,7 @@ void ADCHUD::DrawStamp(ADCPlayerController& PC)
 	const float SlideIn = FMath::Clamp(Age / 0.12f, 0.f, 1.f);
 	const float SlideOut = FMath::Clamp((Hold - Age) / 0.25f, 0.f, 1.f);
 	const float X = Canvas->ClipX - (W + Sx(40.f)) * FMath::Min(SlideIn, SlideOut);
-	DrawPhotoCard(Photo->Image, Photo->Grade, X, Sx(130.f), W, Age / 0.15f, true);
+	DrawPhotoCard(Photo->Image, Photo->Grade, X, Sx(130.f), W, Age / 0.15f, true, FeedStamp(Photo->PhotoId, Photo->ShotTime));
 }
 
 void ADCHUD::DrawHurt(ADCCharacter& Me)
@@ -765,7 +791,9 @@ void ADCHUD::DrawScoop(ADCGameState& GS)
 		return;
 	}
 	const float Pulse = 0.75f + 0.25f * FMath::Sin(RealNow * 6.f);
-	Box(W * 0.5f - Sx(420.f), Sx(150.f), Sx(840.f), Sx(80.f), FLinearColor(Red.R, Red.G, Red.B, 0.85f * Pulse));
-	Text(Scoops[Scoop.Index].Text.ToString().ToUpper(), W * 0.5f, Sx(156.f), Paper, 0.75f, true);
+	// An HQ scoop is a headline, not a danger: magenta-edged glass, light type (red stays for danger).
+	Box(W * 0.5f - Sx(420.f), Sx(150.f), Sx(840.f), Sx(80.f), FLinearColor(Paper.R, Paper.G, Paper.B, 0.85f));
+	Frame(W * 0.5f - Sx(420.f), Sx(150.f), Sx(840.f), Sx(80.f), Sx(3.f), FLinearColor(Magenta.R, Magenta.G, Magenta.B, Pulse));
+	Text(Scoops[Scoop.Index].Text.ToString().ToUpper(), W * 0.5f, Sx(156.f), Ink, 0.75f, true);
 	Text(FString::Printf(TEXT("%.0fs  |  REWARD: %d POINTS + SUPPLY POD"), Left, Scoops[Scoop.Index].RewardPoints), W * 0.5f, Sx(194.f), Gold, 0.6f, true);
 }

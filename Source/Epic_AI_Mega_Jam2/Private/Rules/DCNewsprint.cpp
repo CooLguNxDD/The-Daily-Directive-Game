@@ -104,6 +104,21 @@ namespace DCNewsprint
 		}
 		Gain = 1.f;
 		Offset = 0.f;
+		if (T.ChromaSplitPx > 0)
+		{
+			// Feed chromatic split: red from the left, blue from the right, green in place (clamped at the edges).
+			const TArray<FColor> Src = Pixels;
+			const int32 Split = T.ChromaSplitPx;
+			for (int32 Y = 0; Y < H; ++Y)
+			{
+				for (int32 X = 0; X < W; ++X)
+				{
+					FColor& C = Pixels[Y * W + X];
+					C.R = Src[Y * W + FMath::Max(X - Split, 0)].R;
+					C.B = Src[Y * W + FMath::Min(X + Split, W - 1)].B;
+				}
+			}
+		}
 		const int32 Cell = FMath::Max(T.DotCell, 0);
 		// Mean luminance per halftone cell (after levels), for the dot size.
 		const int32 Cw = Cell > 0 ? FMath::DivideAndRoundUp(W, Cell) : 0;

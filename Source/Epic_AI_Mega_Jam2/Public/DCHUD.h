@@ -23,7 +23,9 @@ public:
 	virtual void DrawHUD() override;
 
 	/** Draws a graded photo with its stamp (used by the stamp, the reel and the front page). */
-	void DrawPhotoCard(UTexture* Image, const FDCPhotoGrade& Grade, float X, float Y, float W, float StampSlam, bool bShowStamp);
+	void DrawPhotoCard(UTexture* Image, const FDCPhotoGrade& Grade, float X, float Y, float W, float StampSlam, bool bShowStamp, const FString& Feed = FString());
+	/** The news-feed line burned under a print (R25): feed id and the shot's clock time. */
+	static FString FeedStamp(int32 PhotoId, float ShotTime);
 
 	// Shared drawing helpers.
 	void Text(const FString& S, float X, float Y, const FLinearColor& C, float Scale = 1.f, bool bCentre = false, UFont* Font = nullptr);

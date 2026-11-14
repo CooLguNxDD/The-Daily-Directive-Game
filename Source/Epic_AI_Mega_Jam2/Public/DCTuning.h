@@ -222,6 +222,8 @@ struct FDCLookTuning
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float BeamFlashGlow = 3.f;
 	/** Beam diameter (cm) at the detonation flash; it shrinks to nothing over the flash. */
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float BeamFlashWidthCm = 300.f;
+	/** Brightest albedo channel of an unlit debris chip (0 = no cap). */
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float DebrisAlbedoCap = 0.f;
 	/** Poster sky (cream to the zenith, not slate): the sky atmosphere's Rayleigh colour (warm, near-flat across
 	 *  wavelengths), its scale and height (a taller layer keeps the zenith bright), and a warm Mie haze. */
 	UPROPERTY(EditAnywhere, Config, Category = "Look") FLinearColor SkyRayleighColor = FLinearColor(1.f, 0.86f, 0.62f);
@@ -308,6 +310,8 @@ struct FDCLookTuning
 	/** Shutter feedback over the screen when a photo is taken (colour, alpha at the click), over this many seconds. */
 	UPROPERTY(EditAnywhere, Config, Category = "Look") FLinearColor ShutterBlink = FLinearColor(1.f, 1.f, 1.f, 0.9f);
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float ShutterBlinkSeconds = 0.18f;
+	/** The reel's freeze at the shutter builds toward this tint (colour, alpha at the end of the freeze). */
+	UPROPERTY(EditAnywhere, Config, Category = "Look") FLinearColor ReelFreezeFlash = FLinearColor(1.f, 1.f, 1.f, 0.95f);
 	/** Sector title card type: the title and the lines above and below it, light on the dark glass (V9.6). */
 	UPROPERTY(EditAnywhere, Config, Category = "Look") FLinearColor SectorCardTitle = FLinearColor(0.791f, 0.815f, 0.887f, 1.f);
 	UPROPERTY(EditAnywhere, Config, Category = "Look") FLinearColor SectorCardRule = FLinearColor(0.024f, 0.552f, 0.687f, 1.f);
