@@ -69,6 +69,7 @@ struct ADCVoxelCity::FFalling
 	int32 PendingMeshes = 0;
 	bool bBroken = false;
 	float BodyAge = 0.f;
+	float StillFor = 0.f;
 	uint32 Seed = 0;
 	TArray<FIntVector> RevealOnRest;
 };
@@ -1089,7 +1090,7 @@ void ADCVoxelCity::TickFalling(float Now)
 		}
 		if (F.Frags.Num() > 0)
 		{
-			if (F.bReady && Now >= F.Start && (Drop >= F.DropCm || U >= 1.f))
+			if (F.bReady && Now >= F.Start && (Drop >= F.DropCm || U >= 1.f || LowestFragmentAboveGround(F) <= 0.f))
 			{
 				BreakApart(Falling[i], Age, U); // it hits the street: the fragments come apart as bodies
 			}
@@ -1124,6 +1125,29 @@ void ADCVoxelCity::TickFalling(float Now)
 	}
 }
 
+float ADCVoxelCity::BodyGroundZ(const FVector& At, const FVector& LandCenter) const
+{
+	// The street under the body: the terrain top, but never the op's own rubble (written to the grid at apply, its
+	// mesh and collision only show when the bodies rest).
+	return FMath::Min(SurfaceZCm(At), LandCenter.Z);
+}
+
+float ADCVoxelCity::LowestFragmentAboveGround(const FFalling& F) const
+{
+	const FTransform Xf = F.Comp->GetComponentTransform();
+	float Lowest = TNumericLimits<float>::Max();
+	for (const FFalling::FFrag& Fr : F.Frags)
+	{
+		if (!Fr.Local.IsValid)
+		{
+			continue;
+		}
+		const FBox W = Fr.Local.TransformBy(Xf);
+		Lowest = FMath::Min(Lowest, W.Min.Z - BodyGroundZ(W.GetCenter(), F.LandCenter));
+	}
+	return Lowest;
+}
+
 void ADCVoxelCity::BreakApart(const TSharedPtr<FFalling>& Shared, float Age, float U)
 {
 	FFalling& F = *Shared;
@@ -1148,7 +1172,11 @@ void ADCVoxelCity::BreakApart(const TSharedPtr<FFalling>& Shared, float Age, flo
 		{
 			continue;
 		}
-		const FVector At = Xf.TransformPosition(Fr.Local.GetCenter());
+		FVector At = Xf.TransformPosition(Fr.Local.GetCenter());
+		// Never start under the street (a body inside the street mesh falls through it): lift it to stand on it.
+		const FBox W = Fr.Local.TransformBy(Xf);
+		At.Z += FMath::Max(0.f, BodyGroundZ(At, F.LandCenter) + 5.f - (W.Min.Z + W.GetExtent().Z * (1.f - Tn.PhysicsBoxScale)));
+		Fr.Comp->SetWorldLocation(Fr.Comp->GetComponentLocation() + FVector(0, 0, At.Z - Xf.TransformPosition(Fr.Local.GetCenter()).Z));
 		UBoxComponent* Box = NewObject<UBoxComponent>(this);
 		Box->SetWorldLocationAndRotation(At, Xf.GetRotation());
 		Box->SetBoxExtent(Fr.Local.GetExtent() * Tn.PhysicsBoxScale);
@@ -1201,19 +1229,29 @@ bool ADCVoxelCity::TickBodies(FFalling& F, float Dt)
 			continue;
 		}
 		const FBox B = Fr.Body->Bounds.GetBox();
+		if (B.Max.Z < BodyGroundZ(B.GetCenter(), F.LandCenter) - 100.f)
+		{
+			Fr.Body->PutRigidBodyToSleep(); // slipped under the street: it rests (hidden by the rubble swap)
+			Fr.Body->SetSimulatePhysics(false);
+			continue;
+		}
 		if (!Fr.bSolid && B.Min.Z <= F.LandCenter.Z + Tn.PhysicsSolidAboveSiteCm)
 		{
 			Fr.bSolid = true;
 			Fr.Body->SetCollisionResponseToChannel(ECC_WorldStatic, ECR_Block);
 		}
-		if (F.BodyAge < Tn.PhysicsSteerSeconds) // drawn over the shared rubble, then left to come to rest
+		const FVector Vel = Fr.Body->GetPhysicsLinearVelocity();
+		if (F.BodyAge < Tn.PhysicsSteerSeconds) // drawn over the shared rubble (a critically damped spring), then left to rest
 		{
 			const FVector At = Fr.Body->GetComponentLocation();
-			Fr.Body->AddForce(FVector(F.LandCenter.X - At.X, F.LandCenter.Y - At.Y, 0.f) * Tn.PhysicsSteer, NAME_None, true);
+			const FVector Off(F.LandCenter.X - At.X, F.LandCenter.Y - At.Y, 0.f);
+			Fr.Body->AddForce(Off * Tn.PhysicsSteer - FVector(Vel.X, Vel.Y, 0.f) * (2.f * FMath::Sqrt(Tn.PhysicsSteer)), NAME_None, true);
 		}
-		bAllAsleep &= !Fr.Body->IsAnyRigidBodyAwake();
+		const bool bStill = !Fr.Body->IsAnyRigidBodyAwake() || (Vel.Size() < Tn.PhysicsRestCms && Fr.Body->GetPhysicsAngularVelocityInDegrees().Size() < Tn.PhysicsRestDegS);
+		bAllAsleep &= bStill;
 	}
-	return (F.BodyAge > 0.5f && bAllAsleep) || F.BodyAge >= Tn.PhysicsMaxAirSeconds;
+	F.StillFor = bAllAsleep ? F.StillFor + Dt : 0.f;
+	return (F.BodyAge > 0.5f && F.StillFor >= Tn.PhysicsRestSeconds) || F.BodyAge >= Tn.PhysicsMaxAirSeconds;
 }
 
 void ADCVoxelCity::OnBodyHit(UPrimitiveComponent* HitComp, AActor* Other, UPrimitiveComponent* OtherComp, FVector NormalImpulse, const FHitResult& Hit)
@@ -1270,6 +1308,7 @@ void ADCVoxelCity::Land(FFalling& F)
 			{
 				Spread = FMath::Max(Spread, FVector::Dist2D(Fr.Body->GetComponentLocation(), F.LandCenter));
 				Awake += Fr.Body->IsAnyRigidBodyAwake() ? 1 : 0;
+				UE_LOG(LogTemp, Verbose, TEXT("DCPHYS body z=%.0f v=%.0f"), Fr.Body->GetComponentLocation().Z, Fr.Body->GetPhysicsLinearVelocity().Size());
 				Bodies.Remove(Fr.Body.Get());
 				Fr.Body->DestroyComponent();
 				Fr.Body = nullptr;
@@ -1282,7 +1321,7 @@ void ADCVoxelCity::Land(FFalling& F)
 			}
 		}
 		BodiesReserved = FMath::Max(0, BodiesReserved - F.Frags.Num());
-		UE_LOG(LogTemp, Display, TEXT("DCPHYS rest %d bodies after %.1f s, %d still awake, farthest %.0f cm from the shared rubble site"), F.Frags.Num(), F.BodyAge, Awake, Spread);
+		UE_LOG(LogTemp, Display, TEXT("DCPHYS rest %d bodies after %.1f s (%s), %d still awake, farthest %.0f cm from the shared rubble site"), F.Frags.Num(), F.BodyAge, F.StillFor > 0.f ? TEXT("still") : TEXT("timed out"), Awake, Spread);
 		F.Frags.Reset();
 	}
 	const float RevealNow = GetWorld()->GetTimeSeconds() - FallOffset;
@@ -1423,7 +1462,7 @@ void ADCVoxelCity::KillCarvedSigns(const TArray<int32>& TouchedLots)
 		const FDCVoxelTower& T = Sector.Towers[Lot];
 		for (int32 s = 0; s < T.Signs.Num(); ++s)
 		{
-			if (T.Grid.Data.Get(T.Signs[s].Center) != T.Signs[s].Material)
+			if (T.Grid.Data.Get(T.Signs[s].Probe) != T.Signs[s].Material)
 			{
 				DeadSigns.Add(FIntPoint(Lot, s));
 			}

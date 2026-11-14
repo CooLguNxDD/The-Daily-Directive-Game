@@ -395,7 +395,6 @@ bool FDCVoxelModelTest::RunTest(const FString&)
 	return true;
 }
 
-#endif
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDCVoxelFragmentTest, "Epic_AI_Mega_Jam2.Voxel.PhysicsFragments", VoxelFlags)
 bool FDCVoxelFragmentTest::RunTest(const FString&)
@@ -449,3 +448,5 @@ bool FDCVoxelFragmentTest::RunTest(const FString&)
 	TestEqual(TEXT("one cell, one fragment"), DCVoxelOps::SplitFragments({FIntVector(5)}, 10, 24).Num(), 1);
 	return true;
 }
+
+#endif

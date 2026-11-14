@@ -13,6 +13,8 @@
 struct EPIC_AI_MEGA_JAM2_API FDCVoxelSign
 {
 	FIntVector Center = FIntVector::ZeroValue;
+	/** A lit (non-emblem) voxel of the sign: carved away = the sign's light dies (the centre is the dark emblem). */
+	FIntVector Probe = FIntVector::ZeroValue;
 	FIntVector Normal = FIntVector::ZeroValue;
 	int32 WidthVox = 0;
 	int32 HeightVox = 0;

@@ -195,6 +195,10 @@ struct FDCVoxelTuning
 	/** Horizontal pull (1/s^2) toward the rubble site for SteerSeconds, so the bodies rest over the shared rubble. */
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float PhysicsSteer = 1.5f;
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float PhysicsSteerSeconds = 2.f;
+	/** A group rests once every body is asleep or slower than RestCms / RestDegS for RestSeconds. */
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float PhysicsRestCms = 40.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float PhysicsRestDegS = 40.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float PhysicsRestSeconds = 0.4f;
 	/** A body turns solid to the city once its underside is within this height (cm) above the rubble site (fragments
 	 *  of a top that broke against its own stump drop clear of it first). */
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float PhysicsSolidAboveSiteCm = 120.f;

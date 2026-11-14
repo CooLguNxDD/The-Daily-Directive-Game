@@ -198,6 +198,10 @@ struct FDCLookTuning
 	/** Beam diameter (cm) when the call lands and at full charge. */
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float BeamWidthStartCm = 240.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float BeamWidthEndCm = 30.f;
+	/** Contact light where the charging beam meets the street (cd at full charge, beam colour; V6.3: the beam lights
+	 *  its own target zone instead of ending on a flat disc), and its reach as a fraction of the blast radius. */
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float BeamContactLight = 40000.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float BeamContactReach = 1.4f;
 	/** Impact flare where the beam meets the street (blast white-orange, only on strikes): width x beam, peak glow. */
 	UPROPERTY(EditAnywhere, Config, Category = "Look") FLinearColor ImpactFlareColor = FLinearColor(1.f, 0.89f, 0.54f);
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float ImpactFlareWidthScale = 2.6f;

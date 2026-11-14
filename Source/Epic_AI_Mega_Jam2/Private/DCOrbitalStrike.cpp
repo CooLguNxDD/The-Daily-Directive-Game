@@ -214,6 +214,11 @@ void ADCOrbitalStrike::TickTelegraph(float Now, const FDCStratagemDef& Def)
 	const float FlareD = Width * FlareLook.ImpactFlareWidthScale * (0.85f + 0.3f * Pulse);
 	ImpactFlare->SetRelativeScale3D(FVector(FlareD, FlareD, 0.02f));
 	DCAssets::SetFlat(FlareMat, FlareLook.ImpactFlareColor, FMath::Lerp(0.6f, FlareLook.ImpactFlareGlow, U) * (0.6f + 0.4f * Pulse));
+	// The beam lights the street and facades around its target (red contact light, rising with the charge).
+	Light->SetRelativeLocation(FVector(0, 0, 150.f));
+	Light->SetLightColor(Def.BeamColor);
+	Light->SetAttenuationRadius(FMath::Max(Def.BlastRadius * FlareLook.BeamContactReach, 600.f));
+	Light->SetIntensity(FlareLook.BeamContactLight * U * U * (0.7f + 0.3f * Pulse));
 
 	if (!bChargePlayed && U > 0.f && Def.TelegraphSeconds - (Now - Start) <= 3.2f)
 	{
@@ -229,6 +234,10 @@ void ADCOrbitalStrike::TickTelegraph(float Now, const FDCStratagemDef& Def)
 
 void ADCOrbitalStrike::DetonateLocal(const FDCStratagemDef& Def)
 {
+	// The blast light takes over from the beam's contact light: fire colour, high over the core, long reach.
+	Light->SetRelativeLocation(FVector(0, 0, 600.f));
+	Light->SetLightColor(UDCTuning::Get().Look.Fire);
+	Light->SetAttenuationRadius(9000.f);
 	const FVector Here = GetActorLocation();
 	float Proximity = 0.4f;
 	if (APlayerController* PC = UGameplayStatics::GetPlayerController(this, 0))

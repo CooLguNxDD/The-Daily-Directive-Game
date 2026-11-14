@@ -195,6 +195,7 @@ namespace
 		}
 		FDCVoxelSign& Sign = OutSigns.AddDefaulted_GetRef();
 		Sign.Center = F.Cell(Face, -1, U0 + Width / 2, Z0 + Height / 2);
+		Sign.Probe = F.Cell(Face, -1, U0 + 1, Z0 + Height / 2); // left edge, outside the emblem diamond
 		Sign.Normal = F.Cell(Face, -1, 0, 0) - F.Cell(Face, 0, 0, 0);
 		Sign.WidthVox = Width;
 		Sign.HeightVox = Height;

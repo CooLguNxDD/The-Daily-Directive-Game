@@ -98,6 +98,10 @@ private:
 	void BreakApart(const TSharedPtr<FFalling>& F, float Age, float U);
 	/** Steers and solidifies the bodies; true when they rest (all asleep or out of air time). */
 	bool TickBodies(FFalling& F, float Dt);
+	/** Street height under a body (terrain top, capped at the rubble site: the op's own rubble is not shown yet). */
+	float BodyGroundZ(const FVector& At, const FVector& LandCenter) const;
+	/** Lowest fragment's underside above the street (<= 0: the falling piece hit the ground). */
+	float LowestFragmentAboveGround(const FFalling& F) const;
 	/** Live and planned bodies (the PhysicsMaxBodies budget). */
 	int32 BodiesReserved = 0;
 	UFUNCTION() void OnBodyHit(UPrimitiveComponent* HitComp, AActor* Other, UPrimitiveComponent* OtherComp, FVector NormalImpulse, const FHitResult& Hit);
