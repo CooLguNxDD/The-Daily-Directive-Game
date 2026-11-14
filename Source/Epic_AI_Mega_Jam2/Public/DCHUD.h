@@ -81,7 +81,7 @@ private:
 	int32 CardSector = INDEX_NONE;
 	double CardLoadedReal = -1.0;
 	/** A newsprint sheet: the generated paper texture tiled at its own scale (R11), else flat paper. */
-	void PaperSheet(float X, float Y, float W, float H);
+	void PaperSheet(float X, float Y, float W, float H, float Alpha = 1.f);
 	UPROPERTY() TObjectPtr<class UTexture2D> PaperTex;
 	bool bPaperTried = false;
 	UPROPERTY() TObjectPtr<class UTexture2D> Grit;

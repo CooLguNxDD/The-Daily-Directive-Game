@@ -213,6 +213,8 @@ struct FDCLookTuning
 	/** Detonation flash of the beam: lerped toward this colour (warm orange keeps red from turning salmon), and its glow. */
 	UPROPERTY(EditAnywhere, Config, Category = "Look") FLinearColor BeamFlashColor = FLinearColor(1.f, 0.42f, 0.02f, 1.f);
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float BeamFlashGlow = 3.f;
+	/** Beam diameter (cm) at the detonation flash; it shrinks to nothing over the flash. */
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float BeamFlashWidthCm = 300.f;
 	/** Poster sky (cream to the zenith, not slate): the sky atmosphere's Rayleigh colour (warm, near-flat across
 	 *  wavelengths), its scale and height (a taller layer keeps the zenith bright), and a warm Mie haze. */
 	UPROPERTY(EditAnywhere, Config, Category = "Look") FLinearColor SkyRayleighColor = FLinearColor(1.f, 0.86f, 0.62f);
@@ -278,6 +280,31 @@ struct FDCLookTuning
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float FogDensity = 0.012f;
 	UPROPERTY(EditAnywhere, Config, Category = "Look") FLinearColor FogColor = FLinearColor(0.75f, 0.55f, 0.38f);
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float GroundSizeCm = 40000.f;
+	/** Peak glare (review CP9): the blast light's reach (cm) keeps it on the street and the falling tower, not on the
+	 *  dust beside the lens; it fades over LightSeconds, holding TailFraction of the peak as a warm ember glow on the
+	 *  rubble (the decay stays readable, V9.4). */
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float BlastLightRadiusCm = 9000.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float BlastLightSeconds = 2.3f;
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float BlastLightTailFraction = 0.f;
+	/** Fire cubes of the blast core near the local camera shrink away: gone inside HideCm, full size past FadeCm (a
+	 *  big hot cube against the lens washes the frame). The cubes are unlit when bFireCubesUnlit (their glow is the
+	 *  only light on them; the blast light no longer bleaches them white). */
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float FireCubeNearHideCm = 0.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float FireCubeNearFadeCm = 0.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Look") bool bFireCubesUnlit = false;
+	/** The blast's colour at the first instant (white-gold) and once it cools (orange), then the ember it fades to. */
+	UPROPERTY(EditAnywhere, Config, Category = "Look") FLinearColor BlastHotColor = FLinearColor(1.f, 0.95f, 0.76f);
+	UPROPERTY(EditAnywhere, Config, Category = "Look") FLinearColor BlastFireColor = FLinearColor(1.f, 0.48f, 0.1f);
+	UPROPERTY(EditAnywhere, Config, Category = "Look") FLinearColor BlastEmberColor = FLinearColor(0.25f, 0.05f, 0.02f);
+	/** HUD flash over the screen at a blast (colour, alpha at the peak): a tint, never a white sheet. */
+	UPROPERTY(EditAnywhere, Config, Category = "Look") FLinearColor FlashOverlay = FLinearColor(1.f, 0.97f, 0.9f, 0.55f);
+	/** Shutter feedback over the screen when a photo is taken (colour, alpha at the click), over this many seconds. */
+	UPROPERTY(EditAnywhere, Config, Category = "Look") FLinearColor ShutterBlink = FLinearColor(1.f, 1.f, 1.f, 0.9f);
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float ShutterBlinkSeconds = 0.18f;
+	/** Sector title card type: the title and the lines above and below it, light on the dark glass (V9.6). */
+	UPROPERTY(EditAnywhere, Config, Category = "Look") FLinearColor SectorCardTitle = FLinearColor(0.791f, 0.815f, 0.887f, 1.f);
+	UPROPERTY(EditAnywhere, Config, Category = "Look") FLinearColor SectorCardRule = FLinearColor(0.024f, 0.552f, 0.687f, 1.f);
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float SectorCardTitleScale = 2.6f;
 };
 
 /** One Enhanced Input binding row. Actions are created at run time from these rows. */

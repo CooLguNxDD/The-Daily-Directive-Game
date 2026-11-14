@@ -1,5 +1,6 @@
 #include "DCOrbitalStrike.h"
 
+#include "Camera/PlayerCameraManager.h"
 #include "Components/InstancedStaticMeshComponent.h"
 #include "Components/PointLightComponent.h"
 #include "Components/StaticMeshComponent.h"
@@ -129,7 +130,7 @@ void ADCOrbitalStrike::BeginPlay()
 	Beacon->SetRelativeScale3D(FVector(0.5f, 0.5f, 1.2f));
 
 	Fireball->SetStaticMesh(DCAssets::Sphere());
-	FireMat = DCAssets::MakeFlat(this, UDCTuning::Get().Look.Fire, 80.f);
+	FireMat = UDCTuning::Get().Look.bFireCubesUnlit ? DCAssets::MakeFlatUnlit(this, UDCTuning::Get().Look.Fire, 1.f) : DCAssets::MakeFlat(this, UDCTuning::Get().Look.Fire, 80.f);
 	Fireball->SetMaterial(0, FireMat);
 	Fireball->SetVisibility(false);
 	// The core's cubes, seeded from where the strike landed: every machine sees the same burst.
@@ -237,7 +238,7 @@ void ADCOrbitalStrike::DetonateLocal(const FDCStratagemDef& Def)
 	// The blast light takes over from the beam's contact light: fire colour, high over the core, long reach.
 	Light->SetRelativeLocation(FVector(0, 0, 600.f));
 	Light->SetLightColor(UDCTuning::Get().Look.Fire);
-	Light->SetAttenuationRadius(9000.f);
+	Light->SetAttenuationRadius(UDCTuning::Get().Look.BlastLightRadiusCm);
 	const FVector Here = GetActorLocation();
 	float Proximity = 0.4f;
 	if (APlayerController* PC = UGameplayStatics::GetPlayerController(this, 0))
@@ -276,6 +277,18 @@ void ADCOrbitalStrike::TickBlast(float Now, const FDCStratagemDef& Def)
 	// Voxel burst: cubes fly out from the core, rise with the heat and shrink as the fire cools; the gaps between
 	// them keep the target readable at the peak (the smooth sphere hid it).
 	const FVector Core(0, 0, Scale * 35.f + T * 300.f);
+	const FDCLookTuning& Look = UDCTuning::Get().Look;
+	// Cubes against the lens shrink away (a big hot cube near the camera washes the frame at the peak).
+	FVector Eye = FVector(1e9f);
+	if (const APlayerController* PC = GetWorld()->GetFirstPlayerController())
+	{
+		if (PC->PlayerCameraManager)
+		{
+			Eye = PC->PlayerCameraManager->GetCameraLocation();
+		}
+	}
+	const FTransform& ToWorld = FireCubes->GetComponentTransform();
+	const float NearSpan = FMath::Max(Look.FireCubeNearFadeCm - Look.FireCubeNearHideCm, 1.f);
 	TArray<FTransform> Xf;
 	Xf.Reserve(CubeSeeds.Num());
 	for (int32 i = 0; i < CubeSeeds.Num(); ++i)
@@ -283,13 +296,14 @@ void ADCOrbitalStrike::TickBlast(float Now, const FDCStratagemDef& Def)
 		const FVector4f& C = CubeSeeds[i];
 		const float Out = 0.35f + 0.65f * FMath::Sqrt(Grow) + 0.25f * (1.f - Fade);
 		const FVector Pos = Core + FVector(C.X, C.Y, C.Z) * Scale * 50.f * Out + FVector(0, 0, T * 120.f * (1.f + C.W));
-		const float Size = Scale * C.W * FMath::Max(Fade, 0.f) * (0.6f + 0.4f * Grow);
+		const float Near = FMath::Clamp((FVector::Dist(ToWorld.TransformPosition(Pos), Eye) - Look.FireCubeNearHideCm) / NearSpan, 0.f, 1.f);
+		const float Size = Scale * C.W * FMath::Max(Fade, 0.f) * (0.6f + 0.4f * Grow) * Near;
 		Xf.Add(FTransform(FRotator(i * 37.f + T * 90.f, i * 53.f, i * 11.f), Pos, FVector(Size)));
 	}
 	FireCubes->BatchUpdateInstancesTransforms(0, Xf, false, true, true);
 	// Blast white-orange only at the first instant, then orange to ember red: the peak reads as fire, not a white dome.
-	const FLinearColor Hot = FMath::Lerp(FLinearColor(1.f, 0.48f, 0.1f), FLinearColor(1.f, 0.95f, 0.76f), FMath::Clamp(1.f - T / 0.25f, 0.f, 1.f));
-	DCAssets::SetFlat(FireMat, FMath::Lerp(FLinearColor(0.25f, 0.05f, 0.02f), Hot, Fade * Fade), 1.f + UDCTuning::Get().Look.FireballGlow * Fade * Fade * Fade);
+	const FLinearColor Hot = FMath::Lerp(Look.BlastFireColor, Look.BlastHotColor, FMath::Clamp(1.f - T / 0.25f, 0.f, 1.f));
+	DCAssets::SetFlat(FireMat, FMath::Lerp(Look.BlastEmberColor, Hot, Fade * Fade), 1.f + Look.FireballGlow * Fade * Fade * Fade);
 	FireCubes->SetVisibility(Fade > 0.02f);
 
 	const float ShockR = Def.BlastRadius * 2.4f * FMath::Clamp(T / 0.6f, 0.f, 1.f) / 100.f;
@@ -299,11 +313,14 @@ void ADCOrbitalStrike::TickBlast(float Now, const FDCStratagemDef& Def)
 	Shock->SetVisibility(false);
 
 	const float BeamFade = FMath::Clamp(1.f - T / 0.35f, 0.f, 1.f);
-	Beam->SetRelativeScale3D(FVector(3.f * BeamFade + 0.01f, 3.f * BeamFade + 0.01f, BeamHeightCm / 100.f));
-	const FDCLookTuning& Look = UDCTuning::Get().Look;
+	const float FlashWidth = Look.BeamFlashWidthCm / 100.f * BeamFade + 0.01f; // a lance flash, not a pillar filling the lens
+	Beam->SetRelativeScale3D(FVector(FlashWidth, FlashWidth, BeamHeightCm / 100.f));
 	DCAssets::SetFlat(BeamMat, FMath::Lerp(Def.BeamColor, Look.BeamFlashColor, 0.5f), Look.BeamFlashGlow * BeamFade); // a short orange flash, then gone
 	Beam->SetVisibility(BeamFade > 0.f);
-	Light->SetIntensity(UDCTuning::Get().Look.BlastLightIntensity * Fade * Fade);
+	// The blast light: a hard fall from the peak, then a small warm tail that lights the rubble through the decay.
+	const float LightFade = FMath::Clamp(1.f - (T - FireballGrowSeconds) / FMath::Max(Look.BlastLightSeconds, 0.1f), 0.f, 1.f);
+	const float Tail = FMath::Clamp(Look.BlastLightTailFraction, 0.f, 1.f);
+	Light->SetIntensity(Look.BlastLightIntensity * (LightFade * LightFade * LightFade * (1.f - Tail) + Tail * FMath::Sqrt(LightFade)));
 }
 
 void ADCOrbitalStrike::TickBehaviour(const FDCStratagemDef& Def, float U, float DeltaSeconds)
