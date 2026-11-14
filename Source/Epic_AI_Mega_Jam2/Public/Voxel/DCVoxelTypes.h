@@ -278,6 +278,8 @@ struct FDCVoxelTuning
 	/** Shatter (R26): carved voxels fly as up to ShardMax bodies; cluster edge = 1 voxel + 1 per ShardGrowCm from the
 	 *  blast centre, at most ShardBlockMax voxels; speed (cm/s) outward, up kick, life (s). */
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 ShardMax = 110;
+	/** Physics shards spawned per frame at most (the rest follow next frames; R13 spawn burst). */
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 ShardSpawnsPerFrame = 28;
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float ShardGrowCm = 150.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 ShardBlockMax = 4;
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float ShardSpeedCms = 850.f;

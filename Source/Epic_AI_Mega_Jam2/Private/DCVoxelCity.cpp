@@ -1363,27 +1363,35 @@ void ADCVoxelCity::SpawnDueShards(float Now)
 {
 	const ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>();
 	ADCDebrisPool* Pool = GS && GS->GetEnvironment() ? GS->GetEnvironment()->GetDebrisPool() : nullptr;
+	// R13 (perf5: 110 pool spawns in one frame cost 5.5-7.6 ms): at most ShardSpawnsPerFrame physics shards a frame,
+	// the rest fly over the next frames. Crumbs are instanced and go at once.
+	int32 Budget = FMath::Max(1, UDCVoxelSettings::Get().Tuning.ShardSpawnsPerFrame);
 	for (int32 i = PendingShards.Num() - 1; i >= 0; --i)
 	{
 		if (Now < PendingShards[i].Start)
 		{
 			continue;
 		}
-		for (const FDCDebrisSpawn& D : PendingShards[i].Spawns)
-		{
-			if (Pool)
-			{
-				Pool->Spawn(D);
-			}
-		}
-		for (const FDCCrumbSpawn& C : PendingShards[i].Crumbs)
+		FDCShardBurst& Burst = PendingShards[i];
+		for (const FDCCrumbSpawn& C : Burst.Crumbs)
 		{
 			if (Crumbs)
 			{
 				Crumbs->Spawn(C);
 			}
 		}
-		PendingShards.RemoveAtSwap(i);
+		Burst.Crumbs.Reset();
+		const int32 N = FMath::Min(Budget, Burst.Spawns.Num());
+		for (int32 k = 0; k < N && Pool; ++k)
+		{
+			Pool->Spawn(Burst.Spawns[k]);
+		}
+		Budget -= N;
+		Burst.Spawns.RemoveAt(0, N, EAllowShrinking::No);
+		if (Burst.Spawns.Num() == 0)
+		{
+			PendingShards.RemoveAtSwap(i);
+		}
 	}
 }
 
