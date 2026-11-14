@@ -94,5 +94,7 @@ private:
 	TMap<FName, float> PostWeights;
 	FDCWeatherState Weather;
 	float PrecipitationCarry = 0.f;
+	/** 0 = night, 1 = day (Look.DayBlend, or -dcdaypose=<0..1> for evidence runs). */
+	float DayBlend = 0.f;
 	int32 PostQuality = 2;
 };

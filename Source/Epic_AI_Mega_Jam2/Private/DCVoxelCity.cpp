@@ -70,6 +70,8 @@ struct ADCVoxelCity::FFalling
 		TArray<int32> Children;
 		bool bSplitPending = false;
 		bool bSplit = false;
+		bool bFrozen = false;
+		float StillFor = 0.f;
 	};
 	TArray<FFrag> Frags;
 	int32 PendingMeshes = 0;
@@ -1432,8 +1434,9 @@ UBoxComponent* ADCVoxelCity::MakeBody(const TSharedPtr<FFalling>& Shared, int32 
 	// clear of it (the tower's async-cooked collision also lags the carve). Bodies collide with each other at once.
 	Box->SetCollisionResponseToChannel(ECC_WorldStatic, bSolid ? ECR_Block : ECR_Ignore);
 	Box->SetCollisionResponseToChannel(ECC_PhysicsBody, ECR_Block);
-	Box->SetNotifyRigidBodyCollision(true);
-	Box->BodyInstance.bUseCCD = true; // fast boxes over a thin street mesh
+	const bool bChunk = Fr.Children.Num() > 1;
+	Box->SetNotifyRigidBodyCollision(bChunk); // hits matter to chunks (they shatter); leaves skip the callback cost
+	Box->BodyInstance.bUseCCD = bChunk; // fast big boxes over a thin street mesh; leaves are slower and many
 	Box->SetHiddenInGame(true);
 	Box->RegisterComponent();
 	Box->SetSimulatePhysics(true);
@@ -1571,11 +1574,23 @@ bool ADCVoxelCity::TickBodies(const TSharedPtr<FFalling>& Shared, float Dt)
 			const FVector Off(F.LandCenter.X - At.X, F.LandCenter.Y - At.Y, 0.f);
 			Fr.Body->AddForce(Off * Tn.PhysicsSteer - FVector(Vel.X, Vel.Y, 0.f) * (2.f * FMath::Sqrt(Tn.PhysicsSteer)), NAME_None, true);
 		}
-		const bool bStill = !Fr.Body->IsAnyRigidBodyAwake() || (Vel.Size() < Tn.PhysicsRestCms && Fr.Body->GetPhysicsAngularVelocityInDegrees().Size() < Tn.PhysicsRestDegS);
-		bAllAsleep &= bStill;
+		if (Fr.bFrozen)
+		{
+			continue;
+		}
+		// Each body freezes on its own once slow for RestSeconds (a touching pile is one island that may never sleep).
+		const bool bSlow = !Fr.Body->IsAnyRigidBodyAwake() || (Vel.Size() < Tn.PhysicsRestCms && Fr.Body->GetPhysicsAngularVelocityInDegrees().Size() < Tn.PhysicsRestDegS);
+		Fr.StillFor = bSlow ? Fr.StillFor + Dt : 0.f;
+		if (Fr.bSolid && Fr.StillFor >= Tn.PhysicsRestSeconds)
+		{
+			Fr.bFrozen = true;
+			Fr.Body->SetSimulatePhysics(false); // kinematic where it lies; others still land on it
+			continue;
+		}
+		bAllAsleep = false;
 	}
 	F.StillFor = bAllAsleep ? F.StillFor + Dt : 0.f;
-	return (F.BodyAge > 0.5f && F.StillFor >= Tn.PhysicsRestSeconds) || F.BodyAge >= Tn.PhysicsMaxAirSeconds;
+	return (F.BodyAge > 0.5f && bAllAsleep) || F.BodyAge >= Tn.PhysicsMaxAirSeconds;
 }
 
 void ADCVoxelCity::OnBodyHit(UPrimitiveComponent* HitComp, AActor* Other, UPrimitiveComponent* OtherComp, FVector NormalImpulse, const FHitResult& Hit)

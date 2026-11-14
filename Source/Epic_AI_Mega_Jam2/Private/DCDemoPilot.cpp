@@ -68,6 +68,33 @@ void ADCDemoPilot::TickMedic()
 			Shot(TEXT("medic_revived_teammate"));
 			UE_LOG(LogDCDemo, Display, TEXT("DEMO medic: teammate back up"));
 		}
+		// -dccostar (R20 evidence): stand in the host's shot, between the host and a telegraphing strike, CoStarSpotCm
+		// short of the blast, so the host's photo frames a teammate near the blast.
+		static const bool bCoStar = FParse::Param(FCommandLine::Get(), TEXT("dccostar"));
+		const ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>();
+		ADCCharacter* Host = nullptr;
+		for (ADCCharacter* C : TActorRange<ADCCharacter>(GetWorld()))
+		{
+			Host = C != Me ? C : Host;
+		}
+		const ADCOrbitalStrike* Strike = nullptr;
+		for (ADCOrbitalStrike* S : TActorRange<ADCOrbitalStrike>(GetWorld()))
+		{
+			Strike = GS && S->GetDetonateTime() > GS->Now() - 1.5f ? S : Strike;
+		}
+		if (bCoStar && Host)
+		{
+			// Idle: 7 m in front of the host; a strike telegraphing: halfway between the host and the blast.
+			const FVector HostAt = Host->GetActorLocation();
+			const FVector Spot = Strike ? FMath::Lerp(HostAt, Strike->GetActorLocation(), 0.45f) : HostAt + Host->GetActorForwardVector().GetSafeNormal2D() * 700.f;
+			if (FVector::Dist2D(Spot, Me->GetActorLocation()) > 150.f)
+			{
+				AimAt(FVector(Spot.X, Spot.Y, Me->GetActorLocation().Z));
+				Press(TEXT("Move"), FVector(0, 1, 0));
+				return;
+			}
+			AimAt(Strike ? Strike->GetActorLocation() : HostAt); // face the blast, in the host's frame
+		}
 		Release(TEXT("Move"));
 		return;
 	}
@@ -594,7 +621,7 @@ void ADCDemoPilot::TickDefend()
 	// bubble, so a swarmer biting at 1-2 m is shot instead of downing the pilot while it frames a photo.
 	// With the camera up (framing a swarm) it only breaks off for a swarmer already at arm's length (3 m).
 	// (Sector 2 runs still went down at 1 m with a 6 m bubble: 10 m gives the rifle time to drop a rushing swarmer.)
-	float Best = bDefend ? 1200.f : (Me && Me->IsCameraRaised() ? 700.f : 1000.f);
+	float Best = bDefend ? 1200.f : (Me && Me->IsCameraRaised() ? 1000.f : 1300.f);
 	if (Me && !Me->IsDowned() && GS && GS->Phase == EDCRunPhase::Sector)
 	{
 		for (ADCEnemy* E : TActorRange<ADCEnemy>(GetWorld()))

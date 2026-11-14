@@ -113,8 +113,11 @@ void ADCEnvironment::BeginPlay()
 {
 	Super::BeginPlay();
 	const FDCLookTuning& Look = UDCTuning::Get().Look;
+	DayBlend = Look.DayBlend;
+	FParse::Value(FCommandLine::Get(), TEXT("dcdaypose="), DayBlend);
+	DayBlend = FMath::Clamp(DayBlend, 0.f, 1.f);
 
-	Sun->SetWorldRotation(Look.SunRotation);
+	Sun->SetWorldRotation(FMath::Lerp(Look.SunRotation, Look.DaySunRotation, DayBlend));
 	Sun->SetIntensity(Look.SunIntensityLux);
 	// Light shafts through the towers (Saltline: shafts sell scale), the cheap screen-space kind.
 	Sun->bEnableLightShaftBloom = true;
@@ -127,7 +130,7 @@ void ADCEnvironment::BeginPlay()
 	Fog->SetFogInscatteringColor(Look.FogColor);
 
 	// Poster sky: warm, flat Rayleigh in a tall layer so the zenith stays cream (CP3 vision: it went charcoal).
-	Atmosphere->SetRayleighScattering(Look.SkyRayleighColor);
+	Atmosphere->SetRayleighScattering(FMath::Lerp(Look.SkyRayleighColor, Look.DaySkyRayleighColor, DayBlend));
 	Atmosphere->SetRayleighScatteringScale(Look.SkyRayleighScale);
 	Atmosphere->SetRayleighExponentialDistribution(Look.SkyRayleighHeightKm);
 	Atmosphere->SetMieScatteringScale(Look.SkyMieScale);
@@ -504,18 +507,21 @@ void ADCEnvironment::Tick(float DeltaSeconds)
 		AppliedWetness = W.Wetness;
 		WetCity->SetWetness(W.Wetness);
 	}
-	Sun->SetIntensity(Look.SunIntensityLux * Light * W.SunScale);
-	Sun->SetLightColor(Look.SunColor * W.SunTint);
-	SkyLight->SetIntensity(Light * W.SkyScale * Look.SkyFill);
+	// Night look blended toward the day end by DayBlend (the day-night cycle's seam; 0 = the noir board).
+	const float Day = DayBlend;
+	Sun->SetIntensity(FMath::Lerp(Look.SunIntensityLux, Look.DaySunLux, Day) * Light * W.SunScale);
+	Sun->SetLightColor(FMath::Lerp(Look.SunColor, Look.DaySunColor, Day) * W.SunTint);
+	SkyLight->SetIntensity(Light * W.SkyScale * FMath::Lerp(Look.SkyFill, Look.DaySkyFill, Day));
 	// The poster sky holds cream to the zenith under any weather: dimming the sun would grey the sky with it, so the
 	// sky luminance makes up for the weather's sun scale (V4.3). Mutators (eclipse) still darken it through Light.
-	const float SkyKeep = Look.SkyLuminance * Light / FMath::Max(W.SunScale, Look.SkyMinSunScale);
+	const float SkyKeep = FMath::Lerp(Look.SkyLuminance, Look.DaySkyLuminance, Day) * Light / FMath::Max(W.SunScale, Look.SkyMinSunScale);
 	Atmosphere->SetSkyLuminanceFactor(FLinearColor(SkyKeep, SkyKeep, SkyKeep));
 	Fog->SetFogDensity(W.FogDensity);
-	Fog->SetFogInscatteringColor(MutatorFog.A > 0.f ? MutatorFog : W.FogColor);
+	Fog->SetFogInscatteringColor(MutatorFog.A > 0.f ? MutatorFog : FMath::Lerp(W.FogColor, Look.DayFogColor, Day));
 	UpdatePostWeights();
 	const FDCPostResult Composed = ComposeLook(false, false);
 	ApplyPost(Composed, Post->Settings);
+	Post->Settings.AutoExposureBias += Look.DayExposure * Day;
 	ApplyOutline(Composed.Outline);
 }
 
