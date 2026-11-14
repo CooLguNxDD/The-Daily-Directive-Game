@@ -280,10 +280,13 @@ bool ADCVoxelCity::IsSolidAt(const FVector& Where) const
 		{
 			return true;
 		}
-		for (const FDCVoxelTower& T : Sector.Towers)
+		for (int32 Lot = 0; Lot < Sector.Towers.Num(); ++Lot)
 		{
+			// A committed-fallen tower is rubble now, not its crafted box (advisor a-7: units on rubble stalled here).
+			const FDCVoxelTower& T = Sector.Towers[Lot];
 			const FIntVector L = T.Grid.ToLocal(Cm);
-			if (L.X >= T.Min.X && L.Y >= T.Min.Y && L.Z >= 0 && L.X < T.Max.X && L.Y < T.Max.Y && L.Z < T.Max.Z)
+			const bool bFallen = CommittedFallen.IsValidIndex(Lot) && CommittedFallen[Lot];
+			if (!bFallen && L.X >= T.Min.X && L.Y >= T.Min.Y && L.Z >= 0 && L.X < T.Max.X && L.Y < T.Max.Y && L.Z < T.Max.Z)
 			{
 				return true;
 			}
@@ -432,6 +435,27 @@ void ADCVoxelCity::BeginPlay()
 float ADCVoxelCity::BodyLoad() const
 {
 	return static_cast<float>(BodiesReserved) / FMath::Max(1, UDCVoxelSettings::Get().Tuning.PhysicsMaxBodies);
+}
+
+void ADCVoxelCity::BurstCrumbs(const FVector& At, const FLinearColor& Body, const FLinearColor& Glow, int32 Count, float SizeCm)
+{
+	const FDCVoxelTuning& Tn = UDCVoxelSettings::Get().Tuning;
+	if (!Crumbs)
+	{
+		return;
+	}
+	FRandomStream Rng(static_cast<int32>(GetTypeHash(At.GridSnap(10.f))));
+	for (int32 i = 0; i < Count; ++i)
+	{
+		FDCCrumbSpawn C;
+		C.At = At + Rng.VRand() * 40.f;
+		C.Velocity = Rng.VRand() * Tn.CrumbSpeedCms * Rng.FRandRange(0.4f, 1.1f) + FVector(0, 0, Rng.FRandRange(150.f, Tn.CrumbUpCms + 200.f));
+		C.SizeCm = SizeCm * Rng.RandRange(1, 2);
+		const bool bGlow = i % 4 == 0;
+		C.Color = bGlow ? Glow : Body;
+		C.Glow = bGlow ? 4.f : 0.f;
+		Crumbs->Spawn(C);
+	}
 }
 
 void ADCVoxelCity::ThrowCrumbs(const FFalling& F, int32 FragIndex, const FBox& WorldBox, const FVector& V, int32 Count, FRandomStream& Rng)
@@ -695,9 +719,10 @@ void ADCVoxelCity::Build(int32 RunSeed, int32 SectorIndex, int32 BuildId, bool b
 	LampSpots.Reset();
 	for (const FDCPropPlan& Prop : Plan.Props)
 	{
-		if (Prop.Model == UDCVoxelSettings::Get().Tuning.LampModel)
+		const int32 Row = V.PropLights.IndexOfByPredicate([&Prop](const FDCPropLightDef& D) { return D.Model == Prop.Model; });
+		if (Row != INDEX_NONE || (V.PropLights.Num() == 0 && Prop.Model == V.Tuning.LampModel))
 		{
-			LampSpots.Add(Prop.Location);
+			LampSpots.Add({Prop.Location, Row});
 		}
 	}
 	FDCVoxelCraftContext Craft = V.CraftContext(T.City.BlockSizeCm);
@@ -1008,7 +1033,7 @@ void ADCVoxelCity::CommitOp(const FDCVoxelOp& Op, FDCVoxelOpResult& Result, bool
 	if (Op.Kind == TEXT("Strike"))
 	{
 		const float R2 = FMath::Square(static_cast<float>(FMath::Max(Op.BlastRadiusCm, 0)));
-		LampSpots.RemoveAll([&Op, R2](const FVector& L) { return FVector::DistSquared2D(L, FVector(Op.CenterCm)) <= R2; }); // lamps in the blast go out
+		LampSpots.RemoveAll([&Op, R2](const FLightSpot& L) { return FVector::DistSquared2D(L.At, FVector(Op.CenterCm)) <= R2; }); // lamps in the blast go out
 	}
 	if (Op.Kind == TEXT("Rest"))
 	{
@@ -1596,9 +1621,23 @@ void ADCVoxelCity::TickFalling(float Now)
 	SpawnDueShards(Now);
 	// Rested bodies shrink away over the shared rubble, then go.
 	const float Fade = FMath::Max(UDCVoxelSettings::Get().Tuning.PhysicsFadeSeconds, 0.01f);
+	const FDCVoxelTuning& FadeTn = UDCVoxelSettings::Get().Tuning;
 	for (int32 i = Fading.Num() - 1; i >= 0; --i)
 	{
-		const float A = (GetWorld()->GetTimeSeconds() - Fading[i].Start) / Fade;
+		const float WorldNow = GetWorld()->GetTimeSeconds();
+		Fading[i].Added = Fading[i].Added < 0.f ? Fading[i].Start : Fading[i].Added;
+		if (UPrimitiveComponent* Flying = Fading[i].bReserved ? Fading[i].Body.Get() : nullptr)
+		{
+			// A stray still in the air keeps flying (no shrink) until it nears the street or runs out of time.
+			const FVector P = Flying->GetComponentLocation();
+			const bool bAir = Flying->IsAnyRigidBodyAwake() && P.Z - SurfaceZCm(P) > FadeTn.PhysicsGroundContactCm * 1.5f;
+			if (bAir && WorldNow - Fading[i].Added < FadeTn.PhysicsStrayFlySeconds)
+			{
+				Fading[i].Start = WorldNow;
+				continue;
+			}
+		}
+		const float A = (WorldNow - Fading[i].Start) / Fade;
 		UPrimitiveComponent* Mesh = Fading[i].Mesh.Get();
 		if (A >= 1.f || !Mesh)
 		{
@@ -2265,8 +2304,9 @@ void ADCVoxelCity::TickLampLights()
 		return;
 	}
 	const FVector View = PC->PlayerCameraManager->GetCameraLocation();
-	TArray<FVector> Near = LampSpots;
-	Near.Sort([&View](const FVector& A, const FVector& B) { return FVector::DistSquared(A, View) < FVector::DistSquared(B, View); });
+	TArray<FLightSpot> Near = LampSpots;
+	Near.Sort([&View](const FLightSpot& A, const FLightSpot& B) { return FVector::DistSquared(A.At, View) < FVector::DistSquared(B.At, View); });
+	const TArray<FDCPropLightDef>& Rows = UDCVoxelSettings::Get().PropLights;
 	while (LampPool.Num() < FMath::Min(Tn.LampLights, Near.Num()))
 	{
 		UPointLightComponent* L = NewObject<UPointLightComponent>(this);
@@ -2285,10 +2325,11 @@ void ADCVoxelCity::TickLampLights()
 			L->SetVisibility(false);
 			continue;
 		}
-		L->SetWorldLocation(Near[i] + FVector(0, 0, Tn.LampHeightCm));
-		L->SetLightColor(Tn.LampColor);
-		L->SetIntensity(Tn.LampCandela);
-		L->SetAttenuationRadius(Tn.LampRadiusCm);
+		const FDCPropLightDef* Row = Rows.IsValidIndex(Near[i].Row) ? &Rows[Near[i].Row] : nullptr;
+		L->SetWorldLocation(Near[i].At + FVector(0, 0, Row ? Row->HeightCm : Tn.LampHeightCm));
+		L->SetLightColor(Row ? Row->Color : Tn.LampColor);
+		L->SetIntensity(Row ? Row->Candela : Tn.LampCandela);
+		L->SetAttenuationRadius(Row ? Row->RadiusCm : Tn.LampRadiusCm);
 		L->SetVisibility(true);
 	}
 }

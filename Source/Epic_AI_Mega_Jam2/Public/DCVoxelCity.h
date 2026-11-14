@@ -70,6 +70,9 @@ public:
 	/** 0..1+: physics bodies reserved over the PhysicsMaxBodies budget (advisor a-3: one destruction budget every new
 	 *  cost source reads: faction strikes wait, crumbs thin out). */
 	float BodyLoad() const;
+	/** Cosmetic burst of Count crumbs at a point (a unit dying into voxels): Body colour, Count/4 of them in the glow
+	 *  colour. Local to this machine. */
+	void BurstCrumbs(const FVector& At, const FLinearColor& Body, const FLinearColor& Glow, int32 Count, float SizeCm);
 	/** Is this world point inside a solid voxel (towers, terrain, props)? Photos never shoot from inside one. */
 	bool IsSolidAt(const FVector& Where) const;
 	/** Photo sight (host grading): is the straight line From -> To blocked by city voxels? Marches the voxel city,
@@ -152,6 +155,9 @@ private:
 		float Start = 0.f;
 		/** A still-simulating body keeps its body reservation until the fade releases it (review CP34). */
 		bool bReserved = false;
+		/** When it joined the list (-1 = not seen yet): a flying stray postpones its fade until it nears the street,
+		 *  at most PhysicsStrayFlySeconds (CP40 major: strays faded mid-flight). */
+		float Added = -1.f;
 	};
 	TArray<FDCFading> Fading;
 	/** -dccollapsecam evidence camera (step -1 = off). */
@@ -294,7 +300,13 @@ private:
 	UPROPERTY() TArray<TObjectPtr<class UPointLightComponent>> FireLightPool;
 	TArray<float> FireLightStart;
 	/** Street lamp spots (from the plan's props) and their pooled lights; a spot is cleared when a blast reaches it. */
-	TArray<FVector> LampSpots;
+	/** Lit prop spots (R25): where, and which PropLights row (INDEX_NONE = the legacy lamp row). */
+	struct FLightSpot
+	{
+		FVector At = FVector::ZeroVector;
+		int32 Row = INDEX_NONE;
+	};
+	TArray<FLightSpot> LampSpots;
 	UPROPERTY() TArray<TObjectPtr<class UPointLightComponent>> LampPool;
 	float NextLampPick = 0.f;
 	void TickLampLights();

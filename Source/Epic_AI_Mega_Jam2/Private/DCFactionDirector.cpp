@@ -39,6 +39,8 @@ void ADCGameMode::RollFactions()
 	GS->Zones.Init(GS->FactionMix.Main, Side * Side);
 	GS->ZoneHalfExtent = CityPlan.HalfExtent;
 	NextTerritoryTime = 0.f;
+	bOpeningDone = false;
+	bNestsDone = false;
 	NextFactionStrike = 0.f;
 	FactionStrikeReady.Reset();
 	FString Invaders;
@@ -95,6 +97,17 @@ int32 ADCGameMode::SpawnSquad(FName Faction, int32 Count, const FVector& Centre,
 		return 0;
 	}
 	const ADCVoxelCity* City = ADCVoxelCity::Get(this);
+	const UDCUnits* Live = UDCUnits::Get(this);
+	int32 Alive = 0;
+	for (const ADCEnemy* U : Live ? Live->All() : TArray<TObjectPtr<ADCEnemy>>())
+	{
+		Alive += U && U->IsAlive() ? 1 : 0;
+	}
+	Count = FMath::Min(Count, T.FactionMix.MaxUnitsAlive - Alive - PendingSpawns.Num());
+	if (Count <= 0)
+	{
+		return 0;
+	}
 	const int32 Squad = NextSquadId++;
 	int32 Landed = 0;
 	for (int32 i = 0; i < Count; ++i)
@@ -148,6 +161,45 @@ void ADCGameMode::TickFactions(float Now)
 		{
 			Standing.Add(C);
 		}
+	}
+	// Nests: factions that nest (the Hive) burst up their nests in the ring around the crew, once per sector.
+	if (!bNestsDone && Standing.Num() > 0 && Now >= SectorStartTime + T.FactionMix.OpeningSeconds)
+	{
+		bNestsDone = true;
+		TArray<FName> OnMap = GS->FactionMix.Invaders;
+		OnMap.Add(GS->FactionMix.Main);
+		for (const FName& Id : OnMap)
+		{
+			const FDCFactionDef* F = DCFactionRules::Find(T.Factions, Id);
+			const FDCEnemyDef* NestDef = F && F->NestCount > 0 ? T.FindEnemy(F->NestUnit) : nullptr;
+			for (int32 n = 0; NestDef && n < F->NestCount; ++n)
+			{
+				FVector At = DropPoint(Standing[0]->GetActorLocation(), Id != GS->FactionMix.Main, P);
+				const ADCVoxelCity* NestCity = ADCVoxelCity::Get(this);
+				At.Z = (NestCity ? NestCity->SurfaceZCm(At) : 0.f) + NestDef->HoverHeight;
+				PendingSpawns.Add({NestDef->Id, FTransform(FRotator(0, SectorRng.FRandRange(0, 360), 0), At), NextSquadId++, 0, 1});
+				UE_LOG(LogTemp, Display, TEXT("DCFACTION nest %s at %s"), *Id.ToString(), *At.ToCompactString());
+			}
+		}
+	}
+	// The opening clash: a fight already under way in sight of the crew within seconds of landing.
+	if (!bOpeningDone && Standing.Num() > 0 && T.FactionMix.OpeningSquad > 0 && Now >= SectorStartTime + T.FactionMix.OpeningSeconds)
+	{
+		bOpeningDone = true;
+		const FName Raider = GS->FactionMix.Invaders.Num() > 0 ? GS->FactionMix.Invaders[0] : (GS->FactionMix.Allies.Num() > 0 ? GS->FactionMix.Allies[0] : NAME_None);
+		const FVector A = DropPoint(Standing[0]->GetActorLocation(), false, P);
+		// The other side lands on the street point nearest OpeningApartCm away from the first.
+		FVector B = A;
+		float BestGap = TNumericLimits<float>::Max();
+		for (const FVector& Pt : CityPlan.StreetPoints)
+		{
+			const float Gap = FMath::Abs(FVector::Dist2D(Pt, A) - T.FactionMix.OpeningApartCm);
+			B = Gap < BestGap ? Pt : B;
+			BestGap = FMath::Min(BestGap, Gap);
+		}
+		const int32 Main = SpawnSquad(GS->FactionMix.Main, T.FactionMix.OpeningSquad, A, 300.f);
+		const int32 Other = SpawnSquad(Raider, T.FactionMix.OpeningSquad, B, 300.f);
+		UE_LOG(LogTemp, Display, TEXT("DCFACTION opening clash %s x%d vs %s x%d"), *GS->FactionMix.Main.ToString(), Main, *Raider.ToString(), Other);
 	}
 	if (Standing.Num() == 0 || Now < SectorStartTime + P.StartSeconds)
 	{

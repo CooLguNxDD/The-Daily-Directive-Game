@@ -256,7 +256,10 @@ void ADCHUD::DrawSectorCard(ADCGameState& GS)
 		}
 	}
 	Box(W * 0.2f, H * 0.62f - Lift, W * 0.6f, Sx(3.f), RuleA);
-	Text(TEXT("CAMERAS READY. THE CITY IS YOUR STUDIO."), W * 0.5f, H * 0.645f - Lift, TitleA, 0.95f, true);
+	// R4: HQ's order for the sector replaces the tagline once the objective is in.
+	const ADCObjective* Order = ADCObjective::Find(this);
+	const FDCObjectiveDef* OrderDef = Order ? Order->GetDef() : nullptr;
+	Text(OrderDef ? OrderDef->Brief : FString(TEXT("CAMERAS READY. THE CITY IS YOUR STUDIO.")), W * 0.5f, H * 0.645f - Lift, OrderDef ? FLinearColor(Gold.R, Gold.G, Gold.B, A) : TitleA, 0.95f, true);
 }
 
 void ADCHUD::DrawFlashes(ADCGameState& GS, ADCCharacter& Me)
@@ -837,7 +840,7 @@ void ADCHUD::DrawTerritory(ADCGameState& GS, ADCCharacter& Me)
 	}
 	const float W = Canvas->ClipX;
 	const float Cell = Sx(16.f), Gap = Sx(2.f);
-	const float X0 = W - Sx(24.f) - N * (Cell + Gap), Y0 = Sx(112.f);
+	const float X0 = W - Sx(24.f) - N * (Cell + Gap), Y0 = Sx(128.f);
 	Text(TEXT("TERRITORY"), X0, Y0 - Sx(16.f), FLinearColor(1.f, 1.f, 1.f, 0.7f), 0.5f);
 	const float Half = GS.ZoneHalfExtent;
 	const int32 Mine = Half > 0.f ? DCFactionRules::ZoneOf(Me.GetActorLocation(), Half, N) : INDEX_NONE;
@@ -875,7 +878,7 @@ void ADCHUD::DrawObjective(ADCGameState& GS, ADCCharacter& Me)
 		{EDCObjectiveStage::Failed, TEXT("OBJECTIVE FAILED")},
 	};
 	const FString* Line = Lines.Find(O->Stage);
-	const float X = Sx(24.f), Y = Sx(96.f);
+	const float X = Sx(24.f), Y = Sx(104.f);
 	Box(X - Sx(4.f), Y, Sx(4.f), Sx(44.f), Gold);
 	Text(TEXT("OBJECTIVE"), X + Sx(8.f), Y, FLinearColor(1.f, 1.f, 1.f, 0.7f), 0.5f);
 	Text(Line ? *Line : FString(), X + Sx(8.f), Y + Sx(16.f), O->Stage == EDCObjectiveStage::Failed ? Red : Gold, 0.72f);

@@ -425,6 +425,21 @@ struct FDCEnemyDef
 	 *  ShotRange it can see (host voxel sight line), Damage per hit, ShotSpread degrees of miss. */
 	UPROPERTY(EditAnywhere, Config, Category = "Enemy") float ShotRange = 0.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Enemy") float ShotSpread = 2.f;
+	/** Hit and run: a foe closer than this makes the unit back off while it keeps firing (0 = holds its ground). */
+	UPROPERTY(EditAnywhere, Config, Category = "Enemy") float KiteCm = 0.f;
+	/** A sound every machine hears from the unit every IdleCueSeconds (+-40 %, staggered per unit); None = silent. */
+	UPROPERTY(EditAnywhere, Config, Category = "Enemy") FName IdleCue;
+	UPROPERTY(EditAnywhere, Config, Category = "Enemy") float IdleCueSeconds = 6.f;
+	/** At its goal (within GoalActRadiusCm, no foe in sight) the unit stops and acts: GoalActCue every GoalActSeconds
+	 *  (Scavengers loot the rubble). None = it just holds there. */
+	UPROPERTY(EditAnywhere, Config, Category = "Enemy") FName GoalActCue;
+	UPROPERTY(EditAnywhere, Config, Category = "Enemy") float GoalActRadiusCm = 500.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Enemy") float GoalActSeconds = 2.5f;
+	/** Behaviour Nest (the Hive): a fixed unit that sends SpawnCount units of its faction every SpawnEverySeconds while
+	 *  fewer than SpawnMaxAlive of its faction live. Killing it stops the flow (and it is worth KillPoints). */
+	UPROPERTY(EditAnywhere, Config, Category = "Enemy") float SpawnEverySeconds = 0.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Enemy") int32 SpawnCount = 0;
+	UPROPERTY(EditAnywhere, Config, Category = "Enemy") int32 SpawnMaxAlive = 16;
 	/** Squad shape for ground infantry (formation registry): Crowd, Line, Skirmish. Spacing between slots (cm). */
 	UPROPERTY(EditAnywhere, Config, Category = "Enemy") FName Formation = TEXT("Crowd");
 	UPROPERTY(EditAnywhere, Config, Category = "Enemy") float FormationSpacingCm = 220.f;

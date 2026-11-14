@@ -35,6 +35,8 @@ struct FDCObjectiveDef
 	UPROPERTY(EditAnywhere, Config, Category = "Objective") int32 Targets = 3;
 	/** Retrieve: a standing player this close picks the package up. */
 	UPROPERTY(EditAnywhere, Config, Category = "Objective") float PickupRadiusCm = 350.f;
+	/** Retrieve: the package lands on a seeded street point among the DeepFraction farthest from the crew's spawn. */
+	UPROPERTY(EditAnywhere, Config, Category = "Objective") float DeepFraction = 0.25f;
 	/** Extraction: the beacon's zone, and how far from the objective it lands at least. */
 	UPROPERTY(EditAnywhere, Config, Category = "Objective") float ExtractRadiusCm = 900.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Objective") float ExtractMinDistanceCm = 6000.f;
@@ -42,6 +44,8 @@ struct FDCObjectiveDef
 	 *  while nobody carries it. */
 	UPROPERTY(EditAnywhere, Config, Category = "Objective") int32 GuardSquad = 8;
 	UPROPERTY(EditAnywhere, Config, Category = "Objective") float GuardGapSeconds = 30.f;
+	/** At most this many guard squads per sector (advisor a-7: loitering by the package must not pile up units). */
+	UPROPERTY(EditAnywhere, Config, Category = "Objective") int32 GuardWaves = 3;
 	/** Propaganda Points paid to every player on extraction; the sector ends ExtractEndSeconds later. */
 	UPROPERTY(EditAnywhere, Config, Category = "Objective") int32 RewardPoints = 600;
 	UPROPERTY(EditAnywhere, Config, Category = "Objective") float ExtractEndSeconds = 2.5f;
@@ -97,6 +101,8 @@ namespace DCObjectiveRules
 	EPIC_AI_MEGA_JAM2_API TArray<int32> PickTargets(const TArray<FVector>& Candidates, const FVector& From, int32 Count, float MinApartCm, int32 Seed);
 	/** Index of the point farthest from From (deep in the swarm); INDEX_NONE when empty. */
 	EPIC_AI_MEGA_JAM2_API int32 Farthest(const TArray<FVector>& Points, const FVector& From);
+	/** Seeded pick among the farthest Fraction of Points from From (deep, but not always the same corner). */
+	EPIC_AI_MEGA_JAM2_API int32 Deep(const TArray<FVector>& Points, const FVector& From, float Fraction, int32 Seed);
 	/** Index of the point nearest MinDistance away from From (at least MinDistance when any is); INDEX_NONE when empty. */
 	EPIC_AI_MEGA_JAM2_API int32 AtLeast(const TArray<FVector>& Points, const FVector& From, float MinDistance);
 }

@@ -61,7 +61,7 @@ void ADCGameMode::StartObjective()
 	const ADCVoxelCity* City = ADCVoxelCity::Get(this);
 	auto Ground = [City](FVector P) { P.Z = City ? City->SurfaceZCm(P) : 0.f; return P; };
 	// Retrieve: the package sits deep in the main faction's ground, the street point farthest from the crew's spawn.
-	const int32 Deep = DCObjectiveRules::Farthest(CityPlan.StreetPoints, Spawn);
+	const int32 Deep = DCObjectiveRules::Deep(CityPlan.StreetPoints, Spawn, Def->DeepFraction, GS->RunSeed + GS->SectorIndex * 977);
 	Objective->PackageAt = Ground(CityPlan.StreetPoints[FMath::Max(Deep, 0)]);
 	// Destroy: marked standing towers, far from the spawn and apart from each other.
 	if (Def->Targets > 0 && Def->Kind == TEXT("Destroy"))
@@ -99,6 +99,7 @@ void ADCGameMode::StartObjective()
 		}
 	}
 	NextGuardTime = 0.f;
+	GuardWavesSent = 0;
 	UE_LOG(LogTemp, Display, TEXT("DCOBJECTIVE sector=%d %s (%s) package=%s targets=%d"), GS->SectorIndex + 1, *Def->Id.ToString(), *Def->Kind.ToString(),
 		*Objective->PackageAt.ToCompactString(), Objective->TargetAt.Num());
 }
@@ -146,9 +147,10 @@ void ADCGameMode::TickObjective(float Now)
 		}
 		// The deep swarm: as the crew closes in on a package nobody carries, the main faction erupts around it.
 		const bool bNear = Standing.ContainsByPredicate([&](const ADCCharacter* C) { return FVector::Dist2D(C->GetActorLocation(), Objective->PackageAt) < 7000.f; });
-		if (!Objective->Carrier && bNear && Now >= NextGuardTime && FactionMode())
+		if (!Objective->Carrier && bNear && Now >= NextGuardTime && FactionMode() && GuardWavesSent < Def->GuardWaves)
 		{
 			NextGuardTime = Now + Def->GuardGapSeconds;
+			++GuardWavesSent;
 			const int32 Landed = SpawnSquad(GS->FactionMix.Main, Def->GuardSquad, Objective->PackageAt, 900.f);
 			UE_LOG(LogTemp, Display, TEXT("DCOBJECTIVE guards %s landed=%d"), *GS->FactionMix.Main.ToString(), Landed);
 		}
@@ -158,10 +160,14 @@ void ADCGameMode::TickObjective(float Now)
 	for (int32 i = 0; i < ObjectiveTargets.Num(); ++i)
 	{
 		const ADCBuilding* B = ObjectiveTargets[i].Get();
-		const bool bDown = !B || B->IsCollapsed();
+		// Strikes and carving count (R4): the gameplay collapse record or the voxel city's committed fall of the lot.
+		const ADCVoxelCity* TargetCity = ADCVoxelCity::Get(this);
+		const bool bDown = !B || B->IsCollapsed() || (TargetCity && TargetCity->IsTowerFallen(B->GetLotIndex()));
 		if (bDown && !Objective->TargetDown[i])
 		{
 			Objective->TargetDown[i] = 1;
+			UE_LOG(LogTemp, Display, TEXT("DCOBJECTIVE target %d down (lot %d, collapsed=%d voxel-fallen=%d)"), i, B ? B->GetLotIndex() : -1, B && B->IsCollapsed() ? 1 : 0,
+				B && TargetCity && TargetCity->IsTowerFallen(B->GetLotIndex()) ? 1 : 0);
 			ToastAll(All, FString::Printf(TEXT("TARGET DOWN  %d / %d"), ObjectiveTargets.Num() - Objective->TargetsLeft(), ObjectiveTargets.Num()));
 		}
 		In.Destroyed += bDown ? 1 : 0;

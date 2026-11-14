@@ -138,3 +138,12 @@ is kept from the run records (Glass Box modifier): what was decided, why, and wh
 - Objectives: Retrieve (a package deep in the main faction's ground) or Destroy (three marked towers), then a lit
   beacon; reaching it ends the sector early. Time up fails the objective but the run goes on to the reel.
 - The builder exports a shareable ID card PNG from its own turntable capture.
+- First editor play of Retrieve (obj4): package picked up, beacon lit, extracted, the sector ended at 74 s. The second
+  sector wiped after the beacon lit; the reel and a CORRECTION front page still played. Both packages had landed at
+  the same corner (farthest street point on a same-size grid); the spot is now a seeded pick among the farthest quarter.
+- First Destroy run (obj5): the strike felled the marked tower in the voxel city, but the gameplay building never
+  reported a collapse, so the pilot kept striking an empty lot. Targets now also count the voxel city's committed fall.
+- Lit props (signs, kiosks, billboards, awnings, lamps) now get pooled coloured lights, because the night frames measured
+  94 % dark with 0.5 % neon accent against the art bible's ~70-80 % and ~10 %.
+- A mix of small faction touches: an opening clash a few seconds into each sector, crowds dropped bigger but weighted
+  lighter against the pressure cap, Scavengers kite and loot rubble, the Dead groan, units burst into voxel crumbs.

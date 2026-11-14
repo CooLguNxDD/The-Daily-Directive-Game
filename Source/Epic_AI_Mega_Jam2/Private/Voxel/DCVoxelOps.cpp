@@ -1014,6 +1014,9 @@ namespace DCVoxelOps
 	void DeriveCosmetics(const FDCVoxelSector& Sector, const FDCVoxelOp& Op, const FDCVoxelOpContext& Ctx, FDCVoxelOpResult& Result)
 	{
 		const FDCVoxelTuning& Tn = *Ctx.Tuning;
+		const FDCVoxelCarveDef& Detail = Ctx.CarveFor(Op.Stratagem);
+		const int32 Pieces = Detail.PhysicsPieces >= 0 ? Detail.PhysicsPieces : Tn.PhysicsPieces;
+		const int32 Fragments = Detail.PhysicsFragments >= 0 ? Detail.PhysicsFragments : Tn.PhysicsFragments;
 		// Physics pieces: the biggest PhysicsPieces (index order breaks ties), each with its fragment tree.
 		TArray<int32> BySize;
 		for (int32 i = 0; i < Result.Pieces.Num(); ++i)
@@ -1021,7 +1024,7 @@ namespace DCVoxelOps
 			BySize.Add(i);
 		}
 		BySize.StableSort([&Result](int32 A, int32 B) { return Result.Pieces[A].Cells.Num() > Result.Pieces[B].Cells.Num(); });
-		for (int32 k = 0; k < BySize.Num() && k < Tn.PhysicsPieces; ++k)
+		for (int32 k = 0; k < BySize.Num() && k < Pieces; ++k)
 		{
 			const FDCVoxelPiece& Pc = Result.Pieces[BySize[k]];
 			FDCPendingPiece P;
@@ -1034,7 +1037,7 @@ namespace DCVoxelOps
 				P.RubbleMaterials.Add(Result.RubbleMaterials.IsValidIndex(r) ? Result.RubbleMaterials[r] : 0);
 			}
 			const FIntVector Focus = Sector.Towers[Pc.Lot].Grid.ToLocal(Op.CenterCm); // smaller fragments near the blast
-			FragmentTree(Pc.Cells, Sector.Towers[Pc.Lot].Grid.VoxelCm, Tn.PhysicsFragmentCm, Tn.PhysicsFragments, Tn.PhysicsLeafCm, Tn.PhysicsLeavesPerChunk, P.FragParent, P.FragCells,
+			FragmentTree(Pc.Cells, Sector.Towers[Pc.Lot].Grid.VoxelCm, Tn.PhysicsFragmentCm, Fragments, Tn.PhysicsLeafCm, Tn.PhysicsLeavesPerChunk, P.FragParent, P.FragCells,
 				&Focus, Tn.PhysicsFocusFalloffCm);
 			P.FragLo.Init(FIntVector(MAX_int32), P.FragCells.Num());
 			P.FragHi.Init(FIntVector(MIN_int32), P.FragCells.Num());

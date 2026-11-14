@@ -516,12 +516,15 @@ void ADCGameMode::TickPressure(float Now)
 		In.SinceCollapse = C.Time <= Now ? FMath::Min(In.SinceCollapse, Now - C.Time) : In.SinceCollapse;
 	}
 	const bool bFactions = FactionMode();
+	float AliveWeight = 0.f;
 	for (ADCEnemy* E : TActorRange<ADCEnemy>(GetWorld()))
 	{
-		// R3: every unit that fights the crew counts against the pressure, whatever its faction.
+		// R3: every unit that fights the crew counts against the pressure, weighted by its faction (crowds are cheap).
 		const bool bCounts = bFactions ? DCFactionRules::FightsCrew(T.Factions, E->GetFaction()) : E->GetKind() == Def->Id;
-		In.Alive += E->IsAlive() && bCounts ? 1 : 0;
+		const FDCFactionDef* EF = bFactions ? DCFactionRules::Find(T.Factions, E->GetFaction()) : nullptr;
+		AliveWeight += E->IsAlive() && bCounts ? (EF ? EF->PressureWeight : 1.f) : 0.f;
 	}
+	In.Alive = FMath::RoundToInt32(AliveWeight);
 	TArray<ADCCharacter*> Standing;
 	for (ADCPlayerState* PS : Players())
 	{
@@ -544,7 +547,9 @@ void ADCGameMode::TickPressure(float Now)
 		// R3: the pack belongs to the map's main faction (big share) or an invader crossing in from the edge.
 		const FName Faction = DCFactionRules::PickDropFaction(GS->FactionMix, SectorRng.FRand());
 		const bool bInvader = Faction != GS->FactionMix.Main;
-		const int32 Landed = SpawnSquad(Faction, D.PackSize, DropPoint(Near, bInvader, Sector.Pressure, bInvader ? Faction : FName()), 400.f);
+		const FDCFactionDef* PackF = DCFactionRules::Find(T.Factions, Faction);
+		const int32 Pack = FMath::Max(1, FMath::RoundToInt32(D.PackSize * (PackF ? PackF->PackScale : 1.f)));
+		const int32 Landed = SpawnSquad(Faction, Pack, DropPoint(Near, bInvader, Sector.Pressure, bInvader ? Faction : FName()), 400.f);
 		LastPackTime = Now;
 		UE_LOG(LogTemp, Display, TEXT("DCPACK sector=%d t=%.0f pack=%d (%s%s) landed=%d alive=%d target=%d lag=%.2f photo=%d/%d"), GS->SectorIndex + 1, In.SectorElapsed, D.PackSize,
 			*Faction.ToString(), bInvader ? TEXT(" invader") : TEXT(""), Landed, In.Alive, D.TargetAlive, D.Lag, In.PhotoPoints, In.QuotaPoints);
@@ -900,6 +905,7 @@ void ADCGameMode::CheckWipe()
 	// Everyone is down: the run fails, but the reel still plays (R12).
 	UE_LOG(LogTemp, Display, TEXT("DCWIPE all %d players down in sector %d: run failed, rolling the reel"), Players().Num(), GS->SectorIndex + 1);
 	GS->bRunFailed = true;
+	EndObjective(); // the sector's order fails with the crew (R4: the reel still plays)
 	ClearCombat();
 	EnterPhase(EDCRunPhase::Reel);
 }

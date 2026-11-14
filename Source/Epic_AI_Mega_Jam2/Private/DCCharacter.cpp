@@ -1095,8 +1095,12 @@ float ADCCharacter::TakeDamage(float, const FDamageEvent&, AController*, AActor*
 	return 0.f; // all player damage goes through HostApplyHurt so blasts and bites share one path
 }
 
-void ADCCharacter::HostApplyHurt(float Amount, const FVector& From)
+void ADCCharacter::HostApplyHurt(float InAmount, const FVector& From)
 {
+	// Evidence runs (-dchurtscale=0.2): scripted pilots survive long objective runs; never set in play.
+	static float HurtScale = 1.f;
+	static const bool bScaled = FParse::Value(FCommandLine::Get(), TEXT("dchurtscale="), HurtScale);
+	const float Amount = InAmount * (bScaled ? HurtScale : 1.f);
 	if (!HasAuthority() || bDowned || Amount <= 0.f)
 	{
 		return;
