@@ -228,6 +228,20 @@ struct FDCLookTuning
 	UPROPERTY(EditAnywhere, Config, Category = "Look") FVector2D BackdropWidthCm = FVector2D(1200.f, 3200.f);
 	UPROPERTY(EditAnywhere, Config, Category = "Look") FVector2D BackdropHeightCm = FVector2D(2500.f, 9000.f);
 	UPROPERTY(EditAnywhere, Config, Category = "Look") FLinearColor BackdropColor = FLinearColor(0.035f, 0.032f, 0.03f);
+	/** Cloud layer (R18): stepped voxel cloud banks in a ring past the skyline (the zenith stays paper cream), each a
+	 *  few flat slabs. The weather's CloudCover shows that share of them (each bank grows in, never pops), CloudShade
+	 *  blends light to storm tone; banks orbit the sector at a speed from the wind. Unlit: the sun never greys them. */
+	UPROPERTY(EditAnywhere, Config, Category = "Look") int32 CloudBanks = 34;
+	UPROPERTY(EditAnywhere, Config, Category = "Look") FIntPoint CloudSlabs = FIntPoint(3, 6);
+	UPROPERTY(EditAnywhere, Config, Category = "Look") FVector2D CloudRingCm = FVector2D(22000.f, 52000.f);
+	UPROPERTY(EditAnywhere, Config, Category = "Look") FVector2D CloudHeightCm = FVector2D(9000.f, 17000.f);
+	UPROPERTY(EditAnywhere, Config, Category = "Look") FVector2D CloudSlabCm = FVector2D(2600.f, 7000.f);
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float CloudSlabThickCm = 700.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Look") FLinearColor CloudLight = FLinearColor(0.93f, 0.86f, 0.72f);
+	UPROPERTY(EditAnywhere, Config, Category = "Look") FLinearColor CloudDark = FLinearColor(0.42f, 0.39f, 0.36f);
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float CloudGlow = 1.f;
+	/** Orbit speed in degrees per second per 100 cm/s of wind. */
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float CloudOrbitDegPerWind = 0.08f;
 	/** Ink outline (its strength is the post stack's Outline): line width in pixels, the relative depth step and the
 	 *  normal change that count as an edge, and the distance (cm) where lines fade out (far towers stay soft). */
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float OutlineThicknessPx = 1.5f;

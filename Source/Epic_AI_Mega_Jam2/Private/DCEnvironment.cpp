@@ -61,6 +61,10 @@ ADCEnvironment::ADCEnvironment()
 	Backdrop->SetupAttachment(Root);
 	Backdrop->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	Backdrop->SetCastShadow(false);
+	Clouds = CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("Clouds"));
+	Clouds->SetupAttachment(Root);
+	Clouds->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	Clouds->SetCastShadow(false);
 	for (TObjectPtr<UInstancedStaticMeshComponent>* Ism : {&Sidewalks, &Dashes})
 	{
 		*Ism = CreateDefaultSubobject<UInstancedStaticMeshComponent>(Ism == &Sidewalks ? TEXT("Sidewalks") : TEXT("Dashes"));
@@ -357,6 +361,74 @@ void ADCEnvironment::BuildBackdrop(const ADCVoxelCity& City, int32 RunSeed, int3
 	}
 }
 
+void ADCEnvironment::BuildClouds(int32 RunSeed, int32 SectorIndex)
+{
+	// Seeded per sector like the skyline: the same banks on every machine (cosmetic, no collision).
+	const FDCLookTuning& L = UDCTuning::Get().Look;
+	Clouds->ClearInstances();
+	Clouds->SetStaticMesh(DCAssets::Cube());
+	if (!CloudMID)
+	{
+		CloudMID = DCAssets::MakeFlatUnlit(this, L.CloudLight, L.CloudGlow);
+	}
+	Clouds->SetMaterial(0, CloudMID);
+	CloudBanks.Reset();
+	CloudSlabs.Reset();
+	FRandomStream Rng(HashCombine(GetTypeHash(RunSeed), GetTypeHash(SectorIndex * 6151 + 29)));
+	for (int32 b = 0; b < L.CloudBanks; ++b)
+	{
+		FCloudBank Bank;
+		Bank.Angle = 360.f * (b + Rng.FRand() * 0.7f) / FMath::Max(L.CloudBanks, 1);
+		Bank.Radius = Rng.FRandRange(L.CloudRingCm.X, L.CloudRingCm.Y);
+		Bank.Height = Rng.FRandRange(L.CloudHeightCm.X, L.CloudHeightCm.Y);
+		Bank.Threshold = Rng.FRand(); // shown once CloudCover passes it: more cover, more banks, same order everywhere
+		CloudBanks.Add(Bank);
+		// A bank is a stepped stack: a long base slab, shorter ones on top, offset along the ring (poster cut-paper).
+		const int32 Slabs = Rng.RandRange(L.CloudSlabs.X, FMath::Max(L.CloudSlabs.X, L.CloudSlabs.Y));
+		float Length = Rng.FRandRange(L.CloudSlabCm.X, L.CloudSlabCm.Y) * 1.6f;
+		for (int32 s = 0; s < Slabs; ++s)
+		{
+			FCloudSlab Slab;
+			Slab.Bank = b;
+			const float Z = (s / 2) * L.CloudSlabThickCm;
+			Slab.Offset = FVector(Rng.FRandRange(-0.25f, 0.25f) * Length, Rng.FRandRange(-0.3f, 0.3f) * Length, Z);
+			Slab.Scale = FVector(Rng.FRandRange(0.35f, 0.6f) * Length, Length, L.CloudSlabThickCm) / 100.f;
+			CloudSlabs.Add(Slab);
+			Clouds->AddInstance(FTransform::Identity);
+			Length *= Rng.FRandRange(0.55f, 0.85f);
+		}
+	}
+	CloudXforms.SetNum(CloudSlabs.Num());
+}
+
+void ADCEnvironment::UpdateClouds(float DeltaSeconds)
+{
+	if (CloudSlabs.IsEmpty())
+	{
+		return;
+	}
+	const FDCLookTuning& L = UDCTuning::Get().Look;
+	const FDCWeatherProfile& W = Weather.Blend;
+	CloudOrbitDeg = FMath::Fmod(CloudOrbitDeg + W.Wind.Size2D() / 100.f * L.CloudOrbitDegPerWind * DeltaSeconds, 360.f);
+	if (CloudMID)
+	{
+		CloudMID->SetVectorParameterValue(TEXT("Color"), FMath::Lerp(L.CloudLight, L.CloudDark, FMath::Clamp(W.CloudShade, 0.f, 1.f)));
+	}
+	for (int32 i = 0; i < CloudSlabs.Num(); ++i)
+	{
+		const FCloudSlab& S = CloudSlabs[i];
+		const FCloudBank& B = CloudBanks[S.Bank];
+		// Each bank grows in over a 0.15 cover band past its threshold, so cover changes never pop banks in.
+		const float Grow = FMath::Clamp((W.CloudCover - B.Threshold) / 0.15f, 0.f, 1.f);
+		const float A = FMath::DegreesToRadians(B.Angle + CloudOrbitDeg);
+		const FVector Center(FMath::Cos(A) * B.Radius, FMath::Sin(A) * B.Radius, B.Height);
+		const FRotator Yaw(0.f, FMath::RadiansToDegrees(A), 0.f); // the long side runs along the ring
+		const FVector Scale = Grow > 0.f ? S.Scale * FVector(Grow, Grow, FMath::Max(Grow, 0.2f)) : FVector(0.001f);
+		CloudXforms[i] = FTransform(Yaw, Center + Yaw.RotateVector(S.Offset), Scale);
+	}
+	Clouds->BatchUpdateInstancesTransforms(0, CloudXforms, false, true);
+}
+
 void ADCEnvironment::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
@@ -367,6 +439,7 @@ void ADCEnvironment::Tick(float DeltaSeconds)
 		{
 			BackdropBuild = City->GetBuildId();
 			BuildBackdrop(*City, BGS->RunSeed, City->GetBuiltSector());
+			BuildClouds(BGS->RunSeed, City->GetBuiltSector());
 		}
 	}
 	const FDCLookTuning& Look = UDCTuning::Get().Look;
@@ -388,7 +461,14 @@ void ADCEnvironment::Tick(float DeltaSeconds)
 		}
 	}
 	UpdateWeather(DeltaSeconds);
+	UpdateClouds(DeltaSeconds);
 	const FDCWeatherProfile& W = Weather.Blend;
+	ADCVoxelCity* WetCity = ADCVoxelCity::IsEnabled() ? ADCVoxelCity::Get(this) : nullptr;
+	if (WetCity && FMath::Abs(W.Wetness - AppliedWetness) > 0.01f)
+	{
+		AppliedWetness = W.Wetness;
+		WetCity->SetWetness(W.Wetness);
+	}
 	Sun->SetIntensity(Look.SunIntensityLux * Light * W.SunScale);
 	Sun->SetLightColor(Look.SunColor * W.SunTint);
 	SkyLight->SetIntensity(Light * W.SkyScale);

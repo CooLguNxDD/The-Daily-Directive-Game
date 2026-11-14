@@ -51,6 +51,8 @@ public:
 
 	int32 GetBuiltSector() const { return BuiltSector; }
 	class ADCVoxelFx* GetFx() const { return Fx; }
+	/** Surface wetness 0..1 from the weather (R18): every voxel material darkens and glosses its up faces. */
+	void SetWetness(float Wetness);
 
 	/** Top of the street, rubble included, at a point (cm): what walkers stand on and players are lifted onto. */
 	float SurfaceZCm(const FVector& Where) const;
@@ -138,6 +140,7 @@ private:
 	/** One instance of the voxel material per voxel size: its edge bevel sits on that grid (V4.2). */
 	UMaterialInterface* VoxelMaterialFor(int32 VoxelCm);
 	UPROPERTY() TMap<int32, TObjectPtr<class UMaterialInstanceDynamic>> VoxelMIDs;
+	float Wetness = 0.f;
 
 	FDCVoxelSector Sector;
 	FDCVoxelOpContext OpCtx;

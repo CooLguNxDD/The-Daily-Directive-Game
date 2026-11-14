@@ -117,6 +117,9 @@ bool FDCWeatherTest::RunTest(const FString&)
 		TestTrue(FString::Printf(TEXT("%s fog stays light"), *P.Id.ToString()), P.FogDensity <= 0.03f);
 		TestTrue(FString::Printf(TEXT("%s exposure mild"), *P.Id.ToString()), FMath::Abs(P.Exposure) <= 0.6f);
 		TestTrue(FString::Printf(TEXT("%s precipitation kind exists"), *P.Id.ToString()), P.Precipitation.IsNone() || V.FxKinds.ContainsByPredicate([&P](const FDCFxKind& K) { return K.Id == P.Precipitation; }));
+		TestTrue(FString::Printf(TEXT("%s cloud and wetness in 0..1"), *P.Id.ToString()), P.CloudCover >= 0.f && P.CloudCover <= 1.f && P.CloudShade >= 0.f && P.CloudShade <= 1.f && P.Wetness >= 0.f && P.Wetness <= 1.f);
+		// Rain wets the street; a dry profile with rain falling would read wrong (R18 surface wetness).
+		TestTrue(FString::Printf(TEXT("%s rain wets the street"), *P.Id.ToString()), P.Precipitation != FName(TEXT("Rain")) || P.Wetness >= 0.5f);
 	}
 	for (const FDCSeasonDef& S : T.Seasons)
 	{

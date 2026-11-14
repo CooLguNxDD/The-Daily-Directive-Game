@@ -308,8 +308,21 @@ UMaterialInterface* ADCVoxelCity::VoxelMaterialFor(int32 VoxelCm)
 	Mid->SetScalarParameterValue(TEXT("EdgeWidth"), Tn.VoxelEdgeWidth);
 	Mid->SetScalarParameterValue(TEXT("EdgeDark"), Tn.VoxelEdgeDark);
 	Mid->SetScalarParameterValue(TEXT("Jitter"), Tn.VoxelJitter);
+	Mid->SetScalarParameterValue(TEXT("Wetness"), Wetness);
 	VoxelMIDs.Add(VoxelCm, Mid);
 	return Mid;
+}
+
+void ADCVoxelCity::SetWetness(float InWetness)
+{
+	Wetness = FMath::Clamp(InWetness, 0.f, 1.f);
+	for (const TPair<int32, TObjectPtr<UMaterialInstanceDynamic>>& It : VoxelMIDs)
+	{
+		if (It.Value)
+		{
+			It.Value->SetScalarParameterValue(TEXT("Wetness"), Wetness);
+		}
+	}
 }
 
 void ADCVoxelCity::BeginPlay()

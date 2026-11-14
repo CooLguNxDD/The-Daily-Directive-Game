@@ -110,7 +110,13 @@ float Edge = 1.0 - saturate(min(D.x, D.y) / max(EdgeWidth, 0.01));
 float Px = length(fwidth(UV));
 float Fade = saturate(1.0 - (Px - 0.12) / 0.3);
 float Shade = 1.0 - (Edge * EdgeDark + (H - 0.5) * Jitter) * Fade;
-return Base * Shade;
+float Wet = saturate(Normal.z) * Wetness;
+return Base * Shade * (1.0 - 0.38 * Wet);
+"""
+
+VOXEL_ROUGH_HLSL = r"""
+// Surface wetness (R18): up faces gloss as they get wet (rain), walls stay matte.
+return lerp(0.9, 0.22, saturate(Normal.z) * Wetness);
 """
 
 
@@ -128,7 +134,7 @@ def build_voxel_material():
     custom.set_editor_property("output_type", unreal.CustomMaterialOutputType.CMOT_FLOAT3)
     custom.set_editor_property("description", "VoxelEdges")
     inputs = []
-    for n in ["Base", "LocalPos", "Normal", "VoxelCm", "EdgeWidth", "EdgeDark", "Jitter"]:
+    for n in ["Base", "LocalPos", "Normal", "VoxelCm", "EdgeWidth", "EdgeDark", "Jitter", "Wetness"]:
         ci = unreal.CustomInput()
         ci.set_editor_property("input_name", n)
         inputs.append(ci)
@@ -152,8 +158,22 @@ def build_voxel_material():
     emissive = lib.create_material_expression(mat, unreal.MaterialExpressionMultiply, -300, 400)
     lib.connect_material_expressions(pw, "", emissive, "A")
     lib.connect_material_expressions(alpha_glow, "", emissive, "B")
-    rough = lib.create_material_expression(mat, unreal.MaterialExpressionConstant, -550, 850)
-    rough.set_editor_property("r", 0.9)
+    wet = lib.create_material_expression(mat, unreal.MaterialExpressionScalarParameter, -850, 950)
+    wet.set_editor_property("parameter_name", "Wetness")
+    wet.set_editor_property("default_value", 0.0)
+    lib.connect_material_expressions(wet, "", custom, "Wetness")
+    rough = lib.create_material_expression(mat, unreal.MaterialExpressionCustom, -550, 850)
+    rough.set_editor_property("code", VOXEL_ROUGH_HLSL)
+    rough.set_editor_property("output_type", unreal.CustomMaterialOutputType.CMOT_FLOAT1)
+    rough.set_editor_property("description", "Wetness")
+    rinputs = []
+    for n in ["Normal", "Wetness"]:
+        ci = unreal.CustomInput()
+        ci.set_editor_property("input_name", n)
+        rinputs.append(ci)
+    rough.set_editor_property("inputs", rinputs)
+    lib.connect_material_expressions(nrm, "", rough, "Normal")
+    lib.connect_material_expressions(wet, "", rough, "Wetness")
     lib.connect_material_property(custom, "", unreal.MaterialProperty.MP_BASE_COLOR)
     lib.connect_material_property(emissive, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
     lib.connect_material_property(rough, "", unreal.MaterialProperty.MP_ROUGHNESS)
