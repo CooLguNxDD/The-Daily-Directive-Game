@@ -3,6 +3,7 @@
 #include "Components/PointLightComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "DCAssets.h"
+#include "DCAudio.h"
 #include "DCTuning.h"
 #include "EngineUtils.h"
 #include "GameFramework/Pawn.h"
@@ -152,6 +153,16 @@ void ADCObjective::Tick(float DeltaSeconds)
 	}
 	const FDCObjectiveDef* Def = GetDef();
 	const FDCObjectiveLook& L = UDCTuning::Get().ObjectiveLook;
+	if (Stage != ShownStage)
+	{
+		// Every machine hears the order's beats: the beacon lighting, the extraction.
+		const TMap<EDCObjectiveStage, FName> Cues = {{EDCObjectiveStage::Extract, TEXT("Beacon")}, {EDCObjectiveStage::Done, TEXT("Scoop")}};
+		if (const FName* Cue = Cues.Find(Stage))
+		{
+			DCAudio::Play2D(this, *Cue);
+		}
+		ShownStage = Stage;
+	}
 	const bool bLive = Def && (Stage == EDCObjectiveStage::Active || Stage == EDCObjectiveStage::Extract);
 	// The beacon (engine cylinder: 100 cm tall, pivot at its centre).
 	const bool bBeacon = bLive && Stage == EDCObjectiveStage::Extract;

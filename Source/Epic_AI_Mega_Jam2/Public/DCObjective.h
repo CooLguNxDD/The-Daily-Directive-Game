@@ -46,5 +46,6 @@ private:
 	UPROPERTY() TObjectPtr<UProceduralMeshComponent> Package;
 	UPROPERTY() TArray<TObjectPtr<UStaticMeshComponent>> Markers;
 	bool bBuilt = false;
+	EDCObjectiveStage ShownStage = EDCObjectiveStage::None;
 	void BuildVisuals();
 };
