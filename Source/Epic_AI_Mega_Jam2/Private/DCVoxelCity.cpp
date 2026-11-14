@@ -465,6 +465,7 @@ void ADCVoxelCity::Build(int32 RunSeed, int32 SectorIndex, int32 BuildId)
 	BuiltSeed = RunSeed;
 	AppliedSeq = 0;
 	QueueAllDirty(nullptr);
+	bLoading = true;
 	UE_LOG(LogTemp, Display, TEXT("DCVOXEL build sector=%d build=%d towers=%d craft=%.0f ms hash=%08x"), SectorIndex, BuildId, Sector.Towers.Num(),
 		(FPlatformTime::Seconds() - Start) * 1000.0, Sector.Hash());
 }
@@ -804,6 +805,7 @@ void ADCVoxelCity::UploadCells()
 {
 	if (DirtyCells.Num() == 0)
 	{
+		bLoading = bLoading && Jobs.Num() > 0; // loaded once the build's jobs are done and every cell is up
 		return;
 	}
 	// A cell uploads only when none of its chunks still has a job in flight (no half-updated cells).
@@ -831,7 +833,8 @@ void ADCVoxelCity::UploadCells()
 	// 2. Everything else under the millisecond budget; a held op's cells wait for its commit.
 	const FDCVoxelTuning& Tn = UDCVoxelSettings::Get().Tuning;
 	const double Start = FPlatformTime::Seconds();
-	const int32 Cap = FMath::Max(1, Tn.UploadsPerFrame);
+	const int32 Cap = bLoading ? MAX_int32 : FMath::Max(1, Tn.UploadsPerFrame);
+	const float BudgetMs = bLoading ? Tn.UploadLoadBudgetMs : Tn.UploadBudgetMs;
 	TArray<FIntVector4> Ready;
 	for (const FIntVector4& Cell : DirtyCells)
 	{
@@ -843,7 +846,7 @@ void ADCVoxelCity::UploadCells()
 	int32 Done = 0;
 	for (const FIntVector4& Cell : Ready)
 	{
-		if (Done > 0 && (Done >= Cap || (FPlatformTime::Seconds() - Start) * 1000.0 >= Tn.UploadBudgetMs))
+		if (Done > 0 && (Done >= Cap || (FPlatformTime::Seconds() - Start) * 1000.0 >= BudgetMs))
 		{
 			break;
 		}

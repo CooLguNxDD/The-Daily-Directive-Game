@@ -110,6 +110,8 @@ private:
 	 *  whose mesh job is still running go first on the next frames. Never a lifted budget for the rest. */
 	TSet<FIntVector4> CommitCells;
 	bool UploadCell(const FIntVector4& Cell);
+	/** Set by Build until the first full upload is done (load-phase budget). */
+	bool bLoading = false;
 	struct FQueuedOp
 	{
 		FDCVoxelOp Op;

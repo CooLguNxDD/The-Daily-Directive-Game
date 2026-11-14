@@ -141,6 +141,9 @@ void ADCCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLife
 void ADCCharacter::BeginPlay()
 {
 	Super::BeginPlay();
+	// The photographer is never in their own photo: a downed Last Frame lens sits inside the body and outfit (the
+	// packaged r14-solo2 run printed a solid black Last Frame on the front page). Teammates stay in frame (co-star).
+	Capture->HiddenActors.AddUnique(this);
 	const UDCTuning& T = UDCTuning::Get();
 
 	if (USkeletalMesh* Mannequin = Cast<USkeletalMesh>(T.Assets.PlayerMesh.TryLoad()))

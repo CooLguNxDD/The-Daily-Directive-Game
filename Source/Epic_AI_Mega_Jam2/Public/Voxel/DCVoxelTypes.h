@@ -151,6 +151,9 @@ struct FDCVoxelTuning
 	/** Game-thread milliseconds per frame for cell uploads (merge + mesh section); UploadsPerFrame stays a cap. At
 	 *  least one cell uploads per frame. A strike's commit frame uploads only that op's cells, outside this budget. */
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float UploadBudgetMs = 4.f;
+	/** Load phase: after a Build (sector start, a reel clip's rebuild) until every cell is up, the budget is this many
+	 *  ms, so the city stands before the clip or the first strike (a 4 ms budget left the reel's city empty). */
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float UploadLoadBudgetMs = 60.f;
 	/** Per-vertex ambient occlusion strength (0 = flat faces). */
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float AOStrength = 0.38f;
 	/** Flying voxel chunks spawned when a piece lands (cosmetic, pooled). */
