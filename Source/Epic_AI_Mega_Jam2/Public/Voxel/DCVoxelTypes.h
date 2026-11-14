@@ -140,6 +140,8 @@ struct FDCVoxelTuning
 	/** A sign falls as a piece when less than this share of the wall behind it is left (critic V19.1: no torn sign
 	 *  hanging in the air off one corner). */
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 SignHoldPercent = 60;
+	/** Sector crafts at sector start run on a worker under the sector card (R13 load frames, advisors CP15/CP18). */
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") bool bAsyncSectorCraft = true;
 	/** Form floor in M_DCVoxel (advisor CP16, critic V20.5): shaded albedo x lerp(FormGround, FormSky) by how much a
 	 *  face turns to MoonDir, x FormFloor, added as emission, so unlit faces separate without lifting the frame
 	 *  (0 = off). */

@@ -86,6 +86,7 @@ namespace DCWeather
 		S.To = B.Profile;
 		S.Alpha = T;
 		S.Blend = Lerp(*Pa, *Pb, T);
+		S.Blend.DayBlend = FMath::Clamp(S.Blend.DayBlend + FMath::Lerp(A.Day, B.Day, T), 0.f, 1.f);
 		return S;
 	}
 }

@@ -158,17 +158,32 @@ bool FDCWeatherTest::RunTest(const FString&)
 		TestTrue(FString::Printf(TEXT("%s cloud and wetness in 0..1"), *P.Id.ToString()), P.CloudCover >= 0.f && P.CloudCover <= 1.f && P.CloudShade >= 0.f && P.CloudShade <= 1.f && P.Wetness >= 0.f && P.Wetness <= 1.f);
 		// Rain wets the street; a dry profile with rain falling would read wrong (R18 surface wetness).
 		TestTrue(FString::Printf(TEXT("%s rain wets the street"), *P.Id.ToString()), P.Precipitation != FName(TEXT("Rain")) || P.Wetness >= 0.5f);
-		// The arc moves the time of day only a little: the noir night stays the board (R25).
-		TestTrue(FString::Printf(TEXT("%s day light stays dusk at most"), *P.Id.ToString()), P.DayBlend >= 0.f && P.DayBlend <= 0.3f);
+		TestTrue(FString::Printf(TEXT("%s day light in 0..1"), *P.Id.ToString()), P.DayBlend >= 0.f && P.DayBlend <= 1.f);
 	}
 	{
-		// The day value follows the blended arc like every other field (R18 day-night seam).
-		const FDCWeatherProfile* DuskRow = T.WeatherProfiles.FindByPredicate([](const FDCWeatherProfile& P) { return P.DayBlend > 0.f; });
-		const FDCWeatherProfile* NightRow = T.WeatherProfiles.FindByPredicate([](const FDCWeatherProfile& P) { return P.DayBlend == 0.f; });
-		if (TestTrue(TEXT("one profile lifts the day, one keeps the night"), DuskRow && NightRow))
+		// Day-night cycle driven by the weather (human 2026-11-14): arcs carry the time of day on their keys; across
+		// the shipped arcs the sectors reach both the noir night and real daylight, and At() blends the key's day.
+		float MinDay = 1.f, MaxDay = 0.f;
+		for (const FDCSeasonDef& S : T.Seasons)
 		{
-			const float Mid = DCWeather::Lerp(*NightRow, *DuskRow, 0.5f).DayBlend;
-			TestTrue(TEXT("day blends half way"), FMath::IsNearlyEqual(Mid, DuskRow->DayBlend * 0.5f, 0.001f));
+			for (const FDCWeatherArc& A : S.Arcs)
+			{
+				for (const FDCWeatherKey& K : A.Keys)
+				{
+					MinDay = FMath::Min(MinDay, K.Day);
+					MaxDay = FMath::Max(MaxDay, K.Day);
+				}
+			}
+		}
+		TestTrue(TEXT("some sector hour is the noir night"), MinDay <= 0.f);
+		TestTrue(TEXT("some sector hour is daylight"), MaxDay >= 0.5f);
+		const FDCSeasonDef& S0 = T.Seasons[0];
+		if (S0.Arcs.Num() > 0 && S0.Arcs[0].Keys.Num() > 0)
+		{
+			const FDCWeatherArc& A0 = S0.Arcs[0];
+			const FDCWeatherProfile* P0 = T.WeatherProfiles.FindByPredicate([&A0](const FDCWeatherProfile& P) { return P.Id == A0.Keys[0].Profile; });
+			const float Day0 = DCWeather::At(T.WeatherProfiles, S0, A0, 0.f).Blend.DayBlend;
+			TestTrue(TEXT("the first key's time of day shows at the arc start"), P0 && FMath::IsNearlyEqual(Day0, FMath::Clamp(P0->DayBlend + A0.Keys[0].Day, 0.f, 1.f), 0.001f));
 		}
 	}
 	for (const FDCSeasonDef& S : T.Seasons)

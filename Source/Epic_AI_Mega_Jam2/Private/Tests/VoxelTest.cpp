@@ -278,6 +278,22 @@ bool FDCVoxelSignDropTest::RunTest(const FString&)
 		DCVoxelOps::Structure(*T, FIntVector(1, 0, 0), Ctx, Intact);
 		TestTrue(TEXT("sign on an intact wall stays"), T->Grid.Data.Get(Sign.Probe) == Sign.Material);
 	}
+	auto CountSign = [&Sign](const FDCVoxelWorld& W)
+	{
+		int32 N = 0;
+		for (int32 Z = Sign.BoxMin.Z; Z < Sign.BoxMax.Z; ++Z)
+		{
+			for (int32 Y = Sign.BoxMin.Y; Y < Sign.BoxMax.Y; ++Y)
+			{
+				for (int32 X = Sign.BoxMin.X; X < Sign.BoxMax.X; ++X)
+				{
+					N += W.Get(FIntVector(X, Y, Z)) != 0 ? 1 : 0;
+				}
+			}
+		}
+		return N;
+	};
+	const int32 SignCells = CountSign(T->Grid.Data);
 	// Blast the wall behind the sign (and the next two layers in), as a carve would.
 	const FIntVector In = Sign.Normal * -3;
 	const FIntVector Lo = Sign.BackMin.ComponentMin(Sign.BackMin + In);
@@ -306,7 +322,15 @@ bool FDCVoxelSignDropTest::RunTest(const FString&)
 		}
 	}
 	TestEqual(TEXT("no sign voxel hangs once its wall is gone"), Left, 0);
-	TestTrue(TEXT("the sign falls as a piece"), R.Pieces.Num() > 0);
+	// The whole sign is one piece of its own (review CP21: not split by the island pass, not mixed with debris).
+	const bool bWhole = R.Pieces.ContainsByPredicate([&Sign, SignCells](const FDCVoxelPiece& P)
+	{
+		return P.Cells.Num() == SignCells && !P.Cells.ContainsByPredicate([&Sign](const FIntVector& C)
+		{
+			return C.X < Sign.BoxMin.X || C.Y < Sign.BoxMin.Y || C.Z < Sign.BoxMin.Z || C.X >= Sign.BoxMax.X || C.Y >= Sign.BoxMax.Y || C.Z >= Sign.BoxMax.Z;
+		});
+	});
+	TestTrue(FString::Printf(TEXT("the sign falls whole as its own piece (%d cells)"), SignCells), bWhole);
 	return true;
 }
 

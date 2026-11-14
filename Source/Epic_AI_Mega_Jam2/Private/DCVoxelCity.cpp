@@ -540,8 +540,9 @@ void ADCVoxelCity::Clear()
 	AppliedSeq = 0;
 }
 
-void ADCVoxelCity::Build(int32 RunSeed, int32 SectorIndex, int32 BuildId)
+void ADCVoxelCity::Build(int32 RunSeed, int32 SectorIndex, int32 BuildId, bool bAsync)
 {
+	PendingCraft.Reset(); // a newer build supersedes a craft still in flight (its result is dropped)
 	CommittedFallen.Reset();
 	HoldRadiusCm = -1.f;
 	HoldTops.Reset();
@@ -566,14 +567,45 @@ void ADCVoxelCity::Build(int32 RunSeed, int32 SectorIndex, int32 BuildId)
 			Craft.Models.Add(Prop.Model, DCVoxelModels::Parsed(Prop.Model)); // file reads stay on the game thread
 		}
 	}
-	DCVoxelCraft::CraftCity(Plan, Craft, Sector.Towers);
-	DCVoxelCraft::CraftTerrain(Sector.Terrain, Plan, T.City.LotSizeCm, Craft);
-	DCVoxelCraft::CraftRubbleZones(Sector.Terrain, Plan, Craft);
-	DCVoxelCraft::CraftProps(Sector.Props, Plan, Craft);
-	if (const FDCSeasonDef* Season = SeasonFor(RunSeed, SectorIndex))
+	const FDCSeasonDef* Season = SeasonFor(RunSeed, SectorIndex);
+	const float SnowCover = Season ? Season->SnowCover : -1.f;
+	const int32 Seed = DCCityRules::SectorSeed(RunSeed, SectorIndex);
+	const float LotSizeCm = T.City.LotSizeCm;
+	// Pure craft from plain copies (plan, context, numbers): the same on the game thread or a worker, so every machine
+	// builds the same hash either way.
+	auto CraftAll = [Plan, Craft, SnowCover, Seed, LotSizeCm](FDCVoxelSector& Out)
 	{
-		LaySnow(Sector, Season->SnowCover, Craft.MaterialId(TEXT("Snow")), DCCityRules::SectorSeed(RunSeed, SectorIndex));
+		DCVoxelCraft::CraftCity(Plan, Craft, Out.Towers);
+		DCVoxelCraft::CraftTerrain(Out.Terrain, Plan, LotSizeCm, Craft);
+		DCVoxelCraft::CraftRubbleZones(Out.Terrain, Plan, Craft);
+		DCVoxelCraft::CraftProps(Out.Props, Plan, Craft);
+		if (SnowCover >= 0.f)
+		{
+			LaySnow(Out, SnowCover, Craft.MaterialId(TEXT("Snow")), Seed);
+		}
+	};
+	if (!bAsync)
+	{
+		CraftAll(Sector);
+		FinishBuild(RunSeed, SectorIndex, BuildId, Start);
+		return;
 	}
+	TSharedPtr<FPendingCraft> Pending = MakeShared<FPendingCraft>();
+	Pending->Out = MakeShared<FDCVoxelSector>();
+	Pending->RunSeed = RunSeed;
+	Pending->SectorIndex = SectorIndex;
+	Pending->BuildId = BuildId;
+	Pending->Start = Start;
+	TSharedPtr<FDCVoxelSector> Out = Pending->Out;
+	Pending->Task = UE::Tasks::Launch(UE_SOURCE_LOCATION, [CraftAll, Out]() { CraftAll(*Out); });
+	PendingCraft = Pending;
+	BuiltId = BuildId; // SyncBuild sees this build as started
+}
+
+void ADCVoxelCity::FinishBuild(int32 RunSeed, int32 SectorIndex, int32 BuildId, double Start)
+{
+	const UDCVoxelSettings& V = UDCVoxelSettings::Get();
+	const UDCTuning& T = UDCTuning::Get();
 	OpCtx = V.OpContext(T.City.BlockSizeCm);
 	Colors = V.MeshColors();
 	BuiltSector = SectorIndex;
@@ -583,8 +615,8 @@ void ADCVoxelCity::Build(int32 RunSeed, int32 SectorIndex, int32 BuildId)
 	QueueAllDirty(nullptr);
 	bLoading = true;
 	PrewarmBodies(); // R26 bodies registered once at sector start, parked until a break
-	UE_LOG(LogTemp, Display, TEXT("DCVOXEL build sector=%d build=%d towers=%d craft=%.0f ms hash=%08x"), SectorIndex, BuildId, Sector.Towers.Num(),
-		(FPlatformTime::Seconds() - Start) * 1000.0, Sector.Hash());
+	UE_LOG(LogTemp, Display, TEXT("DCVOXEL build sector=%d build=%d towers=%d craft=%.0f ms hash=%08x%s"), SectorIndex, BuildId, Sector.Towers.Num(),
+		(FPlatformTime::Seconds() - Start) * 1000.0, Sector.Hash(), PendingCraft.IsValid() ? TEXT(" async") : TEXT(""));
 }
 
 FDCVoxelOpResult ADCVoxelCity::ApplyOp(const FDCVoxelOp& Op, bool bAnimate)
@@ -1045,7 +1077,10 @@ void ADCVoxelCity::QueueShards(const FDCVoxelOp& Op, const FDCVoxelOpResult& Res
 		const float Speed = Tn.ShardSpeedCms * Rng.FRandRange(0.5f, 1.1f) / FMath::Sqrt(static_cast<float>(C.Block));
 		D.LinearVelocity = (Out + Rng.VRand() * 0.35f).GetSafeNormal() * Speed + FVector(0, 0, Rng.FRandRange(0.f, Tn.ShardUpCms));
 		D.AngularVelocityDeg = Rng.VRand() * 720.f;
-		const uint8 Rub = OpCtx.RubbleOf.IsValidIndex(C.Material) && OpCtx.RubbleOf[C.Material] != 0 ? OpCtx.RubbleOf[C.Material] : C.Material;
+		// Lit voxels (windows, neon) keep their own colour and glow in the air (R26: emissive faces while falling);
+		// dull wall voxels fly as their rubble colour (critic: not window-coloured confetti).
+		const bool bLit = Colors.IsValidIndex(C.Material) && Colors[C.Material].A > 0;
+		const uint8 Rub = !bLit && OpCtx.RubbleOf.IsValidIndex(C.Material) && OpCtx.RubbleOf[C.Material] != 0 ? OpCtx.RubbleOf[C.Material] : C.Material;
 		const FColor Col = Colors.IsValidIndex(Rub) ? Colors[Rub] : FColor(30, 30, 40, 0);
 		const bool bEmber = Rng.RandRange(0, 99) < Tn.ShardEmberPercent;
 		D.Color = bEmber ? Tn.ShardEmberColor : FLinearColor::FromSRGBColor(FColor(Col.R, Col.G, Col.B, 255));
@@ -1765,16 +1800,21 @@ void ADCVoxelCity::SyncBuild()
 	{
 		return;
 	}
+	if (PendingCraft.IsValid() && PendingCraft->BuildId == GS->CityBuildId)
+	{
+		return; // this build is crafting off-thread already
+	}
 	if (GS->CityBuildId != BuiltId || (GS->CitySector == INDEX_NONE) != (BuiltSector == INDEX_NONE))
 	{
 		if (GS->CitySector == INDEX_NONE)
 		{
+			PendingCraft.Reset();
 			Clear();
 			BuiltId = GS->CityBuildId;
 		}
 		else
 		{
-			Build(GS->RunSeed, GS->CitySector, GS->CityBuildId);
+			Build(GS->RunSeed, GS->CitySector, GS->CityBuildId, UDCVoxelSettings::Get().Tuning.bAsyncSectorCraft);
 		}
 	}
 }
@@ -1801,6 +1841,14 @@ void ADCVoxelCity::FollowGameState()
 void ADCVoxelCity::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
+	if (PendingCraft.IsValid() && PendingCraft->Task.IsCompleted())
+	{
+		// The off-thread craft is done: swap it in and go live (meshing then runs under the sector card).
+		const TSharedPtr<FPendingCraft> Done = PendingCraft;
+		Sector = MoveTemp(*Done->Out);
+		FinishBuild(Done->RunSeed, Done->SectorIndex, Done->BuildId, Done->Start);
+		PendingCraft.Reset();
+	}
 	if (bFollowGameState) // the host drives Build and ApplyOp directly first, so following is a no-op there
 	{
 		FollowGameState();

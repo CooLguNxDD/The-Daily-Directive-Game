@@ -213,6 +213,11 @@ void ADCHUD::DrawSectorCard(ADCGameState& GS)
 	const FLinearColor& RuleC = T.Look.SectorCardRule;
 	const FLinearColor TitleA(TitleC.R, TitleC.G, TitleC.B, TitleC.A * A);
 	const FLinearColor RuleA(RuleC.R, RuleC.G, RuleC.B, RuleC.A * A);
+	// A dark-glass plate in the middle with thin neon edges (critic V20 minor: the card read as an empty navy screen).
+	Box(W * 0.17f, H * 0.33f - Lift, W * 0.66f, H * 0.38f, FLinearColor(0.02f, 0.03f, 0.06f, 0.85f * A));
+	Box(W * 0.17f, H * 0.33f - Lift, W * 0.66f, Sx(2.f), FLinearColor(Magenta.R, Magenta.G, Magenta.B, 0.9f * A));
+	Box(W * 0.17f, H * 0.71f - Lift - Sx(2.f), W * 0.66f, Sx(2.f), FLinearColor(Cyan.R, Cyan.G, Cyan.B, 0.9f * A));
+	Box(W * 0.17f, H * 0.33f - Lift, Sx(4.f), H * 0.38f, FLinearColor(Magenta.R, Magenta.G, Magenta.B, 0.9f * A));
 	Box(W * 0.2f, H * 0.36f - Lift, W * 0.6f, Sx(3.f), RuleA);
 	Text(FString::Printf(TEXT("SECTOR %d OF %d"), GS.SectorIndex + 1, FMath::Max(T.Sectors.Num(), 1)), W * 0.5f, H * 0.385f - Lift, RuleA, 1.1f, true);
 	Text(Name, W * 0.5f, H * 0.44f - Lift, TitleA, T.Look.SectorCardTitleScale, true, HeadFont);

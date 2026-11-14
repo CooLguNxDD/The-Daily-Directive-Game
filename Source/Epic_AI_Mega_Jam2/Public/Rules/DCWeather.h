@@ -45,6 +45,9 @@ struct FDCWeatherKey
 	/** 0..1 of the sector's time. */
 	UPROPERTY(EditAnywhere, Config, Category = "Weather") float At = 0.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Weather") FName Profile;
+	/** Time of day at this key (0 = the noir night, 1 = full day), added to the profile's DayBlend: an arc is also a
+	 *  stretch of the day-night cycle (human 2026-11-14: night is the noir end of a cycle the weather drives). */
+	UPROPERTY(EditAnywhere, Config, Category = "Weather") float Day = 0.f;
 };
 
 USTRUCT(BlueprintType)
