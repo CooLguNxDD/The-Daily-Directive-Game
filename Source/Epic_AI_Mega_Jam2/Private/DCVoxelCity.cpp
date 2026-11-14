@@ -1668,6 +1668,15 @@ void ADCVoxelCity::Land(FFalling& F)
 				Awake += Fr.Body->IsAnyRigidBodyAwake() ? 1 : 0;
 				Bodies.Remove(Fr.Body.Get());
 				Fr.Body->SetSimulatePhysics(false); // frozen where it lies, then shrinks away over PhysicsFadeSeconds
+				{
+					// Still in the air at the time cap: set it down on the street first (nothing fades mid-air).
+					const FBox Bx = Fr.Body->Bounds.GetBox();
+					const float Ground = BodyGroundZ(Bx.GetCenter(), F.LandCenter);
+					if (Bx.Min.Z > Ground + 200.f)
+					{
+						Fr.Body->SetWorldLocation(Fr.Body->GetComponentLocation() - FVector(0, 0, Bx.Min.Z - Ground), false, nullptr, ETeleportType::TeleportPhysics);
+					}
+				}
 				Fr.Body->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 				if (Fr.Comp)
 				{
