@@ -262,10 +262,13 @@ struct FDCVoxelTuning
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") FLinearColor ShardEmberColor = FLinearColor(1.f, 0.32f, 0.04f);
 	/** Collider = fragment bounds times this (adjacent fragments start apart, never nested). */
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float PhysicsBoxScale = 0.85f;
-	/** A body group rests when every body sleeps or after this long (then its rubble shows). */
+	/** Per-body rest deadline = free fall from its release height + SettleSeconds, capped by MaxAirSeconds; a group
+	 *  rests when every body is frozen, past its deadline or a stray (hard cap MaxAirSeconds + SettleSeconds). */
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float PhysicsMaxAirSeconds = 9.f;
-	/** Rest budget = free fall from the break height + SettleSeconds (capped by MaxAirSeconds). */
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float PhysicsSettleSeconds = 5.f;
+	/** A body farther than this (cm, XY) from its rubble site is a stray: it stops holding its group's rest and, if
+	 *  still moving when the group rests, keeps flying while it fades (never set down). */
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float PhysicsSiteRadiusCm = 1500.f;
 	/** Bodies turn solid once their box clears the struck lot's footprint by this margin (cm). */
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float PhysicsLotMarginCm = 150.f;
 	/** On the street (underside within ContactCm of it) a body switches to these dampings so piles stop jittering. */
