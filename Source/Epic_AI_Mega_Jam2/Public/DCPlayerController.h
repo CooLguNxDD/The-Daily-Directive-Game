@@ -101,6 +101,8 @@ public:
 	class ADCReelDirector* GetReelDirector() const { return Director; }
 	/** R16: send a second take to the host for grading (the image stays here until the reel uploads it). */
 	void RequestSecondTake(int32 PhotoId, const FDCShotView& View, int32 ClipIndex) { ServerSecondTake(PhotoId, View.Location, View.Rotation, View.FOV, ClipIndex); }
+	/** Reel (advisor CP33): this machine has the clip's city in; the host rolls the clip once every player reported. */
+	void ReportReelStaged(int32 ClipIndex) { ServerReelStaged(ClipIndex); }
 
 	// Menu (local).
 	void MenuSolo();
@@ -163,6 +165,7 @@ public:
 	float GetBuilderImageAlpha() const;
 private:
 	UFUNCTION(Server, Reliable) void ServerRestartRun();
+	UFUNCTION(Server, Reliable) void ServerReelStaged(int32 ClipIndex);
 	UFUNCTION(Server, Reliable) void ServerPickUpgrade(FName Id);
 	UFUNCTION(Server, Reliable) void ServerSubmitFinalCut(const TArray<int32>& PhotoIds);
 	UFUNCTION(Server, Reliable) void ServerVote(int32 PhotoId);

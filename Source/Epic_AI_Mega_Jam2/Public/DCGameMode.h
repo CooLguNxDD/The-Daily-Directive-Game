@@ -20,6 +20,8 @@ class EPIC_AI_MEGA_JAM2_API ADCGameMode : public AGameModeBase
 	GENERATED_BODY()
 
 public:
+	/** A player's machine reports the current reel clip staged (ServerReelStaged). */
+	void NoteReelStaged(APlayerController* PC, int32 ClipIndex);
 	ADCGameMode();
 
 	virtual void InitGame(const FString& MapName, const FString& Options, FString& ErrorMessage) override;
@@ -89,6 +91,8 @@ private:
 	void TickRogueStrikes(float Now);
 	void TickPendingCollapses(float Now);
 	void BeginReelClip(int32 Index);
+	/** Machines whose reel has the current clip's city in (advisor CP33); the clip rolls when all players are in. */
+	TSet<TWeakObjectPtr<APlayerController>> ReelStaged;
 	void SetDilation(float Value);
 	FTransform SpawnTransformFor(int32 PlayerIndex) const;
 	TArray<ADCPlayerState*> Players() const;

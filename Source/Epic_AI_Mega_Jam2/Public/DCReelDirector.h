@@ -81,6 +81,7 @@ private:
 	bool bPreWindowQueued = false;
 	/** Restaged; waiting for the host's clip clock (GS->bReelClipLive) before the slate lifts and the strikes spawn. */
 	bool bAwaitLive = false;
+	bool bReportedStaged = false;
 	TArray<FDCBlastRecord> PendingBlasts;
 	int32 StagedIndex = -1;
 	float WindowStart = 0.f;

@@ -941,6 +941,7 @@ void ADCGameMode::BeginReelClip(int32 Index)
 	ADCGameState* GS = GetGameState<ADCGameState>();
 	GS->ReelIndex = Index;
 	GS->ReelStage = 0;
+	ReelStaged.Reset();
 	// Async restage (review CP34): the clock is held until the host's reel director has the clip's city in (it sets
 	// the real start); ReelRestageMaxSeconds is the fallback. Synchronous: a beat for every machine to re-stage.
 	const bool bHold = UDCVoxelSettings::Get().Tuning.bAsyncReelRestage;
@@ -949,6 +950,24 @@ void ADCGameMode::BeginReelClip(int32 Index)
 	ReelStageReal = GetWorld()->GetRealTimeSeconds();
 	SetDilation(UDCTuning::Get().Run.ReelSlowMo);
 	GS->ForceNetUpdate();
+}
+
+void ADCGameMode::NoteReelStaged(APlayerController* PC, int32 ClipIndex)
+{
+	ADCGameState* GS = GetGameState<ADCGameState>();
+	if (!GS || !PC || GS->Phase != EDCRunPhase::Reel || GS->ReelIndex != ClipIndex || GS->bReelClipLive)
+	{
+		return;
+	}
+	ReelStaged.Add(PC);
+	if (ReelStaged.Num() < GetNumPlayers())
+	{
+		return; // another machine is still restaging (the ReelRestageMaxSeconds cap rolls it anyway)
+	}
+	GS->ReelClipStart = FMath::Min(GS->ReelClipStart, GS->Now() + 0.3f);
+	GS->bReelClipLive = true;
+	GS->ForceNetUpdate();
+	UE_LOG(LogTemp, Display, TEXT("DCREEL all %d players staged clip=%d: rolling"), ReelStaged.Num(), ClipIndex);
 }
 
 void ADCGameMode::TickReel(float Now)

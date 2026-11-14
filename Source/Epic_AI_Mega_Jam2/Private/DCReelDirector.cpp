@@ -453,6 +453,7 @@ void ADCReelDirector::Tick(float DeltaSeconds)
 		bTakeRaised = false;
 		Restage(GS->ReelIndex);
 		bAwaitLive = true; // the slate lifts once the city is in and the clip clock is live
+		bReportedStaged = false;
 		SlateFramesLeft = -1;
 		SlateUntilReal = TNumericLimits<double>::Max();
 	}
@@ -484,11 +485,13 @@ void ADCReelDirector::Tick(float DeltaSeconds)
 	{
 		// The host starts the clip clock once its own city is in; every machine plays the clip from that start.
 		ADCGameState* MGS = GetWorld()->GetGameState<ADCGameState>();
-		if (MGS->HasAuthority() && !MGS->bReelClipLive)
+		if (!bReportedStaged)
 		{
-			MGS->ReelClipStart = FMath::Min(MGS->ReelClipStart, MGS->Now() + 0.3f);
-			MGS->bReelClipLive = true;
-			MGS->ForceNetUpdate();
+			bReportedStaged = true; // the host rolls once every player's machine reported (advisor CP33, review CP35)
+			if (ADCPlayerController* LocalPC = GetWorld()->GetFirstPlayerController<ADCPlayerController>())
+			{
+				LocalPC->ReportReelStaged(StagedIndex);
+			}
 		}
 		if (!MGS->bReelClipLive)
 		{
