@@ -166,6 +166,8 @@ void ADCGameMode::PreLogin(const FString& Options, const FString& Address, const
 void ADCGameMode::Logout(AController* Exiting)
 {
 	Super::Logout(Exiting);
+	ReelStaged.Remove(Cast<APlayerController>(Exiting));
+	TryRollReel(); // review CP37: the last unstaged machine leaving rolls the clip for everyone else
 	if (UDCLanBeacon* Beacon = GetGameInstance()->GetSubsystem<UDCLanBeacon>())
 	{
 		Beacon->SetPlayerCount(GameState->PlayerArray.Num()); // the LAN list shows who is still in the lobby
@@ -960,6 +962,16 @@ void ADCGameMode::NoteReelStaged(APlayerController* PC, int32 ClipIndex)
 		return;
 	}
 	ReelStaged.Add(PC);
+	TryRollReel();
+}
+
+void ADCGameMode::TryRollReel()
+{
+	ADCGameState* GS = GetGameState<ADCGameState>();
+	if (!GS || GS->Phase != EDCRunPhase::Reel || !GS->ReelClips.IsValidIndex(GS->ReelIndex) || GS->bReelClipLive || ReelStaged.Num() == 0)
+	{
+		return;
+	}
 	for (auto It = ReelStaged.CreateIterator(); It; ++It)
 	{
 		if (!It->IsValid())
@@ -974,7 +986,7 @@ void ADCGameMode::NoteReelStaged(APlayerController* PC, int32 ClipIndex)
 	GS->ReelClipStart = FMath::Min(GS->ReelClipStart, GS->Now() + 0.3f);
 	GS->bReelClipLive = true;
 	GS->ForceNetUpdate();
-	UE_LOG(LogTemp, Display, TEXT("DCREEL all %d players staged clip=%d: rolling"), ReelStaged.Num(), ClipIndex);
+	UE_LOG(LogTemp, Display, TEXT("DCREEL all %d players staged clip=%d: rolling"), ReelStaged.Num(), GS->ReelIndex);
 }
 
 void ADCGameMode::TickReel(float Now)
