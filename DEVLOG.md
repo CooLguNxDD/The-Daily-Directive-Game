@@ -81,7 +81,23 @@ is kept from the run records (Glass Box modifier): what was decided, why, and wh
 - Real voxel physics: the biggest pieces of each strike fall as one and break into Chaos box bodies at the impact,
   then swap to the host op's rubble when they rest.
 
+## 2026-11-14 (night): true voxel break-up, host-owned rubble, neon noir sweep
+- Strikes now shatter: carved voxels fly as shard bodies (single voxels near the blast, small clusters further out),
+  the toppling top breaks into chunk bodies mid-fall and a hard hit shatters a chunk into leaf bodies. Bodies come from
+  a pool prewarmed at sector build and freeze one by one.
+- The host owns where the rubble lies: its bodies' rest poses go out as a replicated Rest op and every machine
+  re-settles that piece's rubble there; host and client op hashes match on every strike and rest.
+- A look-sweep helper ran in its own worktree: night building form (palette albedo floor, low moon, violet sky fill),
+  dark-glass UI everywhere, holographic stamp, feed timestamp and chroma split, a bloom threshold, a stop-down at the
+  peak and a rim blast light. Signs got a neon tube edge; rubble piles burn with a flickering firelight.
+- Frame time: shard clustering and fragment trees moved to the op worker; R13 on the packaged build with 4 players:
+  99 fps steady, 83 fps average during collapses.
+- The packaged solo run now goes menu to a real front page through all three sectors in about 13 minutes.
+
 ## Problems met
+- Git Bash rewrote `/Game/...` map arguments into `C:/Program Files/Git/Game/...`; `export MSYS_NO_PATHCONV=1` fixed it,
+  but the same export broke `taskkill //F` in the co-op script and left a fleet job hanging.
+- A pile of touching physics bodies is one Chaos island and never sleeps as a group; bodies now freeze one by one.
 - The engine is shared with an editor that has Live Coding on: UnrealBuildTool refuses to build. Fixed with
   `-NoHotReloadFromIDE`, and the packaging step now builds the game target itself.
 - The gate script had a comment with a stray newline that broke tier B; fixed.

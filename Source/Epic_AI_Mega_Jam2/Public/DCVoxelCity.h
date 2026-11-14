@@ -76,6 +76,8 @@ public:
 	static const struct FDCSeasonDef* SeasonFor(int32 RunSeed, int32 Sector);
 	static struct FDCWeatherState WeatherAt(int32 RunSeed, int32 Sector, float Fraction);
 	int32 GetBuildId() const { return BuiltId; }
+	/** Highest op Seq applied or queued on this city. */
+	int32 GetAppliedSeq() const { return AppliedSeq; }
 	uint32 GetHash() const { return Sector.Hash(); }
 	const FDCVoxelSector& GetSector() const { return Sector; }
 	bool IsMeshing() const { return Jobs.Num() > 0 || DirtyCells.Num() > 0; }
