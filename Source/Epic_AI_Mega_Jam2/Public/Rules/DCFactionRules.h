@@ -87,6 +87,9 @@ struct FDCFactionMixRule
 	UPROPERTY(EditAnywhere, Config, Category = "Faction") float OpeningSeconds = 4.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Faction") int32 OpeningSquad = 4;
 	UPROPERTY(EditAnywhere, Config, Category = "Faction") float OpeningApartCm = 1800.f;
+	/** Drop spread (cm) of the opening clash squads and of the friendly army's squads. */
+	UPROPERTY(EditAnywhere, Config, Category = "Faction") float OpeningSpreadCm = 300.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Faction") float AllySpreadCm = 350.f;
 	/** Territory: the map splits into ZonesPerSide^2 zones, all the main faction's at the start; every
 	 *  TerritorySeconds a zone goes to the faction with the most live units in it, if it outnumbers the owner there. */
 	UPROPERTY(EditAnywhere, Config, Category = "Faction") int32 ZonesPerSide = 3;

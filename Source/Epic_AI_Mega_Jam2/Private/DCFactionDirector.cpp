@@ -198,8 +198,8 @@ void ADCGameMode::TickFactions(float Now)
 			B = Gap < BestGap ? Pt : B;
 			BestGap = FMath::Min(BestGap, Gap);
 		}
-		const int32 Main = SpawnSquad(GS->FactionMix.Main, T.FactionMix.OpeningSquad, A, 300.f);
-		const int32 Other = SpawnSquad(Raider, T.FactionMix.OpeningSquad, B, 300.f);
+		const int32 Main = SpawnSquad(GS->FactionMix.Main, T.FactionMix.OpeningSquad, A, T.FactionMix.OpeningSpreadCm);
+		const int32 Other = SpawnSquad(Raider, T.FactionMix.OpeningSquad, B, T.FactionMix.OpeningSpreadCm);
 		UE_LOG(LogTemp, Display, TEXT("DCFACTION opening clash %s x%d vs %s x%d"), *GS->FactionMix.Main.ToString(), Main, *Raider.ToString(), Other);
 	}
 	if (Standing.Num() == 0 || Now < SectorStartTime + P.StartSeconds)
@@ -242,7 +242,7 @@ void ADCGameMode::TickFactions(float Now)
 		{
 			const FVector Near = Standing[SectorRng.RandRange(0, Standing.Num() - 1)]->GetActorLocation();
 			const int32 N = FMath::Min(Room, SectorRng.RandRange(F->SquadMin, F->SquadMax));
-			const int32 Landed = SpawnSquad(Ally, N, DropPoint(Near, false, P, Ally), 350.f);
+			const int32 Landed = SpawnSquad(Ally, N, DropPoint(Near, false, P, Ally), T.FactionMix.AllySpreadCm);
 			UE_LOG(LogTemp, Display, TEXT("DCFACTION ally squad %s landed=%d"), *Ally.ToString(), Landed);
 		}
 	}

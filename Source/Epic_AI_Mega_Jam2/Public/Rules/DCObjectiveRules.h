@@ -46,6 +46,11 @@ struct FDCObjectiveDef
 	UPROPERTY(EditAnywhere, Config, Category = "Objective") float GuardGapSeconds = 30.f;
 	/** At most this many guard squads per sector (advisor a-7: loitering by the package must not pile up units). */
 	UPROPERTY(EditAnywhere, Config, Category = "Objective") int32 GuardWaves = 3;
+	/** Guards land once a standing crew member is within GuardTriggerCm of the package, spread GuardSpreadCm. */
+	UPROPERTY(EditAnywhere, Config, Category = "Objective") float GuardTriggerCm = 7000.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Objective") float GuardSpreadCm = 900.f;
+	/** Destroy: marked towers stand at least this far apart. */
+	UPROPERTY(EditAnywhere, Config, Category = "Objective") float TargetSpacingCm = 5000.f;
 	/** Propaganda Points paid to every player on extraction; the sector ends ExtractEndSeconds later. */
 	UPROPERTY(EditAnywhere, Config, Category = "Objective") int32 RewardPoints = 600;
 	UPROPERTY(EditAnywhere, Config, Category = "Objective") float ExtractEndSeconds = 2.5f;
