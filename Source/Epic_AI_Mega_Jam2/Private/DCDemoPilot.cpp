@@ -593,7 +593,8 @@ void ADCDemoPilot::TickDefend()
 	// Defending: anything within 12 m (holding fire at 25 m emptied the rifle by sector 2). Mid-script: a 6 m guard
 	// bubble, so a swarmer biting at 1-2 m is shot instead of downing the pilot while it frames a photo.
 	// With the camera up (framing a swarm) it only breaks off for a swarmer already at arm's length (3 m).
-	float Best = bDefend ? 1200.f : (Me && Me->IsCameraRaised() ? 300.f : 600.f);
+	// (Sector 2 runs still went down at 1 m with a 6 m bubble: 10 m gives the rifle time to drop a rushing swarmer.)
+	float Best = bDefend ? 1200.f : (Me && Me->IsCameraRaised() ? 300.f : 1000.f);
 	if (Me && !Me->IsDowned() && GS && GS->Phase == EDCRunPhase::Sector)
 	{
 		for (ADCEnemy* E : TActorRange<ADCEnemy>(GetWorld()))
@@ -602,6 +603,12 @@ void ADCDemoPilot::TickDefend()
 			Nearest = D < Best ? E : Nearest;
 			Best = FMath::Min(Best, D);
 		}
+	}
+	// An empty magazine reloads at once; a half-empty one reloads while nothing is close (a player would).
+	if (Me && !Me->IsDowned() && Me->GetSlot() == EDCSlot::Rifle && !Me->IsReloading() && Me->GetReserve() > 0
+		&& (Me->GetAmmo() == 0 || (!Nearest && Me->GetAmmo() < 12)))
+	{
+		Tap(TEXT("Reload"));
 	}
 	if (Nearest)
 	{
