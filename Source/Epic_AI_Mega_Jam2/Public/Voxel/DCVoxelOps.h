@@ -138,11 +138,11 @@ namespace DCVoxelOps
 	/** Breaks a falling piece into fragments for the physics bodies (R26): its cells bucketed on a block grid of
 	 *  BlockCells voxels, the block doubled until there are at most MaxFragments. Returns cell indices per fragment,
 	 *  ordered by block coordinate (the same on every machine; the bodies themselves are local and cosmetic). */
-	EPIC_AI_MEGA_JAM2_API TArray<TArray<int32>> SplitFragments(const TArray<FIntVector>& Cells, int32 BlockCells, int32 MaxFragments);
+	EPIC_AI_MEGA_JAM2_API TArray<TArray<int32>> SplitFragments(const TArray<FIntVector>& Cells, int32 BlockCells, int32 MaxFragments, const FIntVector* Focus = nullptr, float FalloffCells = 0.f);
 	/** The piece's fragment tree (chunks of ChunkCm blocks, each split into leaves of LeafCm blocks), in the order
 	 *  the city builds its bodies: chunk, its leaves, next chunk. Pure, the same on every machine. */
 	EPIC_AI_MEGA_JAM2_API void FragmentTree(const TArray<FIntVector>& Cells, int32 VoxelCm, float ChunkCm, int32 MaxChunks, float LeafCm, int32 MaxLeaves,
-		TArray<int32>& OutParent, TArray<TArray<int32>>& OutCells);
+		TArray<int32>& OutParent, TArray<TArray<int32>>& OutCells, const FIntVector* Focus = nullptr, float FocusFalloffCm = 0.f);
 	/** Axis frame index (0..5 = +X -X +Y -Y +Z -Z) of the world axis nearest Dir, and back. */
 	EPIC_AI_MEGA_JAM2_API uint8 AxisIndex(const FVector& Dir);
 	EPIC_AI_MEGA_JAM2_API FIntVector AxisDir(uint8 Index);

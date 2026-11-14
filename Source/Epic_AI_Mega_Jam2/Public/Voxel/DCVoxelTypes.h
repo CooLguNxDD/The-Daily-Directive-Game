@@ -243,6 +243,8 @@ struct FDCVoxelTuning
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float PhysicsShatterGraceSeconds = 0.3f;
 	/** Fraction of the scripted fall (0..1) at which a toppling piece starts breaking into chunks. */
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float PhysicsBreakAtU = 0.35f;
+	/** Fragments nearer the blast split first: priority = extent / (1 + distance / FocusFalloffCm) (0 = extent only). */
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float PhysicsFocusFalloffCm = 0.f;
 	/** Shatter (R26): carved voxels fly as up to ShardMax bodies; cluster edge = 1 voxel + 1 per ShardGrowCm from the
 	 *  blast centre, at most ShardBlockMax voxels; speed (cm/s) outward, up kick, life (s). */
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 ShardMax = 110;
