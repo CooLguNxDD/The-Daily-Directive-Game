@@ -500,7 +500,10 @@ void ADCHUD::DrawFrontPage(ADCGameState& GS, ADCCharacter* Me)
 			break;
 		}
 	}
-	Box(M, Sx(172.f), W - 2.f * M, Sx(84.f), Magenta); // the headline band is a neon accent (red is danger only)
+	// The headline band: magenta-lit dark glass with a neon edge (a solid magenta slab outshone the hero photo).
+	Box(M, Sx(172.f), W - 2.f * M, Sx(84.f), Paper);
+	Box(M, Sx(172.f), W - 2.f * M, Sx(84.f), FLinearColor(Magenta.R, Magenta.G, Magenta.B, 0.28f));
+	Frame(M, Sx(172.f), W - 2.f * M, Sx(84.f), Sx(3.f), Magenta);
 	Text(GS.Headline, W * 0.5f, Sx(172.f) + (Sx(84.f) - Th) * 0.5f, Ink, Scale, true, HeadFont);
 
 	if (PC && GS.PagePicks.IsValidIndex(GS.HeadlineIndex))
