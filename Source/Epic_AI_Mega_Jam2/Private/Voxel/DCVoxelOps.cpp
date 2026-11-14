@@ -278,7 +278,7 @@ namespace DCVoxelOps
 		return H;
 	}
 
-	int32 CarveSphere(FDCVoxelGrid& Grid, const FIntVector& CenterCm, int32 RadiusCm, int32 MinZ)
+	int32 CarveSphere(FDCVoxelGrid& Grid, const FIntVector& CenterCm, int32 RadiusCm, int32 MinZ, TArray<TPair<FIntVector, uint8>>* Removed)
 	{
 		if (RadiusCm <= 0)
 		{
@@ -287,18 +287,23 @@ namespace DCVoxelOps
 		const int64 R2 = static_cast<int64>(RadiusCm) * RadiusCm;
 		const FIntVector Lo = Grid.ToLocal(CenterCm - FIntVector(RadiusCm));
 		const FIntVector Hi = Grid.ToLocal(CenterCm + FIntVector(RadiusCm)) + FIntVector(1);
-		return Grid.Data.EditBox(FIntVector(Lo.X, Lo.Y, FMath::Max(Lo.Z, MinZ)), Hi, true, [&Grid, &CenterCm, R2](const FIntVector& P, uint8 Old) -> uint8
+		return Grid.Data.EditBox(FIntVector(Lo.X, Lo.Y, FMath::Max(Lo.Z, MinZ)), Hi, true, [&Grid, &CenterCm, R2, Removed](const FIntVector& P, uint8 Old) -> uint8
 		{
 			if (Old == 0)
 			{
 				return 0;
 			}
 			const FIntVector D = Grid.CenterCm(P) - CenterCm;
-			return static_cast<int64>(D.X) * D.X + static_cast<int64>(D.Y) * D.Y + static_cast<int64>(D.Z) * D.Z <= R2 ? 0 : Old;
+			const bool bGone = static_cast<int64>(D.X) * D.X + static_cast<int64>(D.Y) * D.Y + static_cast<int64>(D.Z) * D.Z <= R2;
+			if (bGone && Removed)
+			{
+				Removed->Add({P, Old});
+			}
+			return bGone ? 0 : Old;
 		});
 	}
 
-	int32 CarveColumn(FDCVoxelGrid& Grid, const FIntVector& CenterCm, int32 RadiusCm, int32 TopZ)
+	int32 CarveColumn(FDCVoxelGrid& Grid, const FIntVector& CenterCm, int32 RadiusCm, int32 TopZ, TArray<TPair<FIntVector, uint8>>* Removed)
 	{
 		if (RadiusCm <= 0)
 		{
@@ -307,7 +312,7 @@ namespace DCVoxelOps
 		const int64 R2 = static_cast<int64>(RadiusCm) * RadiusCm;
 		const FIntVector Lo = Grid.ToLocal(CenterCm - FIntVector(RadiusCm, RadiusCm, 0));
 		const FIntVector Hi = Grid.ToLocal(CenterCm + FIntVector(RadiusCm, RadiusCm, 0));
-		return Grid.Data.EditBox(FIntVector(Lo.X, Lo.Y, 0), FIntVector(Hi.X + 1, Hi.Y + 1, TopZ), true, [&Grid, &CenterCm, R2](const FIntVector& P, uint8 Old) -> uint8
+		return Grid.Data.EditBox(FIntVector(Lo.X, Lo.Y, 0), FIntVector(Hi.X + 1, Hi.Y + 1, TopZ), true, [&Grid, &CenterCm, R2, Removed](const FIntVector& P, uint8 Old) -> uint8
 		{
 			if (Old == 0)
 			{
@@ -316,11 +321,16 @@ namespace DCVoxelOps
 			const FIntVector C = Grid.CenterCm(FIntVector(P.X, P.Y, 0));
 			const int64 Dx = C.X - CenterCm.X;
 			const int64 Dy = C.Y - CenterCm.Y;
-			return Dx * Dx + Dy * Dy <= R2 ? 0 : Old;
+			const bool bGone = Dx * Dx + Dy * Dy <= R2;
+			if (bGone && Removed)
+			{
+				Removed->Add({P, Old});
+			}
+			return bGone ? 0 : Old;
 		});
 	}
 
-	int32 Bite(FDCVoxelTower& T, const FIntVector& FromCm, int32 BiteFloors, int32 BitePercent, int32 BayCm)
+	int32 Bite(FDCVoxelTower& T, const FIntVector& FromCm, int32 BiteFloors, int32 BitePercent, int32 BayCm, TArray<TPair<FIntVector, uint8>>* Removed)
 	{
 		if (BiteFloors <= 0 || BitePercent <= 0)
 		{
@@ -347,7 +357,12 @@ namespace DCVoxelOps
 			}
 			const int32 K = Dir[Axis] > 0 ? T.Max[Axis] - 1 - P[Axis] : P[Axis] - T.Min[Axis];
 			const int32 D = Depth - static_cast<int32>(Hash(FIntVector(P[Other], P.Z, Axis), 0xB17E) % Ragged);
-			return K >= KStart && K < D ? 0 : Old;
+			const bool bGone = K >= KStart && K < D;
+			if (bGone && Removed)
+			{
+				Removed->Add({P, Old});
+			}
+			return bGone ? 0 : Old;
 		});
 	}
 
@@ -626,7 +641,12 @@ namespace DCVoxelOps
 		{
 			if (Sector.Towers.IsValidIndex(Op.Lot) && !Sector.Towers[Op.Lot].bFallen)
 			{
-				Out.Carved += Bite(Sector.Towers[Op.Lot], C, Carve.BiteFloors, Carve.BitePercent, Ctx.BayCm);
+				TArray<TPair<FIntVector, uint8>> Removed;
+				Out.Carved += Bite(Sector.Towers[Op.Lot], C, Carve.BiteFloors, Carve.BitePercent, Ctx.BayCm, &Removed);
+				for (const TPair<FIntVector, uint8>& R : Removed)
+				{
+					Out.Shards.Add({Op.Lot, R.Key, R.Value});
+				}
 				Out.TouchedLots.Add(Op.Lot);
 			}
 		}
@@ -638,16 +658,21 @@ namespace DCVoxelOps
 			{
 				FDCVoxelTower& T = Sector.Towers[i];
 				bool bTouched = false;
+				TArray<TPair<FIntVector, uint8>> Removed;
 				if (DistSqToFootprint(T, C) <= static_cast<int64>(Reach + 100) * (Reach + 100))
 				{
-					const int32 Carved = CarveColumn(T.Grid, C, Carve.ColumnRadiusCm, T.ScanMax.Z) + CarveSphere(T.Grid, C, Carve.SphereRadiusCm);
+					const int32 Carved = CarveColumn(T.Grid, C, Carve.ColumnRadiusCm, T.ScanMax.Z, &Removed) + CarveSphere(T.Grid, C, Carve.SphereRadiusCm, 0, &Removed);
 					Out.Carved += Carved;
 					bTouched = Carved > 0;
 				}
 				if (!T.bFallen && DistSqToFootprint(T, C) <= Blast2)
 				{
-					Out.Carved += Bite(T, C, Carve.BiteFloors, Carve.BitePercent, Ctx.BayCm);
+					Out.Carved += Bite(T, C, Carve.BiteFloors, Carve.BitePercent, Ctx.BayCm, &Removed);
 					bTouched = true;
+				}
+				for (const TPair<FIntVector, uint8>& R : Removed)
+				{
+					Out.Shards.Add({i, R.Key, R.Value});
 				}
 				if (bTouched)
 				{

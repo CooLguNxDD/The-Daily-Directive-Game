@@ -173,13 +173,33 @@ struct FDCVoxelTuning
 	 *  their emissive voxel mesh riding on them, tumbling, colliding with the street, the towers and each other, chipping
 	 *  on hard impacts. The rubble every machine stamps is the host op's deterministic rubble; the bodies are local and
 	 *  drawn toward it, and swap to it under the landing dust when they sleep. 0 = scripted only (the fallback). */
-	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 PhysicsPieces = 4;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 PhysicsPieces = 2;
 	/** Fragments per piece at most (the block grid doubles until it fits), and live bodies in the sector at most (a
 	 *  piece that would pass the cap falls scripted). */
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 PhysicsFragments = 20;
-	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 PhysicsMaxBodies = 60;
-	/** Starting fragment block edge in cm (rounded to the piece's voxels). */
-	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float PhysicsFragmentCm = 250.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 PhysicsMaxBodies = 360;
+	/** Chunk block edge in cm (rounded to the piece's voxels): chunks break off as the piece falls. */
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float PhysicsFragmentCm = 400.f;
+	/** Leaves: each chunk is made of up to LeavesPerChunk leaves of LeafCm blocks; a hit over ShatterCms (speed lost)
+	 *  breaks the chunk into them, bursting apart at ShatterBurstCms. */
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float PhysicsLeafCm = 120.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 PhysicsLeavesPerChunk = 8;
+	/** Bodies shrink away over this long when their group rests (the shared rubble shows under them). */
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float PhysicsFadeSeconds = 0.8f;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float PhysicsShatterCms = 350.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float PhysicsShatterBurstCms = 250.f;
+	/** Chunks never shatter in their first seconds (neighbouring chunks touch as they break off). */
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float PhysicsShatterGraceSeconds = 0.3f;
+	/** Fraction of the scripted fall (0..1) at which a toppling piece starts breaking into chunks. */
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float PhysicsBreakAtU = 0.35f;
+	/** Shatter (R26): carved voxels fly as up to ShardMax bodies; cluster edge = 1 voxel + 1 per ShardGrowCm from the
+	 *  blast centre, at most ShardBlockMax voxels; speed (cm/s) outward, up kick, life (s). */
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 ShardMax = 160;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float ShardGrowCm = 150.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 ShardBlockMax = 4;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float ShardSpeedCms = 1500.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float ShardUpCms = 600.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float ShardLifeSeconds = 8.f;
 	/** Collider = fragment bounds times this (adjacent fragments start apart, never nested). */
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float PhysicsBoxScale = 0.85f;
 	/** A body group rests when every body sleeps or after this long (then its rubble shows). */

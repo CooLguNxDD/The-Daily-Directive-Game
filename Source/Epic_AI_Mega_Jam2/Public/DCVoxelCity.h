@@ -11,6 +11,7 @@
 #include "Voxel/DCVoxelMesher.h"
 #include "Voxel/DCVoxelOps.h"
 #include "Rules/DCWeather.h"
+#include "DCDebrisPool.h"
 #include "DCVoxelCity.generated.h"
 
 class UProceduralMeshComponent;
@@ -95,9 +96,35 @@ private:
 	void TickFalling(float Now);
 	void StartFall(const FDCVoxelPiece& Piece, float Now, const TArray<FIntVector>& DeferredTerrain, const FVector& LandAt, bool bPhysics = false);
 	/** R26: a fragmented piece hits the street: each fragment becomes a Chaos body carrying its mesh. */
-	void BreakApart(const TSharedPtr<FFalling>& F, float Age, float U);
-	/** Steers and solidifies the bodies; true when they rest (all asleep or out of air time). */
-	bool TickBodies(FFalling& F, float Dt);
+	void BreakApart(const TSharedPtr<FFalling>& F, float Age, float U, bool bImpact);
+	/** One fragment (chunk or leaf) becomes a simulating box body carrying its mesh. */
+	class UBoxComponent* MakeBody(const TSharedPtr<FFalling>& F, int32 Index, const FVector& At, const FQuat& Rot, const FVector& V, const FVector& SpinDeg, bool bSolid);
+	/** A chunk that took a hard hit breaks into its leaves (each a body). */
+	void Shatter(const TSharedPtr<FFalling>& F, int32 ChunkIndex);
+	/** Steers, solidifies and shatters the bodies; true when they rest (all still or out of air time). */
+	bool TickBodies(const TSharedPtr<FFalling>& F, float Dt);
+	/** R26 shatter: carved tower voxels as flying shard bodies, spawned at the op's presentation start. */
+	void QueueShards(const FDCVoxelOp& Op, const FDCVoxelOpResult& Result, float Start);
+	void SpawnDueShards(float Now);
+	struct FDCShardBurst
+	{
+		float Start = 0.f;
+		TArray<FDCDebrisSpawn> Spawns;
+	};
+	TArray<FDCShardBurst> PendingShards;
+	struct FDCFading
+	{
+		TWeakObjectPtr<UPrimitiveComponent> Body;
+		TWeakObjectPtr<UPrimitiveComponent> Mesh;
+		float Start = 0.f;
+	};
+	TArray<FDCFading> Fading;
+	/** -dccollapsecam evidence camera (step -1 = off). */
+	void TickCollapseCam();
+	int32 CollapseCamStep = -1;
+	int32 CollapseCamOp = 0;
+	FVector CollapseCamCenter = FVector::ZeroVector;
+	float CollapseCamStart = 0.f;
 	/** Street height under a body (terrain top, capped at the rubble site: the op's own rubble is not shown yet). */
 	float BodyGroundZ(const FVector& At, const FVector& LandCenter) const;
 	/** Lowest fragment's underside above the street (<= 0: the falling piece hit the ground). */
