@@ -50,6 +50,11 @@ public:
 	virtual void EndPlay(const EEndPlayReason::Type Reason) override;
 	virtual void SetupInputComponent() override;
 	virtual void PlayerTick(float DeltaTime) override;
+	/** -dcperf: once a real second, logs DCPERF with this machine's frame and GPU times (R13 evidence). */
+	void TickPerf();
+	TArray<float> PerfFrameMs;
+	double PerfWindowStart = 0.0;
+	int32 PerfMaxFalling = 0;
 	virtual void Tick(float DeltaSeconds) override;
 
 	UDCInputSet* GetInputSet();

@@ -1,4 +1,7 @@
 #include "DCPlayerController.h"
+#include "Misc/App.h"
+#include "RHI.h"
+#include "DCVoxelCity.h"
 
 #include "DCAudio.h"
 #include "DCGameMode.h"
@@ -129,11 +132,52 @@ void ADCPlayerController::Tick(float DeltaSeconds)
 	PumpSends();
 }
 
+void ADCPlayerController::TickPerf()
+{
+	static const bool bPerf = FParse::Param(FCommandLine::Get(), TEXT("dcperf"));
+	if (!bPerf)
+	{
+		return;
+	}
+	PerfFrameMs.Add(static_cast<float>(FApp::GetDeltaTime() * 1000.0));
+	if (const ADCVoxelCity* City = ADCVoxelCity::Get(this))
+	{
+		PerfMaxFalling = FMath::Max(PerfMaxFalling, City->GetFallingCount());
+	}
+	const double Now = FPlatformTime::Seconds();
+	if (PerfWindowStart <= 0.0)
+	{
+		PerfWindowStart = Now;
+		return;
+	}
+	if (Now - PerfWindowStart < 1.0 || PerfFrameMs.Num() == 0)
+	{
+		return;
+	}
+	TArray<float> Sorted = PerfFrameMs;
+	Sorted.Sort();
+	float Sum = 0.f;
+	for (const float Ms : Sorted)
+	{
+		Sum += Ms;
+	}
+	const ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>();
+	const float GpuMs = FPlatformTime::ToMilliseconds(RHIGetGPUFrameCycles());
+	const FIntPoint View = GEngine && GEngine->GameViewport ? GEngine->GameViewport->Viewport->GetSizeXY() : FIntPoint::ZeroValue;
+	UE_LOG(LogTemp, Display, TEXT("DCPERF frames=%d avg_ms=%.2f p95_ms=%.2f max_ms=%.2f gpu_ms=%.2f players=%d falling_max=%d phase=%d view=%dx%d"),
+		Sorted.Num(), Sum / Sorted.Num(), Sorted[FMath::Min(Sorted.Num() - 1, FMath::FloorToInt32(Sorted.Num() * 0.95f))], Sorted.Last(), GpuMs,
+		GS ? GS->PlayerArray.Num() : 0, PerfMaxFalling, GS ? static_cast<int32>(GS->Phase) : -1, View.X, View.Y);
+	PerfFrameMs.Reset();
+	PerfMaxFalling = 0;
+	PerfWindowStart = Now;
+}
+
 void ADCPlayerController::PlayerTick(float DeltaTime)
 {
 	Super::PlayerTick(DeltaTime);
 	if (IsLocalController())
 	{
+		TickPerf();
 		UpdateMenu();
 		UpdateCursor();
 		UpdateReel();

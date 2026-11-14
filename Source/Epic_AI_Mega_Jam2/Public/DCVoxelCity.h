@@ -64,6 +64,8 @@ public:
 	uint32 GetHash() const { return Sector.Hash(); }
 	const FDCVoxelSector& GetSector() const { return Sector; }
 	bool IsMeshing() const { return Jobs.Num() > 0 || DirtyCells.Num() > 0; }
+	/** Tower pieces falling right now (an active collapse, for the perf probe). */
+	int32 GetFallingCount() const { return Falling.Num(); }
 	/** An op due by Time (its apply time) is still planning, held or queued: its results have not landed yet. */
 	bool HasPendingOpsAt(float Time) const;
 
