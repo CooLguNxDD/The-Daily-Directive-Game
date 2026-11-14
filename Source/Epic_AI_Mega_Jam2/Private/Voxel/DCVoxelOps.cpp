@@ -869,4 +869,88 @@ namespace DCVoxelOps
 		}
 		return Out;
 	}
+
+	void DeriveCosmetics(const FDCVoxelSector& Sector, const FDCVoxelOp& Op, const FDCVoxelOpContext& Ctx, FDCVoxelOpResult& Result)
+	{
+		const FDCVoxelTuning& Tn = *Ctx.Tuning;
+		// Physics pieces: the biggest PhysicsPieces (index order breaks ties), each with its fragment tree.
+		TArray<int32> BySize;
+		for (int32 i = 0; i < Result.Pieces.Num(); ++i)
+		{
+			BySize.Add(i);
+		}
+		BySize.StableSort([&Result](int32 A, int32 B) { return Result.Pieces[A].Cells.Num() > Result.Pieces[B].Cells.Num(); });
+		for (int32 k = 0; k < BySize.Num() && k < Tn.PhysicsPieces; ++k)
+		{
+			const FDCVoxelPiece& Pc = Result.Pieces[BySize[k]];
+			FDCPendingPiece P;
+			P.Lot = Pc.Lot;
+			P.Cells = Pc.Cells;
+			P.Materials = Pc.Materials;
+			for (int32 r = Pc.RubbleStart; r < Pc.RubbleStart + Pc.RubbleNum && Result.Rubble.IsValidIndex(r); ++r)
+			{
+				P.Rubble.Add(Result.Rubble[r]);
+				P.RubbleMaterials.Add(Result.RubbleMaterials.IsValidIndex(r) ? Result.RubbleMaterials[r] : 0);
+			}
+			FragmentTree(Pc.Cells, Sector.Towers[Pc.Lot].Grid.VoxelCm, Tn.PhysicsFragmentCm, Tn.PhysicsFragments, Tn.PhysicsLeafCm, Tn.PhysicsLeavesPerChunk, P.FragParent, P.FragCells);
+			Result.Pending.Add({BySize[k], MoveTemp(P)});
+		}
+		// Shards: clusters grow with the distance from the blast centre; a seeded sample under the cap, weighted toward
+		// the centre (the column carve reaches the whole height).
+		if (Tn.ShardMax > 0 && Result.Shards.Num() > 0)
+		{
+			struct FAcc
+			{
+				FVector Sum = FVector::ZeroVector;
+				int32 Count = 0;
+				uint8 Mat = 0;
+				int32 Block = 1;
+				float Vcm = 10.f;
+				uint32 Key = 0;
+				float Rank = 0.f;
+			};
+			const FVector Center(Op.CenterCm);
+			TMap<FIntVector4, int32> Index;
+			TArray<FAcc> Acc;
+			for (const FDCVoxelShard& S : Result.Shards)
+			{
+				if (!Sector.Towers.IsValidIndex(S.Lot))
+				{
+					continue;
+				}
+				const FDCVoxelGrid& G = Sector.Towers[S.Lot].Grid;
+				const FVector P = G.ToWorld(S.Cell) + FVector(G.VoxelCm * 0.5f);
+				const int32 Block = FMath::Clamp(1 + FMath::FloorToInt(FVector::Dist(P, Center) / FMath::Max(Tn.ShardGrowCm, 1.f)), 1, FMath::Max(Tn.ShardBlockMax, 1));
+				const FIntVector4 K(S.Lot * 8 + Block, FMath::FloorToInt(static_cast<float>(S.Cell.X) / Block), FMath::FloorToInt(static_cast<float>(S.Cell.Y) / Block), FMath::FloorToInt(static_cast<float>(S.Cell.Z) / Block));
+				int32* Found = Index.Find(K);
+				if (!Found)
+				{
+					Found = &Index.Add(K, Acc.Num());
+					FAcc& A = Acc.AddDefaulted_GetRef();
+					A.Mat = S.Material;
+					A.Block = Block;
+					A.Vcm = G.VoxelCm;
+					A.Key = Hash(FIntVector(K.Y, K.Z, K.W), static_cast<uint32>(K.X));
+				}
+				FAcc& A = Acc[*Found];
+				A.Sum += P;
+				++A.Count;
+			}
+			for (FAcc& A : Acc)
+			{
+				A.Rank = FVector::Dist(A.Sum / A.Count, Center) * (0.35f + static_cast<float>(A.Key % 1000u) / 1000.f);
+			}
+			Acc.Sort([](const FAcc& A, const FAcc& B) { return A.Rank != B.Rank ? A.Rank < B.Rank : A.Key < B.Key; });
+			for (int32 i = 0; i < Acc.Num() && i < Tn.ShardMax; ++i)
+			{
+				FDCShardCluster& C = Result.ShardClusters.AddDefaulted_GetRef();
+				C.Pos = Acc[i].Sum / Acc[i].Count;
+				C.Count = Acc[i].Count;
+				C.Material = Acc[i].Mat;
+				C.Block = Acc[i].Block;
+				C.VoxelCm = Acc[i].Vcm;
+			}
+		}
+		Result.Shards.Empty(); // the raw list is large; only the clusters are kept
+	}
 }

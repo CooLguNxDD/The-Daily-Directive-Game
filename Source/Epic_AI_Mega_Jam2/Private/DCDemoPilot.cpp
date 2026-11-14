@@ -231,7 +231,7 @@ ADCBuilding* ADCDemoPilot::PickTower()
 			continue;
 		}
 		const float D = FVector::Dist2D(B->GetActorLocation(), Me->GetActorLocation());
-		if (D > 2500.f && D < BestDist)
+		if (D > 4000.f && D < BestDist) // far enough that the peak frame shows the tower, not the debris at the lens
 		{
 			Best = B;
 			BestDist = D;

@@ -196,12 +196,14 @@ struct FDCVoxelTuning
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float PhysicsBreakAtU = 0.35f;
 	/** Shatter (R26): carved voxels fly as up to ShardMax bodies; cluster edge = 1 voxel + 1 per ShardGrowCm from the
 	 *  blast centre, at most ShardBlockMax voxels; speed (cm/s) outward, up kick, life (s). */
-	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 ShardMax = 160;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 ShardMax = 110;
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float ShardGrowCm = 150.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 ShardBlockMax = 4;
-	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float ShardSpeedCms = 1500.f;
-	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float ShardUpCms = 600.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float ShardSpeedCms = 850.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float ShardUpCms = 450.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float ShardLifeSeconds = 8.f;
+	/** Shards keep this share of their palette glow (lit windows still glow in the air, but never read as cream blocks at the lens). */
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float ShardGlowScale = 0.35f;
 	/** Collider = fragment bounds times this (adjacent fragments start apart, never nested). */
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float PhysicsBoxScale = 0.85f;
 	/** A body group rests when every body sleeps or after this long (then its rubble shows). */
