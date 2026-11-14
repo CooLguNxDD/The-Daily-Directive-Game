@@ -1,6 +1,7 @@
 #include "Voxel/DCVoxelCraft.h"
 
 #include "Voxel/DCVoxelWorld.h"
+#include "Voxel/DCVoxelOps.h"
 #include "Async/ParallelFor.h"
 #include "Rules/DCPcg.h"
 
@@ -64,7 +65,7 @@ namespace
 
 	struct FCraftIds
 	{
-		uint8 Wall = 1, Window = 1, Trim = 1, Slab = 1, Poster = 1, Ink = 1, PosterEdge = 1;
+		uint8 Wall = 1, Window = 1, Trim = 1, Slab = 1, Poster = 1, Ink = 1, PosterEdge = 1, WindowOff = 0, WindowAlt = 0;
 		/** About 25 cm in voxels: the roof and detail builders size their parts in units. */
 		int32 Unit = 1;
 	};
@@ -276,6 +277,8 @@ namespace DCVoxelCraft
 		FCraftIds Ids;
 		Ids.Wall = Ctx.MaterialId(R->Wall);
 		Ids.Window = Ctx.MaterialId(R->Window);
+		Ids.WindowOff = R->WindowOff.IsNone() ? Ids.Window : Ctx.MaterialId(R->WindowOff);
+		Ids.WindowAlt = R->WindowAlt.IsNone() ? Ids.Window : Ctx.MaterialId(R->WindowAlt);
 		Ids.Trim = Ctx.MaterialId(R->Trim);
 		Ids.Slab = Ctx.MaterialId(R->Slab);
 		Ids.Poster = Ctx.MaterialId(R->Poster);
@@ -323,7 +326,14 @@ namespace DCVoxelCraft
 						for (int32 D = 0; D < Wall; ++D)
 						{
 							const uint8 Outer = Open == EOpening::Solid ? Ids.Wall : 0;
-							const uint8 Inner = Open == EOpening::Window ? Ids.Window : Outer;
+							uint8 Glass = Ids.Window;
+							if (Open == EOpening::Window)
+							{
+								// One pick per opening (bay, floor, face, lot): dark, the alternate tint, or the recipe's.
+								const uint32 Pick = DCVoxelOps::Hash(FIntVector(U / B, Floor, Face), static_cast<uint32>(LotIndex) * 2654435761u) % 100u;
+								Glass = static_cast<int32>(Pick) < R->WindowOffPercent ? Ids.WindowOff : (static_cast<int32>(Pick) < R->WindowOffPercent + R->WindowAltPercent ? Ids.WindowAlt : Ids.Window);
+							}
+							const uint8 Inner = Open == EOpening::Window ? Glass : Outer;
 							World.Set(F.Cell(Face, D, U, Z0 + H), D == 0 ? Outer : Inner);
 						}
 						// Window sill: a trim ledge one voxel proud under each opening.

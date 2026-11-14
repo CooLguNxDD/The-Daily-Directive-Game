@@ -55,6 +55,12 @@ struct FDCVoxelRecipe
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") FName Trim = TEXT("Trim");
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") FName Slab = TEXT("Slab");
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") FName Poster = TEXT("Paper");
+	/** Window variety per opening (critic: a uniform lit grid reads as a black slab with dots): OffPercent of the
+	 *  windows are dark glass (WindowOff), AltPercent use WindowAlt (another tint); hashed per bay and floor. */
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 WindowOffPercent = 0;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") FName WindowOff;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 WindowAltPercent = 0;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") FName WindowAlt;
 	/** The sign's outer ring (a neon tube edge, R25); None = the same as Poster. */
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") FName PosterEdge;
 };
