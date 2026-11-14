@@ -105,6 +105,12 @@ is kept from the run records (Glass Box modifier): what was decided, why, and wh
 - Frame time with props (editor -game, 1600x900, seed 7, demo pilot through sector 0 into 1, night): median 8.23 ms,
   p95 9.22 ms before the art signs and 8.32 / 9.37 ms after, against 7.95 / 8.97 ms without props; sector craft on the
   worker goes from about 0.9 s to 1.2-1.3 s at sector load. Well inside 16.67 ms.
+- Packaged build (full gate tier: package and DCSMOKE pass): all three districts shot by day and night with the new
+  models staged; host and editor craft the same sector hashes. On the merged tree with the faction armies, a packaged
+  run measured median 12.9 ms, p95 15.4 ms while other lanes' game instances shared the machine; side by side under
+  the same load, props cost about 1.4 ms of median frame time.
+- Every op used to rehash the whole sector on the op worker (about 85 ms with the props); chunks now keep their hash
+  until a voxel changes, so an op costs about 1 ms of hashing.
 
 ## Problems met
 - Git Bash rewrote `/Game/...` map arguments into `C:/Program Files/Git/Game/...`; `export MSYS_NO_PATHCONV=1` fixed it,

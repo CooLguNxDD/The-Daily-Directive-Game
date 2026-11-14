@@ -308,14 +308,15 @@ namespace
 	 *  the footprint (the tower grid's margin grows to hold it). Stamp returns the top z written + 1 (0 = skipped). */
 	struct FMount
 	{
-		int32 (*Stamp)(const FMountCtx& C, const FDCVoxelModel& M, const FDCAttachPlan& A);
+		/** Base receives the pivot cell (grid-local) and Turns the quarter turns, for the attachment's light spot. */
+		int32 (*Stamp)(const FMountCtx& C, const FDCVoxelModel& M, const FDCAttachPlan& A, FIntVector& Base, int32& Turns);
 		int32 (*Reach)(const FDCVoxelModel& M, int32 Vcm);
 	};
 	const TMap<FName, FMount>& Mounts()
 	{
 		static const TMap<FName, FMount> Table = {
 			// On the roof deck inside the parapet, never over what the roof builder put there (stair hut, mast).
-			{TEXT("Roof"), {[](const FMountCtx& C, const FDCVoxelModel& M, const FDCAttachPlan& A)
+			{TEXT("Roof"), {[](const FMountCtx& C, const FDCVoxelModel& M, const FDCAttachPlan& A, FIntVector& Base, int32& Turns)
 				{
 					const FFaceFrame& F = C.FloorFrames.Last();
 					const FIntVector S = ModelVox(M, C.Vcm);
@@ -328,12 +329,13 @@ namespace
 					{
 						return 0; // the deck is too small for it
 					}
-					const FIntVector Base(X0 + FMath::RoundToInt32(A.U * (X1 - X0)), Y0 + FMath::RoundToInt32(A.V * (Y1 - Y0)), C.RoofZ + 1);
-					return DCVoxelCraft::StampModel(C.World, M, C.Vcm, Base, A.Face, C.Ctx, true);
+					Base = FIntVector(X0 + FMath::RoundToInt32(A.U * (X1 - X0)), Y0 + FMath::RoundToInt32(A.V * (Y1 - Y0)), C.RoofZ + 1);
+					Turns = A.Face;
+					return DCVoxelCraft::StampModel(C.World, M, C.Vcm, Base, Turns, C.Ctx, true);
 				},
 				[](const FDCVoxelModel&, int32) { return 0; }}},
 			// At the deck edge of face Face, inside the parapet, facing out over the street (rooftop billboards).
-			{TEXT("RoofEdge"), {[](const FMountCtx& C, const FDCVoxelModel& M, const FDCAttachPlan& A)
+			{TEXT("RoofEdge"), {[](const FMountCtx& C, const FDCVoxelModel& M, const FDCAttachPlan& A, FIntVector& Base, int32& Turns)
 				{
 					const FFaceFrame& F = C.FloorFrames.Last();
 					const FIntVector S = ModelVox(M, C.Vcm);
@@ -346,11 +348,13 @@ namespace
 						return 0;
 					}
 					const int32 U = FMath::Clamp(FMath::RoundToInt32(A.U * Len), Half, Len - Half);
-					return DCVoxelCraft::StampModel(C.World, M, C.Vcm, F.Cell(Face, Depth, U, C.RoofZ + 1), MountFaceTurns[Face], C.Ctx, true);
+					Base = F.Cell(Face, Depth, U, C.RoofZ + 1);
+					Turns = MountFaceTurns[Face];
+					return DCVoxelCraft::StampModel(C.World, M, C.Vcm, Base, Turns, C.Ctx, true);
 				},
 				[](const FDCVoxelModel&, int32) { return 0; }}},
 			// On a facade at V floors up, back against the wall (model x = 0 one voxel proud), along the face at U.
-			{TEXT("Wall"), {[](const FMountCtx& C, const FDCVoxelModel& M, const FDCAttachPlan& A)
+			{TEXT("Wall"), {[](const FMountCtx& C, const FDCVoxelModel& M, const FDCAttachPlan& A, FIntVector& Base, int32& Turns)
 				{
 					const int32 Floors = C.FloorFrames.Num();
 					// Kept under the roof line: a sign rolled for floor 4 on a three-floor block sits at its top floor.
@@ -364,7 +368,9 @@ namespace
 						return 0;
 					}
 					const int32 U = FMath::Clamp(FMath::RoundToInt32(A.U * Len), Half, Len - Half);
-					return DCVoxelCraft::StampModel(C.World, M, C.Vcm, F.Cell(Face, -1, U, Z), MountFaceTurns[Face], C.Ctx, true);
+					Base = F.Cell(Face, -1, U, Z);
+					Turns = MountFaceTurns[Face];
+					return DCVoxelCraft::StampModel(C.World, M, C.Vcm, Base, Turns, C.Ctx, true);
 				},
 				[](const FDCVoxelModel& M, int32 Vcm) { return ModelVox(M, Vcm).X + 1; }}},
 		};
@@ -438,6 +444,7 @@ namespace DCVoxelCraft
 		}
 		Tower.Grid.Data.Reset();
 		Tower.Signs.Reset();
+		Tower.AttachSpots.Reset();
 		Tower.Grid.VoxelCm = Vcm;
 		const FIntVector Center = DCVoxelMath::ToCm(Lot.Location);
 		const FIntVector Foot(Lot.Spec.SizeX * B, Lot.Spec.SizeY * B, Lot.Spec.Floors * B);
@@ -557,10 +564,27 @@ namespace DCVoxelCraft
 			{
 				const FDCVoxelModel* const* M = Ctx.Models.Find(A.Model);
 				const FMount* Mount = Mounts().Find(A.Mount);
-				if (M && *M && Mount)
+				if (!M || !*M || !Mount)
 				{
-					RoofTop = FMath::Max(RoofTop, Mount->Stamp(MountCtx, **M, A));
+					continue;
 				}
+				FIntVector Base = FIntVector::ZeroValue;
+				int32 Turns = 0;
+				const int32 StampTop = Mount->Stamp(MountCtx, **M, A, Base, Turns);
+				if (StampTop <= 0)
+				{
+					continue; // did not fit
+				}
+				RoofTop = FMath::Max(RoofTop, StampTop);
+				// Light spot: the model's box centre, from its pivot along the way it faces (+x turned by Turns).
+				static const FIntVector Facing[4] = {{1, 0, 0}, {0, 1, 0}, {-1, 0, 0}, {0, -1, 0}};
+				const FIntVector N = Facing[((Turns % 4) + 4) % 4];
+				const FIntVector S = ModelVox(**M, Vcm);
+				const int32 Forward = S.X / 2 - (*M)->Pivot.X * (*M)->GridCm / Vcm;
+				FDCVoxelAttachSpot& Spot = Tower.AttachSpots.AddDefaulted_GetRef();
+				Spot.Model = A.Model;
+				Spot.Normal = N;
+				Spot.CenterCm = Tower.Grid.CenterCm(Base + N * Forward + FIntVector(0, 0, S.Z / 2));
 			}
 		}
 
