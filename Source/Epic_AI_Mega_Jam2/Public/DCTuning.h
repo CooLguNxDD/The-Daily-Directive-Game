@@ -309,6 +309,17 @@ struct FDCLookTuning
 	UPROPERTY(EditAnywhere, Config, Category = "Look") FLinearColor SectorCardTitle = FLinearColor(0.791f, 0.815f, 0.887f, 1.f);
 	UPROPERTY(EditAnywhere, Config, Category = "Look") FLinearColor SectorCardRule = FLinearColor(0.024f, 0.552f, 0.687f, 1.f);
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float SectorCardTitleScale = 2.6f;
+	/** Day end of the day-night cycle (human 01:10: the noir board is the night end). The environment blends the night
+	 *  look above toward these by DayBlend (0 = night, 1 = day); evidence runs set it with -dcdaypose=<0..1>. */
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float DayBlend = 0.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float DaySunLux = 40.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Look") FLinearColor DaySunColor = FLinearColor(1.f, 0.95f, 0.88f);
+	UPROPERTY(EditAnywhere, Config, Category = "Look") FRotator DaySunRotation = FRotator(-50.f, 35.f, 0.f);
+	UPROPERTY(EditAnywhere, Config, Category = "Look") FLinearColor DaySkyRayleighColor = FLinearColor(0.175f, 0.41f, 1.f);
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float DaySkyLuminance = 1.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float DaySkyFill = 1.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Look") FLinearColor DayFogColor = FLinearColor(0.3f, 0.36f, 0.45f);
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float DayExposure = 0.f;
 };
 
 /** One Enhanced Input binding row. Actions are created at run time from these rows. */

@@ -8,8 +8,9 @@ Creates (or rebuilds):
   /Game/DC/Materials/M_DCFlatUnlit - unlit flat colour: Emissive = Color * Glow (danger red stays palette red)
   /Game/DC/Maps/L_City         - an empty level; the city, lights and sky are spawned from C++ at run time
   /Game/DC/Materials/M_DCVoxel - voxel meshes: BaseColor = sRGB vertex colour decoded to linear with a per-voxel
-                                 jitter and edge bevel (VoxelCm per grid size), Emissive = colour *
-                                 vertex alpha * GlowScale (lit windows); colours come from the voxel palette in
+                                 jitter and edge bevel (VoxelCm per grid size), darkened by vertex alpha *
+                                 GlowBodyDark (lit glass, neon), Emissive = colour * vertex alpha * GlowScale
+                                 (lit windows, signs); colours come from the voxel palette in
                                  Config/DefaultGame.ini, so the material holds no colour of its own
   /Game/DC/Materials/M_DCInkOutline - post material: ink lines where depth or normal jumps (Sobel-style cross of
                                  four taps); Strength comes from the post stack's Outline field, the rest from Look tuning
@@ -194,7 +195,22 @@ def build_voxel_material():
     rough.set_editor_property("inputs", rinputs)
     lib.connect_material_expressions(nrm, "", rough, "Normal")
     lib.connect_material_expressions(wet, "", rough, "Wetness")
-    lib.connect_material_property(custom, "", unreal.MaterialProperty.MP_BASE_COLOR)
+    # Lit glass and neon (R25 look sweep): a glowing voxel's body darkens with its glow, so signs and windows read as
+    # light sources (emission + bloom halo) instead of paint the moon and sign lights bleach to pastel.
+    body_dark = lib.create_material_expression(mat, unreal.MaterialExpressionScalarParameter, -850, 1050)
+    body_dark.set_editor_property("parameter_name", "GlowBodyDark")
+    body_dark.set_editor_property("default_value", 0.9)
+    glow_body = lib.create_material_expression(mat, unreal.MaterialExpressionMultiply, -550, 1050)
+    lib.connect_material_expressions(vc, "A", glow_body, "A")
+    lib.connect_material_expressions(body_dark, "", glow_body, "B")
+    glow_sat = lib.create_material_expression(mat, unreal.MaterialExpressionSaturate, -400, 1050)
+    lib.connect_material_expressions(glow_body, "", glow_sat, "")
+    glow_keep = lib.create_material_expression(mat, unreal.MaterialExpressionOneMinus, -300, 1050)
+    lib.connect_material_expressions(glow_sat, "", glow_keep, "")
+    base_out = lib.create_material_expression(mat, unreal.MaterialExpressionMultiply, -200, 0)
+    lib.connect_material_expressions(custom, "", base_out, "A")
+    lib.connect_material_expressions(glow_keep, "", base_out, "B")
+    lib.connect_material_property(base_out, "", unreal.MaterialProperty.MP_BASE_COLOR)
     lib.connect_material_property(emissive, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
     lib.connect_material_property(rough, "", unreal.MaterialProperty.MP_ROUGHNESS)
     lib.recompile_material(mat)
