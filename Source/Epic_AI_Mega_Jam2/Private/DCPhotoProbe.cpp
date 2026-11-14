@@ -9,6 +9,7 @@
 #include "DCGameState.h"
 #include "DCOrbitalStrike.h"
 #include "DCTuning.h"
+#include "DCVoxelCity.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
 
@@ -27,11 +28,21 @@ namespace
 	constexpr float CollapseAirborneSeconds = 3.f;
 	constexpr float FireballHeightCm = 600.f;
 
-	float VisibleFraction(UWorld* World, const FVector& From, const TArray<FVector>& Points, const AActor* Ignore)
+	float VisibleFraction(UWorld* World, const FVector& From, const TArray<FVector>& Points, const AActor* Ignore, const TArray<int32>& SubjectLots = {})
 	{
 		if (Points.Num() == 0)
 		{
 			return 0.f;
+		}
+		if (const ADCVoxelCity* City = ADCVoxelCity::Get(World))
+		{
+			// Voxel city: sight marches the voxels (the subject's own lots never hide it), not physics collision.
+			int32 Clear = 0;
+			for (const FVector& P : Points)
+			{
+				Clear += City->IsSightBlocked(From, P, SubjectLots) ? 0 : 1;
+			}
+			return static_cast<float>(Clear) / Points.Num();
 		}
 		FCollisionQueryParams Params(SCENE_QUERY_STAT(DCPhotoOcclusion), false, Ignore);
 		int32 Seen = 0;
@@ -51,6 +62,11 @@ namespace
 		const FVector C = B.Location + FVector(0, 0, FireballHeightCm);
 		const float R = FMath::Max(B.Radius * 0.25f, 150.f);
 		Out = {C, C + FVector(R, 0, 0), C - FVector(R, 0, 0), C + FVector(0, R, 0), C - FVector(0, R, 0), C + FVector(0, 0, R)};
+		// The beam column up to tower height: the strike reads from the street even when its fireball sits in a shell.
+		for (const float Z : {600.f, 1500.f, 3000.f})
+		{
+			Out.Add(B.Location + FVector(0, 0, Z));
+		}
 	}
 }
 
@@ -110,7 +126,12 @@ namespace DCPhotoProbe
 				continue;
 			}
 			BlastSamples(B, Samples);
-			const float Vis = VisibleFraction(World, View.Location, Samples, Photographer);
+			TArray<int32> Struck;
+			if (const ADCVoxelCity* City = ADCVoxelCity::Get(World))
+			{
+				City->LotsNear(B.Location, B.Radius, Struck); // the towers this blast strikes are its subject, never its cover
+			}
+			const float Vis = VisibleFraction(World, View.Location, Samples, Photographer, Struck);
 			if (Vis <= 0.f)
 			{
 				continue;
@@ -159,7 +180,7 @@ namespace DCPhotoProbe
 					Samples.Add(P);
 				}
 			}
-			if (!bFramed || VisibleFraction(World, View.Location, Samples, Photographer) <= 0.f)
+			if (!bFramed || VisibleFraction(World, View.Location, Samples, Photographer, {Building->GetLotIndex()}) <= 0.f)
 			{
 				continue;
 			}

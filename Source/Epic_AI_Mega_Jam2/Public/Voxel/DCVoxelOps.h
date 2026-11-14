@@ -70,6 +70,9 @@ namespace DCVoxelOps
 	/** Removes every solid voxel of a grid within RadiusCm of CenterCm (voxel centres, integer). Returns how many. */
 	/** The highest solid tower voxel under terrain column (X, Y), as a terrain cell index (0 = none): rubble rests on
 	 *  what is left of a tower, not on its uncarved roof prism. */
+	/** Photo sight through the sector: true when voxels block From -> To (towers in IgnoreLots never do; a standing
+	 *  shell blocks through its hollow inside). Marches StepCm; the first SkipNearCm and last SkipFarCm never block. */
+	EPIC_AI_MEGA_JAM2_API bool SightBlocked(const struct FDCVoxelSector& Sector, const FVector& From, const FVector& To, const TArray<int32>& IgnoreLots, float StepCm, float SkipNearCm, float SkipFarCm);
 	EPIC_AI_MEGA_JAM2_API int32 TowerTopCells(const struct FDCVoxelTower& T, const FDCVoxelGrid& G, int32 X, int32 Y);
 	/** MinZ: local layers below it are never carved (the terrain's bedrock). */
 	EPIC_AI_MEGA_JAM2_API int32 CarveSphere(FDCVoxelGrid& Grid, const FIntVector& CenterCm, int32 RadiusCm, int32 MinZ = 0);

@@ -105,22 +105,67 @@ float ADCVoxelCity::SurfaceZCm(const FVector& Where) const
 		return 0.f;
 	}
 	const FIntVector C = T.ToLocal(DCVoxelMath::ToCm(FVector(Where.X, Where.Y, 0.f)));
-	if (InFlight.IsValid() && !InFlightTask.IsCompleted())
+	if (InFlight.IsValid())
 	{
-		// An op is writing the sector on a worker: answer from the cache (or the street) until it lands.
-		const float* Cached = SurfaceCache.Find(FIntPoint(C.X, C.Y));
-		return Cached ? *Cached : 0.f;
+		// An op plans or waits: inside its area the snapshot taken before it started; outside it the sector is
+		// unchanged, but it may only be read once the worker is done writing.
+		if (HoldRadiusCm >= 0.f && FVector2D::DistSquared(FVector2D(Where.X, Where.Y), HoldCenterCm) <= FMath::Square(HoldRadiusCm))
+		{
+			const float* Held = HoldTops.Find(FIntPoint(C.X, C.Y));
+			return Held ? *Held : 0.f;
+		}
+		if (!InFlightTask.IsCompleted())
+		{
+			const float* Cached = SurfaceCache.Find(FIntPoint(C.X, C.Y));
+			return Cached ? *Cached : 0.f;
+		}
 	}
+	if (const float* Cached = SurfaceCache.Find(FIntPoint(C.X, C.Y)))
+	{
+		return *Cached;
+	}
+	const float Top = ScanSurface(C);
+	SurfaceCache.Add(FIntPoint(C.X, C.Y), Top);
+	return Top;
+}
+
+float ADCVoxelCity::ScanSurface(const FIntVector& C) const
+{
+	const FDCVoxelGrid& T = Sector.Terrain;
 	for (int32 Z = UDCVoxelSettings::Get().Tuning.GroundLayers + 60; Z >= 0; --Z)
 	{
 		if (T.Data.IsSolid(FIntVector(C.X, C.Y, Z)))
 		{
-			const float Top = static_cast<float>(T.OriginCm.Z + (Z + 1) * T.VoxelCm);
-			SurfaceCache.Add(FIntPoint(C.X, C.Y), Top);
-			return Top;
+			return static_cast<float>(T.OriginCm.Z + (Z + 1) * T.VoxelCm);
 		}
 	}
 	return 0.f;
+}
+
+bool ADCVoxelCity::IsSightBlocked(const FVector& From, const FVector& To, const TArray<int32>& IgnoreLots) const
+{
+	if (BuiltSector == INDEX_NONE || (InFlight.IsValid() && !InFlightTask.IsCompleted()))
+	{
+		return false;
+	}
+	const FDCVoxelTuning& Tn = UDCVoxelSettings::Get().Tuning;
+	return DCVoxelOps::SightBlocked(Sector, From, To, IgnoreLots, Tn.SightStepCm, Tn.SightSkipNearCm, Tn.SightSkipFarCm);
+}
+
+void ADCVoxelCity::LotsNear(const FVector& Where, float RadiusCm, TArray<int32>& Out) const
+{
+	Out.Reset();
+	const FIntVector C = DCVoxelMath::ToCm(Where);
+	for (int32 i = 0; i < Sector.Towers.Num(); ++i)
+	{
+		const FIntVector A = Sector.Towers[i].FootMinCm(), B = Sector.Towers[i].FootMaxCm();
+		const float Dx = FMath::Max3(static_cast<float>(A.X - C.X), 0.f, static_cast<float>(C.X - B.X));
+		const float Dy = FMath::Max3(static_cast<float>(A.Y - C.Y), 0.f, static_cast<float>(C.Y - B.Y));
+		if (Dx * Dx + Dy * Dy <= RadiusCm * RadiusCm)
+		{
+			Out.Add(i);
+		}
+	}
 }
 
 bool ADCVoxelCity::HasPendingOpsAt(float Time) const
@@ -312,6 +357,9 @@ UProceduralMeshComponent* ADCVoxelCity::NewMesh(bool bCollision)
 
 void ADCVoxelCity::Clear()
 {
+	CommittedFallen.Reset();
+	HoldRadiusCm = -1.f;
+	HoldTops.Reset();
 	if (InFlight.IsValid())
 	{
 		InFlightTask.Wait();
@@ -352,6 +400,9 @@ void ADCVoxelCity::Clear()
 
 void ADCVoxelCity::Build(int32 RunSeed, int32 SectorIndex, int32 BuildId)
 {
+	CommittedFallen.Reset();
+	HoldRadiusCm = -1.f;
+	HoldTops.Reset();
 	Clear();
 	const UDCVoxelSettings& V = UDCVoxelSettings::Get();
 	const UDCTuning& T = UDCTuning::Get();
@@ -433,6 +484,26 @@ void ADCVoxelCity::StartNextOp()
 	// collapse costs the game thread only the uploads (impact hitch, R13). Ops stay strictly in Seq order.
 	InFlight = MakeShared<FQueuedOp>(MoveTemp(QueuedOps[0]));
 	QueuedOps.RemoveAt(0);
+	// Snapshot the street tops the op can change (blast radius plus topple reach), before the worker writes them.
+	{
+		const FDCVoxelOp& Op = InFlight->Op;
+		const FDCVoxelTuning& Tn = UDCVoxelSettings::Get().Tuning;
+		HoldCenterCm = FVector2D(Op.CenterCm.X, Op.CenterCm.Y);
+		HoldRadiusCm = FMath::Max(Op.BlastRadiusCm, 0) + Tn.HoldReachCm;
+		HoldTops.Reset();
+		const FDCVoxelGrid& T = Sector.Terrain;
+		const int32 R = FMath::CeilToInt32(HoldRadiusCm / T.VoxelCm) + 1;
+		const FIntVector Mid = T.ToLocal(FIntVector(Op.CenterCm.X, Op.CenterCm.Y, 0));
+		for (int32 Y = Mid.Y - R; Y <= Mid.Y + R; ++Y)
+		{
+			for (int32 X = Mid.X - R; X <= Mid.X + R; ++X)
+			{
+				const FIntVector Col(X, Y, 0);
+				const float* Cached = SurfaceCache.Find(FIntPoint(X, Y));
+				HoldTops.Add(FIntPoint(X, Y), Cached ? *Cached : ScanSurface(Col));
+			}
+		}
+	}
 	TSharedPtr<FQueuedOp> Job = InFlight;
 	FDCVoxelSector* Target = &Sector;
 	const FDCVoxelOpContext* Ctx = &OpCtx;
@@ -484,8 +555,12 @@ void ADCVoxelCity::FinishOp(const FDCVoxelOp& Op, FDCVoxelOpResult& Result, bool
 
 void ADCVoxelCity::CommitOp(const FDCVoxelOp& Op, FDCVoxelOpResult& Result, bool bAnimate, float ApplyMs, uint32 Hash, bool bOffThread)
 {
+	HoldRadiusCm = -1.f;
+	HoldTops.Reset();
+	CommittedFallen.SetNum(FMath::Max(CommittedFallen.Num(), Sector.Towers.Num()));
 	for (int32 Lot : Result.FallenLots)
 	{
+		CommittedFallen[Lot] = true;
 		SetTowerOffset(Lot, FVector::ZeroVector); // the stump stops shaking
 	}
 	// Host: nobody ends up inside the new rubble; lift them onto it (movement replicates to clients).

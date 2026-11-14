@@ -199,6 +199,39 @@ namespace
 
 namespace DCVoxelOps
 {
+	bool SightBlocked(const FDCVoxelSector& Sector, const FVector& From, const FVector& To, const TArray<int32>& IgnoreLots, float StepCm, float SkipNearCm, float SkipFarCm)
+	{
+		const float Len = FVector::Dist(From, To);
+		const float Step = FMath::Max(StepCm, 5.f);
+		// The last stretch before the target never blocks (the subject's own surface), nor the first (the lens).
+		const float Start = SkipNearCm, End = Len - SkipFarCm;
+		const FVector Dir = (To - From).GetSafeNormal();
+		for (float D = Start; D < End; D += Step)
+		{
+			const FVector P = From + Dir * D;
+			const FIntVector Cm = DCVoxelMath::ToCm(P);
+			if (Sector.Terrain.Data.IsSolid(Sector.Terrain.ToLocal(Cm)))
+			{
+				return true;
+			}
+			for (int32 i = 0; i < Sector.Towers.Num(); ++i)
+			{
+				const FDCVoxelTower& T = Sector.Towers[i];
+				const FIntVector L = T.Grid.ToLocal(Cm);
+				if (L.X < T.ScanMin.X || L.Y < T.ScanMin.Y || L.Z < 0 || L.X >= T.ScanMax.X || L.Y >= T.ScanMax.Y || L.Z >= T.ScanMax.Z || IgnoreLots.Contains(i))
+				{
+					continue;
+				}
+				// A standing shell blocks through its hollow inside too (you cannot see through a building).
+				if (T.Grid.Data.IsSolid(L) || (!T.bFallen && L.X >= T.Min.X && L.Y >= T.Min.Y && L.X < T.Max.X && L.Y < T.Max.Y && L.Z < T.Max.Z))
+				{
+					return true;
+				}
+			}
+		}
+		return false;
+	}
+
 	/** The tower's real top over one terrain column, in terrain cells (0 = no tower voxel there): the highest solid
 	 *  tower voxel under the column's square, so rubble rests on what is left, never on the uncarved roof prism. */
 	int32 TowerTopCells(const FDCVoxelTower& T, const FDCVoxelGrid& G, int32 X, int32 Y)

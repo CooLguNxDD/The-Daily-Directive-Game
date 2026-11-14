@@ -801,6 +801,7 @@ void ADCDemoPilot::BuildScript()
 	}
 
 	// Reel: the clip playing, the freeze, the photo.
+	ReelStep = Script.Num();
 	AddWaitPhase(EDCRunPhase::Reel, 400.f);
 	Add(1.2f, [this] { Shot(TEXT("reel_play")); return true; });
 	// Second take (R16): raise the camera during the replay, dolly sideways (WASD), frame the moment, snap.
@@ -931,6 +932,15 @@ void ADCDemoPilot::Tick(float DeltaSeconds)
 	if (StepStartReal < 0.0)
 	{
 		StepStartReal = Real;
+	}
+	if (const ADCGameState* RunGS = GetWorld()->GetGameState<ADCGameState>(); RunGS && RunGS->bRunFailed && ReelStep != INDEX_NONE && Next < ReelStep)
+	{
+		// A wipe ends the sectors: skip to the reel instead of scripting sectors that will never start (CP4 review).
+		UE_LOG(LogDCDemo, Display, TEXT("DEMO run wiped at step %d: on to the reel (step %d)"), Next, ReelStep);
+		Next = ReelStep;
+		StepStartReal = -1.0;
+		StepReadyReal = Real;
+		return;
 	}
 	FStep& Step = Script[Next];
 	const bool bDone = Step.Do();

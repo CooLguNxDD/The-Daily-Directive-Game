@@ -208,6 +208,40 @@ bool FDCVoxelNoFloatTest::RunTest(const FString&)
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDCVoxelSightTest, "Epic_AI_Mega_Jam2.Voxel.PhotoSight", VoxelFlags)
+bool FDCVoxelSightTest::RunTest(const FString&)
+{
+	// Photo sight marches the voxels: a blast's own struck tower never hides it from the street, another standing tower
+	// between the lens and the subject does (CP4 review: physics traces lost PEAK to the struck shell).
+	FDCVoxelSector S;
+	Craft(S, VoxelPlan(DCCityRules::SectorSeed(31337, 1), 1));
+	TestTrue(TEXT("two towers"), S.Towers.Num() >= 2);
+	auto Center = [](const FDCVoxelTower& T)
+	{
+		const FIntVector A = T.FootMinCm(), B = T.FootMaxCm();
+		return FVector((A.X + B.X) * 0.5f, (A.Y + B.Y) * 0.5f, T.Grid.OriginCm.Z + T.Max.Z * T.Grid.VoxelCm * 0.4f);
+	};
+	auto HalfSize = [](const FDCVoxelTower& T) { return FVector(T.FootMaxCm() - T.FootMinCm()).Size2D() * 0.5f; };
+	int32 Other = 1;
+	for (int32 i = 2; i < S.Towers.Num(); ++i)
+	{
+		Other = FVector::Dist2D(Center(S.Towers[i]), Center(S.Towers[0])) < FVector::Dist2D(Center(S.Towers[Other]), Center(S.Towers[0])) ? i : Other;
+	}
+	const FVector A = Center(S.Towers[0]);
+	const FVector B = Center(S.Towers[Other]);
+	const FVector Away = FVector(A - B).GetSafeNormal2D();
+	const FVector Street = A + Away * (HalfSize(S.Towers[0]) + 300.f);
+	const FVector Behind = B - Away * (HalfSize(S.Towers[Other]) + 300.f);
+	auto Blocked = [&S](const FVector& From, const FVector& To, const TArray<int32>& Ignore)
+	{
+		return DCVoxelOps::SightBlocked(S, From, To, Ignore, 25.f, 60.f, 250.f);
+	};
+	TestTrue(TEXT("the struck tower's own wall does not hide its blast"), !Blocked(Street, A, {0}));
+	TestTrue(TEXT("the same wall hides it when the tower is not the subject"), Blocked(Street, A, {}));
+	TestTrue(TEXT("another standing tower between lens and subject hides it"), Blocked(Behind, A, {0}));
+	return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDCVoxelSmallCarveTest, "Epic_AI_Mega_Jam2.Voxel.SmallHoleStands", VoxelFlags)
 bool FDCVoxelSmallCarveTest::RunTest(const FString&)
 {

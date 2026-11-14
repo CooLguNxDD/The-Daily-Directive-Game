@@ -20,6 +20,7 @@
 #include "DCPlayerState.h"
 #include "DCReelDirector.h"
 #include "DCTuning.h"
+#include "Interfaces/MovementBaseInterface.h"
 #include "Voxel/DCVoxelSettings.h"
 #include "Voxel/DCVoxelModel.h"
 #include "ProceduralMeshComponent.h"
@@ -895,6 +896,17 @@ void ADCCharacter::ServerSubmitPhoto_Implementation(int32 PhotoId, FVector_NetQu
 	HostNextShutterTime = T + C.WindOnSeconds * 0.8f;
 	HostGradeShot(PhotoId, CamLoc, CamRot, FMath::Clamp(FOV, C.ViewfinderFOVTight, C.ViewfinderFOVWide + PS->ExtraFOV),
 		FMath::Clamp(ShotTime, T - ShotClockToleranceSeconds, T), bLast, GetWorld()->GetRealTimeSeconds() + C.GradeWaitForOpSeconds);
+}
+
+void ADCCharacter::SetBase(FMovementBaseInterfaceData* MovementBaseInterfaceData, const FName BoneName, bool bNotifyActor)
+{
+	const UActorComponent* Base = MovementBaseInterfaceData ? Cast<UActorComponent>(MovementBaseInterfaceData->GetMovementBaseObject()) : nullptr;
+	if (Base && Cast<ADCVoxelCity>(Base->GetOwner()))
+	{
+		Super::SetBase(static_cast<FMovementBaseInterfaceData*>(nullptr), NAME_None, bNotifyActor);
+		return;
+	}
+	Super::SetBase(MovementBaseInterfaceData, BoneName, bNotifyActor);
 }
 
 void ADCCharacter::HostGradeShot(int32 PhotoId, FVector CamLoc, FRotator CamRot, float FOV, float When, bool bLast, double GiveUpAt)

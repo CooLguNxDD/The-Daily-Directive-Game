@@ -56,6 +56,14 @@ public:
 	float SurfaceZCm(const FVector& Where) const;
 	/** Is this world point inside a solid voxel (towers, terrain, props)? Photos never shoot from inside one. */
 	bool IsSolidAt(const FVector& Where) const;
+	/** Photo sight (host grading): is the straight line From -> To blocked by city voxels? Marches the voxel city,
+	 *  never physics (async-cooked collision lags the shown world); lots in IgnoreLots never block (a strike's own
+	 *  tower is its subject). Unknown while an op writes on a worker: not blocked. */
+	bool IsSightBlocked(const FVector& From, const FVector& To, const TArray<int32>& IgnoreLots) const;
+	/** Has this tower fallen in the shown (committed) world? Game-thread state, never the worker's plan. */
+	bool IsTowerFallen(int32 Lot) const { return CommittedFallen.IsValidIndex(Lot) && CommittedFallen[Lot]; }
+	/** Towers whose footprint lies within RadiusCm of a point (what a blast there strikes). */
+	void LotsNear(const FVector& Where, float RadiusCm, TArray<int32>& Out) const;
 
 	/** The sector's season (rolled from the run seed by the district's weather rules) and its arc (R18). */
 	static const struct FDCSeasonDef* SeasonFor(int32 RunSeed, int32 Sector);
@@ -110,6 +118,13 @@ private:
 	TSharedPtr<FQueuedOp> InFlight;
 	UE::Tasks::FTask InFlightTask;
 	mutable TMap<FIntPoint, float> SurfaceCache;
+	/** While an op plans or waits for its apply time, street tops inside this circle (cm) come from a snapshot taken
+	 *  before it started (the sector already holds the future there); outside it the sector is unchanged. */
+	FVector2D HoldCenterCm = FVector2D::ZeroVector;
+	float HoldRadiusCm = -1.f;
+	TMap<FIntPoint, float> HoldTops;
+	TArray<bool> CommittedFallen;
+	float ScanSurface(const FIntVector& Column) const;
 	int32 ShotStep = 0;
 	double NextShotReal = 0.0;
 	UPROPERTY() TObjectPtr<class ACameraActor> ShotCamera;

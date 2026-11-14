@@ -251,7 +251,8 @@ void ADCBuilding::Collapse(const FVector& InEpicenter, float AtTime)
 	// Voxel city: a collapse the voxels have not already made (walker topple, domino) becomes a Fell op that bites the
 	// base on the epicentre side, so the structure pass drops the tower the same way on every machine.
 	ADCVoxelCity* City = ADCVoxelCity::IsEnabled() ? ADCVoxelCity::Get(this) : nullptr;
-	if (City && GS && City->GetSector().Towers.IsValidIndex(LotIndex) && !City->GetSector().Towers[LotIndex].bFallen)
+	// The committed fallen state (game thread), never the sector a worker may be planning into (CP4 review).
+	if (City && GS && City->GetSector().Towers.IsValidIndex(LotIndex) && !City->IsTowerFallen(LotIndex))
 	{
 		FDCVoxelOp Op;
 		Op.Kind = TEXT("Fell");

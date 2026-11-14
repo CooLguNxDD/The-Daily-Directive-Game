@@ -126,6 +126,12 @@ struct FDCVoxelTuning
 	/** Fx puffs closer than FxNearHideCm to the local camera are hidden, and grow back over FxNearFadeCm. */
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float FxNearHideCm = 150.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float FxNearFadeCm = 350.f;
+	/** Photo sight march: step along the ray (cm), and the stretch at the lens and before the subject that never blocks. */
+	/** Around a planned op, street tops are served from a snapshot until it commits: blast radius plus this (cm). */
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float HoldReachCm = 1500.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float SightStepCm = 25.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float SightSkipNearCm = 60.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float SightSkipFarCm = 250.f;
 	/** Gravity of the cosmetic fall (cm/s^2, exaggerated so a collapse reads at a glance). */
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float FallGravityCm = 2400.f;
 	/** Degrees a toppling piece leans before it breaks apart (cosmetic). */
