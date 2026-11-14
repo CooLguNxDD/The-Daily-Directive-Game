@@ -811,12 +811,17 @@ void ADCGameMode::TickPendingCollapses(float Now)
 void ADCGameMode::OnPlayerDowned(ADCCharacter* Player)
 {
 	LastDownTime = GetGameState<ADCGameState>()->Now(); // pressure relief: no pack right after a down
-	// Last Frame (R21): slow motion only for the dying player, so only when they are the only player.
+	// Last Frame (R21): slow motion only for the dying player. Solo: the shared clock slows. Co-op: the dying
+	// player's own machine slows locally (ADCCharacter::ClientLastFrameSlowMo); everyone else keeps real time.
 	const FDCPhotoTuning& P = UDCTuning::Get().Photo;
-	if (GetNumPlayers() == 1 && P.LastFrameSlowMo > 0.f)
+	if (P.LastFrameSlowMo > 0.f && GetNumPlayers() == 1)
 	{
 		SetDilation(P.LastFrameSlowMo);
 		HitstopEndReal = GetWorld()->GetRealTimeSeconds() + P.LastFrameSlowMoSeconds;
+	}
+	else if (P.LastFrameSlowMo > 0.f && Player)
+	{
+		Player->ClientLastFrameSlowMo(P.LastFrameSlowMo, P.LastFrameSlowMoSeconds);
 	}
 	CheckWipe();
 }

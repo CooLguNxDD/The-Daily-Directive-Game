@@ -29,6 +29,8 @@
 #include "Engine/TextureRenderTarget2D.h"
 #include "EnhancedInputComponent.h"
 #include "Engine/World.h"
+#include "Camera/PlayerCameraManager.h"
+#include "GameFramework/WorldSettings.h"
 #include "EngineUtils.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/SpringArmComponent.h"
@@ -1061,6 +1063,47 @@ void ADCCharacter::ClientHurt_Implementation(FVector_NetQuantize From)
 void ADCCharacter::ClientToast_Implementation(const FString& Text) { Toast(Text); }
 void ADCCharacter::ClientCue_Implementation(FName Cue) { DCAudio::Play2D(this, Cue, 0.9f); }
 
+void ADCCharacter::ClientLastFrameSlowMo_Implementation(float Dilation, float Seconds)
+{
+	UWorld* W = GetWorld();
+	if (!W || Dilation <= 0.f || Seconds <= 0.f)
+	{
+		return;
+	}
+	LocalSlowMoEndReal = W->GetRealTimeSeconds() + Seconds;
+	if (HasAuthority())
+	{
+		// Listen host with teammates still standing: the shared clock keeps running for them.
+		CustomTimeDilation = Dilation;
+		if (APlayerController* PC = Cast<APlayerController>(GetController()); PC && PC->PlayerCameraManager)
+		{
+			PC->PlayerCameraManager->CustomTimeDilation = Dilation;
+		}
+		return;
+	}
+	W->GetWorldSettings()->CinematicTimeDilation = Dilation; // local only: the host never reads it back
+	UE_LOG(LogTemp, Display, TEXT("DCLASTFRAME local slow motion %.2f for %.1f s"), Dilation, Seconds);
+}
+
+void ADCCharacter::TickLocalSlowMo()
+{
+	UWorld* W = GetWorld();
+	if (LocalSlowMoEndReal <= 0.0 || !W || W->GetRealTimeSeconds() < LocalSlowMoEndReal)
+	{
+		return;
+	}
+	LocalSlowMoEndReal = 0.0;
+	CustomTimeDilation = 1.f;
+	if (APlayerController* PC = Cast<APlayerController>(GetController()); PC && PC->PlayerCameraManager)
+	{
+		PC->PlayerCameraManager->CustomTimeDilation = 1.f;
+	}
+	if (!HasAuthority())
+	{
+		W->GetWorldSettings()->CinematicTimeDilation = 1.f;
+	}
+}
+
 void ADCCharacter::ClientSyncAmmo_Implementation(int32 NewAmmo, int32 NewReserve)
 {
 	Ammo = NewAmmo;
@@ -1358,6 +1401,7 @@ void ADCCharacter::Tick(float DeltaSeconds)
 	{
 		return;
 	}
+	TickLocalSlowMo();
 	UpdateView(DeltaSeconds);
 	UpdateStrikeAim();
 
