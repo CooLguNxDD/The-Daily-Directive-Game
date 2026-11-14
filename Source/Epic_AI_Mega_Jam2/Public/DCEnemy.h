@@ -95,6 +95,7 @@ private:
 	UPROPERTY() TObjectPtr<class UProceduralMeshComponent> ModelComp;
 	FVector GaitLast = FVector::ZeroVector;
 	float GaitPhase = 0.f;
+	FVector SmoothModel = FVector::ZeroVector;
 	void Die(AController* Killer);
 	void BuildVisual();
 	bool BuildModel(const struct FDCEnemyDef& Def);

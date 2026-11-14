@@ -429,6 +429,11 @@ void ADCVoxelCity::BeginPlay()
 	Crumbs->GroundZ = [Weak](const FVector& P) { return Weak.IsValid() ? Weak->SurfaceZCm(P) : 0.f; };
 }
 
+float ADCVoxelCity::BodyLoad() const
+{
+	return static_cast<float>(BodiesReserved) / FMath::Max(1, UDCVoxelSettings::Get().Tuning.PhysicsMaxBodies);
+}
+
 void ADCVoxelCity::ThrowCrumbs(const FFalling& F, int32 FragIndex, const FBox& WorldBox, const FVector& V, int32 Count, FRandomStream& Rng)
 {
 	const FDCVoxelTuning& Tn = UDCVoxelSettings::Get().Tuning;
@@ -453,6 +458,7 @@ void ADCVoxelCity::ThrowCrumbs(const FFalling& F, int32 FragIndex, const FBox& W
 		AddSection(F.Frags.IsValidIndex(k) ? F.Frags[k].Comp.Get() : nullptr);
 	}
 	const float GlowScale = Tn.VoxelMaterialGlowScale * Tn.CrumbGlowScale;
+	Count = FMath::RoundToInt32(Count * FMath::Clamp(1.f - Tn.CrumbLoadCut * BodyLoad(), 0.f, 1.f)); // thin out under load
 	for (int32 i = 0; i < Count; ++i)
 	{
 		FDCCrumbSpawn C;
@@ -2198,8 +2204,8 @@ void ADCVoxelCity::Tick(float DeltaSeconds)
 	// Hitch log (R13): which stage of the city's frame went long.
 	if ((T3 - T0) * 1000.0 + PrepMs + CommitMs > UDCVoxelSettings::Get().Tuning.HitchLogMs)
 	{
-		UE_LOG(LogTemp, Display, TEXT("DCHITCH city prep=%.1f commit=%.1f poll=%.1f upload=%.1f falling=%.1f ms cells=%d->%d jobs=%d"), PrepMs, CommitMs, (T1 - T0) * 1000.0, (T2 - T1) * 1000.0, (T3 - T2) * 1000.0,
-			DirtyBefore, DirtyCells.Num(), Jobs.Num());
+		UE_LOG(LogTemp, Display, TEXT("DCHITCH city prep=%.1f commit=%.1f poll=%.1f upload=%.1f falling=%.1f crumb=%.1f ms (%d live) bodies=%d cells=%d->%d jobs=%d"), PrepMs, CommitMs, (T1 - T0) * 1000.0, (T2 - T1) * 1000.0, (T3 - T2) * 1000.0,
+			Crumbs ? Crumbs->LastTickMs : 0.f, Crumbs ? Crumbs->LiveCount() : 0, BodiesReserved, DirtyBefore, DirtyCells.Num(), Jobs.Num());
 	}
 }
 

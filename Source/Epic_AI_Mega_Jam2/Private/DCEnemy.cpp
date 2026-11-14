@@ -547,6 +547,15 @@ void ADCEnemy::TickGait(float DeltaSeconds)
 	const float Sway = bMoving ? FMath::Sin(GaitPhase) * Def->SwayDeg : 0.f;
 	ModelComp->SetRelativeLocation(Def->ModelOffset + FVector(0, 0, Bob));
 	ModelComp->SetRelativeRotation(FRotator(0.f, 0.f, Sway));
+	if (HasAuthority())
+	{
+		return;
+	}
+	// Clients (advisor a-3): infantry replicates at 15-20 Hz, so the model eases toward the replicated root instead of
+	// stepping with each update; a big jump (spawn, teleport) snaps.
+	const FVector Want = ModelComp->GetComponentLocation();
+	SmoothModel = SmoothModel.IsZero() || FVector::DistSquared(SmoothModel, Want) > 500.f * 500.f ? Want : FMath::VInterpTo(SmoothModel, Want, DeltaSeconds, 18.f);
+	ModelComp->SetWorldLocation(SmoothModel);
 }
 
 

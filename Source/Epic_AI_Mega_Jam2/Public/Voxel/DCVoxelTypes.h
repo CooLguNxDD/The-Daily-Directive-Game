@@ -284,6 +284,10 @@ struct FDCVoxelTuning
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float CrumbShrinkSeconds = 1.2f;
 	/** Crumbs keep this share of their voxel's glow (lit windows sparkle as they fall, never cream confetti). */
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float CrumbGlowScale = 0.35f;
+	/** Crumbs start at most CrumbSpawnPerFrame per frame (the rest queue), and a break throws (1 - CrumbLoadCut x body
+	 *  load) of its count, so a busy collapse frame is not where crumbs pile on (advisor a-3). */
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 CrumbSpawnPerFrame = 120;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float CrumbLoadCut = 0.7f;
 	/** R3 faction fire tracers: pool size, bolt length and width (cm), seconds on screen. */
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 TracerPool = 48;
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float TracerLengthCm = 420.f;

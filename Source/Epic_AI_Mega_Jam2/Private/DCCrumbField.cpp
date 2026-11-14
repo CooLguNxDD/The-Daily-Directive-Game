@@ -3,6 +3,7 @@
 #include "Components/InstancedStaticMeshComponent.h"
 #include "DCAssets.h"
 #include "DCTuning.h"
+#include "Misc/ScopeExit.h"
 #include "Voxel/DCVoxelSettings.h"
 
 namespace
@@ -53,6 +54,21 @@ void UDCCrumbField::Spawn(const FDCCrumbSpawn& S)
 	{
 		return;
 	}
+	if (SpawnedThisFrame >= Tn.CrumbSpawnPerFrame)
+	{
+		if (Queued.Num() < Tn.CrumbMax)
+		{
+			Queued.Add(S);
+		}
+		return;
+	}
+	++SpawnedThisFrame;
+	SpawnNow(S);
+}
+
+void UDCCrumbField::SpawnNow(const FDCCrumbSpawn& S)
+{
+	const FDCVoxelTuning& Tn = UDCVoxelSettings::Get().Tuning;
 	int32 Index = INDEX_NONE;
 	if (FreeCrumbs.Num() > 0)
 	{
@@ -64,14 +80,10 @@ void UDCCrumbField::Spawn(const FDCCrumbSpawn& S)
 	}
 	else
 	{
-		// Full: recycle the oldest so a fresh break always shows.
-		Index = 0;
-		for (int32 i = 1; i < Crumbs.Num(); ++i)
-		{
-			Index = Crumbs[i].Born < Crumbs[Index].Born ? i : Index;
-		}
-		Kill(Index);
-		FreeCrumbs.Remove(Index);
+		// Full: recycle round the ring (oldest-ish first, O(1)) so a fresh break always shows.
+		RecycleCursor = (RecycleCursor + 1) % Crumbs.Num();
+		Kill(RecycleCursor);
+		Index = FreeCrumbs.Num() > 0 ? FreeCrumbs.Pop(EAllowShrinking::No) : RecycleCursor;
 	}
 	const int32 Bucket = BucketFor(S.Color, S.Glow);
 	FBucket& B = Buckets[Bucket];
@@ -119,6 +131,7 @@ void UDCCrumbField::Kill(int32 Index)
 
 void UDCCrumbField::ClearAll()
 {
+	Queued.Reset();
 	for (int32 i = 0; i < Crumbs.Num(); ++i)
 	{
 		Kill(i);
@@ -136,7 +149,17 @@ void UDCCrumbField::ClearAll()
 void UDCCrumbField::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
+	const double T0 = FPlatformTime::Seconds();
 	Clock += DeltaTime;
+	SpawnedThisFrame = 0;
+	const int32 Drain = FMath::Min(Queued.Num(), UDCVoxelSettings::Get().Tuning.CrumbSpawnPerFrame);
+	for (int32 i = 0; i < Drain; ++i)
+	{
+		SpawnNow(Queued[i]);
+	}
+	Queued.RemoveAt(0, Drain, EAllowShrinking::No);
+	SpawnedThisFrame = Drain;
+	ON_SCOPE_EXIT { LastTickMs = static_cast<float>((FPlatformTime::Seconds() - T0) * 1000.0); };
 	if (Live == 0)
 	{
 		return;

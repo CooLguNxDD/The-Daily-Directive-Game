@@ -185,7 +185,8 @@ void ADCGameMode::TickFactions(float Now)
 	}
 	// Faction strikes: one at a time across all factions, each faction on its own interval, never while a big
 	// collapse is still settling (the body budget belongs to the crew's shots first).
-	if (Now < NextFactionStrike || Now < SectorStartTime + T.FactionMix.StrikeStartSeconds || !Units)
+	const ADCVoxelCity* StrikeCity = ADCVoxelCity::Get(this);
+	if (Now < NextFactionStrike || Now < SectorStartTime + T.FactionMix.StrikeStartSeconds || !Units || (StrikeCity && StrikeCity->BodyLoad() > T.FactionMix.StrikeMaxBodyLoad))
 	{
 		return;
 	}

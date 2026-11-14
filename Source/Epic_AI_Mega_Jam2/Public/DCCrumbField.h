@@ -37,6 +37,8 @@ public:
 	/** Drops every crumb (sector change, reel restage). */
 	void ClearAll();
 	int32 LiveCount() const { return Live; }
+	/** Game-thread ms of the last tick (DCHITCH attribution). */
+	float LastTickMs = 0.f;
 
 private:
 	struct FCrumb
@@ -69,6 +71,11 @@ private:
 	TMap<uint32, int32> BucketByKey;
 	TArray<FCrumb> Crumbs;
 	TArray<int32> FreeCrumbs;
+	/** Over the per-frame cap: started on later frames, in order. */
+	TArray<FDCCrumbSpawn> Queued;
+	int32 SpawnedThisFrame = 0;
+	int32 RecycleCursor = 0;
+	void SpawnNow(const FDCCrumbSpawn& S);
 	int32 Live = 0;
 	float Clock = 0.f;
 	FRandomStream Rng = FRandomStream(0xC0B5);
