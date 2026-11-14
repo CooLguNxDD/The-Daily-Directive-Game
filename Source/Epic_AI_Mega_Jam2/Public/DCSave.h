@@ -71,6 +71,8 @@ namespace DCSave
 
 	/** Files: read with fallback (a corrupt file is moved aside to <file>.bad), atomic write (keeps <file>.prev). */
 	EPIC_AI_MEGA_JAM2_API ELoadResult LoadFile(const FString& Path, const UScriptStruct* Type, void* Out, int32 CurrentVersion, const TMap<int32, FMigration>& Steps);
+	/** LoadFile, falling back to the .prev copy the save swap keeps when the main file is missing or corrupt. */
+	EPIC_AI_MEGA_JAM2_API ELoadResult LoadWithHistory(const FString& Path, const UScriptStruct* Type, void* Out, int32 CurrentVersion, const TMap<int32, FMigration>& Steps);
 	EPIC_AI_MEGA_JAM2_API bool SaveFile(const FString& Path, const UScriptStruct* Type, const void* In);
 
 	EPIC_AI_MEGA_JAM2_API const TCHAR* ResultName(ELoadResult Result);

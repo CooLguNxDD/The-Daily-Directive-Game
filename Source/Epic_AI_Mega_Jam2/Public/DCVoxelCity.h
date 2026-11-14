@@ -149,6 +149,8 @@ private:
 	UMaterialInterface* VoxelMaterialFor(int32 VoxelCm);
 	UPROPERTY() TMap<int32, TObjectPtr<class UMaterialInstanceDynamic>> VoxelMIDs;
 	float Wetness = 0.f;
+	/** Seconds this machine's presentation clock has fallen behind world time (falls and rubble reveals use it). */
+	float FallOffset = 0.f;
 
 	FDCVoxelSector Sector;
 	FDCVoxelOpContext OpCtx;

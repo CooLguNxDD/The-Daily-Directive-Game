@@ -91,6 +91,31 @@ namespace DCSave
 		return Result;
 	}
 
+	/** The file, else its last good copy: a crash inside the save swap (the engine's Move deletes the target before it
+	 *  renames the temp file) leaves only .prev, which is then loaded and written back as the main file (CP7). */
+	ELoadResult LoadWithHistory(const FString& Path, const UScriptStruct* Type, void* Out, int32 CurrentVersion, const TMap<int32, FMigration>& Steps)
+	{
+		const ELoadResult Main = LoadFile(Path, Type, Out, CurrentVersion, Steps);
+		if (Main == ELoadResult::Loaded || Main == ELoadResult::Migrated || Main == ELoadResult::TooNew)
+		{
+			return Main;
+		}
+		const FString Prev = Path + TEXT(".prev");
+		FString Text;
+		if (!FFileHelper::LoadFileToString(Text, *Prev))
+		{
+			return Main;
+		}
+		const ELoadResult Recovered = FromJson(Text, Type, Out, CurrentVersion, Steps);
+		if (Recovered == ELoadResult::Loaded || Recovered == ELoadResult::Migrated)
+		{
+			IFileManager::Get().Copy(*Path, *Prev);
+			UE_LOG(LogDCSave, Display, TEXT("DCSAVE load %s: recovered from .prev"), *FPaths::GetCleanFilename(Path));
+			return Recovered;
+		}
+		return Main;
+	}
+
 	bool SaveFile(const FString& Path, const UScriptStruct* Type, const void* In)
 	{
 		const FString Tmp = Path + TEXT(".tmp");
@@ -140,9 +165,9 @@ void UDCSaveSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 {
 	Super::Initialize(Collection);
 	IFileManager::Get().MakeDirectory(*Folder(), true);
-	DCSave::LoadFile(Folder() / SettingsKind().File, FDCSettingsSave::StaticStruct(), &Settings, SettingsKind().Version, SettingsKind().Steps);
-	DCSave::LoadFile(Folder() / CharactersKind().File, FDCCharacterSave::StaticStruct(), &Characters, CharactersKind().Version, CharactersKind().Steps);
-	DCSave::LoadFile(Folder() / AlbumKind().File, FDCAlbumSave::StaticStruct(), &Album, AlbumKind().Version, AlbumKind().Steps);
+	DCSave::LoadWithHistory(Folder() / SettingsKind().File, FDCSettingsSave::StaticStruct(), &Settings, SettingsKind().Version, SettingsKind().Steps);
+	DCSave::LoadWithHistory(Folder() / CharactersKind().File, FDCCharacterSave::StaticStruct(), &Characters, CharactersKind().Version, CharactersKind().Steps);
+	DCSave::LoadWithHistory(Folder() / AlbumKind().File, FDCAlbumSave::StaticStruct(), &Album, AlbumKind().Version, AlbumKind().Steps);
 }
 
 void UDCSaveSubsystem::SaveSettings()

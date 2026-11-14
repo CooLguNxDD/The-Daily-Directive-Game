@@ -1391,7 +1391,6 @@ void ADCCharacter::UpdateView(float DeltaSeconds)
 	ThirdCam->SetRelativeRotation(Jitter);
 	FirstCam->SetRelativeRotation(Jitter * 0.6f);
 
-	TickOutfit();
 
 	// Landing spring and sprint FOV kick (Saltline feel, R9), from the move tuning.
 	const FDCMoveTuning& M = UDCTuning::Get().Move;
@@ -1411,6 +1410,7 @@ void ADCCharacter::UpdateView(float DeltaSeconds)
 void ADCCharacter::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
+	TickOutfit(); // every machine builds every pawn's replicated outfit (remote pawns too, CP7)
 	UpdateHeldItems(DeltaSeconds);
 	UpdateFootsteps(DeltaSeconds);
 	if (HasAuthority())

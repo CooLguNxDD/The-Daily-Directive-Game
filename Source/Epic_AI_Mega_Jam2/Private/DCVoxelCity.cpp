@@ -11,6 +11,7 @@
 #include "DCAssets.h"
 #include "DCAudio.h"
 #include "DCDebrisPool.h"
+#include "DCPresentationClock.h"
 #include "DCEnvironment.h"
 #include "DCGameState.h"
 #include "DCTuning.h"
@@ -145,11 +146,38 @@ float ADCVoxelCity::ScanSurface(const FIntVector& C) const
 
 bool ADCVoxelCity::IsSightBlocked(const FVector& From, const FVector& To, const TArray<int32>& IgnoreLots) const
 {
-	if (BuiltSector == INDEX_NONE || (InFlight.IsValid() && !InFlightTask.IsCompleted()))
+	if (BuiltSector == INDEX_NONE)
 	{
 		return false;
 	}
 	const FDCVoxelTuning& Tn = UDCVoxelSettings::Get().Tuning;
+	if (InFlight.IsValid())
+	{
+		// An op is on the worker or held for its apply time: its voxels are either changing or already the future. The
+		// shutter saw the city as last committed, so march the committed-intact towers as their crafted shell boxes
+		// (CP7: never "clear" while an op runs, never through walls that still stood at the shutter).
+		const FVector D = To - From;
+		const float Len = D.Size();
+		const float Step = FMath::Max(Tn.SightStepCm, 1.f);
+		for (float S = Tn.SightSkipNearCm; S < Len - Tn.SightSkipFarCm; S += Step)
+		{
+			const FIntVector Cm = DCVoxelMath::ToCm(From + D * (S / FMath::Max(Len, 1.f)));
+			for (int32 Lot = 0; Lot < Sector.Towers.Num(); ++Lot)
+			{
+				const FDCVoxelTower& T = Sector.Towers[Lot];
+				if (IgnoreLots.Contains(Lot) || (CommittedFallen.IsValidIndex(Lot) && CommittedFallen[Lot]))
+				{
+					continue;
+				}
+				const FIntVector L = T.Grid.ToLocal(Cm);
+				if (L.X >= T.Min.X && L.Y >= T.Min.Y && L.Z >= 0 && L.X < T.Max.X && L.Y < T.Max.Y && L.Z < T.Max.Z)
+				{
+					return true;
+				}
+			}
+		}
+		return false;
+	}
 	return DCVoxelOps::SightBlocked(Sector, From, To, IgnoreLots, Tn.SightStepCm, Tn.SightSkipNearCm, Tn.SightSkipFarCm);
 }
 
@@ -628,7 +656,7 @@ void ADCVoxelCity::CommitOp(const FDCVoxelOp& Op, FDCVoxelOpResult& Result, bool
 
 void ADCVoxelCity::PrepareOp(const FDCVoxelOp& Op, FDCVoxelOpResult& Result, bool bAnimate, float StartWorldTime)
 {
-	const float Now = StartWorldTime;
+	const float Now = StartWorldTime - FallOffset; // falls and rubble reveals run on this machine's presentation clock
 	const int32 FirstJob = Jobs.Num();
 	ON_SCOPE_EXIT
 	{
@@ -781,7 +809,7 @@ void ADCVoxelCity::PollJobs()
 			if (F.Comp && !F.bLanded)
 			{
 				F.Comp->CreateMeshSection(0, Job->Mesh.Positions, Job->Mesh.Indices, Job->Mesh.Normals, Job->Mesh.UVs, Job->Mesh.Colors, {}, false);
-				F.Comp->SetVisibility(GetWorld()->GetTimeSeconds() >= F.Start); // a piece meshed ahead shows at the detonation
+				F.Comp->SetVisibility(GetWorld()->GetTimeSeconds() - FallOffset >= F.Start); // a piece meshed ahead shows at the detonation
 				F.bReady = true;
 			}
 			continue;
@@ -1078,7 +1106,10 @@ void ADCVoxelCity::Tick(float DeltaSeconds)
 	const int32 DirtyBefore = DirtyCells.Num();
 	UploadCells();
 	const double T2 = FPlatformTime::Seconds();
-	TickFalling(GetWorld()->GetTimeSeconds());
+	// Falling pieces follow the presentation clock (a dying player's Last Frame slows them on that machine only, R21);
+	// the voxel state and the host's records keep real time.
+	FallOffset += DeltaSeconds * (1.f - UDCPresentationClock::Dilation(this));
+	TickFalling(GetWorld()->GetTimeSeconds() - FallOffset);
 	const double T3 = FPlatformTime::Seconds();
 	TickCityShot();
 	// Hitch log (R13): which stage of the city's frame went long.

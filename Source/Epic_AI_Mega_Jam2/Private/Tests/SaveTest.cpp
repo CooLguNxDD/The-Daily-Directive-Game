@@ -78,6 +78,13 @@ bool FDCSaveSchemaTest::RunTest(const FString&)
 	TestEqual(TEXT("corrupt file"), static_cast<int32>(LoadFile(File, FDCSettingsSave::StaticStruct(), &AfterCorrupt, 1, None)), static_cast<int32>(ELoadResult::Corrupt));
 	TestTrue(TEXT("corrupt file kept aside"), IFileManager::Get().FileExists(*(File + TEXT(".bad"))));
 	TestEqual(TEXT("corrupt file gives defaults"), AfterCorrupt.MasterVolume, 1.f);
+	// A crash inside the swap leaves only .prev (the main file deleted before the rename): the last good save comes back.
+	IFileManager::Get().Delete(*File);
+	FDCSettingsSave Recovered;
+	const ELoadResult R = LoadWithHistory(File, FDCSettingsSave::StaticStruct(), &Recovered, 1, None);
+	TestTrue(TEXT("missing main file recovers from .prev"), R == ELoadResult::Loaded || R == ELoadResult::Migrated);
+	TestTrue(TEXT("recovered values are the last good save"), Recovered.MasterVolume < 0.99f);
+	TestTrue(TEXT("main file written back"), IFileManager::Get().FileExists(*File));
 	IFileManager::Get().DeleteDirectory(*Dir, false, true);
 	return true;
 }

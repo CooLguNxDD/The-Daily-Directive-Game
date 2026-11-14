@@ -120,6 +120,26 @@ return lerp(0.9, 0.2, saturate(Normal.z) * Wetness); // R25: wet streets mirror 
 """
 
 
+OUTLINE_HLSL = r"""
+float2 Px = float2(Thickness, Thickness);
+float Dc = SceneTextureFetch(PPI_SceneDepth, float2(0, 0)).r;
+float3 Nc = SceneTextureFetch(PPI_WorldNormal, float2(0, 0)).rgb;
+float Edge = 0;
+float2 Taps[4] = { float2(Px.x, 0), float2(-Px.x, 0), float2(0, Px.y), float2(0, -Px.y) };
+for (int i = 0; i < 4; ++i)
+{
+    float D = SceneTextureFetch(PPI_SceneDepth, Taps[i]).r;
+    float3 N = SceneTextureFetch(PPI_WorldNormal, Taps[i]).rgb;
+    // Only the nearer side of a depth step inks, so silhouettes stay one line wide.
+    Edge = max(Edge, saturate(((D - Dc) / max(Dc, 1.0) - DepthThreshold) * 25.0));
+    Edge = max(Edge, saturate((1.0 - dot(N, Nc) - NormalThreshold) * 4.0));
+}
+Edge *= saturate(1.0 - Dc / max(FadeDistance, 1.0)) * saturate(Strength);
+float3 Scene = SceneTextureFetch(PPI_PostProcessInput0, float2(0, 0)).rgb;
+return lerp(Scene, InkColor.rgb * min(Scene, 1.0), Edge);
+"""
+
+
 def build_voxel_material():
     if keep(f"{MAT_DIR}/M_DCVoxel"):
         return

@@ -1,13 +1,14 @@
 # Outfit body: photographer's vest over the torso, accent pockets (R23). Hollow, worn around spine_03.
+# Regridded to 5 cm voxels (R1 floor, CP7).
 name outfit_vest
-grid 2
-size 20 24 26
+grid 5
+size 8 10 11
 slot cloth SwatchMain
 slot pocket SwatchAccent
-shell 0 0 0 20 24 26 2 cloth
-carve box 2 2 0 18 22 26
-carve box 6 0 22 14 24 26
-box 18 3 6 20 9 12 pocket
-box 18 15 6 20 21 12 pocket
-box 18 4 14 20 8 18 pocket
-pivot 10 12 0
+shell 0 0 0 8 10 11 1 cloth
+carve box 1 1 0 7 8 10
+carve box 3 0 9 5 9 10
+box 7 1 2 8 4 5 pocket
+box 7 6 2 8 9 5 pocket
+box 7 1 5 8 4 8 pocket
+pivot 4 5 0

@@ -120,12 +120,20 @@ namespace DCPhotoProbe
 			const float Dist = FVector::Dist(View.Location, B.Location);
 			Danger = FMath::Min(Danger, Dist);
 			NearestBlast = FMath::Min(NearestBlast, Dist);
+			// In frame when the fireball centre or any of its samples (the beam, the upper blast) projects inside (CP7:
+			// framing the visible upper blast without the centre lost its timing bonus).
+			BlastSamples(B, Samples);
+			auto InFrame = [&View](const FVector& P, FVector2D& Out) { return ProjectToFrame(View, P, Out) && FMath::Abs(Out.X) <= 1.1f && FMath::Abs(Out.Y) <= 1.1f; };
 			FVector2D Ndc;
-			if (!ProjectToFrame(View, C, Ndc) || FMath::Abs(Ndc.X) > 1.1f || FMath::Abs(Ndc.Y) > 1.1f)
+			bool bInFrame = InFrame(C, Ndc);
+			for (int32 i = 0; i < Samples.Num() && !bInFrame; ++i)
+			{
+				bInFrame = InFrame(Samples[i], Ndc);
+			}
+			if (!bInFrame)
 			{
 				continue;
 			}
-			BlastSamples(B, Samples);
 			TArray<int32> Struck;
 			if (const ADCVoxelCity* City = ADCVoxelCity::Get(World))
 			{
