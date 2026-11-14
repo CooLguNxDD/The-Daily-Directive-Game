@@ -12,6 +12,7 @@
 #include "Voxel/DCVoxelOps.h"
 #include "Rules/DCWeather.h"
 #include "DCDebrisPool.h"
+#include "DCCrumbField.h"
 #include "DCVoxelCity.generated.h"
 
 class UBoxComponent;
@@ -134,7 +135,12 @@ private:
 	{
 		float Start = 0.f;
 		TArray<FDCDebrisSpawn> Spawns;
+		TArray<FDCCrumbSpawn> Crumbs;
 	};
+	/** R26 crumb tier: single-voxel crumbs thrown by breaks, shatters and carves (local, instanced, cosmetic). */
+	UPROPERTY() TObjectPtr<UDCCrumbField> Crumbs;
+	/** Throws Count crumbs from a fragment's world box, coloured from its voxels, moving with V plus a scatter. */
+	void ThrowCrumbs(const FFalling& F, int32 FragIndex, const FBox& WorldBox, const FVector& V, int32 Count, FRandomStream& Rng);
 	TArray<FDCShardBurst> PendingShards;
 	struct FDCFading
 	{
