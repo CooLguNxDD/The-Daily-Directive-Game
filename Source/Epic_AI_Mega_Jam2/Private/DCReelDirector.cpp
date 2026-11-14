@@ -19,6 +19,8 @@
 #include "DCCharacter.h"
 #include "DCGameState.h"
 #include "DCOrbitalStrike.h"
+#include "DCOutfitBuild.h"
+#include "ProceduralMeshComponent.h"
 #include "DCTuning.h"
 #include "Engine/SkeletalMesh.h"
 #include "Engine/World.h"
@@ -257,7 +259,23 @@ void ADCReelDirector::Restage(int32 ClipIndex)
 		S->FinishSpawning(Xf);
 		Staged.Add(S);
 	}
+	// The stand-in is the clip photographer's own voxel body (review CP23, R10/R23): their replicated outfit code,
+	// the default when they left; the mannequin only drives the pose.
+	FString Code;
+	for (const APlayerState* PS : GS->PlayerArray)
+	{
+		const ADCPlayerState* DPS = Cast<ADCPlayerState>(PS);
+		if (DPS && DPS->GetPlayerName() == Clip.PlayerName)
+		{
+			Code = DPS->OutfitCode;
+		}
+	}
+	DCOutfitBuild::Apply(Puppet, DCOutfitBuild::FromCode(Code), PuppetParts);
 	Puppet->SetVisibility(Clip.Poses.Num() > 0, true);
+	if (PuppetParts.Num() > 0)
+	{
+		Puppet->SetVisibility(false, false); // segments show, the mannequin stays hidden
+	}
 }
 
 void ADCReelDirector::TickPuppet(float ClipTime)
