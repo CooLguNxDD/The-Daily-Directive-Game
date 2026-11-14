@@ -479,6 +479,7 @@ UProceduralMeshComponent* ADCVoxelCity::AcquirePiece(int32 VoxelCm)
 	Piece->RegisterComponent();
 	Piece->SetMaterial(0, VoxelMaterialFor(VoxelCm));
 	PieceCm.Add(Piece, VoxelCm);
+	PieceAll.Add(Piece);
 	return Piece;
 }
 
@@ -512,8 +513,18 @@ void ADCVoxelCity::PrewarmPieces(int32 PerFrame)
 	const int32 Cm = FMath::Max(1, Tn.TowerVoxelCm);
 	for (int32 n = 0; n < PerFrame && PieceCm.Num() < Want; ++n)
 	{
-		UProceduralMeshComponent* Piece = AcquirePiece(Cm);
-		ReleasePiece(Piece);
+		// A new component each time (acquiring would hand back the one just released: review CP26).
+		UProceduralMeshComponent* Piece = NewObject<UProceduralMeshComponent>(this);
+		Piece->bUseAsyncCooking = true;
+		Piece->SetupAttachment(Root);
+		Piece->SetCollisionProfileName(TEXT("NoCollision"));
+		Piece->SetCastShadow(true);
+		Piece->RegisterComponent();
+		Piece->SetVisibility(false, false);
+		Piece->SetMaterial(0, VoxelMaterialFor(Cm));
+		PieceCm.Add(Piece, Cm);
+		PieceAll.Add(Piece);
+		FreePieces.FindOrAdd(Cm).Add(Piece);
 	}
 }
 
@@ -806,9 +817,15 @@ void ADCVoxelCity::StartNextOp()
 	{
 		const double Start = FPlatformTime::Seconds();
 		Job->Result = Job->Op.Kind == TEXT("Rest") ? DCVoxelOps::ApplyRest(*Target, Job->Op, Pend, *Ctx) : DCVoxelOps::Apply(*Target, Job->Op, *Ctx);
+		const double Applied = FPlatformTime::Seconds();
 		DCVoxelOps::DeriveCosmetics(*Target, Job->Op, *Ctx, Job->Result); // shards and fragment trees off the game thread
+		const double Derived = FPlatformTime::Seconds();
 		Job->Hash = Target->Hash();
 		Job->ApplyMs = static_cast<float>((FPlatformTime::Seconds() - Start) * 1000.0);
+		Job->DeriveMs = static_cast<float>((Derived - Applied) * 1000.0);
+		Job->HashMs = static_cast<float>((FPlatformTime::Seconds() - Derived) * 1000.0);
+		UE_LOG(LogTemp, Display, TEXT("DCOPTIME seq=%d carve=%.0f structure=%.0f settle=%.0f derive=%.0f hash=%.0f ms"), Job->Op.Seq,
+			Job->Result.CarveMs, Job->Result.StructureMs, Job->Result.SettleMs, Job->DeriveMs, Job->HashMs);
 	});
 }
 
@@ -1461,7 +1478,10 @@ void ADCVoxelCity::TickFalling(float Now)
 			Fading.RemoveAtSwap(i);
 			continue;
 		}
-		Mesh->SetRelativeScale3D(FVector(FMath::Max(1.f - A, 0.01f)));
+		if (Fading[i].Body.IsValid())
+		{
+			Mesh->SetRelativeScale3D(FVector(FMath::Max(1.f - A, 0.01f))); // leaves shrink with their chunk
+		}
 	}
 	for (int32 i = Falling.Num() - 1; i >= 0; --i)
 	{
@@ -1844,10 +1864,13 @@ void ADCVoxelCity::Land(FFalling& F)
 		// The bodies rest: the shared rubble shows under the landing dust and the fragments go.
 		float Spread = 0.f;
 		int32 Awake = 0;
-		for (FFalling::FFrag& Fr : F.Frags)
+		TBitArray<> FadingFrag(false, F.Frags.Num());
+		for (int32 f = 0; f < F.Frags.Num(); ++f)
 		{
+			FFalling::FFrag& Fr = F.Frags[f];
 			if (Fr.Body)
 			{
+				FadingFrag[f] = true;
 				Spread = FMath::Max(Spread, FVector::Dist2D(Fr.Body->GetComponentLocation(), F.LandCenter));
 				Awake += Fr.Body->IsAnyRigidBodyAwake() ? 1 : 0;
 				Bodies.Remove(Fr.Body.Get());
@@ -1868,6 +1891,13 @@ void ADCVoxelCity::Land(FFalling& F)
 					Fr.Comp = nullptr;
 				}
 				Fr.Body = nullptr;
+			}
+			if (Fr.Comp && F.Frags.IsValidIndex(Fr.Parent) && FadingFrag[Fr.Parent])
+			{
+				// A leaf of an unshattered chunk rides on it and fades with it (review CP26: it vanished at landing).
+				FadingFrag[f] = true;
+				Fading.Add({nullptr, Fr.Comp, static_cast<float>(GetWorld()->GetTimeSeconds())});
+				Fr.Comp = nullptr;
 			}
 			if (Fr.Comp)
 			{

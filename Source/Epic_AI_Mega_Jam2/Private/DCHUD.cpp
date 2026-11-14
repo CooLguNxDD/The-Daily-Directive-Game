@@ -650,9 +650,9 @@ void ADCHUD::DrawStamp(ADCPlayerController& PC)
 		return;
 	}
 	const float W = Sx(520.f);
+	// Slides a short way in and stays whole on screen (a card half off the edge read as cut off: critic CP26).
 	const float SlideIn = FMath::Clamp(Age / 0.12f, 0.f, 1.f);
-	const float SlideOut = FMath::Clamp((Hold - Age) / 0.25f, 0.f, 1.f);
-	const float X = Canvas->ClipX - (W + Sx(40.f)) * FMath::Min(SlideIn, SlideOut);
+	const float X = Canvas->ClipX - (W + Sx(40.f)) + Sx(60.f) * (1.f - SlideIn);
 	DrawPhotoCard(Photo->Image, Photo->Grade, X, Sx(130.f), W, Age / 0.15f, true, FeedStamp(Photo->PhotoId, Photo->ShotTime));
 }
 
