@@ -721,7 +721,16 @@ void ADCHUD::DrawOnboarding(ADCCharacter& Me)
 		}
 	}
 	const float W = Canvas->ClipX;
-	// Low centre, above the viewfinder prompts (they overlapped LMB SNAP): a paper plate with ink type.
+	if (Me.IsCameraRaised())
+	{
+		// Viewfinder up: only the next step, one small line near the bottom edge, never across the subject (critic).
+		if (Next)
+		{
+			Text(FString::Printf(TEXT("%d/5  %s"), Done + 1, *Next->Prompt), W * 0.5f, Canvas->ClipY - Sx(118.f), Ink, 0.6f, true);
+		}
+		return;
+	}
+	// Low centre, above the viewfinder prompts (they overlapped LMB SNAP): a glass plate with light type.
 	const float Y = Canvas->ClipY - Sx(330.f);
 	Box(W * 0.5f - Sx(430.f), Y - Sx(6.f), Sx(860.f), Sx(78.f), Paper);
 	Box(W * 0.5f - Sx(430.f), Y - Sx(6.f), Sx(5.f), Sx(78.f), Ink);
