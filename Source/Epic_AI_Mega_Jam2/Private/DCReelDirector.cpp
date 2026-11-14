@@ -1,6 +1,7 @@
 #include "DCReelDirector.h"
 
 #include "DCVoxelCity.h"
+#include "Voxel/DCVoxelSettings.h"
 #include "Misc/App.h"
 
 #include "Animation/AnimSequence.h"
@@ -213,10 +214,14 @@ void ADCReelDirector::Restage(int32 ClipIndex)
 		{
 			bReuse &= !(Op.Sector == Sector && Op.Seq <= Applied && Op.Time >= WindowStart);
 		}
+		const bool bAsync = UDCVoxelSettings::Get().Tuning.bAsyncReelRestage;
 		if (!bReuse)
 		{
-			City->Build(GS->RunSeed, Sector, -1 - ClipIndex);
+			City->Build(GS->RunSeed, Sector, -1 - ClipIndex, bAsync);
 		}
+		bRestaging = bAsync;
+		bPreWindowQueued = false;
+		PreWindowOps.Reset();
 		UE_LOG(LogTemp, Display, TEXT("DCREEL restage clip=%d sector=%d %s (applied seq %d)"), ClipIndex, Sector, bReuse ? TEXT("reused the city") : TEXT("rebuilt the city"), Applied);
 		for (const FDCVoxelOp& Op : GS->VoxelOps)
 		{
@@ -226,6 +231,11 @@ void ADCReelDirector::Restage(int32 ClipIndex)
 			}
 			if (Op.Time < WindowStart)
 			{
+				if (bAsync)
+				{
+					PreWindowOps.Add(Op); // queued on the worker once the craft is in (Tick)
+					continue;
+				}
 				City->ApplyOp(Op, false);
 				continue;
 			}
@@ -445,7 +455,32 @@ void ADCReelDirector::Tick(float DeltaSeconds)
 		bTakeRaised = false;
 		Restage(GS->ReelIndex);
 		SlateFramesLeft = -1;
+		SlateUntilReal = bRestaging ? TNumericLimits<double>::Max() : FPlatformTime::Seconds() + 0.25;
+	}
+	if (bRestaging)
+	{
+		// Behind the slate: wait for the craft, replay the pre-window ops on the worker, wait for the city to be up.
+		ADCVoxelCity* City = ADCVoxelCity::Get(this);
+		if (City && City->IsCrafting())
+		{
+			return;
+		}
+		if (City && !bPreWindowQueued)
+		{
+			bPreWindowQueued = true;
+			for (const FDCVoxelOp& Op : PreWindowOps)
+			{
+				City->ApplyOpAsync(Op, false, nullptr);
+			}
+			PreWindowOps.Reset();
+		}
+		if (City && (!City->IsOpQueueIdle() || !City->IsLoaded()))
+		{
+			return;
+		}
+		bRestaging = false;
 		SlateUntilReal = FPlatformTime::Seconds() + 0.25;
+		UE_LOG(LogTemp, Display, TEXT("DCREEL restage ready clip=%d"), StagedIndex);
 	}
 	if (bTakeRaised && !CanTakeThisClip())
 	{
@@ -471,7 +506,14 @@ void ADCReelDirector::Tick(float DeltaSeconds)
 		}
 		if (ADCVoxelCity* City = ADCVoxelCity::Get(this))
 		{
-			City->ApplyOp(PendingVoxelOps[i].Value, true);
+			if (UDCVoxelSettings::Get().Tuning.bAsyncReelRestage)
+			{
+				City->ApplyOpAsync(PendingVoxelOps[i].Value, true, nullptr); // the worker, in Seq order behind the rest
+			}
+			else
+			{
+				City->ApplyOp(PendingVoxelOps[i].Value, true);
+			}
 		}
 		PendingVoxelOps.RemoveAt(0);
 	}

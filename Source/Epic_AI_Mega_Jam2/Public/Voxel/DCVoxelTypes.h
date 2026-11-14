@@ -142,6 +142,9 @@ struct FDCVoxelTuning
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 SignHoldPercent = 60;
 	/** Sector crafts at sector start run on a worker under the sector card (R13 load frames, advisors CP15/CP18). */
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") bool bAsyncSectorCraft = true;
+	/** The reel's restage crafts on a worker and replays the ops before the clip through the op queue while its
+	 *  slate is up, instead of one multi-second game-thread frame (R13 reel; advisor CP24, snapshots not built). */
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") bool bAsyncReelRestage = true;
 	/** Form floor in M_DCVoxel (advisor CP16, critic V20.5): shaded albedo x lerp(FormGround, FormSky) by how much a
 	 *  face turns to MoonDir, x FormFloor, added as emission, so unlit faces separate without lifting the frame
 	 *  (0 = off). */

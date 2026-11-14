@@ -41,6 +41,8 @@ public:
 	 *  until then the city reads as not built (no ops apply). The reel builds synchronously. */
 	void Build(int32 RunSeed, int32 Sector, int32 BuildId, bool bAsync = false);
 	bool IsCrafting() const { return PendingCraft.IsValid(); }
+	/** No op queued or in flight on the worker. */
+	bool IsOpQueueIdle() const { return !InFlight.IsValid() && QueuedOps.Num() == 0; }
 	void Clear();
 
 	/** Applies one op now (host: right after appending it; reel: at its replay time). Animate plays the fall. */
