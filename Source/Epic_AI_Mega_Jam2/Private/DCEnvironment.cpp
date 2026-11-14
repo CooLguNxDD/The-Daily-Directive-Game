@@ -181,6 +181,13 @@ void ADCEnvironment::BeginPlay()
 	DebrisPool = GetWorld()->SpawnActor<ADCDebrisPool>(ADCDebrisPool::StaticClass(), FTransform::Identity, Params);
 }
 
+float ADCEnvironment::EffectScaleOf(const UObject* WorldContext)
+{
+	const UWorld* World = WorldContext ? WorldContext->GetWorld() : nullptr;
+	const ADCGameState* GS = World ? World->GetGameState<ADCGameState>() : nullptr;
+	return GS && GS->GetEnvironment() ? GS->GetEnvironment()->GetEffectScale() : 1.f;
+}
+
 void ADCEnvironment::ApplyPreset()
 {
 	const UDCTuning& T = UDCTuning::Get();
@@ -200,6 +207,7 @@ void ADCEnvironment::ApplyPreset()
 		return;
 	}
 	PostQuality = Preset->Quality;
+	EffectScale = FMath::Clamp(Preset->EffectScale, 0.1f, 1.f);
 	for (const FString& Var : Preset->ConsoleVariables)
 	{
 		FString Name, Value;

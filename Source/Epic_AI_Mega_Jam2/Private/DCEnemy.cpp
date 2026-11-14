@@ -637,7 +637,8 @@ void ADCEnemy::BeginPlay()
 	GaitLast = GetActorLocation();
 	const FDCFactionDef* F = DCFactionRules::Find(UDCTuning::Get().Factions, GetFaction());
 	const FDCEnemyDef* CueDef = GetDef();
-	if (F && CueDef && F->CueLightEvery > 0 && CueDef->GlowLight <= 0.f && GetUniqueID() % F->CueLightEvery == 0)
+	const int32 CueEvery = F ? FMath::RoundToInt32(F->CueLightEvery / ADCEnvironment::EffectScaleOf(this)) : 0; // rarer on low tiers
+	if (F && CueDef && CueEvery > 0 && CueDef->GlowLight <= 0.f && GetUniqueID() % CueEvery == 0)
 	{
 		GlowLight->SetVisibility(true);
 		GlowLight->SetIntensityUnits(ELightUnits::Candelas);

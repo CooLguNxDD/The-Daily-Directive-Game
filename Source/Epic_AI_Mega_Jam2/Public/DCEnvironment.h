@@ -46,6 +46,9 @@ public:
 	/** The ink outline blendable on the scene volume, at the composed Outline strength (0 removes it). */
 	void ApplyOutline(float Strength);
 	int32 GetPostQuality() const { return PostQuality; }
+	float GetEffectScale() const { return EffectScale; }
+	/** The active preset's EffectScale (1 when there is no environment yet). */
+	static float EffectScaleOf(const UObject* WorldContext);
 	const FDCWeatherState& GetWeather() const { return Weather; }
 
 	/** Applies the post preset (saved quality, or -dcpost=): scalability console variables and screen percentage. */
@@ -99,4 +102,5 @@ private:
 	/** Day value the sun and sky were last set for (they change only when it moves). */
 	float AppliedDay = -1.f;
 	int32 PostQuality = 2;
+	float EffectScale = 1.f;
 };
