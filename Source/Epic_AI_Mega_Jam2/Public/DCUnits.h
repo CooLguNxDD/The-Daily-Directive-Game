@@ -20,6 +20,9 @@ public:
 	const TArray<TObjectPtr<ADCEnemy>>& All() const { return Units; }
 	/** Live units of a faction. */
 	int32 CountAlive(FName Faction) const;
+	/** R3, one owner (advisor a-9): a live unit of a hostile faction within RangeCm of this one (the CLASH tag and the
+	 *  pilot read it). Returns that unit, or null. Any machine can ask: factions and positions replicate. */
+	const ADCEnemy* InClash(const ADCEnemy& Unit, float RangeCm = 1500.f) const;
 
 private:
 	UPROPERTY() TArray<TObjectPtr<ADCEnemy>> Units;

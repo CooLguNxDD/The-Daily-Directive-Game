@@ -1,5 +1,6 @@
 #include "DCDemoPilot.h"
 #include "DCObjective.h"
+#include "DCUnits.h"
 #include "DCAudio.h"
 
 #include "DCBuilding.h"
@@ -522,6 +523,39 @@ void ADCDemoPilot::AddStratagemOnSwarm(const FString& S)
 	Add(0.2f, [this] { Release(TEXT("Aim")); Tap(TEXT("Slot1")); return true; });
 }
 
+void ADCDemoPilot::AddClashShot(const FString& S)
+{
+	// R3 evidence (advisor a-9): wait for two factions fighting, frame the pair with the real camera and snap; the host
+	// logs the graded photo with its tags and Factions metric (DCPHOTO graded ... tags=...CLASH).
+	Add(0.f, [this]
+	{
+		const APawn* Me = GetWorld()->GetFirstPlayerController() ? GetWorld()->GetFirstPlayerController()->GetPawn() : nullptr;
+		const UDCUnits* Units = UDCUnits::Get(this);
+		const ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>();
+		if (!Me || !Units || !GS || GS->Phase != EDCRunPhase::Sector)
+		{
+			return !GS || GS->Phase != EDCRunPhase::Sector;
+		}
+		float Best = 6000.f;
+		for (const ADCEnemy* U : Units->All())
+		{
+			const ADCEnemy* Other = U && U->IsAlive() ? Units->InClash(*U) : nullptr;
+			const float D = Other ? FVector::Dist(U->GetActorLocation(), Me->GetActorLocation()) : Best;
+			if (D < Best)
+			{
+				Best = D;
+				ClashMid = (U->GetActorLocation() + Other->GetActorLocation()) * 0.5f;
+			}
+		}
+		return Best < 6000.f;
+	}, 90.f);
+	Add(0.f, [this] { Tap(TEXT("Slot3")); return true; });
+	Add(0.6f, [this] { Press(TEXT("Aim")); AimAt(ClashMid + FVector(0, 0, 80.f)); return true; });
+	Add(0.8f, [this] { AimAt(ClashMid + FVector(0, 0, 80.f)); Shot(TEXT("clash_viewfinder")); return true; });
+	Add(0.1f, [this] { Tap(TEXT("Fire")); return true; });
+	Add(0.6f, [this, S] { Shot(S + TEXT("_clash_stamp")); LogPhoto(); Release(TEXT("Aim")); return true; });
+}
+
 void ADCDemoPilot::AddObjectiveRun(const FString& S)
 {
 	// R4 evidence (-dcobjrun): run the sector's objective with the real Move and Sprint actions toward the HUD's
@@ -892,6 +926,10 @@ void ADCDemoPilot::BuildScript()
 		for (int32 Cycle = 0; Cycle < Cycles; ++Cycle)
 		{
 			AddCycle(FString::Printf(TEXT("%s_c%d"), *S, Cycle));
+		}
+		if (FParse::Param(FCommandLine::Get(), TEXT("dcclashshot")))
+		{
+			AddClashShot(S);
 		}
 		if (FParse::Param(FCommandLine::Get(), TEXT("dcobjrun")))
 		{

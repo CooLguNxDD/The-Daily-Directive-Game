@@ -424,6 +424,20 @@ int32 UDCUnits::CountAlive(FName Faction) const
 	return N;
 }
 
+const ADCEnemy* UDCUnits::InClash(const ADCEnemy& Unit, float RangeCm) const
+{
+	const TArray<FDCFactionDef>& Factions = UDCTuning::Get().Factions;
+	for (const ADCEnemy* U : Units)
+	{
+		if (U && U != &Unit && U->IsAlive() && FVector::DistSquared(U->GetActorLocation(), Unit.GetActorLocation()) < RangeCm * RangeCm
+			&& DCFactionRules::IsHostile(Factions, Unit.GetFaction(), U->GetFaction()))
+		{
+			return U;
+		}
+	}
+	return nullptr;
+}
+
 FName ADCEnemy::GetFaction() const
 {
 	const FDCEnemyDef* Def = GetDef();
