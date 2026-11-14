@@ -726,6 +726,28 @@ bool FDCVoxelRestTest::RunTest(const FString&)
 	}
 	TestEqual(TEXT("poses in the air still land (nothing floats)"), Floating, 0);
 	TestEqual(TEXT("axis frames round trip"), static_cast<int32>(DCVoxelOps::AxisIndex(FVector(DCVoxelOps::AxisDir(3)))), 3);
+	{
+		// Review CP39: every body flew off as debris, so the host sends an empty Rest op; the provisional pile goes on
+		// every machine and nothing is stamped in its place.
+		FDCVoxelSector E1, E2;
+		Craft(E1, VoxelPlan(DCCityRules::SectorSeed(77, 0), 0));
+		Craft(E2, VoxelPlan(DCCityRules::SectorSeed(77, 0), 0));
+		DCVoxelOps::Apply(E1, StrikeAt(E1.Towers[0], 1, 1300), Ctx);
+		DCVoxelOps::Apply(E2, StrikeAt(E2.Towers[0], 1, 1300), Ctx);
+		FDCVoxelOp Empty = Rest;
+		Empty.Rests.Reset();
+		const FDCVoxelOpResult EA = DCVoxelOps::ApplyRest(E1, Empty, P, Ctx);
+		DCVoxelOps::ApplyRest(E2, Empty, P, Ctx);
+		int32 Left = 0;
+		for (int32 i = 0; i < P.Rubble.Num(); ++i)
+		{
+			Left += E1.Terrain.Data.Get(P.Rubble[i]) == P.RubbleMaterials[i] ? 1 : 0;
+		}
+		TestTrue(TEXT("an all-debris rest had a provisional pile to remove"), P.Rubble.Num() > 0);
+		TestEqual(TEXT("an all-debris rest removes the provisional pile"), Left, 0);
+		TestEqual(TEXT("an all-debris rest stamps nothing"), EA.Rubble.Num(), 0);
+		TestEqual(TEXT("an all-debris rest is the same on every machine"), E1.Hash(), E2.Hash());
+	}
 	return true;
 }
 
