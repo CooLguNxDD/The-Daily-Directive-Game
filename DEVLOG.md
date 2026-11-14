@@ -94,6 +94,18 @@ is kept from the run records (Glass Box modifier): what was decided, why, and wh
   99 fps steady, 83 fps average during collapses.
 - The packaged solo run now goes menu to a real front page through all three sectors in about 13 minutes.
 
+## 2026-11-14 (evening): city props pass (R2)
+- The city builder places props as data: prop layer rows (lamps, sidewalk furniture, parked cars and wrecks in the
+  lanes, plaza and rubble dressing, shop frontage, roof clutter, rooftop billboards at the parapet, awnings, wall signs
+  and AC boxes, pipes, string-light cables across the streets) and per-district densities in the prop rule sets: the
+  Old Town is a dense market, Ministry Row is orderly, the Capitol is a wreck yard.
+- 28 new voxel-forge models; the rooftop and wall ones are crafted into the tower's own voxels, so they fall and
+  shatter with the building. Three sign artworks came from local ComfyUI and were quantized into neon voxels by a new
+  forge `image` op.
+- Frame time with props (editor -game, 1600x900, seed 7, demo pilot through sector 0 into 1, night): median 8.23 ms,
+  p95 9.22 ms before the art signs and 8.32 / 9.37 ms after, against 7.95 / 8.97 ms without props; sector craft on the
+  worker goes from about 0.9 s to 1.2-1.3 s at sector load. Well inside 16.67 ms.
+
 ## Problems met
 - Git Bash rewrote `/Game/...` map arguments into `C:/Program Files/Git/Game/...`; `export MSYS_NO_PATHCONV=1` fixed it,
   but the same export broke `taskkill //F` in the co-op script and left a fleet job hanging.

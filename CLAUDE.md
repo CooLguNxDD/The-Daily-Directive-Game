@@ -14,6 +14,11 @@ Unreal Engine 5.9 jam game. Engine: `L:/unreal/UE_5.9` (registered source build,
   ops in Seq order (two-phase: planned ahead, committed at detonation), drives the R26 physics (chunk/leaf body pool,
   shatter, per-body freeze) and turns the host's rest poses into a replicated `Rest` op. Tuning: `FDCVoxelTuning`
   (`Public/Voxel/DCVoxelTypes.h`), overridable in `Config/DefaultGame.ini` `Tuning=`.
+- City props (R2): `+PropLayers` rows (Placer from the placer registry in `DCDistrictBuilder.cpp`: Street, Lot,
+  Frontage, Roof, Wall, Cable; optional Mount from the mount registry in `DCVoxelCraft.cpp`: Roof, RoofEdge, Wall). A
+  district's prop rule set (`Props=` of its `+Districts` row) turns a layer on with the slots `<Id>` (models) and
+  `<Id>Count`. Ground props and cables go into the 5 cm prop grid; roof and wall mounts are stamped into the tower's
+  own grid (they fall with it). Models: `tools/voxel-forge/recipes/*.vfr` (skill `voxel-forge`).
 - Look data: `Config/DefaultGame.ini` `Look=`, `+PostLayers`, `+WeatherProfiles`, `+Palette`, `+Recipes`; materials
   are built by `tools/content/build_content.py`.
 - Demo and evidence flags (game or packaged exe): `-dcdemo` (pilot), `-dcdemoquit`, `-dcseed=N`, `-dcshots=<dir>`,

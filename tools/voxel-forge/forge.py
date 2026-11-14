@@ -26,6 +26,9 @@ Recipe language: one op per line, '#' starts a comment. Coordinates are voxels, 
     mirror x|y|z                     copies the half below the middle onto the other side
     noise p seed slot                removes surface voxels of slot with probability p (weathering)
     pivot x y z                      model origin in voxels (default: bottom centre)
+    image file x y0 z0 w h s0 t1 s1 ...  quantizes a picture (path relative to the recipe) onto the +x-facing plane
+                                     at x, y0..y0+w, z0..z0+h: each pixel's luminance (0..1) walks the ladder
+                                     s0 < t1 <= s1 < t2 <= s2 ... (generated sign art -> neon voxels)
 """
 from __future__ import annotations
 
@@ -57,8 +60,9 @@ def load_palette(ini: Path = INI) -> dict[str, tuple[int, tuple[float, float, fl
 
 
 class Model:
-    def __init__(self, name: str):
+    def __init__(self, name: str, base: Path | None = None):
         self.name = name
+        self.base = base or Path(".")
         self.grid_cm = 5
         self.v = np.zeros((16, 16, 16), dtype=np.uint8)  # [x, y, z], value = slot index + 1
         self.slots: list[tuple[str, str]] = []  # (slot, palette name)
@@ -146,6 +150,7 @@ class Model:
             "paint": lambda: self._paint(toks[1:]),
             "mirror": lambda: self._mirror(toks[1]),
             "noise": lambda: self._noise(float(toks[1]), int(toks[2]), toks[3]),
+            "image": lambda: self._image(toks[1:]),
         }
         if k in handlers:
             handlers[k]()
@@ -185,6 +190,23 @@ class Model:
         idx[ax] = slice(n - half, n)
         self.v[tuple(idx)] = flipped
 
+    def _image(self, toks):
+        from PIL import Image  # only recipes with pictures need Pillow
+        path = self.base / toks[0]
+        x, y0, z0, w, h = (int(t) for t in toks[1:6])
+        ladder = toks[6:]
+        if len(ladder) % 2 != 1:
+            raise ValueError("image: ladder must be slot (threshold slot)*")
+        slots = [self.slot_index(ladder[i]) for i in range(0, len(ladder), 2)]
+        cuts = [float(ladder[i]) for i in range(1, len(ladder), 2)]
+        im = Image.open(path).convert("L").resize((w, h), Image.LANCZOS)
+        px = np.asarray(im, dtype=np.float32) / 255.0  # [row (top first), col]
+        for r in range(h):
+            for c in range(w):
+                v = px[r, c]
+                k = sum(1 for t in cuts if v >= t)
+                self.v[x, y0 + (w - 1 - c), z0 + (h - 1 - r)] = slots[k]  # a viewer facing +x has +y on the left
+
     def _noise(self, p: float, seed: int, slot: str):
         s = self.slot_index(slot)
         solid = self.v != 0
@@ -198,7 +220,7 @@ class Model:
 
 
 def parse(path: Path) -> Model:
-    m = Model(path.stem)
+    m = Model(path.stem, path.parent)
     for i, raw in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
         line = raw.split("#", 1)[0].strip()
         if line:

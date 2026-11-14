@@ -353,7 +353,8 @@ namespace
 			{TEXT("Wall"), {[](const FMountCtx& C, const FDCVoxelModel& M, const FDCAttachPlan& A)
 				{
 					const int32 Floors = C.FloorFrames.Num();
-					const int32 Z = FMath::Clamp(FMath::RoundToInt32(A.V * C.Bay), 1, Floors * C.Bay - 1);
+					// Kept under the roof line: a sign rolled for floor 4 on a three-floor block sits at its top floor.
+					const int32 Z = FMath::Clamp(FMath::RoundToInt32(A.V * C.Bay), 1, FMath::Max(1, Floors * C.Bay - ModelVox(M, C.Vcm).Z - 1));
 					const FFaceFrame& F = C.FloorFrames[FMath::Clamp(Z / C.Bay, 0, Floors - 1)];
 					const int32 Face = ((A.Face % 4) + 4) % 4;
 					const int32 Len = F.Length(Face);
