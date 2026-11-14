@@ -61,7 +61,7 @@ void ADCGameMode::StartObjective()
 	const ADCVoxelCity* City = ADCVoxelCity::Get(this);
 	auto Ground = [City](FVector P) { P.Z = City ? City->SurfaceZCm(P) : 0.f; return P; };
 	// Retrieve: the package sits deep in the main faction's ground, the street point farthest from the crew's spawn.
-	const int32 Deep = DCObjectiveRules::Farthest(CityPlan.StreetPoints, Spawn);
+	const int32 Deep = DCObjectiveRules::Deep(CityPlan.StreetPoints, Spawn, Def->DeepFraction, GS->RunSeed + GS->SectorIndex * 977);
 	Objective->PackageAt = Ground(CityPlan.StreetPoints[FMath::Max(Deep, 0)]);
 	// Destroy: marked standing towers, far from the spawn and apart from each other.
 	if (Def->Targets > 0 && Def->Kind == TEXT("Destroy"))

@@ -108,6 +108,22 @@ namespace DCObjectiveRules
 		return Best;
 	}
 
+	int32 Deep(const TArray<FVector>& Points, const FVector& From, float Fraction, int32 Seed)
+	{
+		TArray<int32> Order;
+		for (int32 i = 0; i < Points.Num(); ++i)
+		{
+			Order.Add(i);
+		}
+		Order.Sort([&](int32 A, int32 B)
+		{
+			const float Da = FVector::DistSquared2D(Points[A], From), Db = FVector::DistSquared2D(Points[B], From);
+			return Da != Db ? Da > Db : A < B;
+		});
+		const int32 Pool = FMath::Clamp(FMath::CeilToInt32(Order.Num() * Fraction), 1, FMath::Max(Order.Num(), 1));
+		return Order.Num() > 0 ? Order[DCPcg::Hash(Seed, SaltTargets ^ 0x5Du, 0) % static_cast<uint32>(Pool)] : INDEX_NONE;
+	}
+
 	int32 AtLeast(const TArray<FVector>& Points, const FVector& From, float MinDistance)
 	{
 		int32 Best = INDEX_NONE;

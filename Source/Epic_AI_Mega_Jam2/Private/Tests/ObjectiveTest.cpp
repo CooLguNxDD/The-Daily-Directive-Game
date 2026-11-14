@@ -63,6 +63,14 @@ bool FDCObjectivePlaceTest::RunTest(const FString&)
 	}
 	TestEqual(TEXT("a tiny map still gives three"), DCObjectiveRules::PickTargets({FVector(0), FVector(100, 0, 0), FVector(200, 0, 0)}, FVector::ZeroVector, 3, 5000.f, 1).Num(), 3);
 	TestEqual(TEXT("farthest point"), DCObjectiveRules::Farthest(Towers, FVector::ZeroVector), 15);
+	TSet<int32> Deeps;
+	for (int32 Seed = 0; Seed < 30; ++Seed)
+	{
+		const int32 D = DCObjectiveRules::Deep(Towers, FVector::ZeroVector, 0.25f, Seed * 31);
+		TestTrue(TEXT("deep point is in the far quarter"), FVector::Dist2D(Towers[D], FVector::ZeroVector) >= FVector::Dist2D(Towers[10], FVector::ZeroVector) - 1.f);
+		Deeps.Add(D);
+	}
+	TestTrue(TEXT("seeds vary the deep point"), Deeps.Num() >= 2);
 	const int32 E = DCObjectiveRules::AtLeast(Towers, FVector::ZeroVector, 8000.f);
 	TestTrue(TEXT("extraction at least the distance away"), FVector::Dist2D(Towers[E], FVector::ZeroVector) >= 8000.f);
 	// Shipped rows: both kinds, picks vary with the seed.
