@@ -190,6 +190,16 @@ ART_SOURCE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."
 # Generated art (R11, listed in ASSETS.md): source PNG beside the asset, imported as UI textures.
 TEXTURES = {
     "T_MenuKeyArt": "menu-keyart.png",
+    "T_Card_sundrop": "card-sundrop.png",
+    "T_Card_singularity": "card-singularity.png",
+    "T_Card_decoy": "card-decoy.png",
+    "T_Card_strobe": "card-strobe.png",
+    "T_Card_fisheye": "card-fisheye.png",
+    "T_Card_cursed": "card-cursed.png",
+    "T_Card_domino": "card-domino.png",
+    "T_Card_eclipse": "card-eclipse.png",
+    "T_Card_rogue": "card-rogue.png",
+    "T_PaperGrain": "tex-paper.png",
 }
 
 
@@ -212,6 +222,8 @@ def import_textures():
             tex.set_editor_property("compression_settings", unreal.TextureCompressionSettings.TC_EDITOR_ICON)
             tex.set_editor_property("mip_gen_settings", unreal.TextureMipGenSettings.TMGS_NO_MIPMAPS)
             tex.set_editor_property("lod_group", unreal.TextureGroup.TEXTUREGROUP_UI)
+            if name.startswith("T_Card_"):
+                tex.set_editor_property("max_texture_size", 256)  # draft card art is drawn under 200 px
             eal.save_asset(path)
             unreal.log(f"build_content: {name} imported from {file}")
 

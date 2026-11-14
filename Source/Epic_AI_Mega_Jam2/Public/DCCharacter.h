@@ -164,6 +164,8 @@ private:
 	UPROPERTY(VisibleAnywhere) TObjectPtr<USceneCaptureComponent2D> Capture;
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UStaticMeshComponent> RifleMesh;
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UStaticMeshComponent> PhotoCamMesh;
+	/** The forge-made press camera on the chest (voxel model), hidden while the camera is in hand. */
+	UPROPERTY() TObjectPtr<class UProceduralMeshComponent> ChestCam;
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UStaticMeshComponent> BeaconMesh;
 	UPROPERTY(VisibleAnywhere) TObjectPtr<class UInstancedStaticMeshComponent> StrikeMarker;
 	float StrikeMarkerRadius = -1.f;

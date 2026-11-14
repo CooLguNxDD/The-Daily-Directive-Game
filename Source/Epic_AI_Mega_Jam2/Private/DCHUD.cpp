@@ -42,6 +42,13 @@ void ADCHUD::BeginPlay()
 	HeadFont = DCFonts::Get(TEXT("Headline"));
 	MastFont = DCFonts::Get(TEXT("Masthead"));
 	StampFont = DCFonts::Get(TEXT("Stamp"));
+	for (const FDCUpgradeDef& U : UDCTuning::Get().Upgrades)
+	{
+		if (UTexture2D* Tex = U.Icon.IsNull() ? nullptr : Cast<UTexture2D>(U.Icon.TryLoad()))
+		{
+			CardIcons.Add(U.Id, Tex);
+		}
+	}
 	SmallFont = GEngine->GetMediumFont();
 }
 
@@ -232,7 +239,7 @@ void ADCHUD::DrawStrikeInfo(ADCCharacter& Me)
 	const float X = Canvas->ClipX * 0.5f + Sx(40.f);
 	float Y = Canvas->ClipY * 0.5f - Sx(60.f);
 	// A paper plate with ink type (it sat as thin white text on the bright street); the live pick on a yellow bar.
-	Box(X - Sx(14.f), Y - Sx(10.f), Sx(470.f), Sx(30.f) + PS->OwnedStratagems.Num() * Sx(26.f) + Sx(44.f), FLinearColor(Paper.R, Paper.G, Paper.B, 0.92f));
+	Box(X - Sx(14.f), Y - Sx(10.f), Sx(470.f), Sx(30.f) + PS->OwnedStratagems.Num() * Sx(26.f) + Sx(44.f), Paper);
 	Box(X - Sx(14.f), Y - Sx(10.f), Sx(5.f), Sx(30.f) + PS->OwnedStratagems.Num() * Sx(26.f) + Sx(44.f), Ink);
 	Text(TEXT("ORBITAL CALL-IN"), X, Y, Ink, 0.8f, false, HeadFont);
 	Y += Sx(30.f);
@@ -339,7 +346,7 @@ void ADCHUD::DrawStatus(ADCGameState& GS, ADCCharacter& Me)
 
 	// Paper plates with ink type and a thin ink rule (art bible: cream and ink; Saltline HUD language): readable over
 	// a bright sky and a blast alike.
-	const FLinearColor Plate(Paper.R, Paper.G, Paper.B, 0.9f);
+	const FLinearColor Plate(Paper.R, Paper.G, Paper.B, 1.f); // opaque: ink type never sits on the city behind it
 	// Propaganda Points, the currency the shots buy firepower with.
 	Box(Sx(24.f), Sx(24.f), Sx(330.f), Sx(74.f), Plate);
 	Box(Sx(24.f), Sx(24.f), Sx(5.f), Sx(74.f), Ink);
@@ -398,7 +405,7 @@ void ADCHUD::DrawStatus(ADCGameState& GS, ADCCharacter& Me)
 	{
 		const int32 Ammo = Me.GetAmmo();
 		const FLinearColor AC = Ammo > T.Rifle.LowAmmoWarning ? Ink : Red;
-		Box(W - Sx(214.f), H - Sx(104.f), Sx(190.f), Sx(80.f), FLinearColor(Paper.R, Paper.G, Paper.B, 0.9f));
+		Box(W - Sx(214.f), H - Sx(104.f), Sx(190.f), Sx(80.f), Paper);
 		Box(W - Sx(214.f), H - Sx(104.f), Sx(5.f), Sx(80.f), Ink);
 		Text(FString::Printf(TEXT("%d"), Ammo), W - Sx(200.f), H - Sx(100.f), AC, 2.f);
 		Text(FString::Printf(TEXT("/ %d"), Me.GetReserve()), W - Sx(110.f), H - Sx(70.f), Ink, 0.8f);
@@ -542,6 +549,10 @@ void ADCHUD::DrawStamp(ADCPlayerController& PC)
 
 void ADCHUD::DrawHurt(ADCCharacter& Me)
 {
+	if (Me.IsDowned())
+	{
+		return; // downed: the red edge frame says it; hits on the ground must not wash the Last Frame view red
+	}
 	const float Age = static_cast<float>(RealNow - Me.Feedback().HurtTime);
 	if (Age > 0.8f)
 	{
@@ -609,7 +620,7 @@ void ADCHUD::DrawOnboarding(ADCCharacter& Me)
 	const float W = Canvas->ClipX;
 	// Low centre, above the viewfinder prompts (they overlapped LMB SNAP): a paper plate with ink type.
 	const float Y = Canvas->ClipY - Sx(330.f);
-	Box(W * 0.5f - Sx(430.f), Y - Sx(6.f), Sx(860.f), Sx(78.f), FLinearColor(Paper.R, Paper.G, Paper.B, 0.9f));
+	Box(W * 0.5f - Sx(430.f), Y - Sx(6.f), Sx(860.f), Sx(78.f), Paper);
 	Box(W * 0.5f - Sx(430.f), Y - Sx(6.f), Sx(5.f), Sx(78.f), Ink);
 	Text(TEXT("ORDERS: SHOOT THE DESTRUCTION. PHOTOS PAY FOR BIGGER BOMBS."), W * 0.5f, Y, Ink, 0.65f, true);
 	Text(Next ? FString::Printf(TEXT("%d/5  %s"), Done + 1, Next->Prompt) : FString(TEXT("YOU ARE A WAR PHOTOGRAPHER NOW. GET CLOSER.")), W * 0.5f, Y + Sx(32.f), Ink, 0.75f, true);
@@ -629,8 +640,8 @@ void ADCHUD::DrawDowned(ADCCharacter& Me)
 	Box(0, H - Edge, W, Edge, Red);
 	Box(0, 0, Edge, H, Red);
 	Box(W - Edge, 0, Edge, H, Red);
-	const float Y = Sx(250.f);
-	Box(W * 0.5f - Sx(360.f), Y - Sx(8.f), Sx(720.f), Sx(132.f), FLinearColor(Paper.R, Paper.G, Paper.B, 0.92f));
+	const float Y = Sx(272.f); // below the scoop banner (150-230) with a clear gap
+	Box(W * 0.5f - Sx(360.f), Y - Sx(8.f), Sx(720.f), Sx(132.f), Paper);
 	Box(W * 0.5f - Sx(360.f), Y - Sx(8.f), Sx(720.f), Sx(5.f), Red);
 	Text(TEXT("DOWNED"), W * 0.5f, Y, Red, 1.6f, true);
 	const float Left = Me.SelfReviveSecondsLeft();

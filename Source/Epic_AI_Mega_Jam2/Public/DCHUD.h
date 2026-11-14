@@ -77,6 +77,8 @@ private:
 	class UTexture2D* StampGrit();
 	UPROPERTY() TObjectPtr<class UTexture2D> Grit;
 	UPROPERTY() TObjectPtr<UFont> BigFont;
+	/** Draft card art by upgrade id, loaded once at BeginPlay (never in a draw). */
+	UPROPERTY() TMap<FName, TObjectPtr<class UTexture2D>> CardIcons;
 	UPROPERTY() TObjectPtr<UFont> HeadFont;
 	UPROPERTY() TObjectPtr<UFont> MastFont;
 	UPROPERTY() TObjectPtr<UFont> StampFont;

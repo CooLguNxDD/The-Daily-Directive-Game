@@ -196,8 +196,9 @@ void ADCOrbitalStrike::TickTelegraph(float Now, const FDCStratagemDef& Def)
 {
 	const float Start = DetonateTime - Def.TelegraphSeconds;
 	const float U = FMath::Clamp((Now - Start) / FMath::Max(Def.TelegraphSeconds, 0.01f), 0.f, 1.f);
-	// The laser converges: wide and faint to a thin, white-hot line.
-	const float Width = FMath::Lerp(7.f, 0.35f, FMath::Pow(U, 0.7f));
+	// The beam narrows from a broad sighting column to a thin lance as it charges (art bible: thin red beams).
+	const FDCLookTuning& BeamLook = UDCTuning::Get().Look;
+	const float Width = FMath::Lerp(BeamLook.BeamWidthStartCm, BeamLook.BeamWidthEndCm, FMath::Pow(U, 0.7f)) / 100.f;
 	const float Pulse = 0.5f + 0.5f * FMath::Sin(Now * FMath::Lerp(6.f, 40.f, U));
 	Beam->SetRelativeScale3D(FVector(Width, Width, BeamHeightCm / 100.f));
 	DCAssets::SetFlat(BeamMat, Def.BeamColor, FMath::Lerp(1.f, UDCTuning::Get().Look.BeamGlowPeak, U * U) * (0.7f + 0.3f * Pulse)); // red, not blown to pink

@@ -20,6 +20,9 @@
 #include "DCPlayerState.h"
 #include "DCReelDirector.h"
 #include "DCTuning.h"
+#include "Voxel/DCVoxelSettings.h"
+#include "Voxel/DCVoxelModel.h"
+#include "ProceduralMeshComponent.h"
 #include "Components/InstancedStaticMeshComponent.h"
 #include "Engine/TextureRenderTarget2D.h"
 #include "EnhancedInputComponent.h"
@@ -176,11 +179,23 @@ void ADCCharacter::BeginPlay()
 	PhotoCamMesh->AttachToComponent(GetMesh(), FAttachmentTransformRules::SnapToTargetNotIncludingScale, Hand);
 	PhotoCamMesh->SetStaticMesh(DCAssets::Cube());
 	PhotoCamMesh->SetMaterial(0, DCAssets::MakeFlat(this, FLinearColor(0.9f, 0.85f, 0.75f)));
+	if (const FDCVoxelMeshData* Cam = DCVoxelModels::Mesh(T.Assets.ChestCamModel))
+	{
+		ChestCam = NewObject<UProceduralMeshComponent>(this, TEXT("ChestCam"));
+		ChestCam->SetupAttachment(GetMesh(), T.Assets.ChestCamSocket);
+		ChestCam->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		ChestCam->RegisterComponent();
+		ChestCam->CreateMeshSection(0, Cam->Positions, Cam->Indices, Cam->Normals, Cam->UVs, Cam->Colors, {}, false);
+		ChestCam->SetMaterial(0, Cast<UMaterialInterface>(UDCVoxelSettings::Get().VoxelMaterial.TryLoad()));
+		ChestCam->SetRelativeLocationAndRotation(T.Assets.ChestCamLocation, T.Assets.ChestCamRotation);
+		ChestCam->SetRelativeScale3D(FVector(T.Assets.ChestCamScale));
+		ChestCam->SetVisibility(Slot != EDCSlot::Camera);
+	}
 	BeaconMesh->AttachToComponent(GetMesh(), FAttachmentTransformRules::SnapToTargetNotIncludingScale, Hand);
 	BeaconMesh->SetStaticMesh(DCAssets::Cylinder());
 	BeaconMesh->SetMaterial(0, DCAssets::MakeFlat(this, Look.Accent, 12.f));
 
-	StrikeMarker->SetMaterial(0, DCAssets::MakeFlatUnlit(this, Look.Accent, 1.2f)); // unlit: stays palette red, not lit to salmon
+	StrikeMarker->SetMaterial(0, DCAssets::MakeFlatUnlit(this, Look.Accent, Look.DangerRingGlow)); // unlit: stays palette red, not lit to salmon
 	Tracer->SetStaticMesh(DCAssets::Cube());
 	Tracer->SetMaterial(0, DCAssets::MakeFlat(this, FLinearColor(1.f, 0.8f, 0.4f), 60.f));
 
@@ -525,6 +540,10 @@ void ADCCharacter::OnRep_Slot()
 	RifleMesh->SetRelativeLocation(Slot == EDCSlot::Rifle ? FVector(-10.f, 30.f, 0.f) : A.HolsterLocation);
 	RifleMesh->SetVisibility(true);
 	PhotoCamMesh->SetVisibility(Slot == EDCSlot::Camera);
+	if (ChestCam)
+	{
+		ChestCam->SetVisibility(Slot != EDCSlot::Camera); // the camera is either in hand or on the chest, never gone
+	}
 	BeaconMesh->SetVisibility(Slot == EDCSlot::Stratagem);
 	if (Slot != EDCSlot::Stratagem)
 	{
@@ -1253,6 +1272,10 @@ void ADCCharacter::UpdateView(float DeltaSeconds)
 		GetMesh()->SetOwnerNoSee(bFirst);
 		RifleMesh->SetOwnerNoSee(bFirst);
 		PhotoCamMesh->SetOwnerNoSee(bFirst);
+		if (ChestCam)
+		{
+			ChestCam->SetOwnerNoSee(bFirst);
+		}
 		BeaconMesh->SetOwnerNoSee(bFirst);
 	}
 	FirstCam->SetFieldOfView(FMath::FInterpTo(FirstCam->FieldOfView, LensFOV(), DeltaSeconds, 14.f));

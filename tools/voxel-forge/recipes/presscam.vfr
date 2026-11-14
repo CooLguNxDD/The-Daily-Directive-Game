@@ -1,0 +1,17 @@
+# Press camera (R10): the player's tool, worn on the chest and raised to shoot. Ink body, paper top plate,
+# steel lens barrel along +x, signal-yellow flash (a thing the player uses), steel strap lugs.
+name presscam
+grid 2
+size 16 12 12
+slot body Ink
+slot top Paper
+slot lens Steel
+slot flash Signal
+box 2 1 1 10 11 8 body
+box 2 1 8 10 11 9 top
+beam 10 6 4 15 6 4 2 lens
+carve beam 14 6 4 16 6 4 1
+box 4 2 9 8 6 12 flash
+box 3 0 5 5 1 7 lens
+box 3 11 5 5 12 7 lens
+pivot 6 6 0

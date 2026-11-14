@@ -153,7 +153,17 @@ void ADCHUD::DrawDraft(ADCGameState& GS, ADCCharacter* Me)
 			const bool bPicked = PS->Upgrades.Contains(Def->Id);
 			const float Y = Sx(290.f) + Row++ * (CardH + Sx(14.f));
 			Box(X, Y, ColW, CardH, bPicked ? Gold : Paper);
-			Text(Def->DisplayName.ToString().ToUpper(), X + Sx(16.f), Y + Sx(10.f), Ink, 0.7f);
+			// Card art (R11) in a square at the left, the words beside it.
+			float Tx = X + Sx(16.f);
+			int32 Wrap = 52;
+			if (const TObjectPtr<UTexture2D>* Icon = CardIcons.Find(Def->Id))
+			{
+				const float S = CardH - Sx(16.f);
+				DrawTexture(*Icon, X + Sx(8.f), Y + Sx(8.f), S, S, 0.f, 0.f, 1.f, 1.f, FLinearColor::White, BLEND_Opaque);
+				Tx = X + S + Sx(22.f);
+				Wrap = 40;
+			}
+			Text(Def->DisplayName.ToString().ToUpper(), Tx, Y + Sx(10.f), Ink, 0.7f);
 			// Description wrapped by words into short lines.
 			TArray<FString> Words;
 			Def->Description.ToString().ParseIntoArray(Words, TEXT(" "));
@@ -161,15 +171,15 @@ void ADCHUD::DrawDraft(ADCGameState& GS, ADCCharacter* Me)
 			float Ly = Y + Sx(52.f);
 			for (const FString& Word : Words)
 			{
-				if (Line.Len() + Word.Len() > 52)
+				if (Line.Len() + Word.Len() > Wrap)
 				{
-					Text(Line, X + Sx(16.f), Ly, Ink, 0.5f);
+					Text(Line, Tx, Ly, Ink, 0.5f);
 					Ly += Sx(26.f);
 					Line.Reset();
 				}
 				Line += (Line.IsEmpty() ? TEXT("") : TEXT(" ")) + Word;
 			}
-			Text(Line, X + Sx(16.f), Ly, Ink, 0.5f);
+			Text(Line, Tx, Ly, Ink, 0.5f);
 			if (!PS->bDraftDone)
 			{
 				AddHitBox(FVector2D(X, Y), FVector2D(ColW, CardH), FName(*FString::Printf(TEXT("pick|%s"), *Def->Id.ToString())), true);
@@ -421,7 +431,7 @@ void ADCHUD::DrawFrontPage(ADCGameState& GS, ADCCharacter* Me)
 			Box(X + (i > 0 && (Hash % 11 == 0) ? Sx(12.f) : 0.f), Y + i * Line, FMath::Min(Len, ColW), Sx(5.f), FLinearColor(Ink.R, Ink.G, Ink.B, 0.42f));
 		}
 	};
-	Text(TEXT("The Daily Directive"), W * 0.5f, Sx(14.f), Ink, 2.7f, true, MastFont);
+	Text(TEXT("The Daily Directive"), W * 0.5f, Sx(10.f), Ink, 2.4f, true, MastFont); // descenders clear the rule
 	// Ears either side of the masthead.
 	Box(M, Sx(30.f), Sx(250.f), Sx(70.f), FLinearColor(Ink.R, Ink.G, Ink.B, 0.08f));
 	Text(FString::Printf(TEXT("VOL. 1  NO. %d"), GS.RunSeed), M + Sx(12.f), Sx(38.f), Ink, 0.55f);

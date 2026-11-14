@@ -191,6 +191,9 @@ struct FDCLookTuning
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float LightShaftBloom = 0.15f;
 	/** Strike beam glow at full charge (unlit material): well above 1 the tonemapper bleaches propaganda red to pink. */
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float BeamGlowPeak = 1.3f;
+	/** Beam diameter (cm) when the call lands and at full charge. */
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float BeamWidthStartCm = 240.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float BeamWidthEndCm = 30.f;
 	/** The danger ring: a thin band of this many segments, this wide (cm), at this unlit glow (1 = the palette red). */
 	UPROPERTY(EditAnywhere, Config, Category = "Look") int32 DangerRingSegments = 64;
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float DangerRingWidthCm = 60.f;
@@ -344,6 +347,12 @@ struct FDCAssetTuning
 	};
 	UPROPERTY(EditAnywhere, Config, Category = "Assets") FName DrawSlot = TEXT("DefaultSlot");
 	UPROPERTY(EditAnywhere, Config, Category = "Assets") FName HandSocket = TEXT("hand_r");
+	/** The press camera worn on the chest whenever it is not in hand (R10: every player reads as a photographer). */
+	UPROPERTY(EditAnywhere, Config, Category = "Assets") FName ChestCamModel = TEXT("presscam");
+	UPROPERTY(EditAnywhere, Config, Category = "Assets") FName ChestCamSocket = TEXT("spine_05");
+	UPROPERTY(EditAnywhere, Config, Category = "Assets") FVector ChestCamLocation = FVector(0.f, 18.f, 0.f);
+	UPROPERTY(EditAnywhere, Config, Category = "Assets") FRotator ChestCamRotation = FRotator(0.f, 90.f, -90.f);
+	UPROPERTY(EditAnywhere, Config, Category = "Assets") float ChestCamScale = 1.f;
 	/** Holster (R1): with another slot out, the rifle rides on the back at this bone and offset instead of vanishing. */
 	UPROPERTY(EditAnywhere, Config, Category = "Assets") FName HolsterSocket = TEXT("spine_03");
 	UPROPERTY(EditAnywhere, Config, Category = "Assets") FVector HolsterLocation = FVector(18.f, -22.f, 0.f);
@@ -366,6 +375,8 @@ struct FDCUpgradeDef
 	UPROPERTY(EditAnywhere, Config, Category = "Run") FName Effect;
 	/** Stratagem id an UnlockStratagem effect grants. */
 	UPROPERTY(EditAnywhere, Config, Category = "Run") FName Unlock;
+	/** Card art on the draft (R11, generated; ASSETS.md); none = a text-only card. */
+	UPROPERTY(EditAnywhere, Config, Category = "Run") FSoftObjectPath Icon;
 	UPROPERTY(EditAnywhere, Config, Category = "Run") float Param = 0.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Run") float Param2 = 0.f;
 
