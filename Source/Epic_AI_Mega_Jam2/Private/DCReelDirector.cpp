@@ -400,7 +400,7 @@ void ADCReelDirector::SnapSecondTake()
 	}
 	TakenClip = StagedIndex;
 	const FDCCameraTuning& C = UDCTuning::Get().Camera;
-	UTextureRenderTarget2D* Image = UKismetRenderingLibrary::CreateRenderTarget2D(this, C.PhotoWidth, C.PhotoHeight, RTF_RGBA8);
+	UTextureRenderTarget2D* Image = UKismetRenderingLibrary::CreateRenderTarget2D(this, C.PhotoWidth, C.PhotoHeight, RTF_RGBA16f); // float: the print meter has range (advisor CP21)
 	TakeCapture->TextureTarget = Image;
 	TakeCapture->FOVAngle = Camera->FieldOfView;
 	ADCCharacter::ApplyPhotoLook(GetWorld(), TakeCapture->PostProcessSettings, false);

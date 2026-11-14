@@ -84,6 +84,51 @@ namespace DCNewsprint
 		return M >= Target ? 1.f : FMath::Clamp(FMath::Loge(Target) / FMath::Loge(M), FMath::Clamp(T.MinGamma, 0.1f, 1.f), 1.f);
 	}
 
+	float MeterGain(const TArray<FLinearColor>& Px, int32 W, int32 H, const FDCPrintTuning& T)
+	{
+		if (T.MeterKey <= 0.f || Px.Num() != W * H || W <= 0 || H <= 0)
+		{
+			return 1.f;
+		}
+		// Centre-weighted log average of linear luminance (the subject is framed near the centre), sparse samples.
+		double Sum = 0.0, Weights = 0.0;
+		const int32 Step = FMath::Max(1, FMath::Min(W, H) / 64);
+		for (int32 Y = 0; Y < H; Y += Step)
+		{
+			for (int32 X = 0; X < W; X += Step)
+			{
+				const FLinearColor& C = Px[Y * W + X];
+				const float L = 0.2126f * FMath::Pow(FMath::Clamp(C.R, 0.f, 1.f), 2.2f) + 0.7152f * FMath::Pow(FMath::Clamp(C.G, 0.f, 1.f), 2.2f) + 0.0722f * FMath::Pow(FMath::Clamp(C.B, 0.f, 1.f), 2.2f);
+				const float Dx = (X + 0.5f) / W - 0.5f, Dy = (Y + 0.5f) / H - 0.5f;
+				const float Wt = 1.f + (T.MeterCenterWeight - 1.f) * FMath::Clamp(1.f - 4.f * (Dx * Dx + Dy * Dy), 0.f, 1.f);
+				Sum += Wt * FMath::Loge(FMath::Max(L, 1e-4f));
+				Weights += Wt;
+			}
+		}
+		const float LogAvg = FMath::Exp(static_cast<float>(Sum / FMath::Max(Weights, 1e-6)));
+		const float Gain = T.MeterKey / FMath::Max(LogAvg, 1e-4f);
+		return FMath::Clamp(Gain, FMath::Pow(2.f, -T.MeterMinStops), FMath::Pow(2.f, T.MeterMaxStops));
+	}
+
+	void Develop(const TArray<FLinearColor>& In, int32 W, int32 H, const FDCPrintTuning& T, TArray<FColor>& Out)
+	{
+		const float Gain = MeterGain(In, W, H, T);
+		const float White = FMath::Max(T.MeterWhite, 1.f);
+		Out.SetNumUninitialized(In.Num());
+		for (int32 i = 0; i < In.Num(); ++i)
+		{
+			const FLinearColor& C = In[i];
+			auto Ch = [Gain, White](float V)
+			{
+				// Decode, gain, shoulder (Reinhard with a white point: 1 at White), encode.
+				const float Lin = FMath::Pow(FMath::Clamp(V, 0.f, 1.f), 2.2f) * Gain;
+				const float Mapped = Lin * (1.f + Lin / (White * White)) / (1.f + Lin);
+				return static_cast<uint8>(FMath::Clamp(FMath::RoundToInt(255.f * FMath::Pow(FMath::Clamp(Mapped, 0.f, 1.f), 1.f / 2.2f)), 0, 255));
+			};
+			Out[i] = FColor(Ch(C.R), Ch(C.G), Ch(C.B), 255);
+		}
+	}
+
 	void Print(TArray<FColor>& Pixels, int32 W, int32 H, const FDCPrintTuning& T, uint32 Seed)
 	{
 		if (Pixels.Num() != W * H || W <= 0 || H <= 0)

@@ -290,4 +290,31 @@ bool FDCScreenOnlyLayersTest::RunTest(const FString&)
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDCPhotoMeterTest, "Epic_AI_Mega_Jam2.Look.PhotoMeter", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FDCPhotoMeterTest::RunTest(const FString&)
+{
+	// Advisor CP21: a dark night frame with a dim subject in the middle and a hot blast develops with the subject in
+	// the mid range and the blast core still distinct from the blast edge (no flat clip).
+	const FDCPrintTuning& T = UDCTuning::Get().Camera.Print;
+	TestTrue(TEXT("the meter is on"), T.MeterKey > 0.f);
+	const int32 W = 64, H = 36;
+	TArray<FLinearColor> Px;
+	Px.Init(FLinearColor(0.06f, 0.06f, 0.08f), W * H); // ~0.2 % linear: noir night
+	auto At = [&](int32 X, int32 Y) -> FLinearColor& { return Px[Y * W + X]; };
+	for (int32 Y = 12; Y < 24; ++Y)
+		for (int32 X = 24; X < 40; ++X)
+			At(X, Y) = FLinearColor(0.25f, 0.24f, 0.26f); // the tower face, dim
+	At(30, 14) = FLinearColor(0.9f, 0.8f, 0.6f); // blast edge
+	At(31, 14) = FLinearColor(1.f, 1.f, 1.f);    // blast core
+	TArray<FColor> Out;
+	DCNewsprint::Develop(Px, W, H, T, Out);
+	const FColor Subject = Out[18 * W + 32];
+	const int32 SubjectLuma = (Subject.R + Subject.G + Subject.B) / 3;
+	TestTrue(FString::Printf(TEXT("subject lands mid-range (%d)"), SubjectLuma), SubjectLuma >= 70 && SubjectLuma <= 190);
+	const FColor Edge = Out[14 * W + 30], Core = Out[14 * W + 31];
+	TestTrue(FString::Printf(TEXT("blast core and edge stay distinct (%d vs %d)"), Core.G, Edge.G), Core.G > Edge.G);
+	TestTrue(TEXT("gain bounded"), DCNewsprint::MeterGain(Px, W, H, T) <= FMath::Pow(2.f, T.MeterMaxStops) + 0.001f);
+	return true;
+}
+
 #endif

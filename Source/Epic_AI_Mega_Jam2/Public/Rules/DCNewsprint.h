@@ -38,6 +38,14 @@ struct FDCPrintTuning
 	UPROPERTY(EditAnywhere, Config, Category = "Print") float ScanlineDark = 0.f;
 	/** News-feed chromatic split (R25): red sampled this many pixels to the left, blue to the right (0 = none). */
 	UPROPERTY(EditAnywhere, Config, Category = "Print") int32 ChromaSplitPx = 0;
+	/** Photo meter (advisor CP21, critic V20.4/V25.2): the float capture is developed before printing. Gain brings the
+	 *  centre-weighted log-average luminance (linear) to MeterKey, between 2^-MeterMinStops and 2^MeterMaxStops; a
+	 *  soft shoulder at MeterWhite (linear) keeps a blast core distinct instead of clipping it flat. 0 key = off. */
+	UPROPERTY(EditAnywhere, Config, Category = "Print") float MeterKey = 0.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Print") float MeterMaxStops = 2.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Print") float MeterMinStops = 1.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Print") float MeterCenterWeight = 3.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Print") float MeterWhite = 4.f;
 };
 
 namespace DCNewsprint
@@ -46,6 +54,11 @@ namespace DCNewsprint
 	EPIC_AI_MEGA_JAM2_API void Levels(const TArray<FColor>& Pixels, const FDCPrintTuning& T, float& OutGain, float& OutOffset);
 	/** Gamma that brings the median (after levels) toward TargetMid; 1 when the frame is already bright enough. */
 	EPIC_AI_MEGA_JAM2_API float MidGamma(const TArray<FColor>& Pixels, const FDCPrintTuning& T, float Gain, float Offset);
+
+	/** Meter gain for a display-encoded float capture (values 0..1, sRGB-like): see FDCPrintTuning Meter*. */
+	EPIC_AI_MEGA_JAM2_API float MeterGain(const TArray<FLinearColor>& Pixels, int32 Width, int32 Height, const FDCPrintTuning& T);
+	/** Develops a float capture into 8-bit pixels: decode, metered gain, soft shoulder, encode (no 8-bit stretch). */
+	EPIC_AI_MEGA_JAM2_API void Develop(const TArray<FLinearColor>& In, int32 Width, int32 Height, const FDCPrintTuning& T, TArray<FColor>& Out);
 
 	/** Prints the photo in place: levels, paper tone, halftone, grain (seeded), border. */
 	EPIC_AI_MEGA_JAM2_API void Print(TArray<FColor>& Pixels, int32 Width, int32 Height, const FDCPrintTuning& T, uint32 Seed);

@@ -1010,11 +1010,27 @@ void ADCPlayerController::AddLocalPhoto(int32 PhotoId, UTextureRenderTarget2D* I
 	// Print it (R5): read the capture back once at the shutter, levels + halftone + grain + border on the CPU, and
 	// show and upload the print from then on.
 	FTextureRenderTargetResource* Resource = Image ? Image->GameThread_GetRenderTargetResource() : nullptr;
-	if (Resource && Resource->ReadPixels(Photo.Pixels) && Photo.Pixels.Num() == Image->SizeX * Image->SizeY)
+	const FDCPrintTuning& PrintT = UDCTuning::Get().Camera.Print;
+	bool bRead = false;
+	if (Resource && Image->RenderTargetFormat == RTF_RGBA16f)
+	{
+		// Float capture (advisor CP21): metered and developed before the print, no 8-bit stretch of a dark frame.
+		TArray<FLinearColor> Linear;
+		bRead = Resource->ReadLinearColorPixels(Linear) && Linear.Num() == Image->SizeX * Image->SizeY;
+		if (bRead)
+		{
+			DCNewsprint::Develop(Linear, Image->SizeX, Image->SizeY, PrintT, Photo.Pixels);
+		}
+	}
+	else if (Resource)
+	{
+		bRead = Resource->ReadPixels(Photo.Pixels);
+	}
+	if (bRead && Photo.Pixels.Num() == Image->SizeX * Image->SizeY)
 	{
 		Photo.Width = Image->SizeX;
 		Photo.Height = Image->SizeY;
-		DCNewsprint::Print(Photo.Pixels, Photo.Width, Photo.Height, UDCTuning::Get().Camera.Print, static_cast<uint32>(PhotoId));
+		DCNewsprint::Print(Photo.Pixels, Photo.Width, Photo.Height, PrintT, static_cast<uint32>(PhotoId));
 		UTexture2D* Print = UTexture2D::CreateTransient(Photo.Width, Photo.Height, PF_B8G8R8A8);
 		if (Print)
 		{

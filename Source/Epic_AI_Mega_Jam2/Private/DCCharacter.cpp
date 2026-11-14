@@ -887,7 +887,7 @@ void ADCCharacter::TakePhoto()
 	const FDCCameraTuning& C = UDCTuning::Get().Camera;
 	NextShutterTime = Now() + C.WindOnSeconds;
 
-	UTextureRenderTarget2D* Photo = UKismetRenderingLibrary::CreateRenderTarget2D(this, C.PhotoWidth, C.PhotoHeight, RTF_RGBA8);
+	UTextureRenderTarget2D* Photo = UKismetRenderingLibrary::CreateRenderTarget2D(this, C.PhotoWidth, C.PhotoHeight, RTF_RGBA16f); // float: the print meter has range (advisor CP21)
 	Capture->TextureTarget = Photo;
 	Capture->FOVAngle = LensFOV();
 	ApplyPhotoLook(GetWorld(), Capture->PostProcessSettings, IsSpotlit());
