@@ -425,6 +425,8 @@ struct FDCEnemyDef
 	 *  ShotRange it can see (host voxel sight line), Damage per hit, ShotSpread degrees of miss. */
 	UPROPERTY(EditAnywhere, Config, Category = "Enemy") float ShotRange = 0.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Enemy") float ShotSpread = 2.f;
+	/** Hit and run: a foe closer than this makes the unit back off while it keeps firing (0 = holds its ground). */
+	UPROPERTY(EditAnywhere, Config, Category = "Enemy") float KiteCm = 0.f;
 	/** Squad shape for ground infantry (formation registry): Crowd, Line, Skirmish. Spacing between slots (cm). */
 	UPROPERTY(EditAnywhere, Config, Category = "Enemy") FName Formation = TEXT("Crowd");
 	UPROPERTY(EditAnywhere, Config, Category = "Enemy") float FormationSpacingCm = 220.f;

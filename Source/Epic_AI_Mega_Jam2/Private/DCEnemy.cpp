@@ -281,7 +281,14 @@ namespace
 			const FVector At = Foe->GetActorLocation();
 			const FVector To = (At - Here).GetSafeNormal2D();
 			const float Hold = (Def.ShotRange > 0.f ? Def.ShotRange : Def.AttackRange) * 0.6f;
-			if (FVector::Dist2D(At, Here) > Hold)
+			const float Dist = FVector::Dist2D(At, Here);
+			if (Def.KiteCm > 0.f && Dist < Def.KiteCm)
+			{
+				// Hit and run (Scavengers): back off at speed, still firing.
+				E.GroundMove(Here - To * 600.f, Def.Speed, Dt, Def.HoverHeight);
+				E.SetActorRotation(FMath::RInterpTo(E.GetActorRotation(), To.Rotation(), Dt, 8.f));
+			}
+			else if (Dist > Hold)
 			{
 				const float Speed = Def.Speed * (Def.ShotRange > 0.f ? 1.f : Def.RushMultiplier);
 				E.GroundMove(At + E.SlotOffset(Def, To) * 0.3f, Speed, Dt, Def.HoverHeight);
