@@ -493,6 +493,11 @@ void ADCHUD::DrawPhotoCard(UTexture* Image, const FDCPhotoGrade& Grade, float X,
 	Canvas->Canvas->PushRelativeTransform(FTranslationMatrix(-Pivot) * FRotationMatrix(FRotator(0.f, Tilt, 0.f)) * FTranslationMatrix(Pivot));
 	// A signal-yellow plate with ink type and an ink double rule: legible on any print, even on small cards.
 	const FLinearColor InkStamp(Night.R, Night.G, Night.B, 0.95f); // night type on the lime stamp
+	// Holographic stamp (R25): a lime plate with a soft glow halo (a few widening translucent rules).
+	for (int32 k = 3; k >= 1; --k)
+	{
+		Frame(Bx - k * Sx(5.f), By - k * Sx(5.f), Bw + 2.f * k * Sx(5.f), Bh + 2.f * k * Sx(5.f), Sx(5.f), FLinearColor(Gold.R, Gold.G, Gold.B, 0.10f * (4 - k)));
+	}
 	Box(Bx, By, Bw, Bh, FLinearColor(Gold.R, Gold.G, Gold.B, 0.95f));
 	Frame(Bx, By, Bw, Bh, Sx(4.f), InkStamp);
 	Frame(Bx + Sx(7.f), By + Sx(7.f), Bw - Sx(14.f), Bh - Sx(14.f), Sx(1.5f), InkStamp);

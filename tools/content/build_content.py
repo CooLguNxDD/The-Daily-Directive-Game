@@ -15,7 +15,7 @@ Creates (or rebuilds):
                                  four taps); Strength comes from the post stack's Outline field, the rest from Look tuning
   /Game/DC/Fonts/FF_*            - OFL font faces (R7) from Content/DC/Fonts/Source/*.ttf, inline data; the game
                                  builds runtime fonts from them by role (Assets.FontFaces in Config/DefaultGame.ini)
-Existing assets are kept; set DC_REBUILD=1 to rebuild them (DC_REBUILD_ONLY=M_DCInkOutline rebuilds one).
+Existing assets are kept; set DC_REBUILD=1 to rebuild them (DC_REBUILD_ONLY=M_DCInkOutline,T_MenuKeyArt rebuilds those).
 Everything else (city, strikes, enemies, HUD, audio) is code and Config/DefaultGame.ini.
 """
 import os
@@ -42,7 +42,7 @@ REBUILD_ONLY = os.environ.get("DC_REBUILD_ONLY", "")
 
 
 def keep(path):
-    if eal.does_asset_exist(path) and not REBUILD and not (REBUILD_ONLY and path.endswith("/" + REBUILD_ONLY)):
+    if eal.does_asset_exist(path) and not REBUILD and not (REBUILD_ONLY and path.split("/")[-1] in REBUILD_ONLY.split(",")):
         unreal.log(f"build_content: {path} exists, kept")
         return True
     return False

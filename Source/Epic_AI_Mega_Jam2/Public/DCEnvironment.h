@@ -68,6 +68,8 @@ private:
 	UPROPERTY(VisibleAnywhere) TObjectPtr<class UInstancedStaticMeshComponent> Dashes;
 	/** The skyline beyond the sector edge: ink tower silhouettes in a ring (no barren plain past the last street). */
 	UPROPERTY(VisibleAnywhere) TObjectPtr<class UInstancedStaticMeshComponent> Backdrop;
+	/** Lit floor bands on the skyline towers (R25: warm dim windows, a few magenta and cyan bands), one ISM per tone. */
+	UPROPERTY() TArray<TObjectPtr<class UInstancedStaticMeshComponent>> BackdropLights;
 	int32 BackdropBuild = INDEX_NONE;
 	void BuildBackdrop(const class ADCVoxelCity& City, int32 RunSeed, int32 Sector);
 	/** Cloud layer (R18): seeded banks per sector, shown and shaded by the weather blend, orbiting with the wind. */

@@ -342,6 +342,26 @@ void ADCEnvironment::BuildBackdrop(const ADCVoxelCity& City, int32 RunSeed, int3
 	// Seeded per sector, the same on every machine (cosmetic only, no collision).
 	const FDCLookTuning& L = UDCTuning::Get().Look;
 	Backdrop->ClearInstances();
+	for (UInstancedStaticMeshComponent* Lights : BackdropLights)
+	{
+		Lights->DestroyComponent();
+	}
+	BackdropLights.Reset();
+	float TotalWeight = 0.f;
+	for (int32 i = 0; i < L.BackdropBandColors.Num(); ++i)
+	{
+		const float Wt = L.BackdropBandWeights.IsValidIndex(i) ? L.BackdropBandWeights[i] : 1.f;
+		TotalWeight += Wt;
+		UInstancedStaticMeshComponent* Lights = NewObject<UInstancedStaticMeshComponent>(this);
+		Lights->SetupAttachment(GetRootComponent());
+		Lights->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		Lights->SetCastShadow(false);
+		Lights->RegisterComponent();
+		Lights->SetStaticMesh(DCAssets::Cube());
+		const FLinearColor& Tone = L.BackdropBandColors[i];
+		Lights->SetMaterial(0, DCAssets::MakeFlatUnlit(this, FLinearColor(Tone.R, Tone.G, Tone.B), Tone.A)); // alpha = glow
+		BackdropLights.Add(Lights);
+	}
 	Backdrop->SetStaticMesh(DCAssets::Cube());
 	Backdrop->SetMaterial(0, DCAssets::MakeFlat(this, L.BackdropColor));
 	const float Half = FMath::Abs(static_cast<float>(City.GetSector().Terrain.OriginCm.X));
@@ -357,7 +377,22 @@ void ADCEnvironment::BuildBackdrop(const ADCVoxelCity& City, int32 RunSeed, int3
 		const float W = Rng.FRandRange(L.BackdropWidthCm.X, L.BackdropWidthCm.Y);
 		const float D = Rng.FRandRange(L.BackdropWidthCm.X, L.BackdropWidthCm.Y);
 		const float H = Rng.FRandRange(L.BackdropHeightCm.X, L.BackdropHeightCm.Y);
-		Backdrop->AddInstance(FTransform(FRotator(0.f, Rng.FRandRange(0.f, 90.f), 0.f), FVector(At.X, At.Y, H * 0.5f), FVector(W / 100.f, D / 100.f, H / 100.f)));
+		const FRotator Yaw(0.f, Rng.FRandRange(0.f, 90.f), 0.f);
+		Backdrop->AddInstance(FTransform(Yaw, FVector(At.X, At.Y, H * 0.5f), FVector(W / 100.f, D / 100.f, H / 100.f)));
+		// Lit floor bands wrap the tower just outside its faces: a tone per band, picked by weight (seeded).
+		const int32 Bands = L.BackdropBandColors.IsEmpty() ? 0 : Rng.RandRange(L.BackdropBands.X, FMath::Max(L.BackdropBands.X, L.BackdropBands.Y));
+		for (int32 b = 0; b < Bands && !BackdropLights.IsEmpty(); ++b)
+		{
+			float Pick = Rng.FRand() * TotalWeight;
+			int32 Tone = 0;
+			while (Tone < BackdropLights.Num() - 1 && Pick > (L.BackdropBandWeights.IsValidIndex(Tone) ? L.BackdropBandWeights[Tone] : 1.f))
+			{
+				Pick -= L.BackdropBandWeights.IsValidIndex(Tone) ? L.BackdropBandWeights[Tone] : 1.f;
+				++Tone;
+			}
+			const float Z = Rng.FRandRange(0.15f, 0.92f) * H;
+			BackdropLights[Tone]->AddInstance(FTransform(Yaw, FVector(At.X, At.Y, Z), FVector(W * 1.01f / 100.f, D * 1.01f / 100.f, L.BackdropBandCm / 100.f)));
+		}
 	}
 }
 

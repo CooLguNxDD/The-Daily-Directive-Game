@@ -234,6 +234,12 @@ struct FDCLookTuning
 	UPROPERTY(EditAnywhere, Config, Category = "Look") FVector2D BackdropWidthCm = FVector2D(1200.f, 3200.f);
 	UPROPERTY(EditAnywhere, Config, Category = "Look") FVector2D BackdropHeightCm = FVector2D(2500.f, 9000.f);
 	UPROPERTY(EditAnywhere, Config, Category = "Look") FLinearColor BackdropColor = FLinearColor(0.035f, 0.032f, 0.03f);
+	/** Skyline lights (R25): bands per tower (min..max), band height (cm), and the tones: each tone is a colour, an
+	 *  unlit glow and a weight (warm windows mostly, neon bands rarely). Empty = no lights. */
+	UPROPERTY(EditAnywhere, Config, Category = "Look") FIntPoint BackdropBands = FIntPoint(2, 7);
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float BackdropBandCm = 70.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Look") TArray<FLinearColor> BackdropBandColors;
+	UPROPERTY(EditAnywhere, Config, Category = "Look") TArray<float> BackdropBandWeights;
 	/** Cloud layer (R18): stepped voxel cloud banks in a ring past the skyline (the zenith stays paper cream), each a
 	 *  few flat slabs. The weather's CloudCover shows that share of them (each bank grows in, never pops), CloudShade
 	 *  blends light to storm tone; banks orbit the sector at a speed from the wind. Unlit: the sun never greys them. */
