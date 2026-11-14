@@ -230,6 +230,14 @@ void ADCHUD::DrawReel(ADCGameState& GS, ADCCharacter* Me)
 		Text(TEXT("DEVELOPING THE REEL..."), W * 0.5f, H * 0.5f, Ink, 1.f, true);
 		return;
 	}
+	if (const ADCReelDirector* Slating = PC->GetReelDirector(); Slating && Slating->IsSlating())
+	{
+		// The cut between clips: a dark slate while the next clip's city is rebuilt.
+		PaperSheet(0, 0, W, H);
+		Box(W * 0.3f, H * 0.5f - Sx(30.f), W * 0.4f, Sx(2.f), Cyan);
+		Text(FString::Printf(TEXT("REWINDING TAPE  -  CLIP %d / %d"), GS.ReelIndex + 1, GS.ReelClips.Num()), W * 0.5f, H * 0.5f - Sx(10.f), Ink, 0.9f, true);
+		return;
+	}
 	const FDCReelClip& Clip = GS.ReelClips[GS.ReelIndex];
 	const UDCTuning& T = UDCTuning::Get();
 	const FString Sector = T.Sectors.IsValidIndex(Clip.Photo.Sector) ? T.Sectors[Clip.Photo.Sector].Name.ToString().ToUpper() : TEXT("");

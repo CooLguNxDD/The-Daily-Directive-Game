@@ -430,8 +430,22 @@ void ADCReelDirector::Tick(float DeltaSeconds)
 	}
 	if (GS->ReelIndex != StagedIndex)
 	{
+		// A slate goes up first and is drawn for a frame; the synchronous restage (rebuild + replay, up to a few
+		// seconds) then happens behind it, and the slate lifts a beat later (review CP29: the reel froze mid-view).
+		if (SlateFramesLeft < 0)
+		{
+			SlateFramesLeft = 2;
+			SlateUntilReal = TNumericLimits<double>::Max();
+			return;
+		}
+		if (--SlateFramesLeft > 0)
+		{
+			return;
+		}
 		bTakeRaised = false;
 		Restage(GS->ReelIndex);
+		SlateFramesLeft = -1;
+		SlateUntilReal = FPlatformTime::Seconds() + 0.25;
 	}
 	if (bTakeRaised && !CanTakeThisClip())
 	{

@@ -22,6 +22,7 @@ class EPIC_AI_MEGA_JAM2_API ADCReelDirector : public AActor
 	GENERATED_BODY()
 
 public:
+	bool IsSlating() const { return SlateFramesLeft >= 0 || FPlatformTime::Seconds() < SlateUntilReal; }
 	ADCReelDirector();
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type Reason) override;
@@ -59,6 +60,9 @@ private:
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UCameraComponent> Camera;
 	UPROPERTY(VisibleAnywhere) TObjectPtr<class USceneCaptureComponent2D> TakeCapture;
 	UPROPERTY(VisibleAnywhere) TObjectPtr<USkeletalMeshComponent> Puppet;
+	/** Restage slate: frames left before the restage runs (-1 = none pending) and when it lifts (real seconds). */
+	int32 SlateFramesLeft = -1;
+	double SlateUntilReal = 0.0;
 	UPROPERTY() TArray<TObjectPtr<class UProceduralMeshComponent>> PuppetParts;
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UStaticMeshComponent> PuppetCamera;
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UStaticMeshComponent> PuppetFlash;
