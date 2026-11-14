@@ -592,8 +592,9 @@ void ADCDemoPilot::TickDefend()
 	ADCEnemy* Nearest = nullptr;
 	// Defending: anything within 12 m (holding fire at 25 m emptied the rifle by sector 2). Mid-script: a 6 m guard
 	// bubble, so a swarmer biting at 1-2 m is shot instead of downing the pilot while it frames a photo.
-	float Best = bDefend ? 1200.f : 600.f;
-	if (Me && !Me->IsDowned() && GS && GS->Phase == EDCRunPhase::Sector && (bDefend || !Me->IsCameraRaised()))
+	// With the camera up (framing a swarm) it only breaks off for a swarmer already at arm's length (3 m).
+	float Best = bDefend ? 1200.f : (Me && Me->IsCameraRaised() ? 300.f : 600.f);
+	if (Me && !Me->IsDowned() && GS && GS->Phase == EDCRunPhase::Sector)
 	{
 		for (ADCEnemy* E : TActorRange<ADCEnemy>(GetWorld()))
 		{
