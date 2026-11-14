@@ -215,6 +215,8 @@ struct FDCLookTuning
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float BeamFlashGlow = 3.f;
 	/** Beam diameter (cm) at the detonation flash; it shrinks to nothing over the flash. */
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float BeamFlashWidthCm = 300.f;
+	/** Brightest albedo channel of an unlit debris chip (0 = no cap). */
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float DebrisAlbedoCap = 0.f;
 	/** Poster sky (cream to the zenith, not slate): the sky atmosphere's Rayleigh colour (warm, near-flat across
 	 *  wavelengths), its scale and height (a taller layer keeps the zenith bright), and a warm Mie haze. */
 	UPROPERTY(EditAnywhere, Config, Category = "Look") FLinearColor SkyRayleighColor = FLinearColor(1.f, 0.86f, 0.62f);
