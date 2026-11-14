@@ -695,9 +695,10 @@ void ADCVoxelCity::Build(int32 RunSeed, int32 SectorIndex, int32 BuildId, bool b
 	LampSpots.Reset();
 	for (const FDCPropPlan& Prop : Plan.Props)
 	{
-		if (Prop.Model == UDCVoxelSettings::Get().Tuning.LampModel)
+		const int32 Row = V.PropLights.IndexOfByPredicate([&Prop](const FDCPropLightDef& D) { return D.Model == Prop.Model; });
+		if (Row != INDEX_NONE || (V.PropLights.Num() == 0 && Prop.Model == V.Tuning.LampModel))
 		{
-			LampSpots.Add(Prop.Location);
+			LampSpots.Add({Prop.Location, Row});
 		}
 	}
 	FDCVoxelCraftContext Craft = V.CraftContext(T.City.BlockSizeCm);
@@ -1008,7 +1009,7 @@ void ADCVoxelCity::CommitOp(const FDCVoxelOp& Op, FDCVoxelOpResult& Result, bool
 	if (Op.Kind == TEXT("Strike"))
 	{
 		const float R2 = FMath::Square(static_cast<float>(FMath::Max(Op.BlastRadiusCm, 0)));
-		LampSpots.RemoveAll([&Op, R2](const FVector& L) { return FVector::DistSquared2D(L, FVector(Op.CenterCm)) <= R2; }); // lamps in the blast go out
+		LampSpots.RemoveAll([&Op, R2](const FLightSpot& L) { return FVector::DistSquared2D(L.At, FVector(Op.CenterCm)) <= R2; }); // lamps in the blast go out
 	}
 	if (Op.Kind == TEXT("Rest"))
 	{
@@ -2265,8 +2266,9 @@ void ADCVoxelCity::TickLampLights()
 		return;
 	}
 	const FVector View = PC->PlayerCameraManager->GetCameraLocation();
-	TArray<FVector> Near = LampSpots;
-	Near.Sort([&View](const FVector& A, const FVector& B) { return FVector::DistSquared(A, View) < FVector::DistSquared(B, View); });
+	TArray<FLightSpot> Near = LampSpots;
+	Near.Sort([&View](const FLightSpot& A, const FLightSpot& B) { return FVector::DistSquared(A.At, View) < FVector::DistSquared(B.At, View); });
+	const TArray<FDCPropLightDef>& Rows = UDCVoxelSettings::Get().PropLights;
 	while (LampPool.Num() < FMath::Min(Tn.LampLights, Near.Num()))
 	{
 		UPointLightComponent* L = NewObject<UPointLightComponent>(this);
@@ -2285,10 +2287,11 @@ void ADCVoxelCity::TickLampLights()
 			L->SetVisibility(false);
 			continue;
 		}
-		L->SetWorldLocation(Near[i] + FVector(0, 0, Tn.LampHeightCm));
-		L->SetLightColor(Tn.LampColor);
-		L->SetIntensity(Tn.LampCandela);
-		L->SetAttenuationRadius(Tn.LampRadiusCm);
+		const FDCPropLightDef* Row = Rows.IsValidIndex(Near[i].Row) ? &Rows[Near[i].Row] : nullptr;
+		L->SetWorldLocation(Near[i].At + FVector(0, 0, Row ? Row->HeightCm : Tn.LampHeightCm));
+		L->SetLightColor(Row ? Row->Color : Tn.LampColor);
+		L->SetIntensity(Row ? Row->Candela : Tn.LampCandela);
+		L->SetAttenuationRadius(Row ? Row->RadiusCm : Tn.LampRadiusCm);
 		L->SetVisibility(true);
 	}
 }
