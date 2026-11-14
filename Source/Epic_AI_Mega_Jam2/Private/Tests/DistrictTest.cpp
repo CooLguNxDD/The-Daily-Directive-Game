@@ -206,7 +206,7 @@ bool FDCCityPropsTest::RunTest(const FString&)
 		}
 		AddInfo(FString::Printf(TEXT("DCPROPS %s:%s cables=%d"), *D.Id.ToString(), *Line, P.Cables.Num()));
 	}
-	TestTrue(TEXT("at least 20 distinct prop models across the districts"), Models.Num() >= 20);
+	TestTrue(TEXT("at least 24 distinct prop models across the districts"), Models.Num() >= 24);
 
 	// Crafted twice from the same plan: the same voxels (host and client build the same hash).
 	const FDCCityPlan P = Plan(4242, 0);
