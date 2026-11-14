@@ -661,6 +661,39 @@ void ADCDemoPilot::AddObjectiveRun(const FString& S)
 			Release(TEXT("Sprint"));
 			return bOver;
 		}
+		// Destroy: within ObjStrikeRangeCm of the marked tower, with the free laser ready, call it on the tower's base with
+		// the real Slot2 / Fire actions (two polls apart so the selection lands), then back to walking.
+		const FDCObjectiveDef* Def = O->GetDef();
+		const APlayerController* PC = GetWorld()->GetFirstPlayerController();
+		const ADCPlayerState* PS = PC ? PC->GetPlayerState<ADCPlayerState>() : nullptr;
+		const bool bStrikeReady = PS && PS->CooldownReadyTime(TEXT("OrbitalLaser")) <= GS->Now();
+		if (Def && Def->Kind == TEXT("Destroy") && O->Stage == EDCObjectiveStage::Active && Real >= ObjStrikeReal
+			&& (ObjStrikePhase > 0 || (bStrikeReady && FVector::Dist2D(Me->GetActorLocation(), At) < ObjStrikeRangeCm)))
+		{
+			Release(TEXT("Move"));
+			Release(TEXT("Sprint"));
+			AimAt(FVector(At.X, At.Y, At.Z + 150.f));
+			if (ObjStrikePhase == 0)
+			{
+				Tap(TEXT("Slot2"));
+				ObjStrikePhase = 1;
+				ObjStrikeReal = Real + 0.4;
+			}
+			else if (ObjStrikePhase == 1)
+			{
+				Tap(TEXT("Fire"));
+				UE_LOG(LogDCDemo, Display, TEXT("DEMO objective strike on the marked tower at %s"), *At.ToCompactString());
+				ObjStrikePhase = 2;
+				ObjStrikeReal = Real + 0.6;
+			}
+			else
+			{
+				Tap(TEXT("Slot1"));
+				ObjStrikePhase = 0;
+				ObjStrikeReal = Real + 1.5;
+			}
+			return false;
+		}
 		AimAt(FVector(At.X, At.Y, Me->GetActorLocation().Z + 60.f));
 		Press(TEXT("Move"), FVector(0, 1, 0));
 		Press(TEXT("Sprint"));

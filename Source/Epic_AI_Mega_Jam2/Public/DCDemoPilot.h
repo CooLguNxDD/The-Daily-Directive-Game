@@ -52,6 +52,9 @@ private:
 	double ObjNextShotReal = 0.0;
 	double ObjCheckReal = 0.0;
 	FVector ObjLastPos = FVector::ZeroVector;
+	int32 ObjStrikePhase = 0;
+	double ObjStrikeReal = 0.0;
+	float ObjStrikeRangeCm = 3500.f; // pilot only: how close it walks before calling the laser on a marked tower
 	void AddEnemyFight(const FString& Sector);
 	void AddStratagemOnSwarm(const FString& Sector);
 	void AddWidestFrame(const FString& Sector);
