@@ -42,6 +42,11 @@ private:
 	void AddRifleOnly();
 	void BuildScript();
 	void AddCycle(const FString& Name);
+	void AddObjectiveRun(const FString& S);
+	uint8 ObjStage = 255;
+	double ObjNextShotReal = 0.0;
+	double ObjCheckReal = 0.0;
+	FVector ObjLastPos = FVector::ZeroVector;
 	void AddEnemyFight(const FString& Sector);
 	void AddStratagemOnSwarm(const FString& Sector);
 	void AddWidestFrame(const FString& Sector);
