@@ -868,11 +868,18 @@ void ADCVoxelCity::HostRest(FFalling& F)
 	Op.Kind = TEXT("Rest");
 	Op.RestOf = F.OpSeq;
 	Op.RestPiece = F.PieceIndex;
+	const float SiteRadius = UDCVoxelSettings::Get().Tuning.PhysicsSiteRadiusCm;
+	int32 Debris = 0;
 	for (int32 f = 0; f < F.Frags.Num(); ++f)
 	{
 		const UBoxComponent* B = F.Frags[f].Body;
 		if (!B)
 		{
+			continue;
+		}
+		if (F.Frags[f].State != EFragState::Frozen && FVector::Dist2D(B->GetComponentLocation(), F.LandCenter) > SiteRadius)
+		{
+			++Debris; // a stray still flying far from the pile is debris, not rubble (advisors CP37): never stamped mid-flight
 			continue;
 		}
 		FDCVoxelRest& R = Op.Rests.AddDefaulted_GetRef();
@@ -888,7 +895,7 @@ void ADCVoxelCity::HostRest(FFalling& F)
 	Op.CenterCm = DCVoxelMath::ToCm(F.LandCenter);
 	const int32 Seq = GS->AddVoxelOp(Op).Seq;
 	TWeakObjectPtr<ADCGameState> WeakGS(GS);
-	UE_LOG(LogTemp, Display, TEXT("DCREST host op=%d rests op %d piece %d: %d bodies"), Seq, F.OpSeq, F.PieceIndex, Op.Rests.Num());
+	UE_LOG(LogTemp, Display, TEXT("DCREST host op=%d rests op %d piece %d: %d bodies, %d flying strays left as debris"), Seq, F.OpSeq, F.PieceIndex, Op.Rests.Num(), Debris);
 	ApplyOpAsync(GS->VoxelOps.Last(), true, [WeakGS, Seq](const FDCVoxelOpResult&, uint32 Hash)
 	{
 		if (ADCGameState* State = WeakGS.Get())
