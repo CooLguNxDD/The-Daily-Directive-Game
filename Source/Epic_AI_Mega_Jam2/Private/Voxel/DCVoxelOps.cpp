@@ -806,7 +806,7 @@ namespace DCVoxelOps
 		return Out;
 	}
 
-	TArray<TArray<int32>> SplitFragments(const TArray<FIntVector>& Cells, int32 BlockCells, int32 MaxFragments)
+	TArray<TArray<int32>> SplitFragments(const TArray<FIntVector>& Cells, int32 BlockCells, int32 MaxFragments, const FIntVector* Focus, float FalloffCells)
 	{
 		// Budgeted split (advisor CP23): start with one fragment and keep halving the one with the longest extent along
 		// that axis until the budget is spent or every fragment is at most BlockCells long. Doubling a block size to
@@ -854,16 +854,29 @@ namespace DCVoxelOps
 		const int32 MinLen = FMath::Max(BlockCells, 1);
 		while (Groups.Num() < Cap)
 		{
+			// Largest extent first, nearer the focus (the blast) weighted up when one is given (advisor CP23).
 			int32 Pick = INDEX_NONE, PickLen = 0, PickAxis = 0;
+			double PickScore = -1.0;
 			for (int32 g = 0; g < Groups.Num(); ++g)
 			{
 				int32 Axis = 0;
 				const int32 Len = Longest(Groups[g], Axis);
-				if (Len > MinLen && (Len > PickLen || (Len == PickLen && Before(Groups[g].Lo, Groups[Pick].Lo))))
+				if (Len <= MinLen)
+				{
+					continue;
+				}
+				double Score = Len;
+				if (Focus && FalloffCells > 0.f)
+				{
+					const FVector Center = (FVector(Groups[g].Lo) + FVector(Groups[g].Hi)) * 0.5;
+					Score = Len / (1.0 + FVector::Dist(Center, FVector(*Focus)) / FalloffCells);
+				}
+				if (Score > PickScore || (Score == PickScore && Before(Groups[g].Lo, Groups[Pick].Lo)))
 				{
 					Pick = g;
 					PickLen = Len;
 					PickAxis = Axis;
+					PickScore = Score;
 				}
 			}
 			if (Pick == INDEX_NONE)
@@ -895,12 +908,13 @@ namespace DCVoxelOps
 	}
 
 	void FragmentTree(const TArray<FIntVector>& Cells, int32 VoxelCm, float ChunkCm, int32 MaxChunks, float LeafCm, int32 MaxLeaves,
-		TArray<int32>& OutParent, TArray<TArray<int32>>& OutCells)
+		TArray<int32>& OutParent, TArray<TArray<int32>>& OutCells, const FIntVector* Focus, float FocusFalloffCm)
 	{
 		OutParent.Reset();
 		OutCells.Reset();
 		const int32 Vox = FMath::Max(VoxelCm, 1);
-		for (const TArray<int32>& Group : SplitFragments(Cells, FMath::Max(1, FMath::RoundToInt(ChunkCm / Vox)), MaxChunks))
+		const float Falloff = FocusFalloffCm / Vox;
+		for (const TArray<int32>& Group : SplitFragments(Cells, FMath::Max(1, FMath::RoundToInt(ChunkCm / Vox)), MaxChunks, Focus, Falloff))
 		{
 			const int32 Chunk = OutParent.Num();
 			OutParent.Add(INDEX_NONE);
@@ -910,7 +924,7 @@ namespace DCVoxelOps
 			{
 				GroupCells.Add(Cells[i]);
 			}
-			for (const TArray<int32>& Leaf : SplitFragments(GroupCells, FMath::Max(1, FMath::RoundToInt(LeafCm / Vox)), MaxLeaves))
+			for (const TArray<int32>& Leaf : SplitFragments(GroupCells, FMath::Max(1, FMath::RoundToInt(LeafCm / Vox)), MaxLeaves, Focus, Falloff))
 			{
 				TArray<int32>& Mapped = OutCells.AddDefaulted_GetRef();
 				OutParent.Add(Chunk);
@@ -1019,7 +1033,9 @@ namespace DCVoxelOps
 				P.Rubble.Add(Result.Rubble[r]);
 				P.RubbleMaterials.Add(Result.RubbleMaterials.IsValidIndex(r) ? Result.RubbleMaterials[r] : 0);
 			}
-			FragmentTree(Pc.Cells, Sector.Towers[Pc.Lot].Grid.VoxelCm, Tn.PhysicsFragmentCm, Tn.PhysicsFragments, Tn.PhysicsLeafCm, Tn.PhysicsLeavesPerChunk, P.FragParent, P.FragCells);
+			const FIntVector Focus = Sector.Towers[Pc.Lot].Grid.ToLocal(Op.CenterCm); // smaller fragments near the blast
+			FragmentTree(Pc.Cells, Sector.Towers[Pc.Lot].Grid.VoxelCm, Tn.PhysicsFragmentCm, Tn.PhysicsFragments, Tn.PhysicsLeafCm, Tn.PhysicsLeavesPerChunk, P.FragParent, P.FragCells,
+				&Focus, Tn.PhysicsFocusFalloffCm);
 			Result.Pending.Add({BySize[k], MoveTemp(P)});
 		}
 		// Shards: clusters grow with the distance from the blast centre; a seeded sample under the cap, weighted toward

@@ -43,6 +43,15 @@ struct ADCVoxelCity::FMeshJob
 	int32 Frag = INDEX_NONE;
 };
 
+/** A falling body's rest state, in order: transitions only move forward (DCVoxelCity TickBodies). */
+enum class EFragState : uint8
+{
+	Ghost,
+	Solid,
+	Grounded,
+	Frozen,
+};
+
 struct ADCVoxelCity::FFalling
 {
 	TObjectPtr<UProceduralMeshComponent> Comp;
@@ -65,7 +74,13 @@ struct ADCVoxelCity::FFalling
 		/** Bounds in cm relative to the pivot, before rotation. */
 		FBox Local = FBox(ForceInit);
 		float Mass = 1.f;
-		bool bSolid = false;
+		/** Per-body rest state (advisor CP27). A ghost ignores the city until it nears its site, then turns solid; a
+		 *  solid body on the street gets settle damping; a frozen one is kinematic where it lies. Asleep freezes from
+		 *  any state (a body asleep on a frozen pile is at rest whether or not it ever turned solid). */
+		EFragState State = EFragState::Ghost;
+		/** BodyAge at which this body stops counting against its piece's rest: its own fall time from where it was
+		 *  released plus settle (a leaf released late by a shatter gets its own time, not what is left of the piece's). */
+		float Deadline = 0.f;
 		float LastChip = -10.f;
 		/** Chunk (Parent = INDEX_NONE) or one of a chunk's leaves. A chunk breaks off mid-fall as one body; a hard hit
 		 *  shatters it into its leaves (each its own body). Leaves carry the meshes; a chunk's Comp is an empty root. */
@@ -73,9 +88,8 @@ struct ADCVoxelCity::FFalling
 		TArray<int32> Children;
 		bool bSplitPending = false;
 		bool bSplit = false;
-		bool bFrozen = false;
-		bool bGrounded = false;
 		float StillFor = 0.f;
+		bool IsSolid() const { return State != EFragState::Ghost; }
 	};
 	TArray<FFrag> Frags;
 	int32 PendingMeshes = 0;
@@ -88,9 +102,11 @@ struct ADCVoxelCity::FFalling
 	int32 OpSeq = 0;
 	int32 PieceIndex = INDEX_NONE;
 	bool bRestNow = false;
-	/** Struck lot's footprint (sector cm, XY) and this group's rest budget (free fall from the break + settle). */
+	/** Last tick's count of bodies past their own deadline and of strays (beyond PhysicsSiteRadiusCm), for the log. */
+	int32 Late = 0;
+	int32 Stray = 0;
+	/** Struck lot's footprint (sector cm, XY). Rest deadlines are per body (FFrag::Deadline). */
 	FBox2D LotBox = FBox2D(ForceInit);
-	float RestBudget = 5.f;
 };
 
 namespace
@@ -1650,7 +1666,12 @@ UBoxComponent* ADCVoxelCity::MakeBody(const TSharedPtr<FFalling>& Shared, int32 
 	Box->SetPhysicsLinearVelocity(V);
 	Box->SetPhysicsAngularVelocityInDegrees(SpinDeg);
 	Fr.Body = Box;
-	Fr.bSolid = bSolid;
+	Fr.State = bSolid ? EFragState::Solid : EFragState::Ghost;
+	{
+		// Own deadline from its own release height (advisor CP27 #3): free fall to the site plus settle, capped.
+		const float H = FMath::Max(At.Z - Shared->LandCenter.Z, 0.f);
+		Fr.Deadline = Shared->BodyAge + FMath::Min(FMath::Sqrt(2.f * H / 980.f) + Tn.PhysicsSettleSeconds, Tn.PhysicsMaxAirSeconds);
+	}
 	Bodies.Add(Box, Shared);
 	return Box;
 }
@@ -1660,16 +1681,6 @@ void ADCVoxelCity::BreakApart(const TSharedPtr<FFalling>& Shared, float Age, flo
 	FFalling& F = *Shared;
 	const FDCVoxelTuning& Tn = UDCVoxelSettings::Get().Tuning;
 	F.bBroken = true;
-	{
-		// Rest budget from the height it breaks at (advisor CP13): free-fall time to the site plus settle, capped.
-		float Top = F.Comp->GetComponentLocation().Z;
-		for (const FFalling::FFrag& Fr : F.Frags)
-		{
-			Top = Fr.Parent == INDEX_NONE && Fr.Local.IsValid ? FMath::Max(Top, F.Comp->GetComponentTransform().TransformPosition(Fr.Local.GetCenter()).Z) : Top;
-		}
-		const float H = FMath::Max(Top - F.LandCenter.Z, 0.f); // the highest chunk's fall, not the hinge
-		F.RestBudget = FMath::Min(FMath::Sqrt(2.f * H / 980.f) + Tn.PhysicsSettleSeconds, Tn.PhysicsMaxAirSeconds);
-	}
 	F.BodyAge = 0.f;
 	const FTransform Xf = F.Comp->GetComponentTransform();
 	// Speed now: the fall (most of it lost if this is the impact), the topple's swing (omega x r), scatter and a kick.
@@ -1727,7 +1738,7 @@ void ADCVoxelCity::Shatter(const TSharedPtr<FFalling>& Shared, int32 ChunkIndex)
 	const FTransform B = Chunk.Body->GetComponentTransform();
 	const FVector V = Chunk.Body->GetPhysicsLinearVelocity();
 	const FVector W = FMath::DegreesToRadians(1.f) * Chunk.Body->GetPhysicsAngularVelocityInDegrees();
-	const bool bSolid = Chunk.bSolid;
+	const bool bSolid = Chunk.IsSolid();
 	Bodies.Remove(Chunk.Body.Get());
 	UBoxComponent* Old = Chunk.Body;
 	Chunk.Body = nullptr;
@@ -1764,32 +1775,37 @@ bool ADCVoxelCity::TickBodies(const TSharedPtr<FFalling>& Shared, float Dt)
 			Shatter(Shared, i); // a hard hit last frame: break it here, never inside the physics callback
 		}
 	}
-	bool bAllAsleep = true;
+	// A piece rests when every body is frozen or past its own deadline (advisor CP27): no single budget for all.
+	bool bAllDone = true;
+	F.Late = 0;
+	F.Stray = 0;
 	for (FFalling::FFrag& Fr : F.Frags)
 	{
-		if (!Fr.Body)
+		if (!Fr.Body || Fr.State == EFragState::Frozen)
 		{
 			continue;
 		}
 		const FBox B = Fr.Body->Bounds.GetBox();
-		if (B.Max.Z < BodyGroundZ(B.GetCenter(), F.LandCenter) - 100.f)
+		const float GroundZ = BodyGroundZ(B.GetCenter(), F.LandCenter);
+		if (B.Max.Z < GroundZ - 100.f)
 		{
 			Fr.Body->PutRigidBodyToSleep(); // slipped under the street: it rests (hidden by the rubble swap)
 			Fr.Body->SetSimulatePhysics(false);
+			Fr.State = EFragState::Frozen;
 			continue;
 		}
 		// Solid once near its rubble site's height, or once clear of the struck lot (then it never passes through the
 		// standing towers it flies into).
 		const FBox2D Clear = F.LotBox.ExpandBy(Tn.PhysicsLotMarginCm);
 		const bool bClearOfLot = F.LotBox.bIsValid && !Clear.Intersect(FBox2D(FVector2D(B.Min), FVector2D(B.Max)));
-		if (!Fr.bSolid && (B.Min.Z <= F.LandCenter.Z + Tn.PhysicsSolidAboveSiteCm || bClearOfLot))
+		if (Fr.State == EFragState::Ghost && (B.Min.Z <= F.LandCenter.Z + Tn.PhysicsSolidAboveSiteCm || bClearOfLot))
 		{
-			Fr.bSolid = true;
+			Fr.State = EFragState::Solid;
 			Fr.Body->SetCollisionResponseToChannel(ECC_WorldStatic, ECR_Block);
 		}
-		if (Fr.bSolid && !Fr.bGrounded && B.Min.Z <= BodyGroundZ(B.GetCenter(), F.LandCenter) + Tn.PhysicsGroundContactCm)
+		if (Fr.State == EFragState::Solid && B.Min.Z <= GroundZ + Tn.PhysicsGroundContactCm)
 		{
-			Fr.bGrounded = true; // on the street: settle damping (a fall stays free, a pile stops jittering)
+			Fr.State = EFragState::Grounded; // on the street: settle damping (a fall stays free, a pile stops jittering)
 			Fr.Body->SetLinearDamping(Tn.PhysicsGroundLinearDamping);
 			Fr.Body->SetAngularDamping(Tn.PhysicsGroundAngularDamping);
 		}
@@ -1800,23 +1816,31 @@ bool ADCVoxelCity::TickBodies(const TSharedPtr<FFalling>& Shared, float Dt)
 			const FVector Off(F.LandCenter.X - At.X, F.LandCenter.Y - At.Y, 0.f);
 			Fr.Body->AddForce(Off * Tn.PhysicsSteer - FVector(Vel.X, Vel.Y, 0.f) * (2.f * FMath::Sqrt(Tn.PhysicsSteer)), NAME_None, true);
 		}
-		if (Fr.bFrozen)
-		{
-			continue;
-		}
-		// Each body freezes on its own once slow for RestSeconds (a touching pile is one island that may never sleep).
-		const bool bSlow = !Fr.Body->IsAnyRigidBodyAwake() || (Vel.Size() < Tn.PhysicsRestCms && Fr.Body->GetPhysicsAngularVelocityInDegrees().Size() < Tn.PhysicsRestDegS);
+		// Each body freezes on its own: asleep at once from any state (asleep on a frozen pile is at rest), or slow
+		// for RestSeconds once solid (a touching pile is one island that may never sleep).
+		const bool bAsleep = !Fr.Body->IsAnyRigidBodyAwake();
+		const bool bSlow = bAsleep || (Vel.Size() < Tn.PhysicsRestCms && Fr.Body->GetPhysicsAngularVelocityInDegrees().Size() < Tn.PhysicsRestDegS);
 		Fr.StillFor = bSlow ? Fr.StillFor + Dt : 0.f;
-		if (Fr.bSolid && Fr.StillFor >= Tn.PhysicsRestSeconds)
+		if (bAsleep || (Fr.IsSolid() && Fr.StillFor >= Tn.PhysicsRestSeconds))
 		{
-			Fr.bFrozen = true;
+			Fr.State = EFragState::Frozen;
 			Fr.Body->SetSimulatePhysics(false); // kinematic where it lies; others still land on it
 			continue;
 		}
-		bAllAsleep = false;
+		if (FVector::Dist2D(B.GetCenter(), F.LandCenter) > Tn.PhysicsSiteRadiusCm)
+		{
+			++F.Stray; // flung far from the pile (advisor CP27 #4): it keeps flying and does not hold the rest
+			continue;
+		}
+		if (F.BodyAge >= Fr.Deadline)
+		{
+			++F.Late; // past its own deadline: it no longer holds the piece up (Land sets it down if still in the air)
+			continue;
+		}
+		bAllDone = false;
 	}
-	F.StillFor = bAllAsleep ? F.StillFor + Dt : 0.f;
-	return (F.BodyAge > 0.5f && bAllAsleep) || F.BodyAge >= F.RestBudget;
+	F.StillFor = F.Late == 0 && bAllDone ? F.StillFor + Dt : 0.f;
+	return (F.BodyAge > 0.5f && bAllDone) || F.BodyAge >= Tn.PhysicsMaxAirSeconds + Tn.PhysicsSettleSeconds;
 }
 
 void ADCVoxelCity::OnBodyHit(UPrimitiveComponent* HitComp, AActor* Other, UPrimitiveComponent* OtherComp, FVector NormalImpulse, const FHitResult& Hit)
@@ -1881,6 +1905,19 @@ void ADCVoxelCity::Land(FFalling& F)
 				Spread = FMath::Max(Spread, FVector::Dist2D(Fr.Body->GetComponentLocation(), F.LandCenter));
 				Awake += Fr.Body->IsAnyRigidBodyAwake() ? 1 : 0;
 				Bodies.Remove(Fr.Body.Get());
+				const bool bFlying = Fr.State != EFragState::Frozen && Fr.Body->IsAnyRigidBodyAwake()
+					&& FVector::Dist2D(Fr.Body->GetComponentLocation(), F.LandCenter) > UDCVoxelSettings::Get().Tuning.PhysicsSiteRadiusCm;
+				if (bFlying)
+				{
+					// A stray still in flight keeps its physics and fades as it flies (released at the fade's end).
+					if (Fr.Comp)
+					{
+						Fading.Add({Fr.Body, Fr.Comp, static_cast<float>(GetWorld()->GetTimeSeconds())});
+						Fr.Comp = nullptr;
+					}
+					Fr.Body = nullptr;
+					continue;
+				}
 				Fr.Body->SetSimulatePhysics(false); // frozen where it lies, then shrinks away over PhysicsFadeSeconds
 				{
 					// Still in the air at the time cap: set it down on the street first (nothing fades mid-air).
@@ -1913,7 +1950,7 @@ void ADCVoxelCity::Land(FFalling& F)
 			}
 		}
 		BodiesReserved = FMath::Max(0, BodiesReserved - F.Frags.Num());
-		UE_LOG(LogTemp, Display, TEXT("DCPHYS rest %d chunks and leaves after %.1f s (%s), %d still awake, farthest %.0f cm from the shared rubble site"), F.Frags.Num(), F.BodyAge, F.StillFor > 0.f ? TEXT("still") : TEXT("timed out"), Awake, Spread);
+		UE_LOG(LogTemp, Display, TEXT("DCPHYS rest %d chunks and leaves after %.1f s (%s), %d still awake, %d past deadline, %d strays, farthest %.0f cm from the shared rubble site"), F.Frags.Num(), F.BodyAge, F.StillFor > 0.f ? TEXT("still") : TEXT("timed out"), Awake, F.Late, F.Stray, Spread);
 		F.Frags.Reset();
 	}
 	const float RevealNow = GetWorld()->GetTimeSeconds() - FallOffset;
@@ -2019,6 +2056,8 @@ void ADCVoxelCity::Tick(float DeltaSeconds)
 	}
 	// Two-phase ops: a planned op is held until its apply time (a strike's detonation), then committed.
 	const ADCGameState* State = GetWorld()->GetGameState<ADCGameState>();
+	double PrepMs = 0.0;
+	double CommitMs = 0.0; // advisor CP26: the hitch log scopes the op's game-thread prepare and commit too
 	if (InFlight.IsValid() && InFlightTask.IsCompleted())
 	{
 		const float Lead = State ? InFlight->Op.Time - State->Now() : 0.f;
@@ -2027,12 +2066,16 @@ void ADCVoxelCity::Tick(float DeltaSeconds)
 			// Planned ahead: mesh it now (the worker is done writing), show it at the apply time.
 			InFlight->bPrepared = true;
 			bHoldUploads = true;
+			const double P0 = FPlatformTime::Seconds();
 			PrepareOp(InFlight->Op, InFlight->Result, InFlight->bAnimate, GetWorld()->GetTimeSeconds() + Lead);
+			PrepMs = (FPlatformTime::Seconds() - P0) * 1000.0;
 		}
 		if (Lead <= 0.f)
 		{
+			const double C0 = FPlatformTime::Seconds();
 			FinishInFlight();
 			StartNextOp();
+			CommitMs = (FPlatformTime::Seconds() - C0) * 1000.0;
 		}
 	}
 	const double T0 = FPlatformTime::Seconds();
@@ -2052,9 +2095,9 @@ void ADCVoxelCity::Tick(float DeltaSeconds)
 	TickLampLights();
 	TickCollapseCam();
 	// Hitch log (R13): which stage of the city's frame went long.
-	if ((T3 - T0) * 1000.0 > UDCVoxelSettings::Get().Tuning.HitchLogMs)
+	if ((T3 - T0) * 1000.0 + PrepMs + CommitMs > UDCVoxelSettings::Get().Tuning.HitchLogMs)
 	{
-		UE_LOG(LogTemp, Display, TEXT("DCHITCH city poll=%.1f upload=%.1f falling=%.1f ms cells=%d->%d jobs=%d"), (T1 - T0) * 1000.0, (T2 - T1) * 1000.0, (T3 - T2) * 1000.0,
+		UE_LOG(LogTemp, Display, TEXT("DCHITCH city prep=%.1f commit=%.1f poll=%.1f upload=%.1f falling=%.1f ms cells=%d->%d jobs=%d"), PrepMs, CommitMs, (T1 - T0) * 1000.0, (T2 - T1) * 1000.0, (T3 - T2) * 1000.0,
 			DirtyBefore, DirtyCells.Num(), Jobs.Num());
 	}
 }
