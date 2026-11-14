@@ -163,12 +163,12 @@ bool FDCWeatherTest::RunTest(const FString&)
 	}
 	{
 		// The day value follows the blended arc like every other field (R18 day-night seam).
-		const FDCWeatherProfile* Dusk = T.WeatherProfiles.FindByPredicate([](const FDCWeatherProfile& P) { return P.DayBlend > 0.f; });
-		const FDCWeatherProfile* Night = T.WeatherProfiles.FindByPredicate([](const FDCWeatherProfile& P) { return P.DayBlend == 0.f; });
-		if (TestTrue(TEXT("one profile lifts the day, one keeps the night"), Dusk && Night))
+		const FDCWeatherProfile* DuskRow = T.WeatherProfiles.FindByPredicate([](const FDCWeatherProfile& P) { return P.DayBlend > 0.f; });
+		const FDCWeatherProfile* NightRow = T.WeatherProfiles.FindByPredicate([](const FDCWeatherProfile& P) { return P.DayBlend == 0.f; });
+		if (TestTrue(TEXT("one profile lifts the day, one keeps the night"), DuskRow && NightRow))
 		{
-			const float Mid = DCWeather::Lerp(*Night, *Dusk, 0.5f).DayBlend;
-			TestTrue(TEXT("day blends half way"), FMath::IsNearlyEqual(Mid, Dusk->DayBlend * 0.5f, 0.001f));
+			const float Mid = DCWeather::Lerp(*NightRow, *DuskRow, 0.5f).DayBlend;
+			TestTrue(TEXT("day blends half way"), FMath::IsNearlyEqual(Mid, DuskRow->DayBlend * 0.5f, 0.001f));
 		}
 	}
 	for (const FDCSeasonDef& S : T.Seasons)

@@ -2055,7 +2055,10 @@ void ADCVoxelCity::TickCollapseCam()
 {
 	// -dccollapsecam=<dir> (evidence only): when a strike commits, the view cuts to a fixed wide camera above the
 	// collapse and writes frames at fixed times after the detonation (before, mid-fall, settled), then hands back.
-	static const float Times[] = {0.f, 0.3f, 0.6f, 1.0f, 1.5f, 2.2f, 3.2f, 4.5f, 6.5f};
+	// The last two frames come from street height after the rest op, looking up at the skyline over the rubble
+	// (critic V19.1: anything left hanging in the sky shows against it).
+	static const float Times[] = {0.f, 0.3f, 0.6f, 1.0f, 1.5f, 2.2f, 3.2f, 4.5f, 6.5f, 9.f, 12.f};
+	constexpr int32 FirstStreetFrame = 9;
 	if (CollapseCamStep < 0)
 	{
 		return;
@@ -2073,8 +2076,9 @@ void ADCVoxelCity::TickCollapseCam()
 		ShotCamera->GetCameraComponent()->SetFieldOfView(60.f);
 	}
 	const float T = GetWorld()->GetTimeSeconds() - CollapseCamStart;
-	const FVector Eye = CollapseCamCenter + FVector(-4200.f, -4200.f, 6500.f);
-	ShotCamera->SetActorLocationAndRotation(Eye, (CollapseCamCenter + FVector(0, 0, 800.f) - Eye).Rotation());
+	const bool bStreet = CollapseCamStep >= FirstStreetFrame;
+	const FVector Eye = CollapseCamCenter + (bStreet ? FVector(-3200.f, -2400.f, 250.f) : FVector(-4200.f, -4200.f, 6500.f));
+	ShotCamera->SetActorLocationAndRotation(Eye, (CollapseCamCenter + FVector(0, 0, bStreet ? 1600.f : 800.f) - Eye).Rotation());
 	if (PC->GetViewTarget() != ShotCamera)
 	{
 		PC->SetViewTargetWithBlend(ShotCamera, 0.f);
