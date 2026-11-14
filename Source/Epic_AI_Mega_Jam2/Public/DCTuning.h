@@ -480,6 +480,8 @@ struct FDCSectorDef
 	UPROPERTY(EditAnywhere, Config, Category = "Sector") int32 QuotaPoints = 1500;
 	/** Swarm packs follow the crew's quota lag (Rules/DCPressureRules); Waves keep the special units. */
 	UPROPERTY(EditAnywhere, Config, Category = "Sector") FDCPressureTuning Pressure;
+	/** R3: factions that may own this map (empty = any hostile). Sector 1 keeps the Hive out (advisor a-10). */
+	UPROPERTY(EditAnywhere, Config, Category = "Sector") TArray<FName> Owners;
 };
 
 /** Soft references to the few binary assets the game uses; each has an engine fallback. */
@@ -653,6 +655,16 @@ struct FDCRunTuning
 	UPROPERTY(EditAnywhere, Config, Category = "Run") TMap<FName, FString> Subjects;
 };
 
+/** One onboarding step (advisor a-7: steps are data; completion is looked up by Id in the HUD's registry: Move, Shoot,
+ *  Strike, Raise, Snap, Objective, Extract, Clash). Prompt tokens {SPRINT} {JUMP} {CROUCH} {RELOAD} show the saved keys. */
+USTRUCT(BlueprintType)
+struct FDCOnboardStep
+{
+	GENERATED_BODY()
+	UPROPERTY(EditAnywhere, Config, Category = "Onboarding") FName Id;
+	UPROPERTY(EditAnywhere, Config, Category = "Onboarding") FString Prompt;
+};
+
 /** R5 shareable ID card: the builder's turntable (same recipe as the in-game character) at Angles yaw steps, one big
  *  hero view and a strip of the turn, the call sign and share code, in the noir look. Written to Saved/<OutDir>/. */
 USTRUCT(BlueprintType)
@@ -670,6 +682,9 @@ struct FDCCardTuning
 	UPROPERTY(EditAnywhere, Config, Category = "Card") FLinearColor AccentA = FLinearColor(1.f, 0.03f, 0.22f);
 	UPROPERTY(EditAnywhere, Config, Category = "Card") FLinearColor AccentB = FLinearColor(0.03f, 0.75f, 1.f);
 	UPROPERTY(EditAnywhere, Config, Category = "Card") float ScanlineAlpha = 0.12f;
+	/** Stops added to the builder capture's exposure for the card only (noir: the character sits in the dark, lit by
+	 *  its key and rim, not washed grey). */
+	UPROPERTY(EditAnywhere, Config, Category = "Card") float ExposureOffset = -0.8f;
 	UPROPERTY(EditAnywhere, Config, Category = "Card") FString Title = TEXT("DIRECTOR'S CUT: FRONT PAGE");
 	UPROPERTY(EditAnywhere, Config, Category = "Card") FString Subtitle = TEXT("PRESS CREDENTIAL  //  WAR PHOTOGRAPHER");
 	UPROPERTY(EditAnywhere, Config, Category = "Card") FString Footer = TEXT("PASTE THE CODE IN THE BUILDER TO WEAR THIS PHOTOGRAPHER");
@@ -702,6 +717,7 @@ public:
 	UPROPERTY(EditAnywhere, Config, Category = "Objective") TArray<FDCObjectiveDef> Objectives;
 	UPROPERTY(EditAnywhere, Config, Category = "Objective") FDCObjectiveLook ObjectiveLook;
 	UPROPERTY(EditAnywhere, Config, Category = "Card") FDCCardTuning Card;
+	UPROPERTY(EditAnywhere, Config, Category = "Onboarding") TArray<FDCOnboardStep> Onboarding;
 	UPROPERTY(EditAnywhere, Config, Category = "Sector") TArray<FDCSectorDef> Sectors;
 	UPROPERTY(EditAnywhere, Config, Category = "Input") TArray<FDCActionDef> Actions;
 	UPROPERTY(EditAnywhere, Config, Category = "Input") TArray<FDCKeyBinding> Bindings;

@@ -42,6 +42,8 @@ public:
 	/** Host: the nearest live foe (a player this faction fights, or a hostile faction's unit) within Range. */
 	AActor* FindFoe(float Range) const;
 	/** Host: walk the street toward Goal (cheap: voxel column tops and solid tests, no sweeps; advisor a-2). */
+	/** Closest a ground unit steps to a standing player (body + capsule + FactionMix.CrewContactMarginCm). */
+	float CrewContactCm() const;
 	void GroundMove(const FVector& Goal, float Speed, float DeltaSeconds, float Hover);
 	/** Host: hit a foe (player or unit) in reach: melee at AttackRange, or a tracer shot when ShotRange > 0. */
 	void HostAttack(AActor* Victim, float Now);

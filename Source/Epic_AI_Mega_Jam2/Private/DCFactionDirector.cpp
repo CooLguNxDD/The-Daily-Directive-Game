@@ -26,7 +26,8 @@ void ADCGameMode::RollFactions()
 {
 	ADCGameState* GS = GetGameState<ADCGameState>();
 	const UDCTuning& T = UDCTuning::Get();
-	GS->FactionMix = DCFactionRules::RollMix(T.Factions, T.FactionMix, GS->RunSeed, GS->SectorIndex);
+	GS->FactionMix = DCFactionRules::RollMix(T.Factions, T.FactionMix, GS->RunSeed, GS->SectorIndex,
+		T.Sectors.IsValidIndex(GS->SectorIndex) ? T.Sectors[GS->SectorIndex].Owners : TArray<FName>());
 	// Evidence runs: -dcmain=<Faction> forces the owner (its invaders stay rolled).
 	FString Forced;
 	if (FParse::Value(FCommandLine::Get(), TEXT("dcmain="), Forced) && DCFactionRules::Find(T.Factions, FName(*Forced)))

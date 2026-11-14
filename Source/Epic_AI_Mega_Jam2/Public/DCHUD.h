@@ -73,6 +73,14 @@ private:
 
 	// First-minute onboarding: which verbs this player has done.
 	bool bDidMove = false, bDidShoot = false, bDidStrike = false, bDidRaise = false, bDidSnap = false;
+	bool bDidObjective = false, bDidExtract = false, bDidClash = false;
+	/** First-sighting callouts (R3): factions this machine has already named, and the callout on screen. */
+	TSet<FName> SeenFactions;
+	FString CalloutText;
+	FLinearColor CalloutColor = FLinearColor::White;
+	double CalloutUntilReal = -1.0;
+	void TrackFactionSightings(ADCCharacter& Me);
+	void DrawCallout();
 	FVector SpawnLocation = FVector::ZeroVector;
 	bool bHaveSpawn = false;
 	double OnboardDoneReal = -1.0;

@@ -584,7 +584,11 @@ void ADCPlayerController::TickBuilderFlow()
 		{19.8, [&]() { Shot(TEXT("06_builder_bad_code_rejected.png")); }},
 		{20.2, [this]() { BuilderExportCard(); UE_LOG(LogTemp, Display, TEXT("DCBUILDERFLOW card: %s"), *BuilderMessage); }},
 		{21.0, [&]() { Shot(TEXT("07_builder_id_card_exported.png")); }},
-		{21.5, []() { FGenericPlatformMisc::RequestExit(false); }},
+		// R5 parity: the same outfit in play (DCOUTFIT ... wears <code> matches the card's code).
+		{21.5, [this]() { CloseBuilder(); }},
+		{22.5, [this]() { MenuSolo(); }},
+		{33.0, [&]() { Shot(TEXT("08_same_outfit_in_play.png")); }},
+		{34.0, []() { FGenericPlatformMisc::RequestExit(false); }},
 	};
 	const TArray<TPair<double, TFunction<void()>>>& Steps = bSettingsFlow ? SettingsSteps : BuilderSteps;
 	if (Steps.IsValidIndex(Step) && T >= Steps[Step].Key)

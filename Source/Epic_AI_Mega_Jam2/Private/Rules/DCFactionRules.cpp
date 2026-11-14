@@ -60,7 +60,7 @@ namespace DCFactionRules
 		return IsHostile(Factions, Id, Crew);
 	}
 
-	FDCFactionMix RollMix(const TArray<FDCFactionDef>& Factions, const FDCFactionMixRule& Rule, int32 Seed, int32 Sector)
+	FDCFactionMix RollMix(const TArray<FDCFactionDef>& Factions, const FDCFactionMixRule& Rule, int32 Seed, int32 Sector, const TArray<FName>& Owners)
 	{
 		FDCFactionMix Mix;
 		TArray<int32> Hostiles;
@@ -75,7 +75,9 @@ namespace DCFactionRules
 				Mix.Allies.Add(Factions[i].Id);
 			}
 		}
-		const int32 MainIndex = Weighted(Factions, Hostiles, &MainWeightOf, DCPcg::Unit(Seed, SaltMain, Sector));
+		// The sector's Owners list (data) narrows who may own the map; empty, or no listed hostile, = any hostile.
+		TArray<int32> MainCandidates = Hostiles.FilterByPredicate([&Factions, &Owners](int32 i) { return Owners.Contains(Factions[i].Id); });
+		const int32 MainIndex = Weighted(Factions, MainCandidates.Num() > 0 ? MainCandidates : Hostiles, &MainWeightOf, DCPcg::Unit(Seed, SaltMain, Sector));
 		if (MainIndex == INDEX_NONE)
 		{
 			return Mix;

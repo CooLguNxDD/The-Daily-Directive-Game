@@ -47,6 +47,9 @@ art) is in the game.
 | Street cables with lit beads and their poles (R2) | at run time | C++ (`DCVoxelCraft::CraftProps`) from the `Cable` prop layer row in `Config/DefaultGame.ini` |
 | City props (R2), signs from generated art: `billboard_noodle`, `billboard_eye` (rooftop), `sign_koi` (wall) | `Content/DC/Voxel/<name>.dcvox` | `tools/voxel-forge/forge.py` `image` op quantizes the generated pictures below into palette slots |
 | Faction unit models (trooper, shambler, raider, soldier, skitter; Brute and Brood are scaled shamblers/skitters) and the objective package (`package`) | `Content/DC/Voxel/*.dcvox` | `tools/voxel-forge/forge.py` from `tools/voxel-forge/recipes/{trooper,shambler,raider,soldier,skitter,nest,package}.vfr` (R3, R4; original designs) |
+| Hive nest (`nest`: violet-vented chitin mound, Behaviour=Nest unit) | `Content/DC/Voxel/nest.dcvox` | `tools/voxel-forge/forge.py` from `tools/voxel-forge/recipes/nest.vfr` |
+| Voxel photographer body (`body_head`, `body_chest`, `body_hips`, `body_arm`, `body_hand`, `body_leg`, `body_foot`) | `Content/DC/Voxel/body_*.dcvox` | `tools/voxel-forge/forge.py` from `tools/voxel-forge/recipes/body_*.vfr` |
+| Earlier street props: `barricade`, `lamppost`, `newsstand` | `Content/DC/Voxel/<name>.dcvox` | `tools/voxel-forge/forge.py` from `tools/voxel-forge/recipes/<name>.vfr` |
 | Faction sound cues (FactionShot, Groan, FactionStrike) | synthesised at run time | C++ synth in `DCAudio.cpp` |
 | Shareable ID card (turntable PNG) | written to `Saved/IdCards/` at run time | C++ canvas render target from the builder's turntable capture (`DCIdCard.cpp`, R5) |
 | Newsprint photo print (halftone, grain, border); fallback stamp grit when `T_StampGrit` is missing | at run time | C++ (`Rules/DCNewsprint.cpp`, `DCHUD::StampGrit`) |

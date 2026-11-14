@@ -153,3 +153,12 @@ is kept from the run records (Glass Box modifier): what was decided, why, and wh
   94 % dark with 0.5 % neon accent against the art bible's ~70-80 % and ~10 %.
 - A mix of small faction touches: an opening clash a few seconds into each sector, crowds dropped bigger but weighted
   lighter against the pressure cap, Scavengers kite and loot rubble, the Dead groan, units burst into voxel crumbs.
+- First packaged run with factions (1601df6): menu to front page works, but the pilot was downed 20 s into the first
+  sector and wiped at 26 s. Units moved with unswept location sets and walked into the player's capsule, the opening
+  clash squads could turn on the crew at 4 s, and Skitters outran a sprint. Now ground units stop at a contact ring
+  around a standing player (melee still reaches across it), the first 20 s of a sector are a crew grace (units only
+  fight the crew in self-defence range), each sector row lists which factions may own it (the Hive never owns the
+  first), and Skitters run below sprint speed. All of it is data in `Config/DefaultGame.ini`.
+- Hive nests, a 40-unit cap across every spawn source, friendly-army kills that pay nothing (HQ calls it out), onboarding
+  steps as data rows, per-machine effect scale by hardware tier, a darker ID card, and a faction lineup frame for
+  evidence (`-dclineup`).

@@ -48,6 +48,9 @@ struct FDCPostPreset
 	UPROPERTY(EditAnywhere, Config, Category = "Post") float ScreenPercentage = 100.f;
 	/** Console variables set when the preset applies ("r.Name=Value"). */
 	UPROPERTY(EditAnywhere, Config, Category = "Post") TArray<FString> ConsoleVariables;
+	/** Local cosmetic load (advisor a-8): pooled prop lights, crumbs and faction cue lights scale by this. Never
+	 *  anything the host decides (fragment trees, rubble), so co-op hashes do not depend on it. */
+	UPROPERTY(EditAnywhere, Config, Category = "Post") float EffectScale = 1.f;
 };
 
 /** The composed look. Neutral by default. */

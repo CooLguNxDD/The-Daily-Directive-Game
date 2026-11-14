@@ -43,6 +43,11 @@ private:
 	void BuildScript();
 	void AddCycle(const FString& Name);
 	void AddObjectiveRun(const FString& S);
+	void AddClashShot(const FString& S);
+	void AddLineupShot();
+	TArray<TWeakObjectPtr<class ADCEnemy>> Lineup;
+	FVector LineupMid = FVector::ZeroVector;
+	FVector ClashMid = FVector::ZeroVector;
 	uint8 ObjStage = 255;
 	double ObjNextShotReal = 0.0;
 	double ObjCheckReal = 0.0;

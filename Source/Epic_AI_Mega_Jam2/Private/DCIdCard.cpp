@@ -52,6 +52,8 @@ FString ADCOutfitPreview::ExportCard(const FString& CallSign, const FString& Sha
 	}
 	// 1. The turn: one capture per yaw step, hero first.
 	const FRotator Was = Turn->GetRelativeRotation();
+	const float WasBias = Capture->PostProcessSettings.AutoExposureBias;
+	Capture->PostProcessSettings.AutoExposureBias = WasBias + K.ExposureOffset;
 	TArray<UTextureRenderTarget2D*> Views;
 	for (int32 i = 0; i <= K.Angles; ++i)
 	{
@@ -67,6 +69,7 @@ FString ADCOutfitPreview::ExportCard(const FString& CallSign, const FString& Sha
 	}
 	Capture->TextureTarget = Image;
 	Turn->SetRelativeRotation(Was);
+	Capture->PostProcessSettings.AutoExposureBias = WasBias;
 
 	// 2. The card.
 	UTextureRenderTarget2D* Card = NewObject<UTextureRenderTarget2D>(this);

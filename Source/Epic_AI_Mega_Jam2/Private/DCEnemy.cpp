@@ -10,6 +10,7 @@
 #include "Voxel/DCVoxelModel.h"
 #include "Voxel/DCVoxelSettings.h"
 
+#include "Components/CapsuleComponent.h"
 #include "Components/SphereComponent.h"
 #include "Components/PointLightComponent.h"
 #include "Components/SpotLightComponent.h"
@@ -192,9 +193,21 @@ namespace
 	}
 
 	// Squad goals without a foe in sight (R3), by the row's Goal id. True when a goal was found.
+	// Crew grace (advisor a-10, FactionMix.CrewGraceSeconds): early in a sector units leave the crew alone unless
+	// it comes within CrewSelfDefenceCm. One rule for the opening clash, nests, hunters and early raiders.
+	bool InCrewGrace(const UWorld* World)
+	{
+		const ADCGameState* GS = World ? World->GetGameState<ADCGameState>() : nullptr;
+		return GS && GS->Phase == EDCRunPhase::Sector && GS->Now() - GS->SectorStartTime < UDCTuning::Get().FactionMix.CrewGraceSeconds;
+	}
+
 	using FGoalFn = bool (*)(const ADCEnemy&, const FDCEnemyDef&, float, FVector&);
 	bool GoalPlayers(const ADCEnemy& E, const FDCEnemyDef& Def, float Now, FVector& Out)
 	{
+		if (InCrewGrace(E.GetWorld()))
+		{
+			return false;
+		}
 		const ADCCharacter* C = E.FindTarget(Def.HuntRangeCm > 0.f ? Def.HuntRangeCm : 1e7f, false);
 		Out = C ? C->GetActorLocation() : Out;
 		return C != nullptr;
@@ -289,7 +302,7 @@ namespace
 		{
 			const FVector At = Foe->GetActorLocation();
 			const FVector To = (At - Here).GetSafeNormal2D();
-			const float Hold = (Def.ShotRange > 0.f ? Def.ShotRange : Def.AttackRange) * 0.6f;
+			const float Hold = FMath::Max((Def.ShotRange > 0.f ? Def.ShotRange : Def.AttackRange) * 0.6f, E.CrewContactCm());
 			const float Dist = FVector::Dist2D(At, Here);
 			if (Def.KiteCm > 0.f && Dist < Def.KiteCm)
 			{
@@ -424,6 +437,20 @@ int32 UDCUnits::CountAlive(FName Faction) const
 	return N;
 }
 
+const ADCEnemy* UDCUnits::InClash(const ADCEnemy& Unit, float RangeCm) const
+{
+	const TArray<FDCFactionDef>& Factions = UDCTuning::Get().Factions;
+	for (const ADCEnemy* U : Units)
+	{
+		if (U && U != &Unit && U->IsAlive() && FVector::DistSquared(U->GetActorLocation(), Unit.GetActorLocation()) < RangeCm * RangeCm
+			&& DCFactionRules::IsHostile(Factions, Unit.GetFaction(), U->GetFaction()))
+		{
+			return U;
+		}
+	}
+	return nullptr;
+}
+
 FName ADCEnemy::GetFaction() const
 {
 	const FDCEnemyDef* Def = GetDef();
@@ -446,9 +473,11 @@ AActor* ADCEnemy::FindFoe(float Range) const
 	float BestD = Range * Range;
 	if (Mine.IsNone() || DCFactionRules::FightsCrew(Factions, Mine))
 	{
+		const float CrewD = InCrewGrace(GetWorld()) ? FMath::Min(BestD, FMath::Square(UDCTuning::Get().FactionMix.CrewSelfDefenceCm)) : BestD;
 		for (ADCCharacter* C : TActorRange<ADCCharacter>(GetWorld()))
 		{
-			const float D = C->IsDowned() ? BestD : FVector::DistSquared(C->GetActorLocation(), Here);
+			const float Dist = FVector::DistSquared(C->GetActorLocation(), Here);
+			const float D = C->IsDowned() || Dist >= CrewD ? BestD : Dist;
 			Best = D < BestD ? C : Best;
 			BestD = FMath::Min(BestD, D);
 		}
@@ -493,6 +522,29 @@ void ADCEnemy::GroundMove(const FVector& Goal, float Speed, float DeltaSeconds, 
 		}
 	}
 	const FVector Want = (To.GetSafeNormal() + Push * 0.8f).GetSafeNormal2D();
+	// Crew contact ring (advisor a-10): unswept moves never step inside body + capsule + margin of a standing player
+	// (stepping out of it is always allowed), so a crowd rings the player instead of pinning the capsule.
+	TArray<FVector, TInlineAllocator<4>> Crew;
+	for (const ADCCharacter* C : TActorRange<ADCCharacter>(GetWorld()))
+	{
+		if (!C->IsDowned())
+		{
+			Crew.Add(C->GetActorLocation());
+		}
+	}
+	const float Contact = CrewContactCm();
+	auto IntoCrew = [&Crew, &Here, Contact](const FVector& Next)
+	{
+		for (const FVector& At : Crew)
+		{
+			const float D = FVector::Dist2D(Next, At);
+			if (D < Contact && D < FVector::Dist2D(Here, At))
+			{
+				return true;
+			}
+		}
+		return false;
+	};
 	const ADCVoxelCity* City = ADCVoxelCity::Get(this);
 	const float GroundHere = City ? City->SurfaceZCm(Here) : 0.f;
 	const float Step = Speed * DeltaSeconds;
@@ -505,7 +557,7 @@ void ADCEnemy::GroundMove(const FVector& Goal, float Speed, float DeltaSeconds, 
 		const FVector Next = Here + Dir * Step;
 		const FVector Probe = Here + Dir * FMath::Max(Step, 120.f);
 		const float Ground = City ? City->SurfaceZCm(Probe) : 0.f;
-		if (Ground - GroundHere > 160.f || (City && City->IsSolidAt(FVector(Probe.X, Probe.Y, Ground + 120.f))))
+		if (IntoCrew(Next) || Ground - GroundHere > 160.f || (City && City->IsSolidAt(FVector(Probe.X, Probe.Y, Ground + 120.f))))
 		{
 			continue;
 		}
@@ -519,6 +571,14 @@ void ADCEnemy::GroundMove(const FVector& Goal, float Speed, float DeltaSeconds, 
 	Heading = Heading.RotateAngleAxis(90.f, FVector::UpVector); // boxed in: turn and try another way next tick
 }
 
+float ADCEnemy::CrewContactCm() const
+{
+	// Body radius + the player capsule radius + data margin (the player capsule radius from the class default).
+	const ADCCharacter* Cdo = GetDefault<ADCCharacter>();
+	const float Capsule = Cdo && Cdo->GetCapsuleComponent() ? Cdo->GetCapsuleComponent()->GetUnscaledCapsuleRadius() : 42.f;
+	return (Body ? Body->GetScaledSphereRadius() : 45.f) + Capsule + UDCTuning::Get().FactionMix.CrewContactMarginCm;
+}
+
 void ADCEnemy::HostAttack(AActor* Victim, float Now)
 {
 	const FDCEnemyDef* Def = GetDef();
@@ -530,7 +590,9 @@ void ADCEnemy::HostAttack(AActor* Victim, float Now)
 	const FVector At = Victim->GetActorLocation();
 	const float Dist = FVector::Dist(From, At);
 	const bool bRanged = Def->ShotRange > 0.f;
-	if (Dist > (bRanged ? Def->ShotRange : Def->AttackRange))
+	// Melee reaches at least past the crew contact ring (units hold there and must still land their hits).
+	const float Reach = bRanged ? Def->ShotRange : FMath::Max(Def->AttackRange, CrewContactCm() + 40.f);
+	if (Dist > Reach)
 	{
 		return;
 	}
@@ -637,7 +699,8 @@ void ADCEnemy::BeginPlay()
 	GaitLast = GetActorLocation();
 	const FDCFactionDef* F = DCFactionRules::Find(UDCTuning::Get().Factions, GetFaction());
 	const FDCEnemyDef* CueDef = GetDef();
-	if (F && CueDef && F->CueLightEvery > 0 && CueDef->GlowLight <= 0.f && GetUniqueID() % F->CueLightEvery == 0)
+	const int32 CueEvery = F ? FMath::RoundToInt32(F->CueLightEvery / ADCEnvironment::EffectScaleOf(this)) : 0; // rarer on low tiers
+	if (F && CueDef && CueEvery > 0 && CueDef->GlowLight <= 0.f && GetUniqueID() % CueEvery == 0)
 	{
 		GlowLight->SetVisibility(true);
 		GlowLight->SetIntensityUnits(ELightUnits::Candelas);

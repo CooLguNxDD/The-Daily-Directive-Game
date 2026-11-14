@@ -445,6 +445,7 @@ void ADCVoxelCity::BurstCrumbs(const FVector& At, const FLinearColor& Body, cons
 		return;
 	}
 	FRandomStream Rng(static_cast<int32>(GetTypeHash(At.GridSnap(10.f))));
+	Count = FMath::RoundToInt32(Count * ADCEnvironment::EffectScaleOf(this));
 	for (int32 i = 0; i < Count; ++i)
 	{
 		FDCCrumbSpawn C;
@@ -482,7 +483,7 @@ void ADCVoxelCity::ThrowCrumbs(const FFalling& F, int32 FragIndex, const FBox& W
 		AddSection(F.Frags.IsValidIndex(k) ? F.Frags[k].Comp.Get() : nullptr);
 	}
 	const float GlowScale = Tn.VoxelMaterialGlowScale * Tn.CrumbGlowScale;
-	Count = FMath::RoundToInt32(Count * FMath::Clamp(1.f - Tn.CrumbLoadCut * BodyLoad(), 0.f, 1.f)); // thin out under load
+	Count = FMath::RoundToInt32(Count * FMath::Clamp(1.f - Tn.CrumbLoadCut * BodyLoad(), 0.f, 1.f) * ADCEnvironment::EffectScaleOf(this)); // thin out under load and on low tiers
 	for (int32 i = 0; i < Count; ++i)
 	{
 		FDCCrumbSpawn C;
@@ -1556,6 +1557,7 @@ void ADCVoxelCity::UploadCells()
 
 bool ADCVoxelCity::UploadCell(const FIntVector4& Cell)
 {
+	const double T0 = FPlatformTime::Seconds(); // R13: slow cell uploads are logged with their grid and size (DCUPLOAD)
 	DirtyCells.Remove(Cell);
 	FDCVoxelMeshData Merged;
 	const int32 G = Cell.X;
@@ -1596,7 +1598,14 @@ bool ADCVoxelCity::UploadCell(const FIntVector4& Cell)
 		Mesh->SetRelativeLocation(GridAt(G).ToWorld(FIntVector::ZeroValue));
 		Mesh->ComponentTags.Add(G == 0 ? FName(TEXT("Terrain")) : FName(*FString::Printf(TEXT("Lot%d"), G - 1)));
 	}
+	const double T1 = FPlatformTime::Seconds();
 	Mesh->CreateMeshSection(0, Merged.Positions, Merged.Indices, Merged.Normals, Merged.UVs, Merged.Colors, {}, true);
+	const double T2 = FPlatformTime::Seconds();
+	if ((T2 - T0) * 1000.0 >= UDCVoxelSettings::Get().Tuning.HitchLogMs)
+	{
+		UE_LOG(LogTemp, Display, TEXT("DCUPLOAD slow grid=%d cm=%d cell=%s verts=%d tris=%d merge=%.1f section=%.1f ms loading=%d"), G, GridAt(G).VoxelCm,
+			*FIntVector(Cell.Y, Cell.Z, Cell.W).ToString(), Merged.Positions.Num(), Merged.Indices.Num() / 3, (T1 - T0) * 1000.0, (T2 - T1) * 1000.0, bLoading ? 1 : 0);
+	}
 	return true;
 }
 
@@ -2307,7 +2316,8 @@ void ADCVoxelCity::TickLampLights()
 	TArray<FLightSpot> Near = LampSpots;
 	Near.Sort([&View](const FLightSpot& A, const FLightSpot& B) { return FVector::DistSquared(A.At, View) < FVector::DistSquared(B.At, View); });
 	const TArray<FDCPropLightDef>& Rows = UDCVoxelSettings::Get().PropLights;
-	while (LampPool.Num() < FMath::Min(Tn.LampLights, Near.Num()))
+	const int32 LampCap = FMath::RoundToInt32(Tn.LampLights * ADCEnvironment::EffectScaleOf(this)); // low tiers light fewer
+	while (LampPool.Num() < FMath::Min(LampCap, Near.Num()))
 	{
 		UPointLightComponent* L = NewObject<UPointLightComponent>(this);
 		L->SetupAttachment(Root);
@@ -2320,7 +2330,7 @@ void ADCVoxelCity::TickLampLights()
 	for (int32 i = 0; i < LampPool.Num(); ++i)
 	{
 		UPointLightComponent* L = LampPool[i];
-		if (!Near.IsValidIndex(i) || i >= Tn.LampLights)
+		if (!Near.IsValidIndex(i) || i >= LampCap)
 		{
 			L->SetVisibility(false);
 			continue;
