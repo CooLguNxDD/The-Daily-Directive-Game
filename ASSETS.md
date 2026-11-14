@@ -39,6 +39,9 @@ art) is in the game.
 | Photographer outfit parts (R23): `outfit_cap`, `outfit_helmet`, `outfit_beret`, `outfit_vest`, `outfit_trench`, `outfit_backpack`, `outfit_filmbelt`, `outfit_boxcam` | `Content/DC/Voxel/outfit_*.dcvox` | `tools/voxel-forge/forge.py` from `tools/voxel-forge/recipes/outfit_*.vfr` |
 | `M_DCInkOutline` ink-edge post material | `Content/DC/Materials/M_DCInkOutline.uasset` | `tools/content/build_content.py` (HLSL in the script) |
 | Enemy, prop and player-gear voxel models (swarmer, spotlight, walker, props, the chest press camera `presscam`) | `Content/DC/Voxel/*.dcvox` | `tools/voxel-forge/forge.py` from `tools/voxel-forge/recipes/*.vfr` (R17) |
+| Faction unit models (trooper, shambler, raider, soldier, skitter; Brute and Brood are scaled shamblers/skitters) and the objective package (`package`) | `Content/DC/Voxel/*.dcvox` | `tools/voxel-forge/forge.py` from `tools/voxel-forge/recipes/{trooper,shambler,raider,soldier,skitter,package}.vfr` (R3, R4; original designs) |
+| Faction sound cues (FactionShot, Groan, FactionStrike) | synthesised at run time | C++ synth in `DCAudio.cpp` |
+| Shareable ID card (turntable PNG) | written to `Saved/IdCards/` at run time | C++ canvas render target from the builder's turntable capture (`DCIdCard.cpp`, R5) |
 | Newsprint photo print (halftone, grain, border); fallback stamp grit when `T_StampGrit` is missing | at run time | C++ (`Rules/DCNewsprint.cpp`, `DCHUD::StampGrit`) |
 | Decay effects, voxel blast core, weather precipitation | at run time | C++ pooled instanced cubes (`DCVoxelFx`, `DCOrbitalStrike`) from ini rows |
 

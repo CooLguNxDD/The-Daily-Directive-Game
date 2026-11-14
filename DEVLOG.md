@@ -115,3 +115,14 @@ is kept from the run records (Glass Box modifier): what was decided, why, and wh
 - Every rifle-only test showed swarmers idling 40-60 m away. A per-enemy trace showed them frozen against towers:
   an inside corner or a window ledge blocked the one escape move they had. They now try several and take the first
   that moves.
+
+## 2026-11-14 directors-cut-final (lead)
+- Collapses throw single-voxel crumbs (one instanced cube per colour bucket, ballistic, local only); the host Rest op
+  still owns the rubble that stays. Fragment and body budgets raised as data so tops break into more, smaller chunks.
+- Factions: each map rolls a main faction and two invaders from the run seed; a friendly army acts on its own. Ground
+  infantry walks on voxel column tops (no physics sweeps), retargets at about 4 Hz, and fires tracers. Faction
+  destruction goes through the same strike path as the crew's (rate-limited by the host), so it carves, replicates and
+  grades like any blast. Two factions in one frame earn a CLASH.
+- Objectives: Retrieve (a package deep in the main faction's ground) or Destroy (three marked towers), then a lit
+  beacon; reaching it ends the sector early. Time up fails the objective but the run goes on to the reel.
+- The builder exports a shareable ID card PNG from its own turntable capture.
