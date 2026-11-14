@@ -32,6 +32,10 @@ struct FDCFactionDef
 	UPROPERTY(EditAnywhere, Config, Category = "Faction") TArray<FName> Hostile;
 	/** Squad size per drop. */
 	UPROPERTY(EditAnywhere, Config, Category = "Faction") int32 SquadMin = 3;
+	/** Pressure packs of this faction are PackScale times the rule's pack size (crowds are crowds), and each live unit
+	 *  counts PressureWeight against the pressure's alive target (a shambler is less threat than a trooper). */
+	UPROPERTY(EditAnywhere, Config, Category = "Faction") float PackScale = 1.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Faction") float PressureWeight = 1.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Faction") int32 SquadMax = 6;
 	/** Faction-made destruction (advisor a-2): a +Stratagems row the host calls on the tower nearest the faction's
 	 *  squad, at most once per StrikeInterval seconds per faction (0 = never). */
