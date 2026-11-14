@@ -460,6 +460,9 @@ struct FDCRunTuning
 	UPROPERTY(EditAnywhere, Config, Category = "Run") int32 FinalCutChoices = 8;
 	UPROPERTY(EditAnywhere, Config, Category = "Run") float VoteSeconds = 30.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Run") int32 VoteBonus = 600;
+	/** Photo album (R24): entries kept on disk (the oldest drop first), and how many front-page picks each run adds. */
+	UPROPERTY(EditAnywhere, Config, Category = "Run") int32 AlbumMaxEntries = 60;
+	UPROPERTY(EditAnywhere, Config, Category = "Run") int32 AlbumPicksPerRun = 3;
 	UPROPERTY(EditAnywhere, Config, Category = "Run") float ScoopFirstSeconds = 35.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Run") float ScoopGapSeconds = 20.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Run") int32 PodFilm = 4;

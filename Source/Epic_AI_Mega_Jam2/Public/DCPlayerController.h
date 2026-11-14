@@ -55,6 +55,9 @@ public:
 	/** -dcmenuflow=<dir>: frames the title menu, moves the real cursor onto SOLO RUN, clicks it with Slate mouse events
 	 *  (the same path as a player), and frames the travel and the first street, then quits (menu evidence). */
 	void TickMenuFlow();
+	/** Front page (R24): this player's own printed picks and the page itself go into the saved photo album, once. */
+	void TickAlbum();
+	bool bAlbumSaved = false;
 	TArray<float> PerfFrameMs;
 	double PerfWindowStart = 0.0;
 	int32 PerfMaxFalling = 0;

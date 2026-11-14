@@ -1,4 +1,5 @@
 #include "DCPlayerController.h"
+#include "DCSave.h"
 #include "RenderTimer.h"
 #include "Framework/Application/SlateApplication.h"
 #include "Misc/App.h"
@@ -76,6 +77,10 @@ void ADCPlayerController::BeginPlay()
 {
 	Super::BeginPlay();
 	Sensitivity = UDCTuning::Get().Move.MouseSensitivity;
+	if (const UDCSaveSubsystem* Save = UDCSaveSubsystem::Get(this))
+	{
+		Sensitivity = FMath::Clamp(Save->Settings.MouseSensitivity, 0.05f, 5.f); // saved settings (R24)
+	}
 	if (!IsLocalController())
 	{
 		return;
@@ -121,6 +126,49 @@ void ADCPlayerController::SetupInputComponent()
 void ADCPlayerController::SetSensitivity(float Value)
 {
 	Sensitivity = FMath::Clamp(Value, 0.05f, 5.f);
+	if (UDCSaveSubsystem* Save = UDCSaveSubsystem::Get(this))
+	{
+		Save->Settings.MouseSensitivity = Sensitivity;
+		Save->SaveSettings();
+	}
+}
+
+void ADCPlayerController::TickAlbum()
+{
+	const ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>();
+	if (!GS || GS->Phase != EDCRunPhase::FrontPage)
+	{
+		bAlbumSaved = false;
+		return;
+	}
+	UDCSaveSubsystem* Save = UDCSaveSubsystem::Get(this);
+	if (bAlbumSaved || !Save || GS->PagePicks.Num() == 0)
+	{
+		return;
+	}
+	bAlbumSaved = true;
+	const APlayerState* Me = GetPlayerState<APlayerState>();
+	TArray<const FDCPagePick*> Picks;
+	for (const FDCPagePick& P : GS->PagePicks)
+	{
+		Picks.Add(&P);
+	}
+	Picks.StableSort([](const FDCPagePick& A, const FDCPagePick& B) { return A.PageScore > B.PageScore; });
+	int32 Added = 0;
+	for (const FDCPagePick* P : Picks)
+	{
+		const FDCLocalPhoto* Mine = Me && P->Photo.OwnerPlayerId == Me->GetPlayerId() ? Album.FindByPredicate([P](const FDCLocalPhoto& L) { return L.PhotoId == P->Photo.PhotoId; }) : nullptr;
+		if (Mine && Mine->Pixels.Num() > 0 && Added < UDCTuning::Get().Run.AlbumPicksPerRun)
+		{
+			Save->AddToAlbum(TEXT("photo"), Mine->Pixels, Mine->Width, Mine->Height, P->PageScore, P->Headline.IsEmpty() ? GS->Headline : P->Headline, P->PlayerName);
+			++Added;
+		}
+	}
+	// The page itself, once it has drawn: a screenshot into the album folder.
+	const FString PageFile = UDCSaveSubsystem::Folder() / FString::Printf(TEXT("album/%s_frontpage.png"), *FDateTime::Now().ToString(TEXT("%Y%m%d-%H%M%S")));
+	FTimerHandle Later;
+	GetWorldTimerManager().SetTimer(Later, FTimerDelegate::CreateWeakLambda(this, [PageFile] { FScreenshotRequest::RequestScreenshot(PageFile, true, false); }), 1.5f, false);
+	UE_LOG(LogTemp, Display, TEXT("DCALBUM front page: %d own picks saved, page shot %s"), Added, *PageFile);
 }
 
 void ADCPlayerController::Confirm() { DCAudio::Play2D(this, TEXT("UIConfirm"), 0.9f); }
@@ -248,6 +296,7 @@ void ADCPlayerController::PlayerTick(float DeltaTime)
 	{
 		TickPerf();
 		TickMenuFlow();
+		TickAlbum();
 		UpdateMenu();
 		UpdateCursor();
 		UpdateReel();
