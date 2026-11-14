@@ -257,6 +257,8 @@ void ADCEnvironment::ApplyPost(const FDCPostResult& L, FPostProcessSettings& S)
 {
 	S.bOverride_BloomIntensity = true;
 	S.BloomIntensity = L.Bloom;
+	S.bOverride_BloomThreshold = true;
+	S.BloomThreshold = L.BloomThreshold > 0.f ? L.BloomThreshold : -1.f; // <= 0: no threshold
 	S.bOverride_AutoExposureBias = true;
 	S.AutoExposureBias = L.Exposure;
 	S.bOverride_ColorSaturation = true;

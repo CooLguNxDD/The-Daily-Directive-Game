@@ -288,6 +288,12 @@ struct FDCLookTuning
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float BlastLightRadiusCm = 9000.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float BlastLightSeconds = 2.3f;
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float BlastLightTailFraction = 0.f;
+	/** Rim, not flood (advisor CP11): the blast light sits this many blast radii beyond the strike centre on the far
+	 *  side from the local camera, HeightCm up, reaching RadiusScale blast radii (0 = BlastLightRadiusCm at the centre),
+	 *  so the tower reads as a silhouette with its windows against the glow. */
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float BlastLightBehind = 0.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float BlastLightRadiusScale = 0.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float BlastLightHeightCm = 600.f;
 	/** Fire cubes of the blast core near the local camera shrink away: gone inside HideCm, full size past FadeCm (a
 	 *  big hot cube against the lens washes the frame). The cubes are unlit when bFireCubesUnlit (their glow is the
 	 *  only light on them; the blast light no longer bleaches them white). */

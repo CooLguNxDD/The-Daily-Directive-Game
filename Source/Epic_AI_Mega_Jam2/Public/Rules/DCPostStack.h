@@ -23,6 +23,9 @@ struct FDCPostLayer
 	UPROPERTY(EditAnywhere, Config, Category = "Post") float Vignette = 0.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Post") float Grain = 0.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Post") float Outline = 0.f;
+	/** Bloom threshold in scene luminance (additive): only light above it blooms. The composed value <= 0 turns the
+	 *  threshold off (everything blooms, the engine's physically based default). */
+	UPROPERTY(EditAnywhere, Config, Category = "Post") float BloomThreshold = 0.f;
 	// Multiplicative
 	UPROPERTY(EditAnywhere, Config, Category = "Post") float Saturation = 1.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Post") float Contrast = 1.f;
@@ -57,6 +60,7 @@ struct FDCPostResult
 	UPROPERTY() float Vignette = 0.f;
 	UPROPERTY() float Grain = 0.f;
 	UPROPERTY() float Outline = 0.f;
+	UPROPERTY() float BloomThreshold = 0.f;
 	UPROPERTY() float Saturation = 1.f;
 	UPROPERTY() float Contrast = 1.f;
 	UPROPERTY() FLinearColor Gain = FLinearColor::White;
