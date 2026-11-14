@@ -259,6 +259,57 @@ bool FDCVoxelSmallCarveTest::RunTest(const FString&)
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDCVoxelSignDropTest, "Epic_AI_Mega_Jam2.Voxel.SignFallsWithItsWall", VoxelFlags)
+bool FDCVoxelSignDropTest::RunTest(const FString&)
+{
+	// Critic V19.1: a sign whose wall is blasted away falls whole; a sign on an intact wall stays.
+	const FDCVoxelOpContext Ctx = UDCVoxelSettings::Get().OpContext(UDCTuning::Get().City.BlockSizeCm);
+	FDCVoxelSector S;
+	Craft(S, VoxelPlan(DCCityRules::SectorSeed(5, 0), 0));
+	FDCVoxelTower* T = S.Towers.FindByPredicate([](const FDCVoxelTower& X) { return X.Signs.Num() > 0; });
+	if (!TestNotNull(TEXT("a crafted tower carries a sign"), T))
+	{
+		return true;
+	}
+	const FDCVoxelSign Sign = T->Signs[0];
+	TestTrue(TEXT("sign is storefront scale (no side over 8 m)"), FMath::Max(Sign.WidthVox, Sign.HeightVox) * T->Grid.VoxelCm <= 800);
+	{
+		FDCVoxelOpResult Intact;
+		DCVoxelOps::Structure(*T, FIntVector(1, 0, 0), Ctx, Intact);
+		TestTrue(TEXT("sign on an intact wall stays"), T->Grid.Data.Get(Sign.Probe) == Sign.Material);
+	}
+	// Blast the wall behind the sign (and the next two layers in), as a carve would.
+	const FIntVector In = Sign.Normal * -3;
+	const FIntVector Lo = Sign.BackMin.ComponentMin(Sign.BackMin + In);
+	const FIntVector Hi = Sign.BackMax.ComponentMax(Sign.BackMax + In);
+	for (int32 Z = Lo.Z; Z < Hi.Z; ++Z)
+	{
+		for (int32 Y = Lo.Y; Y < Hi.Y; ++Y)
+		{
+			for (int32 X = Lo.X; X < Hi.X; ++X)
+			{
+				T->Grid.Data.Set(FIntVector(X, Y, Z), 0);
+			}
+		}
+	}
+	FDCVoxelOpResult R;
+	DCVoxelOps::Structure(*T, FIntVector(1, 0, 0), Ctx, R);
+	int32 Left = 0;
+	for (int32 Z = Sign.BoxMin.Z; Z < Sign.BoxMax.Z; ++Z)
+	{
+		for (int32 Y = Sign.BoxMin.Y; Y < Sign.BoxMax.Y; ++Y)
+		{
+			for (int32 X = Sign.BoxMin.X; X < Sign.BoxMax.X; ++X)
+			{
+				Left += T->Grid.Data.Get(FIntVector(X, Y, Z)) != 0 ? 1 : 0;
+			}
+		}
+	}
+	TestEqual(TEXT("no sign voxel hangs once its wall is gone"), Left, 0);
+	TestTrue(TEXT("the sign falls as a piece"), R.Pieces.Num() > 0);
+	return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDCVoxelDataTest, "Epic_AI_Mega_Jam2.Voxel.ShippedData", VoxelFlags)
 bool FDCVoxelDataTest::RunTest(const FString&)
 {

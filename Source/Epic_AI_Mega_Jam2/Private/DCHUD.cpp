@@ -313,7 +313,8 @@ void ADCHUD::DrawStrikeInfo(ADCCharacter& Me)
 void ADCHUD::DrawViewfinder(ADCCharacter& Me)
 {
 	const float W = Canvas->ClipX, H = Canvas->ClipY;
-	const FLinearColor Line(1, 1, 1, 0.8f);
+	// Cyan HUD framing (critic V20 minor: the viewfinder reads as the same neon HUD as the feed and the stamp).
+	const FLinearColor Line(Cyan.R, Cyan.G, Cyan.B, 0.85f);
 	// Letterbox to the photo's 16:9 and corner brackets.
 	const float FrameH = W * 9.f / 16.f;
 	const float Bar = FMath::Max(0.f, (H - FrameH) * 0.5f);
@@ -331,7 +332,7 @@ void ADCHUD::DrawViewfinder(ADCCharacter& Me)
 		DrawLine(X, Y, X, Y + Dy, Line, T);
 	}
 	// Thirds and the centre mark.
-	const FLinearColor Faint(1, 1, 1, 0.18f);
+	const FLinearColor Faint(Cyan.R, Cyan.G, Cyan.B, 0.16f);
 	DrawLine(W / 3, Bar, W / 3, H - Bar, Faint, 1.f);
 	DrawLine(2 * W / 3, Bar, 2 * W / 3, H - Bar, Faint, 1.f);
 	DrawLine(0, Bar + FrameH / 3, W, Bar + FrameH / 3, Faint, 1.f);

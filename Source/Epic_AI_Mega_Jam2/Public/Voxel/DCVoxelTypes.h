@@ -58,11 +58,24 @@ struct FDCVoxelRecipe
 	/** Window variety per opening (critic: a uniform lit grid reads as a black slab with dots): OffPercent of the
 	 *  windows are dark glass (WindowOff), AltPercent use WindowAlt (another tint); hashed per bay and floor. */
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 WindowOffPercent = 0;
+	/** Relief depth in voxels (advisor CP12: 1 voxel of relief is ~2 px at 100 m): string-course ledges and pier ribs
+	 *  stand this far proud of the wall (at most 4: the tower's scan margin). */
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 LedgeDepthVox = 1;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 RibDepthVox = 1;
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") FName WindowOff;
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 WindowAltPercent = 0;
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") FName WindowAlt;
 	/** The sign's outer ring (a neon tube edge, R25); None = the same as Poster. */
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") FName PosterEdge;
+	/** Sign builder id from the sign registry (critic V19.4: storefront-scale neon, not giant flat boards): Blade = a
+	 *  vertical sign standing out from a pier, Board = a horizontal band over the ground floor, Poster = the old
+	 *  two-bay board. Sizes in voxels: Width along the face (blade thickness), Height, Depth out from the wall. */
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") FName SignKind = TEXT("Poster");
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 SignWidthVox = 2;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 SignHeightVox = 36;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 SignDepthVox = 6;
+	/** Dark glyph strokes across the sign every N voxels (reads as lettering; 0 = none). */
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 SignGlyphEvery = 4;
 };
 
 USTRUCT(BlueprintType)
@@ -124,6 +137,16 @@ struct FDCVoxelTuning
 	 *  IslandBlockFill solid voxels (thin links break). */
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 IslandBlockVoxels = 5;
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 IslandBlockFill = 18;
+	/** A sign falls as a piece when less than this share of the wall behind it is left (critic V19.1: no torn sign
+	 *  hanging in the air off one corner). */
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 SignHoldPercent = 60;
+	/** Form floor in M_DCVoxel (advisor CP16, critic V20.5): shaded albedo x lerp(FormGround, FormSky) by how much a
+	 *  face turns to MoonDir, x FormFloor, added as emission, so unlit faces separate without lifting the frame
+	 *  (0 = off). */
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float FormFloor = 0.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") FLinearColor FormSky = FLinearColor(0.32f, 0.4f, 0.8f);
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") FLinearColor FormGround = FLinearColor(0.05f, 0.05f, 0.08f);
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") FVector MoonDir = FVector(-0.4f, 0.3f, 0.85f);
 	/** Percent of a fallen piece's voxels that land as rubble (the rest is dust). */
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 RubbleKeepPercent = 35;
 	/** How far a toppling piece is thrown: voxels of drift per 100 voxels of height above the break. */

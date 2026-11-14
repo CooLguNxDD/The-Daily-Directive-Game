@@ -378,6 +378,10 @@ UMaterialInterface* ADCVoxelCity::VoxelMaterialFor(int32 VoxelCm)
 	Mid->SetScalarParameterValue(TEXT("EdgeDark"), Tn.VoxelEdgeDark);
 	Mid->SetScalarParameterValue(TEXT("Jitter"), Tn.VoxelJitter);
 	Mid->SetScalarParameterValue(TEXT("Wetness"), Wetness);
+	Mid->SetScalarParameterValue(TEXT("FormFloor"), Tn.FormFloor);
+	Mid->SetVectorParameterValue(TEXT("FormSky"), Tn.FormSky);
+	Mid->SetVectorParameterValue(TEXT("FormGround"), Tn.FormGround);
+	Mid->SetVectorParameterValue(TEXT("MoonDir"), FLinearColor(Tn.MoonDir.GetSafeNormal()));
 	VoxelMIDs.Add(VoxelCm, Mid);
 	return Mid;
 }

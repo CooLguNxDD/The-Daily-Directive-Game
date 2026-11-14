@@ -209,6 +209,13 @@ struct FDCLookTuning
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float OutfitRimCandela = 300.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Look") FLinearColor OutfitRimColor = FLinearColor(0.024f, 0.552f, 0.687f);
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float OutfitExposureBias = 0.f;
+	/** The photographer in play (critic V18.4/V20.3: dark silhouette, cyan rim): the body's suit colour, and a small
+	 *  shadowless rim light ahead of and above the body (cd, reach in cm, offset in the actor's frame) so the edges
+	 *  the third-person camera sees catch OutfitRimColor. 0 cd = no rim light. */
+	UPROPERTY(EditAnywhere, Config, Category = "Look") FLinearColor SuitColor = FLinearColor(0.02f, 0.022f, 0.03f);
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float PlayerRimCandela = 0.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float PlayerRimReachCm = 260.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Look") FVector PlayerRimOffset = FVector(110.f, 0.f, 170.f);
 	/** Impact flare where the beam meets the street (blast white-orange, only on strikes): width x beam, peak glow. */
 	UPROPERTY(EditAnywhere, Config, Category = "Look") FLinearColor ImpactFlareColor = FLinearColor(1.f, 0.89f, 0.54f);
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float ImpactFlareWidthScale = 2.6f;

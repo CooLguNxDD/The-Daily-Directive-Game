@@ -527,6 +527,38 @@ namespace DCVoxelOps
 		{
 			TakePiece(Drop, 0, [&Reached, &BIndex, K](int32 X, int32 Y, int32 Z) { return !Reached[BIndex(X / K, Y / K, Z / K)]; });
 		}
+		// 3. Signs: a sign whose wall is mostly gone falls whole (it would hang off one corner otherwise).
+		const int32 Hold = FMath::Clamp(Ctx.Tuning->SignHoldPercent, 0, 100);
+		for (const FDCVoxelSign& Sign : T.Signs)
+		{
+			if (Sign.BackCells <= 0)
+			{
+				continue;
+			}
+			const FIntVector B0 = Sign.BackMin - Box.Min;
+			const FIntVector B1 = Sign.BackMax - Box.Min;
+			int32 Left = 0;
+			for (int32 Z = FMath::Max(B0.Z, 0); Z < FMath::Min(B1.Z, Size.Z); ++Z)
+			{
+				for (int32 Y = FMath::Max(B0.Y, 0); Y < FMath::Min(B1.Y, Size.Y); ++Y)
+				{
+					for (int32 X = FMath::Max(B0.X, 0); X < FMath::Min(B1.X, Size.X); ++X)
+					{
+						Left += Box.V[Box.Index(X, Y, Z)] != 0 ? 1 : 0;
+					}
+				}
+			}
+			if (static_cast<int64>(Left) * 100 >= static_cast<int64>(Sign.BackCells) * Hold)
+			{
+				continue;
+			}
+			const FIntVector S0 = Sign.BoxMin - Box.Min;
+			const FIntVector S1 = Sign.BoxMax - Box.Min;
+			TakePiece(Drop, S0.Z, [S0, S1](int32 X, int32 Y, int32 Z)
+			{
+				return X >= S0.X && Y >= S0.Y && Z >= S0.Z && X < S1.X && Y < S1.Y && Z < S1.Z;
+			});
+		}
 		if (Drop.Cells.Num() > 0)
 		{
 			Drop.Pivot = Drop.Cells[0];

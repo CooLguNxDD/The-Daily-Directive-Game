@@ -1,4 +1,6 @@
 #include "DCCharacter.h"
+
+#include "Components/PointLightComponent.h"
 #include "DCOutfitBuild.h"
 
 #include "DCVoxelCity.h"
@@ -103,6 +105,10 @@ ADCCharacter::ADCCharacter()
 	RifleMesh = MakeProp(TEXT("Rifle"));
 	PhotoCamMesh = MakeProp(TEXT("PhotoCam"));
 	BeaconMesh = MakeProp(TEXT("Beacon"));
+	RimLight = CreateDefaultSubobject<UPointLightComponent>(TEXT("RimLight"));
+	RimLight->SetupAttachment(RootComponent);
+	RimLight->SetCastShadows(false);
+	RimLight->SetVisibility(false);
 
 	StrikeMarker = CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("StrikeMarker"));
 	StrikeMarker->SetupAttachment(RootComponent);
@@ -215,6 +221,18 @@ void ADCCharacter::BeginPlay()
 	BeaconMesh->AttachToComponent(GetMesh(), FAttachmentTransformRules::SnapToTargetNotIncludingScale, Hand);
 	BeaconMesh->SetStaticMesh(DCAssets::Cylinder());
 	BeaconMesh->SetMaterial(0, DCAssets::MakeFlat(this, Look.Accent, 12.f));
+	// Dark suit (one flat material over every body slot) and the cyan rim that keeps it readable at night.
+	UMaterialInstanceDynamic* Suit = DCAssets::MakeFlat(this, Look.SuitColor);
+	for (int32 m = 0; m < GetMesh()->GetNumMaterials(); ++m)
+	{
+		GetMesh()->SetMaterial(m, Suit);
+	}
+	RimLight->SetRelativeLocation(Look.PlayerRimOffset);
+	RimLight->SetIntensityUnits(ELightUnits::Candelas);
+	RimLight->SetIntensity(Look.PlayerRimCandela);
+	RimLight->SetLightColor(Look.OutfitRimColor);
+	RimLight->SetAttenuationRadius(Look.PlayerRimReachCm);
+	RimLight->SetVisibility(Look.PlayerRimCandela > 0.f);
 
 	StrikeMarker->SetMaterial(0, DCAssets::MakeFlatUnlit(this, Look.Accent, Look.DangerRingGlow)); // unlit: stays palette red, not lit to salmon
 	Tracer->SetStaticMesh(DCAssets::Cube());
@@ -968,6 +986,7 @@ void ADCCharacter::TickOutfit()
 	{
 		ChestCam = Cam;
 	}
+	HideBodyFromOwner(FirstCam->IsActive());
 	if (ChestCam)
 	{
 		ChestCam->SetVisibility(Slot != EDCSlot::Camera);
@@ -1363,6 +1382,22 @@ void ADCCharacter::UpdateHeldItems(float DeltaSeconds)
 	}
 }
 
+void ADCCharacter::HideBodyFromOwner(bool bHide)
+{
+	// Everything on the body (outfit parts, holstered gear, their voxel children) leaves the first-person view, or a
+	// part behind the lens crosses the viewfinder as a big flat polygon (critic V19.6).
+	GetMesh()->SetOwnerNoSee(bHide);
+	TArray<USceneComponent*> Parts;
+	GetMesh()->GetChildrenComponents(true, Parts);
+	for (USceneComponent* Part : Parts)
+	{
+		if (UPrimitiveComponent* Prim = Cast<UPrimitiveComponent>(Part))
+		{
+			Prim->SetOwnerNoSee(bHide);
+		}
+	}
+}
+
 void ADCCharacter::UpdateView(float DeltaSeconds)
 {
 	const float Target = bCameraRaised ? 1.f : 0.f;
@@ -1372,14 +1407,7 @@ void ADCCharacter::UpdateView(float DeltaSeconds)
 	{
 		FirstCam->SetActive(bFirst);
 		ThirdCam->SetActive(!bFirst);
-		GetMesh()->SetOwnerNoSee(bFirst);
-		RifleMesh->SetOwnerNoSee(bFirst);
-		PhotoCamMesh->SetOwnerNoSee(bFirst);
-		if (ChestCam)
-		{
-			ChestCam->SetOwnerNoSee(bFirst);
-		}
-		BeaconMesh->SetOwnerNoSee(bFirst);
+		HideBodyFromOwner(bFirst);
 	}
 	FirstCam->SetFieldOfView(FMath::FInterpTo(FirstCam->FieldOfView, LensFOV(), DeltaSeconds, 14.f));
 
