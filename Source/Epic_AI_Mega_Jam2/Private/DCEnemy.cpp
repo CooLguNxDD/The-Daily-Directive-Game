@@ -926,8 +926,15 @@ void ADCEnemy::Die(AController* Killer)
 	{
 		if (ADCPlayerState* PS = Killer->GetPlayerState<ADCPlayerState>())
 		{
-			PS->AddPoints(Def ? Def->KillPoints : UDCTuning::Get().Economy.KillPoints);
-			++PS->Kills;
+			// R3: shooting the friendly army pays nothing and HQ notices (advisor a-7).
+			const bool bAlly = !GetFaction().IsNone() && !DCFactionRules::FightsCrew(UDCTuning::Get().Factions, GetFaction());
+			PS->AddPoints(bAlly ? 0 : (Def ? Def->KillPoints : UDCTuning::Get().Economy.KillPoints));
+			PS->Kills += bAlly ? 0 : 1;
+			ADCCharacter* Shooter = bAlly ? PS->GetPawn<ADCCharacter>() : nullptr;
+			if (Shooter)
+			{
+				Shooter->HostToast(TEXT("FRIENDLY FIRE. HQ WILL BILL YOU FOR THE UNIFORM."));
+			}
 		}
 	}
 	SetActorEnableCollision(false);

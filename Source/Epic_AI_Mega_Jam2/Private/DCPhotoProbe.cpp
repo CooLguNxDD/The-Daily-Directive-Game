@@ -336,6 +336,8 @@ namespace DCPhotoProbe
 				using FTagRule = TPair<bool (*)(const ADCEnemy&, float), const TCHAR*>;
 				static const FTagRule Rules[] = {
 					{[](const ADCEnemy& En, float T) { return En.IsStunned(T); }, TEXT("STUNNED")},
+					// R3: the friendly army reads as friendly in the viewfinder (advisor a-7).
+					{[](const ADCEnemy& En, float) { return !En.GetFaction().IsNone() && !DCFactionRules::FightsCrew(UDCTuning::Get().Factions, En.GetFaction()); }, TEXT("ALLY")},
 					{[](const ADCEnemy& En, float) { return En.IsWalker(); }, TEXT("WAR MACHINE")},
 					// R3: a hostile faction's unit close by (any machine can tell: factions and positions replicate).
 					{[](const ADCEnemy& En, float)

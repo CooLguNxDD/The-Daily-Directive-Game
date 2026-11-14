@@ -44,6 +44,8 @@ struct FDCObjectiveDef
 	 *  while nobody carries it. */
 	UPROPERTY(EditAnywhere, Config, Category = "Objective") int32 GuardSquad = 8;
 	UPROPERTY(EditAnywhere, Config, Category = "Objective") float GuardGapSeconds = 30.f;
+	/** At most this many guard squads per sector (advisor a-7: loitering by the package must not pile up units). */
+	UPROPERTY(EditAnywhere, Config, Category = "Objective") int32 GuardWaves = 3;
 	/** Propaganda Points paid to every player on extraction; the sector ends ExtractEndSeconds later. */
 	UPROPERTY(EditAnywhere, Config, Category = "Objective") int32 RewardPoints = 600;
 	UPROPERTY(EditAnywhere, Config, Category = "Objective") float ExtractEndSeconds = 2.5f;

@@ -97,6 +97,17 @@ int32 ADCGameMode::SpawnSquad(FName Faction, int32 Count, const FVector& Centre,
 		return 0;
 	}
 	const ADCVoxelCity* City = ADCVoxelCity::Get(this);
+	const UDCUnits* Live = UDCUnits::Get(this);
+	int32 Alive = 0;
+	for (const ADCEnemy* U : Live ? Live->All() : TArray<TObjectPtr<ADCEnemy>>())
+	{
+		Alive += U && U->IsAlive() ? 1 : 0;
+	}
+	Count = FMath::Min(Count, T.FactionMix.MaxUnitsAlive - Alive - PendingSpawns.Num());
+	if (Count <= 0)
+	{
+		return 0;
+	}
 	const int32 Squad = NextSquadId++;
 	int32 Landed = 0;
 	for (int32 i = 0; i < Count; ++i)

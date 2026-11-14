@@ -77,6 +77,9 @@ struct FDCFactionMixRule
 	/** Faction strikes wait while the city's physics body load is above this (the crew's shots own the body budget). */
 	UPROPERTY(EditAnywhere, Config, Category = "Faction") float StrikeMaxBodyLoad = 0.35f;
 	UPROPERTY(EditAnywhere, Config, Category = "Faction") int32 SpawnsPerFrame = 2;
+	/** One cap on live faction units of every source (pressure, guards, allies, nests, opening; advisor a-7): a squad
+	 *  is clamped to the room left, counting spawns still queued. */
+	UPROPERTY(EditAnywhere, Config, Category = "Faction") int32 MaxUnitsAlive = 40;
 	/** The opening clash (first 10 seconds sell the game): OpeningSeconds into the sector a main-faction squad and an
 	 *  invader squad of OpeningSquad each land OpeningApartCm apart in the ring around the crew and fight (0 = off). */
 	UPROPERTY(EditAnywhere, Config, Category = "Faction") float OpeningSeconds = 4.f;

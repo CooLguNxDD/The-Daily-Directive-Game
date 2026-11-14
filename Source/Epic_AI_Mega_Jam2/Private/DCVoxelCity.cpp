@@ -280,10 +280,13 @@ bool ADCVoxelCity::IsSolidAt(const FVector& Where) const
 		{
 			return true;
 		}
-		for (const FDCVoxelTower& T : Sector.Towers)
+		for (int32 Lot = 0; Lot < Sector.Towers.Num(); ++Lot)
 		{
+			// A committed-fallen tower is rubble now, not its crafted box (advisor a-7: units on rubble stalled here).
+			const FDCVoxelTower& T = Sector.Towers[Lot];
 			const FIntVector L = T.Grid.ToLocal(Cm);
-			if (L.X >= T.Min.X && L.Y >= T.Min.Y && L.Z >= 0 && L.X < T.Max.X && L.Y < T.Max.Y && L.Z < T.Max.Z)
+			const bool bFallen = CommittedFallen.IsValidIndex(Lot) && CommittedFallen[Lot];
+			if (!bFallen && L.X >= T.Min.X && L.Y >= T.Min.Y && L.Z >= 0 && L.X < T.Max.X && L.Y < T.Max.Y && L.Z < T.Max.Z)
 			{
 				return true;
 			}

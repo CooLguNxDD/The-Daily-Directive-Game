@@ -99,6 +99,7 @@ void ADCGameMode::StartObjective()
 		}
 	}
 	NextGuardTime = 0.f;
+	GuardWavesSent = 0;
 	UE_LOG(LogTemp, Display, TEXT("DCOBJECTIVE sector=%d %s (%s) package=%s targets=%d"), GS->SectorIndex + 1, *Def->Id.ToString(), *Def->Kind.ToString(),
 		*Objective->PackageAt.ToCompactString(), Objective->TargetAt.Num());
 }
@@ -146,9 +147,10 @@ void ADCGameMode::TickObjective(float Now)
 		}
 		// The deep swarm: as the crew closes in on a package nobody carries, the main faction erupts around it.
 		const bool bNear = Standing.ContainsByPredicate([&](const ADCCharacter* C) { return FVector::Dist2D(C->GetActorLocation(), Objective->PackageAt) < 7000.f; });
-		if (!Objective->Carrier && bNear && Now >= NextGuardTime && FactionMode())
+		if (!Objective->Carrier && bNear && Now >= NextGuardTime && FactionMode() && GuardWavesSent < Def->GuardWaves)
 		{
 			NextGuardTime = Now + Def->GuardGapSeconds;
+			++GuardWavesSent;
 			const int32 Landed = SpawnSquad(GS->FactionMix.Main, Def->GuardSquad, Objective->PackageAt, 900.f);
 			UE_LOG(LogTemp, Display, TEXT("DCOBJECTIVE guards %s landed=%d"), *GS->FactionMix.Main.ToString(), Landed);
 		}

@@ -151,6 +151,7 @@ private:
 	UPROPERTY() TObjectPtr<class ADCObjective> Objective;
 	TArray<TWeakObjectPtr<ADCBuilding>> ObjectiveTargets;
 	float NextGuardTime = 0.f;
+	int32 GuardWavesSent = 0;
 	FRandomStream SectorRng;
 	float NextScoopTime = 0.f;
 	int32 LastScoop = -1;
