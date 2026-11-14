@@ -15,6 +15,7 @@
 #include "SocketSubsystem.h"
 #include "Styling/CoreStyle.h"
 #include "Brushes/SlateColorBrush.h"
+#include "Brushes/SlateRoundedBoxBrush.h"
 #include "Widgets/Input/SButton.h"
 #include "Widgets/Input/SEditableTextBox.h"
 #include "Widgets/Layout/SBorder.h"
@@ -49,8 +50,9 @@ namespace DCMenuStyle
 		{
 			FButtonStyle S = FCoreStyle::Get().GetWidgetStyle<FButtonStyle>("Button");
 			S.SetNormal(FSlateColorBrush(FLinearColor::White));
-			S.SetHovered(FSlateColorBrush(FLinearColor(0.85f, 0.85f, 0.85f)));
-			S.SetPressed(FSlateColorBrush(FLinearColor(0.7f, 0.7f, 0.7f)));
+			// Hover and press read at a glance (critic CP6): a thick ink rule around the plate, pressed darker.
+			S.SetHovered(FSlateRoundedBoxBrush(FLinearColor::White, 0.f, FLinearColor(0.086f, 0.086f, 0.1f), 5.f));
+			S.SetPressed(FSlateRoundedBoxBrush(FLinearColor(0.72f, 0.72f, 0.72f), 0.f, FLinearColor(0.086f, 0.086f, 0.1f), 7.f));
 			S.SetNormalPadding(FMargin(0));
 			S.SetPressedPadding(FMargin(0));
 			return S;

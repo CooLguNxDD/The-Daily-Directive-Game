@@ -471,7 +471,7 @@ void ADCEnvironment::Tick(float DeltaSeconds)
 	}
 	Sun->SetIntensity(Look.SunIntensityLux * Light * W.SunScale);
 	Sun->SetLightColor(Look.SunColor * W.SunTint);
-	SkyLight->SetIntensity(Light * W.SkyScale);
+	SkyLight->SetIntensity(Light * W.SkyScale * Look.SkyFill);
 	// The poster sky holds cream to the zenith under any weather: dimming the sun would grey the sky with it, so the
 	// sky luminance makes up for the weather's sun scale (V4.3). Mutators (eclipse) still darken it through Light.
 	const float SkyKeep = Look.SkyLuminance * Light / FMath::Max(W.SunScale, Look.SkyMinSunScale);
