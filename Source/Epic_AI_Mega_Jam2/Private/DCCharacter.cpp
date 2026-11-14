@@ -970,10 +970,12 @@ void ADCCharacter::ServerSubmitPhoto_Implementation(int32 PhotoId, FVector_NetQu
 void ADCCharacter::TickOutfit()
 {
 	const ADCPlayerState* PS = GetPlayerState<ADCPlayerState>();
-	if (!PS || PS->OutfitCode.IsEmpty() || PS->OutfitCode == AppliedOutfit)
+	// An empty code is the default outfit (the voxel body must replace the mannequin either way).
+	if (!PS || (bOutfitApplied && PS->OutfitCode == AppliedOutfit))
 	{
 		return;
 	}
+	bOutfitApplied = true;
 	AppliedOutfit = PS->OutfitCode;
 	// The outfit's camera replaces the default chest camera (same rule: shown while the camera is not in hand).
 	UProceduralMeshComponent* Cam = DCOutfitBuild::Apply(GetMesh(), DCOutfitBuild::FromCode(AppliedOutfit), OutfitMeshes);

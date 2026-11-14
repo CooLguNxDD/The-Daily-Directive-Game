@@ -1,0 +1,9 @@
+dcvox 1
+name body_chest
+grid_cm 5
+size 8 7 4
+pivot 0 3 2
+slots SwatchMain SwatchAccent NeonCyan
+solid 224
+rle
+169*1 7*3 3*1 1*2 7*1 1*2 7*1 1*2 7*1 1*2 7*1 1*2 5*1 7*3

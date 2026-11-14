@@ -1,0 +1,7 @@
+# Voxel photographer body: glove, on the hand bone (x along the bone toward the fingers).
+name body_hand
+grid 5
+size 3 2 2
+slot glove Ink
+box 0 0 0 3 2 2 glove
+pivot 0 1 1

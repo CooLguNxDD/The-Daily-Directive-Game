@@ -68,6 +68,39 @@ namespace
 	}
 }
 
+namespace
+{
+	/** A body segment's transform relative to its bone (see FDCBodySegment): aimed along Bone -> Aim in the reference
+	 *  pose and stretched to that length, or placed in actor space like a part when there is no Aim bone. */
+	FTransform SegmentToBone(const USkeletalMeshComponent* Mesh, const FDCBodySegment& S, const FDCVoxelModel& Model)
+	{
+		const FReferenceSkeleton& Ref = Mesh->GetSkeletalMeshAsset()->GetRefSkeleton();
+		const int32 Bone = Ref.FindBoneIndex(S.Bone);
+		const int32 Aim = S.Aim.IsNone() ? INDEX_NONE : Ref.FindBoneIndex(S.Aim);
+		const FTransform BoneCS = FAnimationRuntime::GetComponentSpaceTransformRefPose(Ref, Bone);
+		const FQuat MeshToActor = Mesh->GetRelativeRotation().Quaternion();
+		if (Aim == INDEX_NONE)
+		{
+			const FQuat Rot = MeshToActor.Inverse() * S.Rotation.Quaternion();
+			const FVector Loc = BoneCS.GetLocation() + MeshToActor.Inverse().RotateVector(S.Offset);
+			return FTransform(Rot, Loc).GetRelativeTransform(BoneCS);
+		}
+		const FTransform AimCS = FAnimationRuntime::GetComponentSpaceTransformRefPose(Ref, Aim);
+		const FVector Span = AimCS.GetLocation() - BoneCS.GetLocation();
+		const float Len = FMath::Max(Span.Size(), 1.f);
+		const FVector Dir = Span / Len;
+		// Model Z faces the actor's front (its up when the bone itself points forward, like a foot).
+		const FVector Fwd = MeshToActor.Inverse().RotateVector(FVector::ForwardVector);
+		const FVector Up = MeshToActor.Inverse().RotateVector(FVector::UpVector);
+		const FVector Hint = FMath::Abs(FVector::DotProduct(Dir, Fwd)) < 0.8f ? Fwd : Up;
+		const FQuat Rot = FRotationMatrix::MakeFromXZ(Dir, Hint).ToQuat();
+		const float ModelLenCm = FMath::Max(Model.Size.X * Model.GridCm, 1);
+		const FVector Scale((Len + S.OverlapCm) / ModelLenCm, 1.f, 1.f);
+		const FVector Loc = BoneCS.GetLocation() - Dir * (S.OverlapCm * 0.5f) + Rot.RotateVector(S.Offset);
+		return FTransform(Rot, Loc, Scale).GetRelativeTransform(BoneCS);
+	}
+}
+
 namespace DCOutfitBuild
 {
 	FDCOutfit FromCode(const FString& Code)
@@ -127,6 +160,35 @@ namespace DCOutfitBuild
 			}
 			Camera = T.OutfitSlots[s] == TEXT("Camera") ? Part : Camera;
 			Out.Add(Part);
+		}
+		// The voxel body: one rigid segment per bone; the mannequin only drives the animation (invisible, still posed).
+		const USkeletalMesh* Asset = Mesh->GetSkeletalMeshAsset();
+		int32 Segments = 0;
+		for (const FDCBodySegment& S : T.BodySegments)
+		{
+			const FDCVoxelMeshData* Data = Asset ? PartMesh(S.Model, Main, Accent) : nullptr;
+			const FDCVoxelModel* Model = DCVoxelModels::Parsed(S.Model);
+			const int32 Bone = Asset ? Asset->GetRefSkeleton().FindBoneIndex(S.Bone) : INDEX_NONE;
+			if (!Data || !Model || Bone == INDEX_NONE)
+			{
+				continue;
+			}
+			UProceduralMeshComponent* Part = NewObject<UProceduralMeshComponent>(Mesh->GetOwner());
+			Part->SetupAttachment(Mesh, S.Bone);
+			Part->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+			Part->SetCastShadow(true);
+			Part->RegisterComponent();
+			Part->CreateMeshSection(0, Data->Positions, Data->Indices, Data->Normals, Data->UVs, Data->Colors, {}, false);
+			Part->SetMaterial(0, Material);
+			Part->SetRelativeTransform(SegmentToBone(Mesh, S, *Model));
+			Out.Add(Part);
+			++Segments;
+		}
+		if (Segments > 0)
+		{
+			// Invisible driver: the pose still updates (attachments follow the bones), nothing of the mannequin draws.
+			Mesh->SetVisibility(false, false);
+			Mesh->VisibilityBasedAnimTickOption = EVisibilityBasedAnimTickOption::AlwaysTickPoseAndRefreshBones;
 		}
 		return Camera;
 	}

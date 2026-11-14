@@ -1,0 +1,9 @@
+dcvox 1
+name body_arm
+grid_cm 5
+size 5 2 2
+pivot 0 1 1
+slots SwatchMain
+solid 20
+rle
+20*1
