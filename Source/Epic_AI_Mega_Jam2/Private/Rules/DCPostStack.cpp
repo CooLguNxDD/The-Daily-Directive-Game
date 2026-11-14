@@ -29,6 +29,7 @@ namespace DCPostStack
 			R.Vignette += W * L->Vignette;
 			R.Grain += W * L->Grain;
 			R.Outline += W * L->Outline;
+			R.BloomThreshold += W * L->BloomThreshold;
 			R.Saturation *= FMath::Lerp(1.f, L->Saturation, FMath::Min(W, 1.f));
 			R.Contrast *= FMath::Lerp(1.f, L->Contrast, FMath::Min(W, 1.f));
 			R.Gain *= FMath::Lerp(FLinearColor::White, L->Gain, FMath::Min(W, 1.f));

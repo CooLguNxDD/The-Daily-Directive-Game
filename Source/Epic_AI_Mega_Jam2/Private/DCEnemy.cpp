@@ -7,6 +7,7 @@
 #include "Voxel/DCVoxelSettings.h"
 
 #include "Components/SphereComponent.h"
+#include "Components/PointLightComponent.h"
 #include "Components/SpotLightComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "DCAssets.h"
@@ -202,6 +203,10 @@ ADCEnemy::ADCEnemy()
 	Spot->SetupAttachment(Body);
 	Spot->SetVisibility(false);
 	Spot->SetCastShadows(false);
+	GlowLight = CreateDefaultSubobject<UPointLightComponent>(TEXT("GlowLight"));
+	GlowLight->SetupAttachment(Body);
+	GlowLight->SetVisibility(false);
+	GlowLight->SetCastShadows(false);
 }
 
 void ADCEnemy::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -265,6 +270,12 @@ void ADCEnemy::BuildVisual()
 	const FDCEnemyDef& Def = *GetDef();
 	const float S = Def.Scale;
 	BuildModel(Def); // the basic shapes below stay hidden behind a model, as the fallback, and set collision sizes
+	// The eye glow (data): a small red light so a dark machine reads in the dark street.
+	GlowLight->SetVisibility(Def.GlowLight > 0.f);
+	GlowLight->SetIntensity(Def.GlowLight);
+	GlowLight->SetAttenuationRadius(Def.GlowLightRadiusCm);
+	GlowLight->SetLightColor(Def.EyeColor);
+	GlowLight->SetRelativeLocation(Def.GlowLightOffset);
 	Visual->SetMaterial(0, DCAssets::MakeFlat(this, Def.Color));
 	Eye->SetStaticMesh(DCAssets::Sphere());
 	Eye->SetMaterial(0, DCAssets::MakeFlat(this, Def.EyeColor, 40.f));
@@ -531,6 +542,7 @@ void ADCEnemy::PlayDeathFx()
 	}
 	bDeathFxPlayed = true;
 	Spot->SetVisibility(false);
+	GlowLight->SetVisibility(false);
 	DCAudio::PlayAt(this, TEXT("Kill"), GetActorLocation(), 0.4f, 0.7f);
 	const ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>();
 	ADCDebrisPool* Pool = GS && GS->GetEnvironment() ? GS->GetEnvironment()->GetDebrisPool() : nullptr;
