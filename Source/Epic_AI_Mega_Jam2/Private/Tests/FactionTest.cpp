@@ -82,4 +82,28 @@ bool FDCFactionDataTest::RunTest(const FString&)
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDCFactionTerritoryTest, "Epic_AI_Mega_Jam2.Faction.Territory",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FDCFactionTerritoryTest::RunTest(const FString&)
+{
+	const FName Dead(TEXT("Dead")), Machines(TEXT("Machines"));
+	TestEqual(TEXT("bottom-left zone"), DCFactionRules::ZoneOf(FVector(-900, -900, 0), 1000.f, 3), 0);
+	TestEqual(TEXT("top-right zone"), DCFactionRules::ZoneOf(FVector(900, 900, 0), 1000.f, 3), 8);
+	TestEqual(TEXT("outside clamps to the edge"), DCFactionRules::ZoneOf(FVector(5000, -5000, 0), 1000.f, 3), 2);
+	TArray<FName> Owners;
+	Owners.Init(Dead, 9);
+	TArray<TPair<FVector, FName>> Units = {{FVector(900, 900, 0), Machines}};
+	TestEqual(TEXT("one unit takes nothing (TakeMinUnits 2)"), DCFactionRules::StepTerritory(Owners, Units, 1000.f, 3, 2), 0);
+	Units.Add({FVector(850, 880, 0), Machines});
+	TestEqual(TEXT("two machines take the empty corner"), DCFactionRules::StepTerritory(Owners, Units, 1000.f, 3, 2), 1);
+	TestEqual(TEXT("corner owner"), Owners[8], Machines);
+	Units.Add({FVector(800, 800, 0), Dead});
+	Units.Add({FVector(820, 800, 0), Dead});
+	TestEqual(TEXT("a tie keeps the owner"), DCFactionRules::StepTerritory(Owners, Units, 1000.f, 3, 2), 0);
+	Units.Add({FVector(840, 800, 0), Dead});
+	DCFactionRules::StepTerritory(Owners, Units, 1000.f, 3, 2);
+	TestEqual(TEXT("outnumbered: the dead take it back"), Owners[8], Dead);
+	return true;
+}
+
 #endif

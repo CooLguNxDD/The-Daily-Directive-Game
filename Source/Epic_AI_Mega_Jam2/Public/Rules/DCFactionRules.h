@@ -58,6 +58,12 @@ struct FDCFactionMixRule
 	/** Global floor between any two faction strikes (seconds) and the body budget they leave free. */
 	UPROPERTY(EditAnywhere, Config, Category = "Faction") float StrikeGapSeconds = 16.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Faction") float StrikeStartSeconds = 35.f;
+	/** Territory: the map splits into ZonesPerSide^2 zones, all the main faction's at the start; every
+	 *  TerritorySeconds a zone goes to the faction with the most live units in it, if it outnumbers the owner there. */
+	UPROPERTY(EditAnywhere, Config, Category = "Faction") int32 ZonesPerSide = 3;
+	UPROPERTY(EditAnywhere, Config, Category = "Faction") float TerritorySeconds = 2.f;
+	/** Units a faction needs in a zone to take it at all. */
+	UPROPERTY(EditAnywhere, Config, Category = "Faction") int32 TakeMinUnits = 2;
 };
 
 /** One map's factions: the owner and its raiders with their shares of the hostile drops (sum 1). */
@@ -87,6 +93,11 @@ namespace DCFactionRules
 	EPIC_AI_MEGA_JAM2_API FDCFactionMix RollMix(const TArray<FDCFactionDef>& Factions, const FDCFactionMixRule& Rule, int32 Seed, int32 Sector);
 	/** Which hostile faction a drop belongs to, from a 0..1 roll. */
 	EPIC_AI_MEGA_JAM2_API FName PickDropFaction(const FDCFactionMix& Mix, float Roll);
+	/** Zone index of a point on a ZonesPerSide grid over [-HalfExtent, HalfExtent]^2 (clamped to the edge zones). */
+	EPIC_AI_MEGA_JAM2_API int32 ZoneOf(const FVector& At, float HalfExtent, int32 ZonesPerSide);
+	/** One territory step: Units are (position, faction) of live units; a zone flips to the faction with the most units
+	 *  there when it has at least MinUnits and strictly more than the owner has there. Returns zones that flipped. */
+	EPIC_AI_MEGA_JAM2_API int32 StepTerritory(TArray<FName>& Owners, const TArray<TPair<FVector, FName>>& Units, float HalfExtent, int32 ZonesPerSide, int32 MinUnits);
 	/** Which unit of the faction, from a 0..1 roll (None when it has none). */
 	EPIC_AI_MEGA_JAM2_API FName PickUnit(const FDCFactionDef& Faction, float Roll);
 }

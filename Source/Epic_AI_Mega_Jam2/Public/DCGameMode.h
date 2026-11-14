@@ -120,12 +120,13 @@ private:
 	/** Spawns Count units of a faction around Centre as one squad (formation slots); returns how many landed. */
 	int32 SpawnSquad(FName Faction, int32 Count, const FVector& Centre, float Spread);
 	/** A street point for a drop: ring around a standing player (main faction, allies) or the far edge (invaders). */
-	FVector DropPoint(const FVector& Near, bool bFar, const FDCPressureTuning& P);
+	FVector DropPoint(const FVector& Near, bool bFar, const FDCPressureTuning& P, FName DropFaction = NAME_None);
 	bool FactionMode() const;
 	float NextAllyTime = 0.f;
 	float NextFactionStrike = 0.f;
 	TMap<FName, float> FactionStrikeReady;
 	int32 NextSquadId = 1;
+	float NextTerritoryTime = 0.f;
 	// R4 objective director (DCObjectiveDirector.cpp).
 	void StartObjective();
 	void TickObjective(float Now);

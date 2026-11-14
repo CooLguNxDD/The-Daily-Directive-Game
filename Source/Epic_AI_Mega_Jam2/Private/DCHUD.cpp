@@ -172,6 +172,7 @@ void ADCHUD::DrawSector(ADCGameState& GS, ADCCharacter* Me)
 	}
 	DrawStatus(GS, *Me);
 	DrawObjective(GS, *Me);
+	DrawTerritory(GS, *Me);
 	DrawScoop(GS);
 	DrawHurt(*Me);
 	if (ADCPlayerController* PC = Cast<ADCPlayerController>(PlayerOwner))
@@ -822,6 +823,36 @@ void ADCHUD::DrawToast(ADCCharacter& Me)
 		return;
 	}
 	Text(Me.Feedback().Toast, Canvas->ClipX * 0.5f, Canvas->ClipY * 0.62f, FLinearColor(1.f, 0.85f, 0.3f, FMath::Clamp((2.2f - Age) * 2.f, 0.f, 1.f)), 0.85f, true);
+}
+
+void ADCHUD::DrawTerritory(ADCGameState& GS, ADCCharacter& Me)
+{
+	// R3: who holds which part of the map, a small grid of zones in each owner's light cue (top right, under the film);
+	// the crew's own zone is outlined. North up, like the street grid.
+	const UDCTuning& T = UDCTuning::Get();
+	const int32 N = FMath::Max(1, T.FactionMix.ZonesPerSide);
+	if (GS.Zones.Num() != N * N)
+	{
+		return;
+	}
+	const float W = Canvas->ClipX;
+	const float Cell = Sx(16.f), Gap = Sx(2.f);
+	const float X0 = W - Sx(24.f) - N * (Cell + Gap), Y0 = Sx(112.f);
+	Text(TEXT("TERRITORY"), X0, Y0 - Sx(16.f), FLinearColor(1.f, 1.f, 1.f, 0.7f), 0.5f);
+	const float Half = GS.ZoneHalfExtent;
+	const int32 Mine = Half > 0.f ? DCFactionRules::ZoneOf(Me.GetActorLocation(), Half, N) : INDEX_NONE;
+	for (int32 z = 0; z < GS.Zones.Num(); ++z)
+	{
+		const FDCFactionDef* F = DCFactionRules::Find(T.Factions, GS.Zones[z]);
+		const FLinearColor C = F ? F->Cue : FLinearColor(0.2f, 0.2f, 0.25f);
+		// Row 0 is the map's -Y edge; draw +X to the right and +Y up.
+		const float X = X0 + (z % N) * (Cell + Gap), Y = Y0 + (N - 1 - z / N) * (Cell + Gap);
+		Box(X, Y, Cell, Cell, FLinearColor(C.R, C.G, C.B, 0.75f));
+		if (z == Mine)
+		{
+			Frame(X - Sx(2.f), Y - Sx(2.f), Cell + Sx(4.f), Cell + Sx(4.f), Sx(2.f), FLinearColor::White);
+		}
+	}
 }
 
 void ADCHUD::DrawObjective(ADCGameState& GS, ADCCharacter& Me)

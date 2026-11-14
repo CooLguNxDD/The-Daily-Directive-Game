@@ -35,6 +35,10 @@ void ADCGameMode::RollFactions()
 		GS->FactionMix.Main = FName(*Forced);
 	}
 	NextAllyTime = GetWorld()->GetTimeSeconds() + T.FactionMix.AllyGapSeconds * 0.5f;
+	const int32 Side = FMath::Max(1, T.FactionMix.ZonesPerSide);
+	GS->Zones.Init(GS->FactionMix.Main, Side * Side);
+	GS->ZoneHalfExtent = CityPlan.HalfExtent;
+	NextTerritoryTime = 0.f;
 	NextFactionStrike = 0.f;
 	FactionStrikeReady.Reset();
 	FString Invaders;
@@ -46,7 +50,7 @@ void ADCGameMode::RollFactions()
 		GS->FactionMix.MainShare, *Invaders, GS->FactionMix.Allies.Num());
 }
 
-FVector ADCGameMode::DropPoint(const FVector& Near, bool bFar, const FDCPressureTuning& P)
+FVector ADCGameMode::DropPoint(const FVector& Near, bool bFar, const FDCPressureTuning& P, FName DropFaction)
 {
 	// Main faction and allies land in a ring around the crew; invaders cross in from beyond it.
 	TArray<FVector> Pool;
@@ -60,6 +64,25 @@ FVector ADCGameMode::DropPoint(const FVector& Near, bool bFar, const FDCPressure
 		}
 	}
 	const TArray<FVector>& From = Pool.Num() > 0 ? Pool : CityPlan.StreetPoints;
+	// Ground a faction holds is where its reinforcements come in (territory matters for the next drops).
+	const ADCGameState* GS = GetGameState<ADCGameState>();
+	const UDCTuning& T = UDCTuning::Get();
+	if (!DropFaction.IsNone() && GS && GS->Zones.Contains(DropFaction))
+	{
+		TArray<FVector> Held;
+		for (const FVector& Pt : From)
+		{
+			const int32 Z = DCFactionRules::ZoneOf(Pt, CityPlan.HalfExtent, T.FactionMix.ZonesPerSide);
+			if (GS->Zones.IsValidIndex(Z) && GS->Zones[Z] == DropFaction)
+			{
+				Held.Add(Pt);
+			}
+		}
+		if (Held.Num() > 0)
+		{
+			return Held[SectorRng.RandRange(0, Held.Num() - 1)];
+		}
+	}
 	return From.Num() > 0 ? From[SectorRng.RandRange(0, From.Num() - 1)] : Near;
 }
 
@@ -121,6 +144,30 @@ void ADCGameMode::TickFactions(float Now)
 		return;
 	}
 	UDCUnits* Units = UDCUnits::Get(this);
+	// Territory: zones go to whoever holds the ground in numbers (allies too).
+	if (Units && Now >= NextTerritoryTime)
+	{
+		NextTerritoryTime = Now + T.FactionMix.TerritorySeconds;
+		TArray<TPair<FVector, FName>> Live;
+		for (const ADCEnemy* U : Units->All())
+		{
+			if (U && U->IsAlive())
+			{
+				Live.Emplace(U->GetActorLocation(), U->GetFaction());
+			}
+		}
+		const TArray<FName> Before = GS->Zones;
+		if (DCFactionRules::StepTerritory(GS->Zones, Live, CityPlan.HalfExtent, T.FactionMix.ZonesPerSide, T.FactionMix.TakeMinUnits) > 0)
+		{
+			for (int32 z = 0; z < GS->Zones.Num(); ++z)
+			{
+				if (Before.IsValidIndex(z) && Before[z] != GS->Zones[z])
+				{
+					UE_LOG(LogTemp, Display, TEXT("DCTERRITORY zone %d: %s -> %s"), z, *Before[z].ToString(), *GS->Zones[z].ToString());
+				}
+			}
+		}
+	}
 	// The friendly army: its own squads on its own clock, no orders (GOAL: acts on its own).
 	if (T.FactionMix.AllyGapSeconds > 0.f && Now >= NextAllyTime && GS->FactionMix.Allies.Num() > 0 && Units)
 	{
@@ -132,7 +179,7 @@ void ADCGameMode::TickFactions(float Now)
 		{
 			const FVector Near = Standing[SectorRng.RandRange(0, Standing.Num() - 1)]->GetActorLocation();
 			const int32 N = FMath::Min(Room, SectorRng.RandRange(F->SquadMin, F->SquadMax));
-			const int32 Landed = SpawnSquad(Ally, N, DropPoint(Near, false, P), 350.f);
+			const int32 Landed = SpawnSquad(Ally, N, DropPoint(Near, false, P, Ally), 350.f);
 			UE_LOG(LogTemp, Display, TEXT("DCFACTION ally squad %s landed=%d"), *Ally.ToString(), Landed);
 		}
 	}

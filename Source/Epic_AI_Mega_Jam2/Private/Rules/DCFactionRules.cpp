@@ -123,6 +123,50 @@ namespace DCFactionRules
 		return Mix.Invaders.Last();
 	}
 
+	int32 ZoneOf(const FVector& At, float HalfExtent, int32 ZonesPerSide)
+	{
+		const int32 N = FMath::Max(1, ZonesPerSide);
+		const float Size = FMath::Max(1.f, 2.f * HalfExtent / N);
+		const int32 X = FMath::Clamp(FMath::FloorToInt32((At.X + HalfExtent) / Size), 0, N - 1);
+		const int32 Y = FMath::Clamp(FMath::FloorToInt32((At.Y + HalfExtent) / Size), 0, N - 1);
+		return Y * N + X;
+	}
+
+	int32 StepTerritory(TArray<FName>& Owners, const TArray<TPair<FVector, FName>>& Units, float HalfExtent, int32 ZonesPerSide, int32 MinUnits)
+	{
+		const int32 Zones = FMath::Max(1, ZonesPerSide) * FMath::Max(1, ZonesPerSide);
+		if (Owners.Num() != Zones)
+		{
+			return 0;
+		}
+		// Counts per zone per faction, in sorted faction order so ties resolve the same on every run.
+		TArray<TMap<FName, int32>> Counts;
+		Counts.SetNum(Zones);
+		for (const TPair<FVector, FName>& U : Units)
+		{
+			if (!U.Value.IsNone())
+			{
+				++Counts[ZoneOf(U.Key, HalfExtent, ZonesPerSide)].FindOrAdd(U.Value);
+			}
+		}
+		int32 Flipped = 0;
+		for (int32 z = 0; z < Zones; ++z)
+		{
+			Counts[z].KeySort([](const FName& A, const FName& B) { return A.LexicalLess(B); });
+			const int32 Held = Counts[z].FindRef(Owners[z]);
+			FName Best = Owners[z];
+			int32 BestN = Held;
+			for (const TPair<FName, int32>& C : Counts[z])
+			{
+				Best = C.Value > BestN && C.Value >= MinUnits ? C.Key : Best;
+				BestN = FMath::Max(BestN, C.Value >= MinUnits ? C.Value : BestN);
+			}
+			Flipped += Best != Owners[z] ? 1 : 0;
+			Owners[z] = Best;
+		}
+		return Flipped;
+	}
+
 	FName PickUnit(const FDCFactionDef& Faction, float Roll)
 	{
 		float Total = 0.f;
