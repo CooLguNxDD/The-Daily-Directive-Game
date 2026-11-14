@@ -158,7 +158,9 @@ void ADCGameMode::TickObjective(float Now)
 	for (int32 i = 0; i < ObjectiveTargets.Num(); ++i)
 	{
 		const ADCBuilding* B = ObjectiveTargets[i].Get();
-		const bool bDown = !B || B->IsCollapsed();
+		// Strikes and carving count (R4): the gameplay collapse record or the voxel city's committed fall of the lot.
+		const ADCVoxelCity* TargetCity = ADCVoxelCity::Get(this);
+		const bool bDown = !B || B->IsCollapsed() || (TargetCity && TargetCity->IsTowerFallen(B->GetLotIndex()));
 		if (bDown && !Objective->TargetDown[i])
 		{
 			Objective->TargetDown[i] = 1;
