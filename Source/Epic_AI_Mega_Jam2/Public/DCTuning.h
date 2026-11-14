@@ -430,6 +430,11 @@ struct FDCEnemyDef
 	/** A sound every machine hears from the unit every IdleCueSeconds (+-40 %, staggered per unit); None = silent. */
 	UPROPERTY(EditAnywhere, Config, Category = "Enemy") FName IdleCue;
 	UPROPERTY(EditAnywhere, Config, Category = "Enemy") float IdleCueSeconds = 6.f;
+	/** At its goal (within GoalActRadiusCm, no foe in sight) the unit stops and acts: GoalActCue every GoalActSeconds
+	 *  (Scavengers loot the rubble). None = it just holds there. */
+	UPROPERTY(EditAnywhere, Config, Category = "Enemy") FName GoalActCue;
+	UPROPERTY(EditAnywhere, Config, Category = "Enemy") float GoalActRadiusCm = 500.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Enemy") float GoalActSeconds = 2.5f;
 	/** Squad shape for ground infantry (formation registry): Crowd, Line, Skirmish. Spacing between slots (cm). */
 	UPROPERTY(EditAnywhere, Config, Category = "Enemy") FName Formation = TEXT("Crowd");
 	UPROPERTY(EditAnywhere, Config, Category = "Enemy") float FormationSpacingCm = 220.f;

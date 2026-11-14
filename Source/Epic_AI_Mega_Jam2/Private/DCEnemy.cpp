@@ -309,6 +309,16 @@ namespace
 		const FGoalFn* Fn = Goals().Find(Def.Goal);
 		if (Fn && (*Fn)(E, Def, Now, Goal))
 		{
+			if (!Def.GoalActCue.IsNone() && FVector::Dist2D(Goal, Here) < Def.GoalActRadiusCm)
+			{
+				// At the goal: act there (loot) instead of milling about.
+				if (Now >= E.NextAttackTime)
+				{
+					E.NextAttackTime = Now + Def.GoalActSeconds;
+					E.Cue(Def.GoalActCue);
+				}
+				return;
+			}
 			const FVector Facing = (Goal - Here).GetSafeNormal2D();
 			E.GroundMove(Goal + E.SlotOffset(Def, Facing.IsNearlyZero() ? E.Heading : Facing), Def.Speed * 0.7f, Dt, Def.HoverHeight);
 			return;
