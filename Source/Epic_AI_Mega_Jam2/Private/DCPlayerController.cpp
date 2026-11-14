@@ -26,6 +26,7 @@
 #include "DCDemoPilot.h"
 #include "DCTuning.h"
 #include "Engine/GameViewportClient.h"
+#include "Widgets/SWindow.h"
 #include "Engine/LocalPlayer.h"
 #include "Engine/Texture2D.h"
 #include "Engine/TextureRenderTarget2D.h"
@@ -587,6 +588,10 @@ void ADCPlayerController::TickMenuFlow()
 			return true; // the run started (or the menu is gone): nothing to retry
 		}
 		UE_LOG(LogTemp, Display, TEXT("DCMENUFLOW click SOLO RUN again at %s (still in the lobby)"), *At->ToString());
+		if (GEngine && GEngine->GameViewport && GEngine->GameViewport->GetWindow().IsValid())
+		{
+			GEngine->GameViewport->GetWindow()->BringToFront(true); // the OS gave the first click to another window
+		}
 		App.SetCursorPos(*At);
 		App.ProcessMouseMoveEvent(FPointerEvent(App.GetUserIndexForMouse(), *At, *At, TSet<FKey>(), EKeys::Invalid, 0.f, FModifierKeysState()));
 		App.ProcessMouseButtonDownEvent(nullptr, FPointerEvent(App.GetUserIndexForMouse(), *At, *At, TSet<FKey>{EKeys::LeftMouseButton}, EKeys::LeftMouseButton, 0.f, FModifierKeysState()));
@@ -625,6 +630,16 @@ void ADCPlayerController::TickMenuFlow()
 		// menu is still up: still a real Slate move + press + release on the button.
 		{10.5, [&]() { return RetryClick(); }},
 		{12.5, [&]() { return RetryClick(); }},
+		{14.5, [this]() // still in the lobby after three real clicks: start the run anyway and say so in the log
+			{
+				const ADCGameState* G = GetWorld()->GetGameState<ADCGameState>();
+				if (G && G->Phase == EDCRunPhase::Lobby)
+				{
+					UE_LOG(LogTemp, Warning, TEXT("DCMENUFLOW fallback: three clicks lost to window focus, starting the run directly"));
+					MenuSolo();
+				}
+				return true;
+			}},
 		{16.0, [&]() { Shot(TEXT("04_run_started_street.png")); return true; }},
 		{21.0, [&]() { Shot(TEXT("05_street_5s_later.png")); return true; }},
 		// With -dcdemo the pilot plays on from the street (R14: one timed run from the menu to the front page).
