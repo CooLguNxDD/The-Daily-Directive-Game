@@ -178,14 +178,14 @@ struct FDCVoxelTuning
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 PhysicsPieces = 2;
 	/** Fragments per piece at most (the block grid doubles until it fits), and live bodies in the sector at most (a
 	 *  piece that would pass the cap falls scripted). */
-	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 PhysicsFragments = 20;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 PhysicsFragments = 16;
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 PhysicsMaxBodies = 360;
 	/** Chunk block edge in cm (rounded to the piece's voxels): chunks break off as the piece falls. */
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float PhysicsFragmentCm = 400.f;
 	/** Leaves: each chunk is made of up to LeavesPerChunk leaves of LeafCm blocks; a hit over ShatterCms (speed lost)
 	 *  breaks the chunk into them, bursting apart at ShatterBurstCms. */
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float PhysicsLeafCm = 120.f;
-	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 PhysicsLeavesPerChunk = 8;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 PhysicsLeavesPerChunk = 6;
 	/** Bodies shrink away over this long when their group rests (the shared rubble shows under them). */
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float PhysicsFadeSeconds = 0.8f;
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float PhysicsShatterCms = 350.f;
