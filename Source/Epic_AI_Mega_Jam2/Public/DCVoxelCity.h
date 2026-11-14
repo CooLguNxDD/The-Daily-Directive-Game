@@ -70,6 +70,9 @@ public:
 	/** 0..1+: physics bodies reserved over the PhysicsMaxBodies budget (advisor a-3: one destruction budget every new
 	 *  cost source reads: faction strikes wait, crumbs thin out). */
 	float BodyLoad() const;
+	/** Cosmetic burst of Count crumbs at a point (a unit dying into voxels): Body colour, Count/4 of them in the glow
+	 *  colour. Local to this machine. */
+	void BurstCrumbs(const FVector& At, const FLinearColor& Body, const FLinearColor& Glow, int32 Count, float SizeCm);
 	/** Is this world point inside a solid voxel (towers, terrain, props)? Photos never shoot from inside one. */
 	bool IsSolidAt(const FVector& Where) const;
 	/** Photo sight (host grading): is the straight line From -> To blocked by city voxels? Marches the voxel city,

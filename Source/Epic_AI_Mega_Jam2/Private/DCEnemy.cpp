@@ -921,7 +921,13 @@ void ADCEnemy::PlayDeathFx()
 	{
 		return;
 	}
-	for (int32 i = 0; i < 6; ++i)
+	// R3: a unit bursts into voxel crumbs of its body and its light cue (instanced, cheap), plus a couple of tumbling
+	// debris blocks.
+	if (ADCVoxelCity* City = ADCVoxelCity::Get(this))
+	{
+		City->BurstCrumbs(GetActorLocation(), Def->Color * 3.f, Def->EyeColor, FMath::RoundToInt32(24 * FMath::Max(Def->Scale, 0.5f)), 5.f * FMath::Max(Def->Scale, 1.f) * 2.f);
+	}
+	for (int32 i = 0; i < 2; ++i)
 	{
 		FDCDebrisSpawn D;
 		D.Transform = FTransform(FRotator(FMath::FRandRange(0.f, 360.f), FMath::FRandRange(0.f, 360.f), 0.f), GetActorLocation(), FVector(0.2f * Def->Scale));

@@ -434,6 +434,27 @@ float ADCVoxelCity::BodyLoad() const
 	return static_cast<float>(BodiesReserved) / FMath::Max(1, UDCVoxelSettings::Get().Tuning.PhysicsMaxBodies);
 }
 
+void ADCVoxelCity::BurstCrumbs(const FVector& At, const FLinearColor& Body, const FLinearColor& Glow, int32 Count, float SizeCm)
+{
+	const FDCVoxelTuning& Tn = UDCVoxelSettings::Get().Tuning;
+	if (!Crumbs)
+	{
+		return;
+	}
+	FRandomStream Rng(static_cast<int32>(GetTypeHash(At.GridSnap(10.f))));
+	for (int32 i = 0; i < Count; ++i)
+	{
+		FDCCrumbSpawn C;
+		C.At = At + Rng.VRand() * 40.f;
+		C.Velocity = Rng.VRand() * Tn.CrumbSpeedCms * Rng.FRandRange(0.4f, 1.1f) + FVector(0, 0, Rng.FRandRange(150.f, Tn.CrumbUpCms + 200.f));
+		C.SizeCm = SizeCm * Rng.RandRange(1, 2);
+		const bool bGlow = i % 4 == 0;
+		C.Color = bGlow ? Glow : Body;
+		C.Glow = bGlow ? 4.f : 0.f;
+		Crumbs->Spawn(C);
+	}
+}
+
 void ADCVoxelCity::ThrowCrumbs(const FFalling& F, int32 FragIndex, const FBox& WorldBox, const FVector& V, int32 Count, FRandomStream& Rng)
 {
 	const FDCVoxelTuning& Tn = UDCVoxelSettings::Get().Tuning;
