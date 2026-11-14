@@ -1562,6 +1562,21 @@ bool ADCVoxelCity::UploadCell(const FIntVector4& Cell)
 	FDCVoxelMeshData Merged;
 	const int32 G = Cell.X;
 	const float ChunkCm = FDCVoxelChunk::Size * GridAt(G).VoxelCm;
+	// Size the merge once (R13: the arrays grew vertex by vertex across every chunk of the cell).
+	int32 NumVerts = 0, NumIndices = 0;
+	for (const FIntVector& Chunk : CellChunks.FindRef(Cell))
+	{
+		if (const FDCVoxelMeshData* M = ChunkMeshes.Find(Key(G, Chunk)))
+		{
+			NumVerts += M->Positions.Num();
+			NumIndices += M->Indices.Num();
+		}
+	}
+	Merged.Positions.Reserve(NumVerts);
+	Merged.Normals.Reserve(NumVerts);
+	Merged.UVs.Reserve(NumVerts);
+	Merged.Colors.Reserve(NumVerts);
+	Merged.Indices.Reserve(NumIndices);
 	for (const FIntVector& Chunk : CellChunks.FindRef(Cell))
 	{
 		const FDCVoxelMeshData* M = ChunkMeshes.Find(Key(G, Chunk));
