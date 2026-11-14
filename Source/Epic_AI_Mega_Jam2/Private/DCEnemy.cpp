@@ -195,6 +195,15 @@ namespace
 	// Squad goals without a foe in sight (R3), by the row's Goal id. True when a goal was found.
 	// Crew grace (advisor a-10, FactionMix.CrewGraceSeconds): early in a sector units leave the crew alone unless
 	// it comes within CrewSelfDefenceCm. One rule for the opening clash, nests, hunters and early raiders.
+	// Unit damage to a crew member, scaled by crew size (FactionMix.CrewDamageByPlayers).
+	float CrewDamage(const UWorld* World, float Base)
+	{
+		const TArray<float>& Scale = UDCTuning::Get().FactionMix.CrewDamageByPlayers;
+		const AGameStateBase* GS = World ? World->GetGameState() : nullptr;
+		const int32 Players = GS ? FMath::Max(1, GS->PlayerArray.Num()) : 1;
+		return Scale.Num() > 0 ? Base * Scale[FMath::Min(Players, Scale.Num()) - 1] : Base;
+	}
+
 	bool InCrewGrace(const UWorld* World)
 	{
 		const ADCGameState* GS = World ? World->GetGameState<ADCGameState>() : nullptr;
@@ -621,7 +630,7 @@ void ADCEnemy::HostAttack(AActor* Victim, float Now)
 	}
 	if (ADCCharacter* C = Cast<ADCCharacter>(Victim))
 	{
-		C->HostApplyHurt(Def->Damage, GetActorLocation());
+		C->HostApplyHurt(CrewDamage(GetWorld(), Def->Damage), GetActorLocation());
 		return;
 	}
 	Victim->TakeDamage(Def->Damage, FDamageEvent(), nullptr, this);
@@ -912,7 +921,7 @@ void ADCEnemy::TryAttack(ADCCharacter* Target, float Now)
 		return;
 	}
 	NextAttackTime = Now + Def->AttackInterval;
-	Target->HostApplyHurt(Def->Damage, GetActorLocation());
+	Target->HostApplyHurt(CrewDamage(GetWorld(), Def->Damage), GetActorLocation());
 }
 
 void ADCEnemy::Tick(float DeltaSeconds)

@@ -100,6 +100,9 @@ struct FDCFactionMixRule
 	/** Ground units never step closer to a standing crew member than their body radius + the capsule radius + this
 	 *  margin (unswept moves used to walk into the capsule and pin the player). */
 	UPROPERTY(EditAnywhere, Config, Category = "Faction") float CrewContactMarginCm = 25.f;
+	/** Unit damage to the crew by crew size (index = players - 1, the last entry for bigger crews): a solo
+	 *  photographer has nobody to revive them (packaged 1b41c0c solo: downed at 29 s and 39 s by raider fire). */
+	UPROPERTY(EditAnywhere, Config, Category = "Faction") TArray<float> CrewDamageByPlayers = {0.45f, 0.75f, 0.9f, 1.f};
 };
 
 /** One map's factions: the owner and its raiders with their shares of the hostile drops (sum 1). */
