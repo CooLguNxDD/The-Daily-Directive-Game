@@ -697,6 +697,22 @@ void ADCCharacter::ServerFire_Implementation(FVector_NetQuantize Start, FVector_
 	FCollisionQueryParams Params(SCENE_QUERY_STAT(DCRifle), false, this);
 	const FVector End = Start + FVector(Dir).GetSafeNormal() * R.RangeCm;
 	const bool bHit = GetWorld()->LineTraceSingleByChannel(Hit, Start, End, ECC_Visibility, Params);
+	// Demo telemetry (-dcrifletrace): what the rifle hits, every 2 s (the sector-2 downs: is the pilot hitting?).
+	static const bool bTrace = FParse::Param(FCommandLine::Get(), TEXT("dcrifletrace"));
+	if (bTrace)
+	{
+		static int32 Shots = 0, EnemyHits = 0;
+		static FString LastOther;
+		static double NextLog = 0.0;
+		++Shots;
+		EnemyHits += bHit && Cast<ADCEnemy>(Hit.GetActor()) ? 1 : 0;
+		LastOther = bHit && !Cast<ADCEnemy>(Hit.GetActor()) ? FString::Printf(TEXT("%s@%.0fcm"), Hit.GetActor() ? *Hit.GetActor()->GetClass()->GetName() : TEXT("?"), Hit.Distance) : LastOther;
+		if (GetWorld()->GetRealTimeSeconds() >= NextLog)
+		{
+			NextLog = GetWorld()->GetRealTimeSeconds() + 2.0;
+			UE_LOG(LogTemp, Display, TEXT("DCRIFLE shots=%d enemyhits=%d lastother=%s health=%.0f ammo=%d"), Shots, EnemyHits, *LastOther, Health, HostAmmo);
+		}
+	}
 	if (bHit)
 	{
 		if (ADCEnemy* Enemy = Cast<ADCEnemy>(Hit.GetActor()))
