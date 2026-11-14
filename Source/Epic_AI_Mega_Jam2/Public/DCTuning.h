@@ -427,6 +427,9 @@ struct FDCEnemyDef
 	UPROPERTY(EditAnywhere, Config, Category = "Enemy") float ShotSpread = 2.f;
 	/** Hit and run: a foe closer than this makes the unit back off while it keeps firing (0 = holds its ground). */
 	UPROPERTY(EditAnywhere, Config, Category = "Enemy") float KiteCm = 0.f;
+	/** A sound every machine hears from the unit every IdleCueSeconds (+-40 %, staggered per unit); None = silent. */
+	UPROPERTY(EditAnywhere, Config, Category = "Enemy") FName IdleCue;
+	UPROPERTY(EditAnywhere, Config, Category = "Enemy") float IdleCueSeconds = 6.f;
 	/** Squad shape for ground infantry (formation registry): Crowd, Line, Skirmish. Spacing between slots (cm). */
 	UPROPERTY(EditAnywhere, Config, Category = "Enemy") FName Formation = TEXT("Crowd");
 	UPROPERTY(EditAnywhere, Config, Category = "Enemy") float FormationSpacingCm = 220.f;

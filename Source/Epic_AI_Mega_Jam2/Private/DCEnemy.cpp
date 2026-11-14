@@ -270,6 +270,11 @@ namespace
 	void TickInfantry(ADCEnemy& E, const FDCEnemyDef& Def, float Dt, float Now)
 	{
 		// R3 ground unit: fight the nearest foe in sense range (crew or a hostile faction), else follow the squad goal.
+		if (!Def.IdleCue.IsNone() && Now >= E.NextCueTime)
+		{
+			E.NextCueTime = Now + Def.IdleCueSeconds * (0.6f + 0.8f * ((E.GetUniqueID() * 2654435761u) % 1000) / 1000.f);
+			E.Cue(Def.IdleCue);
+		}
 		if (Now >= E.NextRetarget || !IsLiveFoe(E.Foe.Get()))
 		{
 			E.NextRetarget = Now + 0.25f + (E.GetUniqueID() % 8) * 0.01f; // ~4 Hz, staggered (advisor a-2)
