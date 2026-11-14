@@ -1,4 +1,6 @@
 #include "DCVoxelCity.h"
+
+#include "Async/ParallelFor.h"
 #include "Materials/MaterialInstanceDynamic.h"
 
 #include "DCVoxelFx.h"
@@ -1261,19 +1263,22 @@ void ADCVoxelCity::QueueDirty(int32 GridIndex, const TSet<FIntVector>& Chunks)
 	const FDCVoxelGrid& Grid = GridAt(GridIndex);
 	const float Vcm = Grid.VoxelCm;
 	const float AO = UDCVoxelSettings::Get().Tuning.AOStrength;
-	for (const FIntVector& Chunk : Chunks)
+	// Snapshots in parallel (read-only on the grid; a whole city at once cost ~0.7 s on one thread: reel restage).
+	TArray<FIntVector> List = Chunks.Array();
+	TArray<TArray<uint8>> Padded;
+	Padded.SetNum(List.Num());
+	ParallelFor(List.Num(), [&](int32 i) { Grid.Data.CopyPadded(List[i], Padded[i]); }, List.Num() < 16);
+	for (int32 i = 0; i < List.Num(); ++i)
 	{
 		TSharedPtr<FMeshJob> Job = MakeShared<FMeshJob>();
 		Job->Grid = GridIndex;
-		Job->Chunk = Chunk;
+		Job->Chunk = List[i];
 		Job->BuildId = BuiltId;
-		TArray<uint8> Padded;
-		Grid.Data.CopyPadded(Chunk, Padded); // a snapshot: the job never reads the live grid
 		FDCVoxelMeshData* Out = &Job->Mesh;
 		TArray<FColor> JobColors = Colors;
-		Job->Task = UE::Tasks::Launch(TEXT("DCVoxelChunkMesh"), [Padded = MoveTemp(Padded), JobColors = MoveTemp(JobColors), Vcm, AO, Out]()
+		Job->Task = UE::Tasks::Launch(TEXT("DCVoxelChunkMesh"), [Pad = MoveTemp(Padded[i]), JobColors = MoveTemp(JobColors), Vcm, AO, Out]()
 		{
-			DCVoxelMesher::MeshPadded(Padded, JobColors, Vcm, AO, *Out);
+			DCVoxelMesher::MeshPadded(Pad, JobColors, Vcm, AO, *Out);
 		});
 		Jobs.Add(Job);
 	}
@@ -1368,7 +1373,8 @@ void ADCVoxelCity::UploadCells()
 	// 2. Everything else under the millisecond budget; a held op's cells wait for its commit.
 	const FDCVoxelTuning& Tn = UDCVoxelSettings::Get().Tuning;
 	const double Start = FPlatformTime::Seconds();
-	const int32 Cap = bLoading ? MAX_int32 : FMath::Max(1, Tn.UploadsPerFrame);
+	// Load cap in cells too: the render thread pays per new section, not per game-thread ms (perf-r13m load spikes).
+	const int32 Cap = bLoading ? FMath::Max(1, Tn.UploadLoadMaxCells) : FMath::Max(1, Tn.UploadsPerFrame);
 	const float BudgetMs = bLoading ? Tn.UploadLoadBudgetMs : Tn.UploadBudgetMs;
 	TArray<FIntVector4> Ready;
 	for (const FIntVector4& Cell : DirtyCells)
