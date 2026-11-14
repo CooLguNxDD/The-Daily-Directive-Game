@@ -182,8 +182,8 @@ void ADCReelDirector::Restage(int32 ClipIndex)
 	const int32 Sector = Clip.Photo.Sector;
 	ShotTime = Clip.Photo.ShotTime;
 	WindowStart = ShotTime - T.Run.ClipSeconds;
-	// Clip time t plays at server time ReelClipStart + (t - WindowStart).
-	const float Offset = GS->ReelClipStart - WindowStart;
+	// Clip time t plays at server time ReelClipStart + (t - WindowStart); clip events are kept in content time because
+	// the host may still move ReelClipStart (held for the async restage, review CP34).
 
 	// The sector's city, rebuilt from the run seed: same towers, same lots.
 	const FDCCityPlan Plan = ADCVoxelCity::PlanSector(GS->RunSeed, Sector); // the same specs the sector played with
@@ -239,7 +239,7 @@ void ADCReelDirector::Restage(int32 ClipIndex)
 				City->ApplyOp(Op, false);
 				continue;
 			}
-			PendingVoxelOps.Add({Op.Time + Offset, Op});
+			PendingVoxelOps.Add({Op.Time, Op}); // content time
 		}
 	}
 	for (const FDCCollapseRecord& Rec : GS->Collapses)
@@ -254,20 +254,16 @@ void ADCReelDirector::Restage(int32 ClipIndex)
 			(*B)->RestageCollapse(Rec.Epicenter, false, Rec.Time); // already rubble when the clip starts
 			continue;
 		}
-		Pending.Add({Rec.Time + Offset, *B, Rec.Epicenter, Rec.Time});
+		Pending.Add({Rec.Time, *B, Rec.Epicenter, Rec.Time}); // content time
 	}
+	PendingBlasts.Reset();
 	for (const FDCBlastRecord& Blast : GS->Blasts)
 	{
 		if (Blast.Kind != TEXT("Strike") || Blast.Sector != Sector || Blast.Time < WindowStart - BlastLeadSeconds || Blast.Time > ShotTime + 0.3f)
 		{
 			continue;
 		}
-		const FTransform Xf(Blast.Location);
-		ADCOrbitalStrike* S = GetWorld()->SpawnActorDeferred<ADCOrbitalStrike>(ADCOrbitalStrike::StaticClass(), Xf, this, nullptr, ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
-		S->SetReplicates(false);
-		S->InitRestage(Blast.StratagemId, Blast.Time + Offset);
-		S->FinishSpawning(Xf);
-		Staged.Add(S);
+		PendingBlasts.Add(Blast); // spawned once the clip clock is live (their telegraph runs on server time)
 	}
 	// The stand-in is the clip photographer's own voxel body (review CP23, R10/R23): the outfit code recorded with
 	// the clip; the mannequin only drives the pose.
@@ -352,7 +348,8 @@ float ADCReelDirector::ContentTime() const
 bool ADCReelDirector::CanTakeThisClip() const
 {
 	const ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>();
-	return GS && GS->Phase == EDCRunPhase::Reel && GS->ReelClips.IsValidIndex(StagedIndex) && GS->ReelStage <= 1 && TakenClip != StagedIndex;
+	return GS && GS->Phase == EDCRunPhase::Reel && GS->ReelClips.IsValidIndex(StagedIndex) && GS->ReelStage <= 1 && TakenClip != StagedIndex
+		&& !bRestaging && !bAwaitLive && !IsSlating(); // review CP34: no take of an unfinished scene
 }
 
 void ADCReelDirector::SetTakeRaised(bool bRaised)
@@ -454,8 +451,9 @@ void ADCReelDirector::Tick(float DeltaSeconds)
 		}
 		bTakeRaised = false;
 		Restage(GS->ReelIndex);
+		bAwaitLive = true; // the slate lifts once the city is in and the clip clock is live
 		SlateFramesLeft = -1;
-		SlateUntilReal = bRestaging ? TNumericLimits<double>::Max() : FPlatformTime::Seconds() + 0.25;
+		SlateUntilReal = TNumericLimits<double>::Max();
 	}
 	if (bRestaging)
 	{
@@ -479,17 +477,46 @@ void ADCReelDirector::Tick(float DeltaSeconds)
 			return;
 		}
 		bRestaging = false;
-		SlateUntilReal = FPlatformTime::Seconds() + 0.25;
 		UE_LOG(LogTemp, Display, TEXT("DCREEL restage ready clip=%d"), StagedIndex);
+	}
+	if (bAwaitLive)
+	{
+		// The host starts the clip clock once its own city is in; every machine plays the clip from that start.
+		ADCGameState* MGS = GetWorld()->GetGameState<ADCGameState>();
+		if (MGS->HasAuthority() && !MGS->bReelClipLive)
+		{
+			MGS->ReelClipStart = FMath::Min(MGS->ReelClipStart, MGS->Now() + 0.3f);
+			MGS->bReelClipLive = true;
+			MGS->ForceNetUpdate();
+		}
+		if (!MGS->bReelClipLive)
+		{
+			return; // slate stays up until the host's clock is live
+		}
+		bAwaitLive = false;
+		SlateUntilReal = FPlatformTime::Seconds() + 0.25;
+		const float Offset = MGS->ReelClipStart - WindowStart;
+		for (const FDCBlastRecord& Blast : PendingBlasts)
+		{
+			const FTransform Xf(Blast.Location);
+			ADCOrbitalStrike* S = GetWorld()->SpawnActorDeferred<ADCOrbitalStrike>(ADCOrbitalStrike::StaticClass(), Xf, this, nullptr, ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
+			S->SetReplicates(false);
+			S->InitRestage(Blast.StratagemId, Blast.Time + Offset);
+			S->FinishSpawning(Xf);
+			Staged.Add(S);
+		}
+		PendingBlasts.Reset();
+		UE_LOG(LogTemp, Display, TEXT("DCREEL clip live clip=%d start=%.2f"), StagedIndex, MGS->ReelClipStart);
 	}
 	if (bTakeRaised && !CanTakeThisClip())
 	{
 		bTakeRaised = false;
 	}
 	const float Now = GS->Now();
+	const float ClipRaw = WindowStart + (Now - GS->ReelClipStart); // content time now (events are kept in it)
 	for (int32 i = Pending.Num() - 1; i >= 0; --i)
 	{
-		if (Now >= Pending[i].At)
+		if (ClipRaw >= Pending[i].At)
 		{
 			if (ADCBuilding* B = Pending[i].Building.Get())
 			{
@@ -500,7 +527,7 @@ void ADCReelDirector::Tick(float DeltaSeconds)
 	}
 	for (int32 i = 0; i < PendingVoxelOps.Num();)
 	{
-		if (Now < PendingVoxelOps[i].Key)
+		if (ClipRaw < PendingVoxelOps[i].Key)
 		{
 			break; // kept in op order: apply strictly in sequence
 		}

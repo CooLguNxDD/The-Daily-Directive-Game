@@ -60,6 +60,7 @@ void ADCGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLife
 	DOREPLIFETIME(ADCGameState, ReelIndex);
 	DOREPLIFETIME(ADCGameState, ReelStage);
 	DOREPLIFETIME(ADCGameState, ReelClipStart);
+	DOREPLIFETIME(ADCGameState, bReelClipLive);
 	DOREPLIFETIME(ADCGameState, PagePicks);
 	DOREPLIFETIME(ADCGameState, HeadlineIndex);
 	DOREPLIFETIME(ADCGameState, Headline);

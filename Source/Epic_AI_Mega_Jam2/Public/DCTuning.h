@@ -567,6 +567,8 @@ struct FDCRunTuning
 	UPROPERTY(EditAnywhere, Config, Category = "Run") int32 ReelClipsPerPlayer = 2;
 	/** Seconds of recorded pose before the shutter (the clip length in game time). */
 	UPROPERTY(EditAnywhere, Config, Category = "Run") float ClipSeconds = 2.f;
+	/** Async reel restage: the clip clock waits for the host's restage, at most this long (server seconds). */
+	UPROPERTY(EditAnywhere, Config, Category = "Run") float ReelRestageMaxSeconds = 8.f;
 	/** Second take (R16): the camera dollies (WASD) this fast, at most this far from the original shot's camera. */
 	UPROPERTY(EditAnywhere, Config, Category = "Run") float SecondTakeDollyCmPerSec = 700.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Run") float SecondTakeRadiusCm = 2800.f;

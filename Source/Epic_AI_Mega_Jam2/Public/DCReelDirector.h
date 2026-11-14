@@ -6,6 +6,7 @@
 
 #include "CoreMinimal.h"
 #include "Voxel/DCVoxelTypes.h"
+#include "DCTypes.h"
 #include "GameFramework/Actor.h"
 #include "DCReelDirector.generated.h"
 
@@ -45,7 +46,7 @@ public:
 private:
 	struct FPendingCollapse
 	{
-		float At = 0.f;
+		float At = 0.f; // content time of the collapse (clip time), not server time
 		TWeakObjectPtr<ADCBuilding> Building;
 		FVector Epicenter = FVector::ZeroVector;
 		float ContentTime = 0.f;
@@ -78,6 +79,9 @@ private:
 	TArray<FDCVoxelOp> PreWindowOps;
 	bool bRestaging = false;
 	bool bPreWindowQueued = false;
+	/** Restaged; waiting for the host's clip clock (GS->bReelClipLive) before the slate lifts and the strikes spawn. */
+	bool bAwaitLive = false;
+	TArray<FDCBlastRecord> PendingBlasts;
 	int32 StagedIndex = -1;
 	float WindowStart = 0.f;
 	float ShotTime = 0.f;

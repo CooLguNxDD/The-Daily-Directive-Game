@@ -941,7 +941,11 @@ void ADCGameMode::BeginReelClip(int32 Index)
 	ADCGameState* GS = GetGameState<ADCGameState>();
 	GS->ReelIndex = Index;
 	GS->ReelStage = 0;
-	GS->ReelClipStart = GS->Now() + 0.3f; // a beat for every machine to re-stage the scene
+	// Async restage (review CP34): the clock is held until the host's reel director has the clip's city in (it sets
+	// the real start); ReelRestageMaxSeconds is the fallback. Synchronous: a beat for every machine to re-stage.
+	const bool bHold = UDCVoxelSettings::Get().Tuning.bAsyncReelRestage;
+	GS->bReelClipLive = !bHold;
+	GS->ReelClipStart = GS->Now() + (bHold ? UDCTuning::Get().Run.ReelRestageMaxSeconds : 0.3f);
 	ReelStageReal = GetWorld()->GetRealTimeSeconds();
 	SetDilation(UDCTuning::Get().Run.ReelSlowMo);
 	GS->ForceNetUpdate();
@@ -967,7 +971,13 @@ void ADCGameMode::SetReelStage(uint8 Stage, float Dilation)
 
 void ADCGameMode::TickReelPlay(float Now)
 {
-	if (Now >= GetGameState<ADCGameState>()->ReelClipStart + UDCTuning::Get().Run.ClipSeconds)
+	ADCGameState* GS = GetGameState<ADCGameState>();
+	if (!GS->bReelClipLive && Now >= GS->ReelClipStart)
+	{
+		GS->bReelClipLive = true; // the hold ran out (no director here, or a stuck restage): play from the cap
+		GS->ForceNetUpdate();
+	}
+	if (Now >= GS->ReelClipStart + UDCTuning::Get().Run.ClipSeconds)
 	{
 		SetReelStage(1, FreezeDilation);
 	}
