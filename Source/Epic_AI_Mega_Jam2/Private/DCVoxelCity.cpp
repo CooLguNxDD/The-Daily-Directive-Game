@@ -1640,9 +1640,26 @@ void ADCVoxelCity::SetTowerOffset(int32 Lot, const FVector& Offset)
 	}
 }
 
+namespace
+{
+	// R13 (advisor a-12 step 5): the falling stage split for the DCHITCH line: shards, fade, bodies, break, land (ms).
+	double GFallMs[5] = {};
+	struct FFallTimer
+	{
+		int32 Stage;
+		double Start = FPlatformTime::Seconds();
+		~FFallTimer() { GFallMs[Stage] += (FPlatformTime::Seconds() - Start) * 1000.0; }
+	};
+}
+
 void ADCVoxelCity::TickFalling(float Now)
 {
-	SpawnDueShards(Now);
+	FMemory::Memzero(GFallMs, sizeof(GFallMs));
+	{
+		FFallTimer Timer{0};
+		SpawnDueShards(Now);
+	}
+	FFallTimer FadeTimer{1};
 	// Rested bodies shrink away over the shared rubble, then go.
 	const float Fade = FMath::Max(UDCVoxelSettings::Get().Tuning.PhysicsFadeSeconds, 0.01f);
 	const FDCVoxelTuning& FadeTn = UDCVoxelSettings::Get().Tuning;
@@ -1690,8 +1707,15 @@ void ADCVoxelCity::TickFalling(float Now)
 		}
 		if (F.bBroken)
 		{
-			if (F.bRestNow || TickBodies(Falling[i], GetWorld()->GetDeltaSeconds() * UDCPresentationClock::Dilation(this)))
+			bool bRested = F.bRestNow;
+			if (!bRested)
 			{
+				FFallTimer Timer{2};
+				bRested = TickBodies(Falling[i], GetWorld()->GetDeltaSeconds() * UDCPresentationClock::Dilation(this));
+			}
+			if (bRested)
+			{
+				FFallTimer Timer{4};
 				if (!F.bRestNow)
 				{
 					HostRest(F); // host only: its rest poses become the shared rubble
@@ -1714,6 +1738,7 @@ void ADCVoxelCity::TickFalling(float Now)
 			const bool bImpact = Drop >= F.DropCm || U >= 1.f || LowestFragmentAboveGround(F) <= 0.f;
 			if (F.bReady && Now >= F.Start && (bImpact || U >= UDCVoxelSettings::Get().Tuning.PhysicsBreakAtU))
 			{
+				FFallTimer Timer{3};
 				BreakApart(Falling[i], Age, U, bImpact); // chunks break off as it falls (or at the impact)
 			}
 			continue;
@@ -2266,6 +2291,11 @@ void ADCVoxelCity::Tick(float DeltaSeconds)
 	{
 		UE_LOG(LogTemp, Display, TEXT("DCHITCH city prep=%.1f commit=%.1f poll=%.1f upload=%.1f falling=%.1f crumb=%.1f ms (%d live) bodies=%d cells=%d->%d jobs=%d"), PrepMs, CommitMs, (T1 - T0) * 1000.0, (T2 - T1) * 1000.0, (T3 - T2) * 1000.0,
 			Crumbs ? Crumbs->LastTickMs : 0.f, Crumbs ? Crumbs->LiveCount() : 0, BodiesReserved, DirtyBefore, DirtyCells.Num(), Jobs.Num());
+		if ((T3 - T2) * 1000.0 > UDCVoxelSettings::Get().Tuning.HitchLogMs * 0.25)
+		{
+			UE_LOG(LogTemp, Display, TEXT("DCHITCH falling shards=%.1f fade+frame=%.1f bodies=%.1f break=%.1f land=%.1f ms (fading %d, falling %d)"),
+				GFallMs[0], GFallMs[1], GFallMs[2], GFallMs[3], GFallMs[4], Fading.Num(), Falling.Num());
+		}
 	}
 }
 
