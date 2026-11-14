@@ -463,7 +463,49 @@ namespace DCVoxelOps
 			}
 		}
 
-		// 2. Islands: anything not connected to the ground drops straight down. Connectivity runs on coarse blocks (K^3
+		// 2. Signs: a sign whose wall is mostly gone falls whole, as its own piece, before the island pass can split it
+		//    (review CP21; it would hang off one corner otherwise).
+		const int32 Hold = FMath::Clamp(Ctx.Tuning->SignHoldPercent, 0, 100);
+		for (const FDCVoxelSign& Sign : T.Signs)
+		{
+			if (Sign.BackCells <= 0)
+			{
+				continue;
+			}
+			const FIntVector B0 = Sign.BackMin - Box.Min;
+			const FIntVector B1 = Sign.BackMax - Box.Min;
+			int32 Left = 0;
+			for (int32 Z = FMath::Max(B0.Z, 0); Z < FMath::Min(B1.Z, Size.Z); ++Z)
+			{
+				for (int32 Y = FMath::Max(B0.Y, 0); Y < FMath::Min(B1.Y, Size.Y); ++Y)
+				{
+					for (int32 X = FMath::Max(B0.X, 0); X < FMath::Min(B1.X, Size.X); ++X)
+					{
+						Left += Box.V[Box.Index(X, Y, Z)] != 0 ? 1 : 0;
+					}
+				}
+			}
+			if (static_cast<int64>(Left) * 100 >= static_cast<int64>(Sign.BackCells) * Hold)
+			{
+				continue;
+			}
+			const FIntVector S0 = Sign.BoxMin - Box.Min;
+			const FIntVector S1 = Sign.BoxMax - Box.Min;
+			FDCVoxelPiece SignPiece;
+			SignPiece.Lot = T.Lot;
+			SignPiece.Dir = Dir;
+			TakePiece(SignPiece, S0.Z, [S0, S1](int32 X, int32 Y, int32 Z)
+			{
+				return X >= S0.X && Y >= S0.Y && Z >= S0.Z && X < S1.X && Y < S1.Y && Z < S1.Z;
+			});
+			if (SignPiece.Cells.Num() > 0)
+			{
+				SignPiece.Pivot = SignPiece.Cells[0];
+				Out.Pieces.Add(MoveTemp(SignPiece));
+			}
+		}
+
+		// 3. Islands: anything not connected to the ground drops straight down. Connectivity runs on coarse blocks (K^3
 		//    voxels, solid only above a fill count), so a floor never hangs on a single 10 cm voxel (critic: floating
 		//    slabs). Cells in blocks that are not reached from the ground fall.
 		const int32 K = FMath::Max(1, Ctx.Tuning->IslandBlockVoxels);

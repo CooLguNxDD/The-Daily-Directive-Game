@@ -213,6 +213,11 @@ void ADCHUD::DrawSectorCard(ADCGameState& GS)
 	const FLinearColor& RuleC = T.Look.SectorCardRule;
 	const FLinearColor TitleA(TitleC.R, TitleC.G, TitleC.B, TitleC.A * A);
 	const FLinearColor RuleA(RuleC.R, RuleC.G, RuleC.B, RuleC.A * A);
+	// A dark-glass plate in the middle with thin neon edges (critic V20 minor: the card read as an empty navy screen).
+	Box(W * 0.17f, H * 0.33f - Lift, W * 0.66f, H * 0.38f, FLinearColor(0.02f, 0.03f, 0.06f, 0.85f * A));
+	Box(W * 0.17f, H * 0.33f - Lift, W * 0.66f, Sx(2.f), FLinearColor(Magenta.R, Magenta.G, Magenta.B, 0.9f * A));
+	Box(W * 0.17f, H * 0.71f - Lift - Sx(2.f), W * 0.66f, Sx(2.f), FLinearColor(Cyan.R, Cyan.G, Cyan.B, 0.9f * A));
+	Box(W * 0.17f, H * 0.33f - Lift, Sx(4.f), H * 0.38f, FLinearColor(Magenta.R, Magenta.G, Magenta.B, 0.9f * A));
 	Box(W * 0.2f, H * 0.36f - Lift, W * 0.6f, Sx(3.f), RuleA);
 	Text(FString::Printf(TEXT("SECTOR %d OF %d"), GS.SectorIndex + 1, FMath::Max(T.Sectors.Num(), 1)), W * 0.5f, H * 0.385f - Lift, RuleA, 1.1f, true);
 	Text(Name, W * 0.5f, H * 0.44f - Lift, TitleA, T.Look.SectorCardTitleScale, true, HeadFont);
@@ -313,7 +318,8 @@ void ADCHUD::DrawStrikeInfo(ADCCharacter& Me)
 void ADCHUD::DrawViewfinder(ADCCharacter& Me)
 {
 	const float W = Canvas->ClipX, H = Canvas->ClipY;
-	const FLinearColor Line(1, 1, 1, 0.8f);
+	// Cyan HUD framing (critic V20 minor: the viewfinder reads as the same neon HUD as the feed and the stamp).
+	const FLinearColor Line(Cyan.R, Cyan.G, Cyan.B, 0.85f);
 	// Letterbox to the photo's 16:9 and corner brackets.
 	const float FrameH = W * 9.f / 16.f;
 	const float Bar = FMath::Max(0.f, (H - FrameH) * 0.5f);
@@ -331,7 +337,7 @@ void ADCHUD::DrawViewfinder(ADCCharacter& Me)
 		DrawLine(X, Y, X, Y + Dy, Line, T);
 	}
 	// Thirds and the centre mark.
-	const FLinearColor Faint(1, 1, 1, 0.18f);
+	const FLinearColor Faint(Cyan.R, Cyan.G, Cyan.B, 0.16f);
 	DrawLine(W / 3, Bar, W / 3, H - Bar, Faint, 1.f);
 	DrawLine(2 * W / 3, Bar, 2 * W / 3, H - Bar, Faint, 1.f);
 	DrawLine(0, Bar + FrameH / 3, W, Bar + FrameH / 3, Faint, 1.f);
@@ -721,7 +727,18 @@ void ADCHUD::DrawOnboarding(ADCCharacter& Me)
 		}
 	}
 	const float W = Canvas->ClipX;
-	// Low centre, above the viewfinder prompts (they overlapped LMB SNAP): a paper plate with ink type.
+	if (Me.IsCameraRaised())
+	{
+		// Viewfinder up: only the next step, one small line near the bottom edge, never across the subject (critic).
+		if (Next)
+		{
+			// One line above the LMB SNAP / WINDING label (H - Bar - 110): they overlapped (self-critic CP21).
+			const float Bar = FMath::Max(0.f, (Canvas->ClipY - W * 9.f / 16.f) * 0.5f);
+			Text(FString::Printf(TEXT("%d/5  %s"), Done + 1, *Next->Prompt), W * 0.5f, Canvas->ClipY - Bar - Sx(165.f), Ink, 0.6f, true);
+		}
+		return;
+	}
+	// Low centre, above the viewfinder prompts (they overlapped LMB SNAP): a glass plate with light type.
 	const float Y = Canvas->ClipY - Sx(330.f);
 	Box(W * 0.5f - Sx(430.f), Y - Sx(6.f), Sx(860.f), Sx(78.f), Paper);
 	Box(W * 0.5f - Sx(430.f), Y - Sx(6.f), Sx(5.f), Sx(78.f), Ink);

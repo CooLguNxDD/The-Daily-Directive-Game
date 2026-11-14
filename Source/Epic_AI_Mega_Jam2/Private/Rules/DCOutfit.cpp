@@ -141,7 +141,7 @@ namespace DCOutfit
 		FDCOutfit O;
 		O.Parts.Init(0, Slots.Num());
 		O.Main = 0;
-		O.Accent = 1;
+		O.Accent = 2; // InkBlue: the default photographer is a dark silhouette (critic V20.3), magenta stays a choice
 		return O;
 	}
 

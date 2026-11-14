@@ -202,10 +202,23 @@ void ADCReelDirector::Restage(int32 ClipIndex)
 	if (ADCVoxelCity* City = ADCVoxelCity::Get(this))
 	{
 		City->SetFollowGameState(false);
-		City->Build(GS->RunSeed, Sector, -1 - ClipIndex);
+		// Reuse the re-staged city when this clip follows the last one in the same sector and nothing already replayed
+		// lies after this clip's window start: only the new ops replay (a rebuild plus a full replay froze the reel for
+		// seconds in sector 3, R13).
+		const int32 Applied = City->GetAppliedSeq();
+		bool bReuse = City->GetBuildId() < 0 && City->GetBuiltSector() == Sector && Applied > 0;
 		for (const FDCVoxelOp& Op : GS->VoxelOps)
 		{
-			if (Op.Sector != Sector || Op.Time > ShotTime + 0.5f)
+			bReuse &= !(Op.Sector == Sector && Op.Seq <= Applied && Op.Time >= WindowStart);
+		}
+		if (!bReuse)
+		{
+			City->Build(GS->RunSeed, Sector, -1 - ClipIndex);
+		}
+		UE_LOG(LogTemp, Display, TEXT("DCREEL restage clip=%d sector=%d %s (applied seq %d)"), ClipIndex, Sector, bReuse ? TEXT("reused the city") : TEXT("rebuilt the city"), Applied);
+		for (const FDCVoxelOp& Op : GS->VoxelOps)
+		{
+			if (Op.Sector != Sector || Op.Time > ShotTime + 0.5f || (bReuse && Op.Seq <= Applied))
 			{
 				continue;
 			}

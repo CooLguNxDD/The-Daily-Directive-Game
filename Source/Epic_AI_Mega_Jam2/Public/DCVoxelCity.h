@@ -36,8 +36,11 @@ public:
 	static bool IsEnabled();
 	static ADCVoxelCity* Get(const UObject* WorldContext);
 
-	/** Crafts the sector (clears the old one). BuildId tags which ops belong to this build. */
-	void Build(int32 RunSeed, int32 Sector, int32 BuildId);
+	/** Crafts the sector (clears the old one). BuildId tags which ops belong to this build. bAsync crafts on a worker
+	 *  (the sector card covers it; R13: the craft was a 0.7-1 s game-thread frame) and goes live in Tick when done;
+	 *  until then the city reads as not built (no ops apply). The reel builds synchronously. */
+	void Build(int32 RunSeed, int32 Sector, int32 BuildId, bool bAsync = false);
+	bool IsCrafting() const { return PendingCraft.IsValid(); }
 	void Clear();
 
 	/** Applies one op now (host: right after appending it; reel: at its replay time). Animate plays the fall. */
@@ -76,6 +79,8 @@ public:
 	static const struct FDCSeasonDef* SeasonFor(int32 RunSeed, int32 Sector);
 	static struct FDCWeatherState WeatherAt(int32 RunSeed, int32 Sector, float Fraction);
 	int32 GetBuildId() const { return BuiltId; }
+	/** Highest op Seq applied or queued on this city. */
+	int32 GetAppliedSeq() const { return AppliedSeq; }
 	uint32 GetHash() const { return Sector.Hash(); }
 	const FDCVoxelSector& GetSector() const { return Sector; }
 	bool IsMeshing() const { return Jobs.Num() > 0 || DirtyCells.Num() > 0; }
@@ -171,6 +176,18 @@ private:
 	bool UploadCell(const FIntVector4& Cell);
 	/** Set by Build until the first full upload is done (load-phase budget). */
 	bool bLoading = false;
+	/** An off-thread sector craft in flight (Build with bAsync); FinishBuild swaps it in. */
+	struct FPendingCraft
+	{
+		TSharedPtr<FDCVoxelSector> Out;
+		UE::Tasks::FTask Task;
+		int32 RunSeed = 0;
+		int32 SectorIndex = INDEX_NONE;
+		int32 BuildId = 0;
+		double Start = 0.0;
+	};
+	TSharedPtr<FPendingCraft> PendingCraft;
+	void FinishBuild(int32 RunSeed, int32 SectorIndex, int32 BuildId, double Start);
 	struct FQueuedOp
 	{
 		FDCVoxelOp Op;
@@ -236,6 +253,11 @@ private:
 	/** Aftermath firelights over fresh rubble piles (pooled, FireLights at most). */
 	UPROPERTY() TArray<TObjectPtr<class UPointLightComponent>> FireLightPool;
 	TArray<float> FireLightStart;
+	/** Street lamp spots (from the plan's props) and their pooled lights; a spot is cleared when a blast reaches it. */
+	TArray<FVector> LampSpots;
+	UPROPERTY() TArray<TObjectPtr<class UPointLightComponent>> LampPool;
+	float NextLampPick = 0.f;
+	void TickLampLights();
 	void StartFireLight(const FVector& Where);
 	void TickFireLights();
 	float NextSignPick = 0.f;

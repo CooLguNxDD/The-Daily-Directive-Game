@@ -1,6 +1,7 @@
 #include "Voxel/DCVoxelCraft.h"
 
 #include "Voxel/DCVoxelWorld.h"
+#include "Voxel/DCVoxelOps.h"
 #include "Async/ParallelFor.h"
 #include "Rules/DCPcg.h"
 
@@ -64,16 +65,16 @@ namespace
 
 	struct FCraftIds
 	{
-		uint8 Wall = 1, Window = 1, Trim = 1, Slab = 1, Poster = 1, Ink = 1, PosterEdge = 1;
+		uint8 Wall = 1, Window = 1, Trim = 1, Slab = 1, Poster = 1, Ink = 1, PosterEdge = 1, WindowOff = 0, WindowAlt = 0;
 		/** About 25 cm in voxels: the roof and detail builders size their parts in units. */
 		int32 Unit = 1;
 	};
 
-	void RingLayer(FDCVoxelWorld& W, const FFaceFrame& F, int32 Z, int32 Depth, uint8 Mat)
+	void RingLayer(FDCVoxelWorld& W, const FFaceFrame& F, int32 Z, int32 Depth, uint8 Mat, int32 Reach = 1)
 	{
 		for (int32 Face = 0; Face < 4; ++Face)
 		{
-			for (int32 U = -1; U <= F.Length(Face); ++U)
+			for (int32 U = -Reach; U < F.Length(Face) + Reach; ++U)
 			{
 				W.Set(F.Cell(Face, Depth, U, Z), Mat);
 			}
@@ -170,38 +171,115 @@ namespace
 		return Table;
 	}
 
-	void Poster(FDCVoxelWorld& W, const FFaceFrame& F, int32 Face, int32 B, int32 Floors, const FCraftIds& Ids, FRandomStream& Rng, TArray<FDCVoxelSign>& OutSigns)
+	/** A sign's extent on a face: along-face U [U0, U1), height Z [Z0, Z1), depth 1..Depth out from the wall. */
+	struct FSignShape
 	{
-		// A paper poster one voxel proud of the wall, two floors tall, with an ink diamond: propaganda without red.
-		const int32 Len = F.Length(Face);
-		const int32 Width = FMath::Min(B * 2 - 2, Len - 4);
-		if (Width < 6 || Floors < 4)
+		int32 U0 = 0, U1 = 0, Z0 = 0, Z1 = 0, Depth = 1;
+		bool IsValid() const { return U1 > U0 && Z1 > Z0 && Depth > 0; }
+	};
+
+	/** Sign registry (critic V19.4: storefront-scale neon). Each builder sizes a sign on one face from the recipe. */
+	using FSignFn = FSignShape (*)(const FFaceFrame& F, int32 Face, int32 B, int32 Floors, const FDCVoxelRecipe& R, FRandomStream& Rng);
+	const TMap<FName, FSignFn>& Signs()
+	{
+		static const TMap<FName, FSignFn> Table = {
+			// A vertical blade standing out from a pier between two bays, from the first floor up.
+			{TEXT("Blade"), [](const FFaceFrame& F, int32 Face, int32 B, int32 Floors, const FDCVoxelRecipe& R, FRandomStream& Rng)
+				{
+					const int32 Bays = F.Length(Face) / B;
+					FSignShape S;
+					if (Bays < 2 || Floors < 3)
+					{
+						return S;
+					}
+					S.U0 = Rng.RandRange(1, Bays - 1) * B - R.SignWidthVox / 2;
+					S.U1 = S.U0 + FMath::Max(1, R.SignWidthVox);
+					S.Z0 = B + Rng.RandRange(0, B / 2);
+					S.Z1 = S.Z0 + FMath::Min(R.SignHeightVox, (Floors - 1) * B - S.Z0);
+					S.Depth = FMath::Max(2, R.SignDepthVox);
+					return S;
+				}},
+			// A horizontal band over a ground-floor bay, under the first string course.
+			{TEXT("Board"), [](const FFaceFrame& F, int32 Face, int32 B, int32 Floors, const FDCVoxelRecipe& R, FRandomStream& Rng)
+				{
+					const int32 Bays = F.Length(Face) / B;
+					FSignShape S;
+					if (Bays < 1)
+					{
+						return S;
+					}
+					const int32 W = FMath::Min(R.SignWidthVox, B - 4);
+					S.U0 = Rng.RandRange(0, Bays - 1) * B + (B - W) / 2;
+					S.U1 = S.U0 + W;
+					S.Z0 = B * 2 / 3 + 1;
+					S.Z1 = S.Z0 + FMath::Min(R.SignHeightVox, B - S.Z0 - 1);
+					S.Depth = FMath::Max(1, R.SignDepthVox);
+					return S;
+				}},
+			// The first run's two-bay board (kept for recipes that still name it).
+			{TEXT("Poster"), [](const FFaceFrame& F, int32 Face, int32 B, int32 Floors, const FDCVoxelRecipe& R, FRandomStream& Rng)
+				{
+					const int32 Len = F.Length(Face);
+					const int32 Width = FMath::Min(B * 2 - 2, Len - 4);
+					FSignShape S;
+					if (Width < 6 || Floors < 4)
+					{
+						return S;
+					}
+					S.U0 = Rng.RandRange(2, FMath::Max(2, Len - Width - 2));
+					S.U1 = S.U0 + Width;
+					S.Z0 = B + 2;
+					S.Z1 = S.Z0 + FMath::Min(B * 2 - 2, (Floors - 2) * B);
+					S.Depth = 1;
+					return S;
+				}},
+		};
+		return Table;
+	}
+
+	void PaintSign(FDCVoxelWorld& W, const FFaceFrame& F, int32 Face, const FSignShape& S, int32 GlyphEvery, const FCraftIds& Ids, TArray<FDCVoxelSign>& OutSigns)
+	{
+		// The face a passer-by reads: a blade (deeper than wide) shows its depth-height side, a board its front.
+		const bool bBlade = S.Depth > S.U1 - S.U0;
+		const int32 Long = bBlade ? S.Z1 - S.Z0 : FMath::Max(S.U1 - S.U0, S.Z1 - S.Z0);
+		const bool bGlyphRows = bBlade || S.Z1 - S.Z0 > S.U1 - S.U0;
+		const int32 G = GlyphEvery > 1 && Long > 2 * GlyphEvery ? GlyphEvery : 0;
+		FIntVector Lo(MAX_int32, MAX_int32, MAX_int32);
+		FIntVector Hi(MIN_int32, MIN_int32, MIN_int32);
+		for (int32 Dp = 1; Dp <= S.Depth; ++Dp)
 		{
-			return;
-		}
-		const int32 U0 = Rng.RandRange(2, FMath::Max(2, Len - Width - 2));
-		const int32 Z0 = B + 2;
-		const int32 Height = FMath::Min(B * 2 - 2, (Floors - 2) * B);
-		const int32 Cu = U0 + Width / 2;
-		const int32 Cz = Z0 + Height / 2;
-		const int32 R = FMath::Min(Width, Height) / 3;
-		for (int32 U = U0; U < U0 + Width; ++U)
-		{
-			for (int32 Z = Z0; Z < Z0 + Height; ++Z)
+			for (int32 U = S.U0; U < S.U1; ++U)
 			{
-				const bool bEmblem = FMath::Abs(U - Cu) + FMath::Abs(Z - Cz) <= R;
-				const bool bEdge = U == U0 || U == U0 + Width - 1 || Z == Z0 || Z == Z0 + Height - 1;
-				// A neon tube round the edge (brightest), a dimmer lit face, the dark emblem.
-				W.Set(F.Cell(Face, -1, U, Z), bEdge ? Ids.PosterEdge : (bEmblem ? Ids.Ink : Ids.Poster));
+				for (int32 Z = S.Z0; Z < S.Z1; ++Z)
+				{
+					const bool bEdgeZ = Z == S.Z0 || Z == S.Z1 - 1;
+					const bool bEdge = bEdgeZ || (bBlade ? Dp == S.Depth : (U == S.U0 || U == S.U1 - 1));
+					// Dark glyph strokes across the long axis, a lit margin left round them: reads as lettering.
+					const int32 Along = bGlyphRows ? Z - S.Z0 : U - S.U0;
+					const bool bInner = bBlade ? (Dp >= 2 && Dp <= S.Depth - 2) : (bGlyphRows ? (U > S.U0 + 1 && U < S.U1 - 2) : (Z > S.Z0 + 1 && Z < S.Z1 - 2));
+					const bool bGlyph = G > 0 && !bEdge && bInner && Along % G == G / 2;
+					const FIntVector P = F.Cell(Face, -Dp, U, Z);
+					W.Set(P, bEdge ? Ids.PosterEdge : (bGlyph ? Ids.Ink : Ids.Poster));
+					Lo = Lo.ComponentMin(P);
+					Hi = Hi.ComponentMax(P);
+				}
 			}
 		}
 		FDCVoxelSign& Sign = OutSigns.AddDefaulted_GetRef();
-		Sign.Center = F.Cell(Face, -1, U0 + Width / 2, Z0 + Height / 2);
-		Sign.Probe = F.Cell(Face, -1, U0 + 1, Z0 + Height / 2); // left edge, outside the emblem diamond
+		const int32 Zm = (S.Z0 + S.Z1) / 2;
+		Sign.Center = F.Cell(Face, -S.Depth, (S.U0 + S.U1) / 2, Zm);
+		Sign.Probe = F.Cell(Face, -S.Depth, S.U0, Zm); // an edge voxel (blade tip or board side): always lit
 		Sign.Normal = F.Cell(Face, -1, 0, 0) - F.Cell(Face, 0, 0, 0);
-		Sign.WidthVox = Width;
-		Sign.HeightVox = Height;
-		Sign.Material = Ids.Poster;
+		Sign.WidthVox = FMath::Max(S.U1 - S.U0, S.Depth);
+		Sign.HeightVox = S.Z1 - S.Z0;
+		Sign.Material = Ids.PosterEdge;
+		Sign.BoxMin = Lo;
+		Sign.BoxMax = Hi + FIntVector(1, 1, 1);
+		const FIntVector B0 = F.Cell(Face, 0, S.U0, S.Z0);
+		const FIntVector B1 = F.Cell(Face, 0, S.U1 - 1, S.Z1 - 1);
+		Sign.BackMin = B0.ComponentMin(B1);
+		Sign.BackMax = B0.ComponentMax(B1) + FIntVector(1, 1, 1);
+		Sign.BackCells = (S.U1 - S.U0) * (S.Z1 - S.Z0);
 	}
 }
 
@@ -262,7 +340,7 @@ namespace DCVoxelCraft
 		}
 		const int32 Vcm = FMath::Max(1, Ctx.Tuning->TowerVoxelCm);
 		const int32 B = FMath::Max(6, Ctx.BayCm / Vcm);
-		const int32 Margin = FMath::Max(3, 60 / Vcm); // room for trim, posters and the bite's outer edge
+		const int32 Margin = FMath::Max3(3, 60 / Vcm, R->SignDepthVox + 2); // room for trim, signs and the bite's outer edge
 		Tower.Grid.Data.Reset();
 		Tower.Signs.Reset();
 		Tower.Grid.VoxelCm = Vcm;
@@ -276,6 +354,8 @@ namespace DCVoxelCraft
 		FCraftIds Ids;
 		Ids.Wall = Ctx.MaterialId(R->Wall);
 		Ids.Window = Ctx.MaterialId(R->Window);
+		Ids.WindowOff = R->WindowOff.IsNone() ? Ids.Window : Ctx.MaterialId(R->WindowOff);
+		Ids.WindowAlt = R->WindowAlt.IsNone() ? Ids.Window : Ctx.MaterialId(R->WindowAlt);
 		Ids.Trim = Ctx.MaterialId(R->Trim);
 		Ids.Slab = Ctx.MaterialId(R->Slab);
 		Ids.Poster = Ctx.MaterialId(R->Poster);
@@ -323,7 +403,14 @@ namespace DCVoxelCraft
 						for (int32 D = 0; D < Wall; ++D)
 						{
 							const uint8 Outer = Open == EOpening::Solid ? Ids.Wall : 0;
-							const uint8 Inner = Open == EOpening::Window ? Ids.Window : Outer;
+							uint8 Glass = Ids.Window;
+							if (Open == EOpening::Window)
+							{
+								// One pick per opening (bay, floor, face, lot): dark, the alternate tint, or the recipe's.
+								const uint32 Pick = DCVoxelOps::Hash(FIntVector(U / B, Floor, Face), static_cast<uint32>(LotIndex) * 2654435761u) % 100u;
+								Glass = static_cast<int32>(Pick) < R->WindowOffPercent ? Ids.WindowOff : (static_cast<int32>(Pick) < R->WindowOffPercent + R->WindowAltPercent ? Ids.WindowAlt : Ids.Window);
+							}
+							const uint8 Inner = Open == EOpening::Window ? Glass : Outer;
 							World.Set(F.Cell(Face, D, U, Z0 + H), D == 0 ? Outer : Inner);
 						}
 						// Window sill: a trim ledge one voxel proud under each opening.
@@ -336,10 +423,13 @@ namespace DCVoxelCraft
 						{
 							World.Set(F.Cell(Face, -1, U, Z0 + H), Ids.Wall);
 						}
-						// Pier ribs at each bay start and the corners stand one voxel proud, floor to floor.
+						// Pier ribs at each bay start and the corners stand proud (RibDepthVox), floor to floor.
 						if (Rib > 0 && (bCorner || U % B < Rib))
 						{
-							World.Set(F.Cell(Face, -1, U, Z0 + H), Ids.Wall);
+							for (int32 Dp = 1; Dp <= FMath::Clamp(R->RibDepthVox, 1, 4); ++Dp)
+							{
+								World.Set(F.Cell(Face, -Dp, U, Z0 + H), Ids.Wall);
+							}
 						}
 					}
 				}
@@ -348,7 +438,10 @@ namespace DCVoxelCraft
 			{
 				for (int32 Z = Z0; Z < Z0 + Ids.Unit; ++Z)
 				{
-					RingLayer(World, F, Z, -1, Ids.Trim); // plinth and string courses stand proud of the wall
+					for (int32 Dp = 1; Dp <= FMath::Clamp(R->LedgeDepthVox, 1, 4); ++Dp)
+					{
+						RingLayer(World, F, Z, -Dp, Ids.Trim, Dp); // plinth and string courses stand proud of the wall
+					}
 				}
 			}
 			Top = Z0 + B;
@@ -364,7 +457,12 @@ namespace DCVoxelCraft
 		{
 			if (Rng.FRand() < R->PosterChance)
 			{
-				Poster(World, Full, Face, B, Lot.Spec.Floors, Ids, Rng, Tower.Signs);
+				const FSignFn* Sign = Signs().Find(R->SignKind);
+				const FSignShape Shape = Sign ? (*Sign)(Full, Face, B, Lot.Spec.Floors, *R, Rng) : FSignShape();
+				if (Shape.IsValid())
+				{
+					PaintSign(World, Full, Face, Shape, R->SignGlyphEvery, Ids, Tower.Signs);
+				}
 			}
 		}
 

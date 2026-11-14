@@ -19,12 +19,19 @@ struct EPIC_AI_MEGA_JAM2_API FDCVoxelSign
 	int32 WidthVox = 0;
 	int32 HeightVox = 0;
 	uint8 Material = 0;
+	/** Grid-local box of every sign voxel (Min inclusive, Max exclusive) and the wall box right behind it: the
+	 *  structure pass drops the sign when too little of that wall is left (SignHoldPercent). */
+	FIntVector BoxMin = FIntVector::ZeroValue;
+	FIntVector BoxMax = FIntVector::ZeroValue;
+	FIntVector BackMin = FIntVector::ZeroValue;
+	FIntVector BackMax = FIntVector::ZeroValue;
+	int32 BackCells = 0;
 };
 
 /** A crafted tower in its own grid, with the solid count of every layer when intact (the structure pass compares). */
 struct EPIC_AI_MEGA_JAM2_API FDCVoxelTower
 {
-	/** Lit signs crafted on its facades (cosmetic lights only; never read by the ops). */
+	/** Lit signs crafted on its facades (lights; the structure pass drops a sign whose wall is gone). */
 	TArray<FDCVoxelSign> Signs;
 	int32 Lot = INDEX_NONE;
 	FDCVoxelGrid Grid;

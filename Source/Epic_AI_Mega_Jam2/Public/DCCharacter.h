@@ -183,7 +183,9 @@ private:
 	UPROPERTY() TArray<TObjectPtr<class UProceduralMeshComponent>> OutfitMeshes;
 	FString AppliedOutfit;
 	void TickOutfit();
+	void HideBodyFromOwner(bool bHide);
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UStaticMeshComponent> BeaconMesh;
+	UPROPERTY(VisibleAnywhere) TObjectPtr<class UPointLightComponent> RimLight;
 	UPROPERTY(VisibleAnywhere) TObjectPtr<class UInstancedStaticMeshComponent> StrikeMarker;
 	float StrikeMarkerRadius = -1.f;
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UStaticMeshComponent> Tracer;

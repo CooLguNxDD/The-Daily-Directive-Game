@@ -10,7 +10,8 @@ Creates (or rebuilds):
   /Game/DC/Materials/M_DCVoxel - voxel meshes: BaseColor = sRGB vertex colour decoded to linear with a per-voxel
                                  jitter and edge bevel (VoxelCm per grid size), darkened by vertex alpha *
                                  GlowBodyDark (lit glass, neon), Emissive = colour * vertex alpha * GlowScale
-                                 (lit windows, signs); colours come from the voxel palette in
+                                 (lit windows, signs) + a faint moon-facing form floor (FormFloor, FormSky,
+                                 FormGround, MoonDir); colours come from the voxel palette in
                                  Config/DefaultGame.ini, so the material holds no colour of its own
   /Game/DC/Materials/M_DCInkOutline - post material: ink lines where depth or normal jumps (Sobel-style cross of
                                  four taps); Strength comes from the post stack's Outline field, the rest from Look tuning
@@ -141,6 +142,14 @@ return lerp(Scene, InkColor.rgb * min(Scene, 1.0), Edge);
 """
 
 
+VOXEL_FORM_HLSL = r"""
+// Form floor (advisor CP16, critic V20.5): a faint moon-and-sky term on the shaded albedo, so voxel faces that turn
+// toward the moon separate from faces turned away even with no light on them. Values from FDCVoxelTuning (Form*).
+float K = saturate(dot(normalize(Normal), normalize(MoonDir.xyz)) * 0.5 + 0.5);
+return Albedo * lerp(Ground.rgb, Sky.rgb, K * K) * FormFloor;
+"""
+
+
 def build_voxel_material():
     if keep(f"{MAT_DIR}/M_DCVoxel"):
         return
@@ -211,7 +220,33 @@ def build_voxel_material():
     lib.connect_material_expressions(custom, "", base_out, "A")
     lib.connect_material_expressions(glow_keep, "", base_out, "B")
     lib.connect_material_property(base_out, "", unreal.MaterialProperty.MP_BASE_COLOR)
-    lib.connect_material_property(emissive, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
+    form = lib.create_material_expression(mat, unreal.MaterialExpressionCustom, -300, 1300)
+    form.set_editor_property("code", VOXEL_FORM_HLSL)
+    form.set_editor_property("output_type", unreal.CustomMaterialOutputType.CMOT_FLOAT3)
+    form.set_editor_property("description", "FormFloor")
+    finputs = []
+    for n in ["Albedo", "Normal", "MoonDir", "Sky", "Ground", "FormFloor"]:
+        ci = unreal.CustomInput()
+        ci.set_editor_property("input_name", n)
+        finputs.append(ci)
+    form.set_editor_property("inputs", finputs)
+    lib.connect_material_expressions(base_out, "", form, "Albedo")
+    lib.connect_material_expressions(nrm, "", form, "Normal")
+    for i, (n, v) in enumerate([("MoonDir", unreal.LinearColor(-0.4, 0.3, 0.85, 0.0)),
+                                ("FormSky", unreal.LinearColor(0.32, 0.4, 0.8, 1.0)),
+                                ("FormGround", unreal.LinearColor(0.05, 0.05, 0.08, 1.0))]):
+        vp = lib.create_material_expression(mat, unreal.MaterialExpressionVectorParameter, -850, 1300 + i * 110)
+        vp.set_editor_property("parameter_name", n)
+        vp.set_editor_property("default_value", v)
+        lib.connect_material_expressions(vp, "", form, {"FormSky": "Sky", "FormGround": "Ground"}.get(n, n))
+    ff = lib.create_material_expression(mat, unreal.MaterialExpressionScalarParameter, -850, 1650)
+    ff.set_editor_property("parameter_name", "FormFloor")
+    ff.set_editor_property("default_value", 0.0)
+    lib.connect_material_expressions(ff, "", form, "FormFloor")
+    emissive_all = lib.create_material_expression(mat, unreal.MaterialExpressionAdd, -100, 400)
+    lib.connect_material_expressions(emissive, "", emissive_all, "A")
+    lib.connect_material_expressions(form, "", emissive_all, "B")
+    lib.connect_material_property(emissive_all, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
     lib.connect_material_property(rough, "", unreal.MaterialProperty.MP_ROUGHNESS)
     lib.recompile_material(mat)
     eal.save_asset(f"{MAT_DIR}/M_DCVoxel")

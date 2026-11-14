@@ -378,6 +378,10 @@ UMaterialInterface* ADCVoxelCity::VoxelMaterialFor(int32 VoxelCm)
 	Mid->SetScalarParameterValue(TEXT("EdgeDark"), Tn.VoxelEdgeDark);
 	Mid->SetScalarParameterValue(TEXT("Jitter"), Tn.VoxelJitter);
 	Mid->SetScalarParameterValue(TEXT("Wetness"), Wetness);
+	Mid->SetScalarParameterValue(TEXT("FormFloor"), Tn.FormFloor);
+	Mid->SetVectorParameterValue(TEXT("FormSky"), Tn.FormSky);
+	Mid->SetVectorParameterValue(TEXT("FormGround"), Tn.FormGround);
+	Mid->SetVectorParameterValue(TEXT("MoonDir"), FLinearColor(Tn.MoonDir.GetSafeNormal()));
 	VoxelMIDs.Add(VoxelCm, Mid);
 	return Mid;
 }
@@ -536,8 +540,9 @@ void ADCVoxelCity::Clear()
 	AppliedSeq = 0;
 }
 
-void ADCVoxelCity::Build(int32 RunSeed, int32 SectorIndex, int32 BuildId)
+void ADCVoxelCity::Build(int32 RunSeed, int32 SectorIndex, int32 BuildId, bool bAsync)
 {
+	PendingCraft.Reset(); // a newer build supersedes a craft still in flight (its result is dropped)
 	CommittedFallen.Reset();
 	HoldRadiusCm = -1.f;
 	HoldTops.Reset();
@@ -546,6 +551,14 @@ void ADCVoxelCity::Build(int32 RunSeed, int32 SectorIndex, int32 BuildId)
 	const UDCTuning& T = UDCTuning::Get();
 	const double Start = FPlatformTime::Seconds();
 	const FDCCityPlan Plan = PlanSector(RunSeed, SectorIndex);
+	LampSpots.Reset();
+	for (const FDCPropPlan& Prop : Plan.Props)
+	{
+		if (Prop.Model == UDCVoxelSettings::Get().Tuning.LampModel)
+		{
+			LampSpots.Add(Prop.Location);
+		}
+	}
 	FDCVoxelCraftContext Craft = V.CraftContext(T.City.BlockSizeCm);
 	for (const FDCPropPlan& Prop : Plan.Props)
 	{
@@ -554,14 +567,45 @@ void ADCVoxelCity::Build(int32 RunSeed, int32 SectorIndex, int32 BuildId)
 			Craft.Models.Add(Prop.Model, DCVoxelModels::Parsed(Prop.Model)); // file reads stay on the game thread
 		}
 	}
-	DCVoxelCraft::CraftCity(Plan, Craft, Sector.Towers);
-	DCVoxelCraft::CraftTerrain(Sector.Terrain, Plan, T.City.LotSizeCm, Craft);
-	DCVoxelCraft::CraftRubbleZones(Sector.Terrain, Plan, Craft);
-	DCVoxelCraft::CraftProps(Sector.Props, Plan, Craft);
-	if (const FDCSeasonDef* Season = SeasonFor(RunSeed, SectorIndex))
+	const FDCSeasonDef* Season = SeasonFor(RunSeed, SectorIndex);
+	const float SnowCover = Season ? Season->SnowCover : -1.f;
+	const int32 Seed = DCCityRules::SectorSeed(RunSeed, SectorIndex);
+	const float LotSizeCm = T.City.LotSizeCm;
+	// Pure craft from plain copies (plan, context, numbers): the same on the game thread or a worker, so every machine
+	// builds the same hash either way.
+	auto CraftAll = [Plan, Craft, SnowCover, Seed, LotSizeCm](FDCVoxelSector& Out)
 	{
-		LaySnow(Sector, Season->SnowCover, Craft.MaterialId(TEXT("Snow")), DCCityRules::SectorSeed(RunSeed, SectorIndex));
+		DCVoxelCraft::CraftCity(Plan, Craft, Out.Towers);
+		DCVoxelCraft::CraftTerrain(Out.Terrain, Plan, LotSizeCm, Craft);
+		DCVoxelCraft::CraftRubbleZones(Out.Terrain, Plan, Craft);
+		DCVoxelCraft::CraftProps(Out.Props, Plan, Craft);
+		if (SnowCover >= 0.f)
+		{
+			LaySnow(Out, SnowCover, Craft.MaterialId(TEXT("Snow")), Seed);
+		}
+	};
+	if (!bAsync)
+	{
+		CraftAll(Sector);
+		FinishBuild(RunSeed, SectorIndex, BuildId, Start);
+		return;
 	}
+	TSharedPtr<FPendingCraft> Pending = MakeShared<FPendingCraft>();
+	Pending->Out = MakeShared<FDCVoxelSector>();
+	Pending->RunSeed = RunSeed;
+	Pending->SectorIndex = SectorIndex;
+	Pending->BuildId = BuildId;
+	Pending->Start = Start;
+	TSharedPtr<FDCVoxelSector> Out = Pending->Out;
+	Pending->Task = UE::Tasks::Launch(UE_SOURCE_LOCATION, [CraftAll, Out]() { CraftAll(*Out); });
+	PendingCraft = Pending;
+	BuiltId = BuildId; // SyncBuild sees this build as started
+}
+
+void ADCVoxelCity::FinishBuild(int32 RunSeed, int32 SectorIndex, int32 BuildId, double Start)
+{
+	const UDCVoxelSettings& V = UDCVoxelSettings::Get();
+	const UDCTuning& T = UDCTuning::Get();
 	OpCtx = V.OpContext(T.City.BlockSizeCm);
 	Colors = V.MeshColors();
 	BuiltSector = SectorIndex;
@@ -571,8 +615,8 @@ void ADCVoxelCity::Build(int32 RunSeed, int32 SectorIndex, int32 BuildId)
 	QueueAllDirty(nullptr);
 	bLoading = true;
 	PrewarmBodies(); // R26 bodies registered once at sector start, parked until a break
-	UE_LOG(LogTemp, Display, TEXT("DCVOXEL build sector=%d build=%d towers=%d craft=%.0f ms hash=%08x"), SectorIndex, BuildId, Sector.Towers.Num(),
-		(FPlatformTime::Seconds() - Start) * 1000.0, Sector.Hash());
+	UE_LOG(LogTemp, Display, TEXT("DCVOXEL build sector=%d build=%d towers=%d craft=%.0f ms hash=%08x%s"), SectorIndex, BuildId, Sector.Towers.Num(),
+		(FPlatformTime::Seconds() - Start) * 1000.0, Sector.Hash(), PendingCraft.IsValid() ? TEXT(" async") : TEXT(""));
 }
 
 FDCVoxelOpResult ADCVoxelCity::ApplyOp(const FDCVoxelOp& Op, bool bAnimate)
@@ -759,6 +803,11 @@ void ADCVoxelCity::CommitOp(const FDCVoxelOp& Op, FDCVoxelOpResult& Result, bool
 	HoldTops.Reset();
 	CommittedFallen.SetNum(FMath::Max(CommittedFallen.Num(), Sector.Towers.Num()));
 	KillCarvedSigns(Result.TouchedLots);
+	if (Op.Kind == TEXT("Strike"))
+	{
+		const float R2 = FMath::Square(static_cast<float>(FMath::Max(Op.BlastRadiusCm, 0)));
+		LampSpots.RemoveAll([&Op, R2](const FVector& L) { return FVector::DistSquared2D(L, FVector(Op.CenterCm)) <= R2; }); // lamps in the blast go out
+	}
 	if (Op.Kind == TEXT("Rest"))
 	{
 		for (const TSharedPtr<FFalling>& Fl : Falling)
@@ -1028,9 +1077,14 @@ void ADCVoxelCity::QueueShards(const FDCVoxelOp& Op, const FDCVoxelOpResult& Res
 		const float Speed = Tn.ShardSpeedCms * Rng.FRandRange(0.5f, 1.1f) / FMath::Sqrt(static_cast<float>(C.Block));
 		D.LinearVelocity = (Out + Rng.VRand() * 0.35f).GetSafeNormal() * Speed + FVector(0, 0, Rng.FRandRange(0.f, Tn.ShardUpCms));
 		D.AngularVelocityDeg = Rng.VRand() * 720.f;
-		const FColor Col = Colors.IsValidIndex(C.Material) ? Colors[C.Material] : FColor(30, 30, 40, 0);
-		D.Color = FLinearColor::FromSRGBColor(FColor(Col.R, Col.G, Col.B, 255));
-		D.Glow = Col.A / 255.f * GlowScale * Tn.ShardGlowScale;
+		// Lit voxels (windows, neon) keep their own colour and glow in the air (R26: emissive faces while falling);
+		// dull wall voxels fly as their rubble colour (critic: not window-coloured confetti).
+		const bool bLit = Colors.IsValidIndex(C.Material) && Colors[C.Material].A > 0;
+		const uint8 Rub = !bLit && OpCtx.RubbleOf.IsValidIndex(C.Material) && OpCtx.RubbleOf[C.Material] != 0 ? OpCtx.RubbleOf[C.Material] : C.Material;
+		const FColor Col = Colors.IsValidIndex(Rub) ? Colors[Rub] : FColor(30, 30, 40, 0);
+		const bool bEmber = Rng.RandRange(0, 99) < Tn.ShardEmberPercent;
+		D.Color = bEmber ? Tn.ShardEmberColor : FLinearColor::FromSRGBColor(FColor(Col.R, Col.G, Col.B, 255));
+		D.Glow = bEmber ? Tn.ShardEmberGlow : Col.A / 255.f * GlowScale * Tn.ShardGlowScale;
 		D.LifeSeconds = Tn.ShardLifeSeconds * Rng.FRandRange(0.7f, 1.2f);
 		Burst.Spawns.Add(D);
 	}
@@ -1668,6 +1722,15 @@ void ADCVoxelCity::Land(FFalling& F)
 				Awake += Fr.Body->IsAnyRigidBodyAwake() ? 1 : 0;
 				Bodies.Remove(Fr.Body.Get());
 				Fr.Body->SetSimulatePhysics(false); // frozen where it lies, then shrinks away over PhysicsFadeSeconds
+				{
+					// Still in the air at the time cap: set it down on the street first (nothing fades mid-air).
+					const FBox Bx = Fr.Body->Bounds.GetBox();
+					const float Ground = BodyGroundZ(Bx.GetCenter(), F.LandCenter);
+					if (Bx.Min.Z > Ground + 200.f)
+					{
+						Fr.Body->SetWorldLocation(Fr.Body->GetComponentLocation() - FVector(0, 0, Bx.Min.Z - Ground), false, nullptr, ETeleportType::TeleportPhysics);
+					}
+				}
 				Fr.Body->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 				if (Fr.Comp)
 				{
@@ -1737,16 +1800,21 @@ void ADCVoxelCity::SyncBuild()
 	{
 		return;
 	}
+	if (PendingCraft.IsValid() && PendingCraft->BuildId == GS->CityBuildId)
+	{
+		return; // this build is crafting off-thread already
+	}
 	if (GS->CityBuildId != BuiltId || (GS->CitySector == INDEX_NONE) != (BuiltSector == INDEX_NONE))
 	{
 		if (GS->CitySector == INDEX_NONE)
 		{
+			PendingCraft.Reset();
 			Clear();
 			BuiltId = GS->CityBuildId;
 		}
 		else
 		{
-			Build(GS->RunSeed, GS->CitySector, GS->CityBuildId);
+			Build(GS->RunSeed, GS->CitySector, GS->CityBuildId, UDCVoxelSettings::Get().Tuning.bAsyncSectorCraft);
 		}
 	}
 }
@@ -1773,6 +1841,14 @@ void ADCVoxelCity::FollowGameState()
 void ADCVoxelCity::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
+	if (PendingCraft.IsValid() && PendingCraft->Task.IsCompleted())
+	{
+		// The off-thread craft is done: swap it in and go live (meshing then runs under the sector card).
+		const TSharedPtr<FPendingCraft> Done = PendingCraft;
+		Sector = MoveTemp(*Done->Out);
+		FinishBuild(Done->RunSeed, Done->SectorIndex, Done->BuildId, Done->Start);
+		PendingCraft.Reset();
+	}
 	if (bFollowGameState) // the host drives Build and ApplyOp directly first, so following is a no-op there
 	{
 		FollowGameState();
@@ -1809,6 +1885,7 @@ void ADCVoxelCity::Tick(float DeltaSeconds)
 	TickCityShot();
 	TickSignLights();
 	TickFireLights();
+	TickLampLights();
 	TickCollapseCam();
 	// Hitch log (R13): which stage of the city's frame went long.
 	if ((T3 - T0) * 1000.0 > UDCVoxelSettings::Get().Tuning.HitchLogMs)
@@ -1860,6 +1937,49 @@ void ADCVoxelCity::StartFireLight(const FVector& Where)
 	L->SetAttenuationRadius(Tn.FireLightRadiusCm);
 	L->SetVisibility(true);
 	FireLightStart[Slot] = GetWorld()->GetTimeSeconds();
+}
+
+void ADCVoxelCity::TickLampLights()
+{
+	const FDCVoxelTuning& Tn = UDCVoxelSettings::Get().Tuning;
+	const float Now = GetWorld()->GetTimeSeconds();
+	if (Now < NextLampPick)
+	{
+		return;
+	}
+	NextLampPick = Now + Tn.SignLightRepickSeconds;
+	const APlayerController* PC = GetWorld()->GetFirstPlayerController();
+	if (!PC || !PC->PlayerCameraManager)
+	{
+		return;
+	}
+	const FVector View = PC->PlayerCameraManager->GetCameraLocation();
+	TArray<FVector> Near = LampSpots;
+	Near.Sort([&View](const FVector& A, const FVector& B) { return FVector::DistSquared(A, View) < FVector::DistSquared(B, View); });
+	while (LampPool.Num() < FMath::Min(Tn.LampLights, Near.Num()))
+	{
+		UPointLightComponent* L = NewObject<UPointLightComponent>(this);
+		L->SetupAttachment(Root);
+		L->SetMobility(EComponentMobility::Movable);
+		L->SetCastShadows(false);
+		L->SetIntensityUnits(ELightUnits::Candelas);
+		L->RegisterComponent();
+		LampPool.Add(L);
+	}
+	for (int32 i = 0; i < LampPool.Num(); ++i)
+	{
+		UPointLightComponent* L = LampPool[i];
+		if (!Near.IsValidIndex(i) || i >= Tn.LampLights)
+		{
+			L->SetVisibility(false);
+			continue;
+		}
+		L->SetWorldLocation(Near[i] + FVector(0, 0, Tn.LampHeightCm));
+		L->SetLightColor(Tn.LampColor);
+		L->SetIntensity(Tn.LampCandela);
+		L->SetAttenuationRadius(Tn.LampRadiusCm);
+		L->SetVisibility(true);
+	}
 }
 
 void ADCVoxelCity::TickFireLights()
@@ -1983,7 +2103,10 @@ void ADCVoxelCity::TickCollapseCam()
 {
 	// -dccollapsecam=<dir> (evidence only): when a strike commits, the view cuts to a fixed wide camera above the
 	// collapse and writes frames at fixed times after the detonation (before, mid-fall, settled), then hands back.
-	static const float Times[] = {0.f, 0.3f, 0.6f, 1.0f, 1.5f, 2.2f, 3.2f, 4.5f, 6.5f};
+	// The last two frames come from street height after the rest op, looking up at the skyline over the rubble
+	// (critic V19.1: anything left hanging in the sky shows against it).
+	static const float Times[] = {0.f, 0.3f, 0.6f, 1.0f, 1.5f, 2.2f, 3.2f, 4.5f, 6.5f, 9.f, 12.f};
+	constexpr int32 FirstStreetFrame = 9;
 	if (CollapseCamStep < 0)
 	{
 		return;
@@ -2001,8 +2124,9 @@ void ADCVoxelCity::TickCollapseCam()
 		ShotCamera->GetCameraComponent()->SetFieldOfView(60.f);
 	}
 	const float T = GetWorld()->GetTimeSeconds() - CollapseCamStart;
-	const FVector Eye = CollapseCamCenter + FVector(-4200.f, -4200.f, 6500.f);
-	ShotCamera->SetActorLocationAndRotation(Eye, (CollapseCamCenter + FVector(0, 0, 800.f) - Eye).Rotation());
+	const bool bStreet = CollapseCamStep >= FirstStreetFrame;
+	const FVector Eye = CollapseCamCenter + (bStreet ? FVector(-3200.f, -2400.f, 250.f) : FVector(-4200.f, -4200.f, 6500.f));
+	ShotCamera->SetActorLocationAndRotation(Eye, (CollapseCamCenter + FVector(0, 0, bStreet ? 1600.f : 800.f) - Eye).Rotation());
 	if (PC->GetViewTarget() != ShotCamera)
 	{
 		PC->SetViewTargetWithBlend(ShotCamera, 0.f);

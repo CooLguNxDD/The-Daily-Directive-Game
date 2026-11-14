@@ -28,6 +28,9 @@ struct FDCWeatherProfile
 	UPROPERTY(EditAnywhere, Config, Category = "Weather") float CloudShade = 0.f;
 	/** Surface wetness 0..1: up-facing voxels darken and gloss (rain); the blend dries them as the arc moves on. */
 	UPROPERTY(EditAnywhere, Config, Category = "Weather") float Wetness = 0.f;
+	/** Day light added to Look.DayBlend while this profile holds (0 = the noir night; the arc's Dusk row lifts it a
+	 *  little), so the time of day follows the replicated weather arc (seed + clock). */
+	UPROPERTY(EditAnywhere, Config, Category = "Weather") float DayBlend = 0.f;
 	// The weather post layer (R19): added to the stack with weight 1.
 	UPROPERTY(EditAnywhere, Config, Category = "Weather") float Exposure = 0.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Weather") float Saturation = 1.f;
@@ -42,6 +45,9 @@ struct FDCWeatherKey
 	/** 0..1 of the sector's time. */
 	UPROPERTY(EditAnywhere, Config, Category = "Weather") float At = 0.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Weather") FName Profile;
+	/** Time of day at this key (0 = the noir night, 1 = full day), added to the profile's DayBlend: an arc is also a
+	 *  stretch of the day-night cycle (human 2026-11-14: night is the noir end of a cycle the weather drives). */
+	UPROPERTY(EditAnywhere, Config, Category = "Weather") float Day = 0.f;
 };
 
 USTRUCT(BlueprintType)

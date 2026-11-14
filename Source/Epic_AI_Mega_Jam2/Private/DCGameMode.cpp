@@ -1,4 +1,5 @@
 #include "DCGameMode.h"
+#include "Voxel/DCVoxelSettings.h"
 
 #include "DCBuilding.h"
 #include "DCCharacter.h"
@@ -310,7 +311,7 @@ void ADCGameMode::BuildCity(int32 SectorIndex)
 		++MutableGS->CityBuildId;
 		if (ADCVoxelCity* City = GS->GetVoxelCity())
 		{
-			City->Build(GS->RunSeed, SectorIndex, MutableGS->CityBuildId);
+			City->Build(GS->RunSeed, SectorIndex, MutableGS->CityBuildId, UDCVoxelSettings::Get().Tuning.bAsyncSectorCraft);
 		}
 	}
 	for (int32 Lot = 0; Lot < CityPlan.Buildings.Num(); ++Lot)

@@ -139,16 +139,17 @@ namespace DCVoxelModels
 	const FDCVoxelModel* Parsed(FName Model)
 	{
 		check(IsInGameThread());
-		static TMap<FName, TOptional<FDCVoxelModel>> Cache;
+		// Heap entries: the returned pointer stays valid when the map grows (sector crafts read models off-thread).
+		static TMap<FName, TUniquePtr<FDCVoxelModel>> Cache;
 		if (Model.IsNone())
 		{
 			return nullptr;
 		}
-		if (const TOptional<FDCVoxelModel>* Found = Cache.Find(Model))
+		if (const TUniquePtr<FDCVoxelModel>* Found = Cache.Find(Model))
 		{
-			return Found->IsSet() ? &Found->GetValue() : nullptr;
+			return Found->Get();
 		}
-		TOptional<FDCVoxelModel>& Slot = Cache.Add(Model);
+		TUniquePtr<FDCVoxelModel>& Slot = Cache.Add(Model);
 		const FString Path = FPaths::ProjectContentDir() / TEXT("DC/Voxel") / (Model.ToString() + TEXT(".dcvox"));
 		FString Text;
 		FDCVoxelModel M;
@@ -158,8 +159,8 @@ namespace DCVoxelModels
 			UE_LOG(LogTemp, Warning, TEXT("DCVOXEL model %s not loaded (%s): %s"), *Model.ToString(), *Path, *Error);
 			return nullptr;
 		}
-		Slot.Emplace(MoveTemp(M));
-		return &Slot.GetValue();
+		Slot = MakeUnique<FDCVoxelModel>(MoveTemp(M));
+		return Slot.Get();
 	}
 
 	const FDCVoxelMeshData* Mesh(FName Model)
