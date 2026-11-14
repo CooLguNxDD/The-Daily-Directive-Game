@@ -54,6 +54,7 @@ ADCOrbitalStrike::ADCOrbitalStrike()
 	Ring->SetCastShadow(false);
 	Ring->SetMobility(EComponentMobility::Movable);
 	Beacon = MakeFx(this, TEXT("Beacon"), RootComponent);
+	ImpactFlare = MakeFx(this, TEXT("ImpactFlare"), RootComponent);
 	Fireball = MakeFx(this, TEXT("Fireball"), RootComponent);
 	FireCubes = CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("FireCubes"));
 	FireCubes->SetupAttachment(RootComponent);
@@ -118,6 +119,10 @@ void ADCOrbitalStrike::BeginPlay()
 	Ring->SetMaterial(0, DCAssets::MakeFlatUnlit(this, Look.Accent, Look.DangerRingGlow));
 	Ring->SetRelativeLocation(FVector(0, 0, 3.f));
 
+	ImpactFlare->SetStaticMesh(DCAssets::Cylinder());
+	FlareMat = DCAssets::MakeFlatUnlit(this, UDCTuning::Get().Look.ImpactFlareColor, 1.f);
+	ImpactFlare->SetMaterial(0, FlareMat);
+	ImpactFlare->SetRelativeLocation(FVector(0, 0, 6.f));
 	Beacon->SetStaticMesh(DCAssets::Cone());
 	Beacon->SetMaterial(0, DCAssets::MakeFlat(this, BeamColor, 30.f));
 	Beacon->SetRelativeLocation(FVector(0, 0, 60.f));
@@ -203,6 +208,11 @@ void ADCOrbitalStrike::TickTelegraph(float Now, const FDCStratagemDef& Def)
 	Beam->SetRelativeScale3D(FVector(Width, Width, BeamHeightCm / 100.f));
 	DCAssets::SetFlat(BeamMat, Def.BeamColor, FMath::Lerp(1.f, UDCTuning::Get().Look.BeamGlowPeak, U * U) * (0.7f + 0.3f * Pulse)); // red, not blown to pink
 	Beacon->SetVisibility(Pulse > 0.3f || U > 0.8f);
+	// The flare where the beam lands: wider than the beam, hotter as it charges, pulsing with it.
+	const FDCLookTuning& FlareLook = UDCTuning::Get().Look;
+	const float FlareD = Width * FlareLook.ImpactFlareWidthScale * (0.85f + 0.3f * Pulse);
+	ImpactFlare->SetRelativeScale3D(FVector(FlareD, FlareD, 0.02f));
+	DCAssets::SetFlat(FlareMat, FlareLook.ImpactFlareColor, FMath::Lerp(0.6f, FlareLook.ImpactFlareGlow, U) * (0.6f + 0.4f * Pulse));
 
 	if (!bChargePlayed && U > 0.f && Def.TelegraphSeconds - (Now - Start) <= 3.2f)
 	{
@@ -244,6 +254,7 @@ void ADCOrbitalStrike::DetonateLocal(const FDCStratagemDef& Def)
 	Shock->SetVisibility(false); // the filled shock disc read as a white bar edge-on (critic); the voxel core carries the peak
 	Ring->SetVisibility(false);
 	Beacon->SetVisibility(false);
+	ImpactFlare->SetVisibility(false);
 }
 
 void ADCOrbitalStrike::TickBlast(float Now, const FDCStratagemDef& Def)

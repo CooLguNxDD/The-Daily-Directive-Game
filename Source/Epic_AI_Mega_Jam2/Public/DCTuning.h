@@ -198,6 +198,10 @@ struct FDCLookTuning
 	/** Beam diameter (cm) when the call lands and at full charge. */
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float BeamWidthStartCm = 240.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float BeamWidthEndCm = 30.f;
+	/** Impact flare where the beam meets the street (blast white-orange, only on strikes): width x beam, peak glow. */
+	UPROPERTY(EditAnywhere, Config, Category = "Look") FLinearColor ImpactFlareColor = FLinearColor(1.f, 0.89f, 0.54f);
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float ImpactFlareWidthScale = 2.6f;
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float ImpactFlareGlow = 2.2f;
 	/** The danger ring: a thin band of this many segments, this wide (cm), at this unlit glow (1 = the palette red). */
 	UPROPERTY(EditAnywhere, Config, Category = "Look") int32 DangerRingSegments = 64;
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float DangerRingWidthCm = 60.f;

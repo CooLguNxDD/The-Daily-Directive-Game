@@ -46,6 +46,9 @@ private:
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UStaticMeshComponent> Beam;
 	UPROPERTY(VisibleAnywhere) TObjectPtr<class UInstancedStaticMeshComponent> Ring;
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UStaticMeshComponent> Beacon;
+	/** Where the beam meets the street: a pulsing white-orange flare disc (V4.5), gone at detonation. */
+	UPROPERTY(VisibleAnywhere) TObjectPtr<UStaticMeshComponent> ImpactFlare;
+	UPROPERTY() TObjectPtr<class UMaterialInstanceDynamic> FlareMat;
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UStaticMeshComponent> Fireball;
 	/** Voxel blast core (R4): seeded chunky cubes with gaps between them, so a tower stays readable behind the peak. */
 	UPROPERTY(VisibleAnywhere) TObjectPtr<class UInstancedStaticMeshComponent> FireCubes;
