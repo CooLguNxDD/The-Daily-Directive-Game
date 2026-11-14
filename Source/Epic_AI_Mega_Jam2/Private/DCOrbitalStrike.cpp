@@ -131,7 +131,9 @@ void ADCOrbitalStrike::BeginPlay()
 
 	Fireball->SetStaticMesh(DCAssets::Sphere());
 	FireMat = UDCTuning::Get().Look.bFireCubesUnlit ? DCAssets::MakeFlatUnlit(this, UDCTuning::Get().Look.Fire, 1.f) : DCAssets::MakeFlat(this, UDCTuning::Get().Look.Fire, 80.f);
-	Fireball->SetMaterial(0, FireMat);
+	CoreMat = DCAssets::MakeFlatUnlit(this, UDCTuning::Get().Look.BlastHotColor, UDCTuning::Get().Look.CoreFlareGlow);
+	Fireball->SetMaterial(0, CoreMat); // the hot core flare (TickBlast)
+	Fireball->SetCastShadow(false);
 	Fireball->SetVisibility(false);
 	// The core's cubes, seeded from where the strike landed: every machine sees the same burst.
 	FireCubes->SetStaticMesh(DCAssets::Cube());
@@ -311,6 +313,15 @@ void ADCOrbitalStrike::TickBlast(float Now, const FDCStratagemDef& Def)
 		Xf.Add(FTransform(FRotator(i * 37.f + T * 90.f, i * 53.f, i * 11.f), Pos, FVector(Size)));
 	}
 	FireCubes->BatchUpdateInstancesTransforms(0, Xf, false, true, true);
+	// The hot core: white-gold, far over the bloom threshold (a halo), shrinking away within CoreFlareSeconds.
+	{
+		const float CoreU = FMath::Clamp(T / FMath::Max(Look.CoreFlareSeconds, 0.01f), 0.f, 1.f);
+		const float CoreD = Look.CoreFlareMeters * (1.f - CoreU * CoreU) * FMath::Clamp(T / 0.04f, 0.2f, 1.f);
+		Fireball->SetRelativeLocation(FVector(0, 0, Look.CoreFlareHeightCm));
+		Fireball->SetRelativeScale3D(FVector(CoreD));
+		DCAssets::SetFlat(CoreMat, Look.BlastHotColor, Look.CoreFlareGlow * (1.f - CoreU));
+		Fireball->SetVisibility(CoreU < 1.f && CoreD > 0.05f);
+	}
 	// Blast white-orange only at the first instant, then orange to ember red: the peak reads as fire, not a white dome.
 	const FLinearColor Hot = FMath::Lerp(Look.BlastFireColor, Look.BlastHotColor, FMath::Clamp(1.f - T / 0.25f, 0.f, 1.f));
 	DCAssets::SetFlat(FireMat, FMath::Lerp(Look.BlastEmberColor, Hot, Fade * Fade), 1.f + Look.FireballGlow * Fade * Fade * Fade);

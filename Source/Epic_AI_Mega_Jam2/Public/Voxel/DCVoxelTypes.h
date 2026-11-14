@@ -210,6 +210,11 @@ struct FDCVoxelTuning
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float ShardLifeSeconds = 8.f;
 	/** Shards keep this share of their palette glow (lit windows still glow in the air, but never read as cream blocks at the lens). */
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float ShardGlowScale = 0.35f;
+	/** Shards fly in their rubble material (dark concrete, critic: never window-coloured confetti); EmberPercent of them
+	 *  burn as embers (EmberColor, EmberGlow). */
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 ShardEmberPercent = 18;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float ShardEmberGlow = 6.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") FLinearColor ShardEmberColor = FLinearColor(1.f, 0.32f, 0.04f);
 	/** Collider = fragment bounds times this (adjacent fragments start apart, never nested). */
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float PhysicsBoxScale = 0.85f;
 	/** A body group rests when every body sleeps or after this long (then its rubble shows). */

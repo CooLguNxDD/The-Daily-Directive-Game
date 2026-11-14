@@ -58,6 +58,7 @@ private:
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UPointLightComponent> Light;
 	UPROPERTY() TObjectPtr<UMaterialInstanceDynamic> BeamMat;
 	UPROPERTY() TObjectPtr<UMaterialInstanceDynamic> FireMat;
+	UPROPERTY() TObjectPtr<UMaterialInstanceDynamic> CoreMat;
 	UPROPERTY() TObjectPtr<UMaterialInstanceDynamic> ShockMat;
 	UPROPERTY() TObjectPtr<AController> InstigatorController;
 

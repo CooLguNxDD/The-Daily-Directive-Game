@@ -1028,9 +1028,11 @@ void ADCVoxelCity::QueueShards(const FDCVoxelOp& Op, const FDCVoxelOpResult& Res
 		const float Speed = Tn.ShardSpeedCms * Rng.FRandRange(0.5f, 1.1f) / FMath::Sqrt(static_cast<float>(C.Block));
 		D.LinearVelocity = (Out + Rng.VRand() * 0.35f).GetSafeNormal() * Speed + FVector(0, 0, Rng.FRandRange(0.f, Tn.ShardUpCms));
 		D.AngularVelocityDeg = Rng.VRand() * 720.f;
-		const FColor Col = Colors.IsValidIndex(C.Material) ? Colors[C.Material] : FColor(30, 30, 40, 0);
-		D.Color = FLinearColor::FromSRGBColor(FColor(Col.R, Col.G, Col.B, 255));
-		D.Glow = Col.A / 255.f * GlowScale * Tn.ShardGlowScale;
+		const uint8 Rub = OpCtx.RubbleOf.IsValidIndex(C.Material) && OpCtx.RubbleOf[C.Material] != 0 ? OpCtx.RubbleOf[C.Material] : C.Material;
+		const FColor Col = Colors.IsValidIndex(Rub) ? Colors[Rub] : FColor(30, 30, 40, 0);
+		const bool bEmber = Rng.RandRange(0, 99) < Tn.ShardEmberPercent;
+		D.Color = bEmber ? Tn.ShardEmberColor : FLinearColor::FromSRGBColor(FColor(Col.R, Col.G, Col.B, 255));
+		D.Glow = bEmber ? Tn.ShardEmberGlow : Col.A / 255.f * GlowScale * Tn.ShardGlowScale;
 		D.LifeSeconds = Tn.ShardLifeSeconds * Rng.FRandRange(0.7f, 1.2f);
 		Burst.Spawns.Add(D);
 	}

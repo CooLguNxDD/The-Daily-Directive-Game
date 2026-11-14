@@ -305,6 +305,12 @@ struct FDCLookTuning
 	 *  big hot cube against the lens washes the frame). The cubes are unlit when bFireCubesUnlit (their glow is the
 	 *  only light on them; the blast light no longer bleaches them white). */
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float FireCubeNearHideCm = 0.f;
+	/** Hot core at the impact (critic): a small white-gold sphere, emissive far over the bloom threshold, for the first
+	 *  CoreFlareSeconds after detonation, shrinking (metres across, glow multiplier). The halo is the bloom's. */
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float CoreFlareMeters = 3.5f;
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float CoreFlareGlow = 40.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float CoreFlareSeconds = 0.45f;
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float CoreFlareHeightCm = 250.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float FireCubeNearFadeCm = 0.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Look") bool bFireCubesUnlit = false;
 	/** The blast's colour at the first instant (white-gold) and once it cools (orange), then the ember it fades to. */
