@@ -42,6 +42,9 @@ struct FDCMoveTuning
 	UPROPERTY(EditAnywhere, Config, Category = "Move") float LandDipFullSpeed = 1200.f;
 	/** Field of view added while sprinting (third person). */
 	UPROPERTY(EditAnywhere, Config, Category = "Move") float SprintFOVKick = 6.f;
+	/** Downed third-person camera: boom pivot height above the actor (cm) and arm length, clear of the rubble. */
+	UPROPERTY(EditAnywhere, Config, Category = "Move") float DownedBoomHeightCm = 260.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Move") float DownedArmLength = 520.f;
 };
 
 USTRUCT(BlueprintType)

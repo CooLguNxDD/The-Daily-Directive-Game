@@ -1294,6 +1294,11 @@ void ADCCharacter::UpdateView(float DeltaSeconds)
 	LandDipVel += Accel * DeltaSeconds;
 	LandDip = FMath::Clamp(LandDip + LandDipVel * DeltaSeconds, -M.LandDipMaxCm, M.LandDipMaxCm);
 	Boom->SocketOffset = M.ShoulderOffset + FVector(0.f, 0.f, LandDip);
+	// Downed: the boom lifts above the rubble and pulls back, so the player sees themselves and the street (a boom at
+	// knee height in a rubble pile went black).
+	const float BoomZ = FMath::FInterpTo(Boom->GetRelativeLocation().Z, bDowned ? M.DownedBoomHeightCm : 40.f, DeltaSeconds, 4.f);
+	Boom->SetRelativeLocation(FVector(0.f, 0.f, BoomZ));
+	Boom->TargetArmLength = FMath::FInterpTo(Boom->TargetArmLength, bDowned ? M.DownedArmLength : M.ArmLength, DeltaSeconds, 4.f);
 	const bool bSprintKick = bSprinting && !bCameraRaised && GetVelocity().Size2D() > M.WalkSpeed;
 	ThirdCam->SetFieldOfView(FMath::FInterpTo(ThirdCam->FieldOfView, M.ThirdPersonFOV + (bSprintKick ? M.SprintFOVKick : 0.f), DeltaSeconds, 6.f));
 }

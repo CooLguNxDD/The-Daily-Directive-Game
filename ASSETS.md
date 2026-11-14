@@ -25,6 +25,7 @@ art) is in the game.
 | Asset | Path | Tool | Notes |
 |-------|------|------|-------|
 | Title menu key art | `Content/DC/Art/T_MenuKeyArt.uasset` (source `Content/DC/Art/Source/menu-keyart.png`) | `scripts/media.sh` (agy backend, 2026-11-13; codex was out of quota) | prompt in `goal/epic-ai-mega-jam2/refs/game/menu-keyart.md`; imported by `tools/content/build_content.py` |
+| Draft card art: Sun-Drop, Gravity Singularity | `Content/DC/Art/T_Card_sundrop.uasset`, `T_Card_singularity.uasset` (sources `Content/DC/Art/Source/card-*.png`) | `scripts/media.sh` (agy backend, 2026-11-13) | prompts in `goal/epic-ai-mega-jam2/refs/game/card-*.md`; imported at 256 px by `tools/content/build_content.py`; the other seven cards wait on image quota (text-only until then) |
 | Critic reference board (not in the build) | `goal/epic-ai-mega-jam2/refs/board/*.png` | `scripts/media.sh` (agy) | poster city, newspaper front, strike call-in, ink stamp, voxel city; the human picks keepers |
 
 ## Made in code or from text (no third-party source)
@@ -33,7 +34,7 @@ art) is in the game.
 | Voxel city, terrain, rubble | spawned at run time | C++ voxel engine (`Source/.../Voxel/`) from recipes and districts in `Config/DefaultGame.ini` |
 | `M_DCVoxel` vertex-colour voxel material | `Content/DC/Materials/M_DCVoxel.uasset` | `tools/content/build_content.py` |
 | `M_DCInkOutline` ink-edge post material | `Content/DC/Materials/M_DCInkOutline.uasset` | `tools/content/build_content.py` (HLSL in the script) |
-| Enemy and prop voxel models | `Content/DC/Voxel/*.dcvox` | `tools/voxel-forge/forge.py` from `tools/voxel-forge/recipes/*.vfr` (R17) |
+| Enemy, prop and player-gear voxel models (swarmer, spotlight, walker, props, the chest press camera `presscam`) | `Content/DC/Voxel/*.dcvox` | `tools/voxel-forge/forge.py` from `tools/voxel-forge/recipes/*.vfr` (R17) |
 | Newsprint photo print, stamp grit | at run time | C++ (`Rules/DCNewsprint.cpp`, `DCHUD::StampGrit`) |
 | Decay effects, voxel blast core, weather precipitation | at run time | C++ pooled instanced cubes (`DCVoxelFx`, `DCOrbitalStrike`) from ini rows |
 
