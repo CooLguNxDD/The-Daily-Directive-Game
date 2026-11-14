@@ -460,6 +460,63 @@ UProceduralMeshComponent* ADCVoxelCity::NewMesh(bool bCollision, int32 VoxelCm)
 	return Mesh;
 }
 
+UProceduralMeshComponent* ADCVoxelCity::AcquirePiece(int32 VoxelCm)
+{
+	TArray<TObjectPtr<UProceduralMeshComponent>>& Free = FreePieces.FindOrAdd(VoxelCm);
+	while (Free.Num() > 0)
+	{
+		UProceduralMeshComponent* Piece = Free.Pop(EAllowShrinking::No);
+		if (IsValid(Piece))
+		{
+			return Piece;
+		}
+	}
+	UProceduralMeshComponent* Piece = NewObject<UProceduralMeshComponent>(this);
+	Piece->bUseAsyncCooking = true;
+	Piece->SetupAttachment(Root);
+	Piece->SetCollisionProfileName(TEXT("NoCollision"));
+	Piece->SetCastShadow(true);
+	Piece->RegisterComponent();
+	Piece->SetMaterial(0, VoxelMaterialFor(VoxelCm));
+	PieceCm.Add(Piece, VoxelCm);
+	return Piece;
+}
+
+void ADCVoxelCity::ReleasePiece(UPrimitiveComponent* Piece)
+{
+	UProceduralMeshComponent* Mesh = Cast<UProceduralMeshComponent>(Piece);
+	const int32* Cm = Mesh ? PieceCm.Find(Mesh) : nullptr;
+	if (!Cm)
+	{
+		if (Piece)
+		{
+			Piece->DestroyComponent(); // not a pooled piece
+		}
+		return;
+	}
+	Mesh->ClearAllMeshSections();
+	Mesh->SetVisibility(false, false);
+	Mesh->AttachToComponent(Root, FAttachmentTransformRules::KeepRelativeTransform);
+	Mesh->SetRelativeTransform(FTransform::Identity);
+	Mesh->SetOwnerNoSee(false);
+	Mesh->SetCastShadow(true);
+	Mesh->SetMaterial(0, VoxelMaterialFor(*Cm));
+	FreePieces.FindOrAdd(*Cm).Add(Mesh);
+}
+
+void ADCVoxelCity::PrewarmPieces(int32 PerFrame)
+{
+	// Enough for the body budget plus the scripted piece roots, created a few per frame (never in a collapse frame).
+	const FDCVoxelTuning& Tn = UDCVoxelSettings::Get().Tuning;
+	const int32 Want = Tn.PhysicsMaxBodies + 16;
+	const int32 Cm = FMath::Max(1, Tn.TowerVoxelCm);
+	for (int32 n = 0; n < PerFrame && PieceCm.Num() < Want; ++n)
+	{
+		UProceduralMeshComponent* Piece = AcquirePiece(Cm);
+		ReleasePiece(Piece);
+	}
+}
+
 void ADCVoxelCity::Clear()
 {
 	CommittedFallen.Reset();
@@ -498,9 +555,13 @@ void ADCVoxelCity::Clear()
 		{
 			if (Fr.Body)
 			{
-				ReleaseBox(Fr.Body); // R26 bodies back to the pool (their meshes went with the mesh pool)
+				ReleaseBox(Fr.Body); // R26 bodies back to the pool
 			}
+			ReleasePiece(Fr.Comp);
+			Fr.Comp = nullptr;
 		}
+		ReleasePiece(F->Comp);
+		F->Comp = nullptr;
 	}
 	Bodies.Reset();
 	BodiesReserved = 0;
@@ -510,7 +571,7 @@ void ADCVoxelCity::Clear()
 	{
 		if (Fd.Mesh.IsValid())
 		{
-			Fd.Mesh->DestroyComponent();
+			ReleasePiece(Fd.Mesh.Get());
 		}
 		ReleaseBox(Fd.Body.Get());
 	}
@@ -1002,7 +1063,7 @@ void ADCVoxelCity::StartFall(const FDCVoxelPiece& Piece, float Now, const TArray
 	F->LandCenter = LandAt;
 	const uint8 Mat = Piece.Materials.Num() > 0 ? Piece.Materials[0] : 1;
 	F->Color = Colors.IsValidIndex(Mat) ? FLinearColor::FromSRGBColor(Colors[Mat]) : FLinearColor::Black;
-	F->Comp = NewMesh(false, Grid.VoxelCm);
+	F->Comp = AcquirePiece(Grid.VoxelCm);
 	F->Comp->SetWorldLocation(F->Pivot);
 	F->Comp->SetVisibility(false);
 	// R26 true break-up: chunks (PhysicsFragmentCm blocks) that break off mid-fall, each made of leaves
@@ -1072,7 +1133,7 @@ void ADCVoxelCity::StartFall(const FDCVoxelPiece& Piece, float Now, const TArray
 			const int32 Parent = Pend->FragParent[f];
 			FFalling::FFrag& Fr = F->Frags.AddDefaulted_GetRef();
 			Fr.Parent = Parent;
-			Fr.Comp = NewMesh(false, Grid.VoxelCm); // a chunk's stays empty: its leaves ride on it
+			Fr.Comp = AcquirePiece(Grid.VoxelCm); // a chunk's stays empty: its leaves ride on it
 			Fr.Comp->AttachToComponent(Parent == INDEX_NONE ? F->Comp.Get() : F->Frags[Parent].Comp.Get(), FAttachmentTransformRules::SnapToTargetNotIncludingScale);
 			for (int32 i : Idx)
 			{
@@ -1394,7 +1455,7 @@ void ADCVoxelCity::TickFalling(float Now)
 		{
 			if (Mesh)
 			{
-				Mesh->DestroyComponent();
+				ReleasePiece(Mesh);
 			}
 			ReleaseBox(Fading[i].Body.Get());
 			Fading.RemoveAtSwap(i);
@@ -1803,7 +1864,6 @@ void ADCVoxelCity::Land(FFalling& F)
 				Fr.Body->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 				if (Fr.Comp)
 				{
-					MeshPool.Remove(Fr.Comp);
 					Fading.Add({Fr.Body, Fr.Comp, static_cast<float>(GetWorld()->GetTimeSeconds())});
 					Fr.Comp = nullptr;
 				}
@@ -1811,8 +1871,7 @@ void ADCVoxelCity::Land(FFalling& F)
 			}
 			if (Fr.Comp)
 			{
-				MeshPool.Remove(Fr.Comp);
-				Fr.Comp->DestroyComponent();
+				ReleasePiece(Fr.Comp);
 				Fr.Comp = nullptr;
 			}
 		}
@@ -1836,8 +1895,7 @@ void ADCVoxelCity::Land(FFalling& F)
 	StartFireLight(Where);
 	if (F.Comp)
 	{
-		MeshPool.Remove(F.Comp);
-		F.Comp->DestroyComponent();
+		ReleasePiece(F.Comp);
 		F.Comp = nullptr;
 	}
 	// Flying voxel chunks hide the swap from the falling mesh to the settled rubble.
@@ -1913,6 +1971,10 @@ void ADCVoxelCity::Tick(float DeltaSeconds)
 	if (PendingCraft.IsValid() && PendingCraft->Task.IsCompleted())
 	{
 		FlushPendingCraft(); // done off-thread: swap it in and go live (meshing then runs under the sector card)
+	}
+	if (BuiltSector != INDEX_NONE && Falling.Num() == 0)
+	{
+		PrewarmPieces(6); // a few pooled piece meshes per quiet frame until the body budget is covered
 	}
 	if (bFollowGameState) // the host drives Build and ApplyOp directly first, so following is a no-op there
 	{
