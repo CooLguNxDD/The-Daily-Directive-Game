@@ -68,6 +68,33 @@ void ADCDemoPilot::TickMedic()
 			Shot(TEXT("medic_revived_teammate"));
 			UE_LOG(LogDCDemo, Display, TEXT("DEMO medic: teammate back up"));
 		}
+		// -dccostar (R20 evidence): stand in the host's shot, between the host and a telegraphing strike, CoStarSpotCm
+		// short of the blast, so the host's photo frames a teammate near the blast.
+		static const bool bCoStar = FParse::Param(FCommandLine::Get(), TEXT("dccostar"));
+		const ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>();
+		ADCCharacter* Host = nullptr;
+		for (ADCCharacter* C : TActorRange<ADCCharacter>(GetWorld()))
+		{
+			Host = C != Me ? C : Host;
+		}
+		const ADCOrbitalStrike* Strike = nullptr;
+		for (ADCOrbitalStrike* S : TActorRange<ADCOrbitalStrike>(GetWorld()))
+		{
+			Strike = GS && S->GetDetonateTime() > GS->Now() - 1.5f ? S : Strike;
+		}
+		if (bCoStar && Host)
+		{
+			// Idle: 7 m in front of the host; a strike telegraphing: halfway between the host and the blast.
+			const FVector HostAt = Host->GetActorLocation();
+			const FVector Spot = Strike ? FMath::Lerp(HostAt, Strike->GetActorLocation(), 0.45f) : HostAt + Host->GetActorForwardVector().GetSafeNormal2D() * 700.f;
+			if (FVector::Dist2D(Spot, Me->GetActorLocation()) > 150.f)
+			{
+				AimAt(FVector(Spot.X, Spot.Y, Me->GetActorLocation().Z));
+				Press(TEXT("Move"), FVector(0, 1, 0));
+				return;
+			}
+			AimAt(Strike ? Strike->GetActorLocation() : HostAt); // face the blast, in the host's frame
+		}
 		Release(TEXT("Move"));
 		return;
 	}
