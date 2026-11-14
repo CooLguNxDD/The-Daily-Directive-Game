@@ -30,6 +30,8 @@ public:
 	/** City builder (R16): one district row per sector (the last repeats); PCG rule sets they roll (R15). */
 	UPROPERTY(EditAnywhere, Config, Category = "District") TArray<FDCDistrictRule> Districts;
 	UPROPERTY(EditAnywhere, Config, Category = "District") TArray<FDCPcgRuleSet> RuleSets;
+	/** City props (R2): the prop layers every district can turn on through its prop rule set. */
+	UPROPERTY(EditAnywhere, Config, Category = "District") TArray<FDCPropLayer> PropLayers;
 	/** Decay effects (R4): puff kinds and the emitters the city plays at a crater, a landing and burning rubble. */
 	UPROPERTY(EditAnywhere, Config, Category = "Fx") TArray<FDCFxKind> FxKinds;
 	UPROPERTY(EditAnywhere, Config, Category = "Fx") TArray<FDCFxEmitter> FxEmitters;

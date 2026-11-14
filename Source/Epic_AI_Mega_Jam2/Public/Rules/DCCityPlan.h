@@ -20,12 +20,46 @@ struct FDCBuildingSpec
 	UPROPERTY() uint8 Recipe = 0;
 };
 
+/** A voxel-forge model fixed to a building (R2 props): roof clutter or a wall mount. Crafted into the tower's own grid,
+ *  so it falls and shatters with the building through the same voxel ops. */
+USTRUCT()
+struct FDCAttachPlan
+{
+	GENERATED_BODY()
+	UPROPERTY() FName Model;
+	/** Prop layer it came from (tests and previews count props per layer). */
+	UPROPERTY() FName Layer;
+	/** Mount id from the mount registry (DCVoxelCraft.cpp): Roof or Wall. */
+	UPROPERTY() FName Mount;
+	/** Face 0..3 (-X, +X, -Y, +Y): which facade a wall mount sits on, or the way roof clutter faces. */
+	UPROPERTY() int32 Face = 0;
+	/** 0..1 across the roof deck (U, V) or along the face (U); V is the mount height in floors for a wall. */
+	UPROPERTY() float U = 0.5f;
+	UPROPERTY() float V = 0.5f;
+};
+
 USTRUCT()
 struct FDCLotPlan
 {
 	GENERATED_BODY()
 	UPROPERTY() FVector Location = FVector::ZeroVector;
 	UPROPERTY() FDCBuildingSpec Spec;
+	UPROPERTY() TArray<FDCAttachPlan> Attach;
+};
+
+/** A line strung across a street (R2 props): sector-local cm end points, sag at mid span, an optional lit bead every
+ *  BeadEveryCm and optional poles under both ends. Crafted into the prop grid. */
+USTRUCT()
+struct FDCCablePlan
+{
+	GENERATED_BODY()
+	UPROPERTY() FVector A = FVector::ZeroVector;
+	UPROPERTY() FVector B = FVector::ZeroVector;
+	UPROPERTY() float SagCm = 0.f;
+	UPROPERTY() FName Material;
+	UPROPERTY() FName BeadMaterial;
+	UPROPERTY() float BeadEveryCm = 0.f;
+	UPROPERTY() FName PoleMaterial;
 };
 
 /** A voxel-forge model placed in the city (R16): a street prop, plaza dressing or a wreck in a rubble zone. */
@@ -38,6 +72,8 @@ struct FDCPropPlan
 	UPROPERTY() FVector Location = FVector::ZeroVector;
 	/** Quarter turns (0-3), so the voxels stay on the grid. */
 	UPROPERTY() int32 Turns = 0;
+	/** Prop layer it came from (R2: tests count props per layer). */
+	UPROPERTY() FName Layer;
 };
 
 USTRUCT()
@@ -50,6 +86,7 @@ struct FDCCityPlan
 	UPROPERTY() TArray<FVector> Plazas;
 	UPROPERTY() TArray<FVector> RubbleZones;
 	UPROPERTY() TArray<FDCPropPlan> Props;
+	UPROPERTY() TArray<FDCCablePlan> Cables;
 	UPROPERTY() int32 Landmark = -1;
 	UPROPERTY() FVector SightFrom = FVector::ZeroVector;
 	UPROPERTY() FVector SightTo = FVector::ZeroVector;

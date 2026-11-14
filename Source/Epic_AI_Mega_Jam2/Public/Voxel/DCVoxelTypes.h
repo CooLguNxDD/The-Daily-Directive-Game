@@ -76,6 +76,9 @@ struct FDCVoxelRecipe
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 SignDepthVox = 6;
 	/** Dark glyph strokes across the sign every N voxels (reads as lettering; 0 = none). */
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 SignGlyphEvery = 4;
+	/** Share of the district's Roof-placer clutter count this recipe takes (R2 props; 0 = none: stepped or spire
+	 *  tops have no flat deck). */
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 RoofPropPercent = 100;
 };
 
 USTRUCT(BlueprintType)
@@ -332,6 +335,39 @@ struct FDCVoxelTuning
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") FDCVoxelCarveDef DefaultCarve;
 	/** Decay window: how long the rubble of a fallen piece smokes and burns (s). */
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float DecaySeconds = 9.f;
+};
+
+/** A prop layer (R2 city props): where one family of voxel-forge props goes. The district's prop rule set turns a
+ *  layer on and sets its density with the slots <Id> (weighted models) and <Id>Count (count range per spot: per street
+ *  segment, lot, building face or building); Placer picks the placement from the placer registry
+ *  (DCDistrictBuilder.cpp): Street (sidewalk, both sides), Lot (scattered in lots of LotKinds), Frontage (in front of
+ *  each building face, facing out), Roof (on the roof deck, crafted into the tower grid), Wall (on a facade at a floor
+ *  height, crafted into the tower grid), Cable (lines strung across each street segment on two poles). */
+USTRUCT(BlueprintType)
+struct FDCPropLayer
+{
+	GENERATED_BODY()
+	UPROPERTY(EditAnywhere, Config, Category = "District") FName Id;
+	UPROPERTY(EditAnywhere, Config, Category = "District") FName Placer;
+	/** Roof, Wall: the mount from the mount registry (DCVoxelCraft.cpp) the attachments use; None = the placer's own
+	 *  (Roof on the deck, Wall on a facade). RoofEdge stands a model at the parapet, facing out over the street. */
+	UPROPERTY(EditAnywhere, Config, Category = "District") FName Mount;
+	/** Lot kinds the layer uses (Lot, Frontage, Roof, Wall); empty = every lot with a building. */
+	UPROPERTY(EditAnywhere, Config, Category = "District") TArray<FName> LotKinds;
+	/** Street, Cable: distance in from the kerb (cm). Frontage: gap between the wall and the prop (cm). */
+	UPROPERTY(EditAnywhere, Config, Category = "District") float EdgeCm = 180.f;
+	/** Spread along a street segment or building face, or the scatter square in a lot (percent of the lot size). */
+	UPROPERTY(EditAnywhere, Config, Category = "District") float SpreadPercent = 80.f;
+	/** Wall: mount height in floors (0 = street level). Cable: anchor height in cm. */
+	UPROPERTY(EditAnywhere, Config, Category = "District") float HeightMin = 0.f;
+	UPROPERTY(EditAnywhere, Config, Category = "District") float HeightMax = 0.f;
+	/** Cable: sag at mid span (cm), line material, a lit bead every BeadEveryCm (0 = none) and the pole material
+	 *  (None = no pole). */
+	UPROPERTY(EditAnywhere, Config, Category = "District") float SagCm = 80.f;
+	UPROPERTY(EditAnywhere, Config, Category = "District") FName Material = TEXT("Ink");
+	UPROPERTY(EditAnywhere, Config, Category = "District") FName BeadMaterial;
+	UPROPERTY(EditAnywhere, Config, Category = "District") float BeadEveryCm = 0.f;
+	UPROPERTY(EditAnywhere, Config, Category = "District") FName PoleMaterial;
 };
 
 /** District rules for one sector (R16): the street grid, which lot kinds the PCG rules roll, the landmark, the sight

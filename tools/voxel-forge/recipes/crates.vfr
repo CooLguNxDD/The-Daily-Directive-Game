@@ -1,0 +1,13 @@
+# Stacked shipping crates beside a shop door.
+grid 5
+size 30 24 26
+slot wood InkBrown
+slot edge Trim
+box 0 0 0 14 12 12 wood
+box 15 1 0 29 13 12 wood
+box 2 12 0 14 23 10 wood
+box 6 3 12 20 15 24 wood
+paint box 0 0 11 30 24 12 edge
+paint box 6 3 23 20 15 24 edge
+paint box 0 0 0 1 24 12 edge
+noise 0.04 2 wood

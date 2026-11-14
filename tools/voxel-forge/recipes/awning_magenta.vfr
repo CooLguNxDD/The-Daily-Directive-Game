@@ -1,0 +1,14 @@
+# Shop awning (wall mount), brown cloth with a magenta neon valance edge.
+grid 10
+size 8 24 7
+slot cloth InkBrown
+slot rib Trim
+slot edge PaperEdge
+pivot 0 12 0
+box 0 0 5 4 24 7 cloth
+box 4 0 4 8 24 6 cloth
+box 7 0 2 8 24 4 cloth
+paint box 0 0 0 8 1 7 rib
+paint box 0 23 0 8 24 7 rib
+paint box 0 12 0 8 13 7 rib
+box 7 0 2 8 24 3 edge
