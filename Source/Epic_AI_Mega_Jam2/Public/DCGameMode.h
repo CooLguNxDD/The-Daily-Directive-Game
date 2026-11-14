@@ -126,6 +126,14 @@ private:
 	float NextFactionStrike = 0.f;
 	TMap<FName, float> FactionStrikeReady;
 	int32 NextSquadId = 1;
+	// R4 objective director (DCObjectiveDirector.cpp).
+	void StartObjective();
+	void TickObjective(float Now);
+	/** Sector end: a live objective fails (time up). */
+	void EndObjective();
+	UPROPERTY() TObjectPtr<class ADCObjective> Objective;
+	TArray<TWeakObjectPtr<ADCBuilding>> ObjectiveTargets;
+	float NextGuardTime = 0.f;
 	FRandomStream SectorRng;
 	float NextScoopTime = 0.f;
 	int32 LastScoop = -1;

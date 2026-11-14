@@ -337,6 +337,7 @@ void ADCGameMode::EnterSector(float Now)
 	ClearCombat();
 	BuildCity(GS->SectorIndex);
 	RollFactions();
+	StartObjective();
 
 	SectorStartTime = Now;
 	LastPackTime = -1e6f;
@@ -406,6 +407,7 @@ void ADCGameMode::TickSectorPhase(float Now)
 	TickWaves(Now);
 	TickPressure(Now);
 	TickFactions(Now);
+	TickObjective(Now);
 	TickPendingCollapses(Now);
 	TickScoop(Now);
 	TickRogueStrikes(Now);
@@ -414,6 +416,7 @@ void ADCGameMode::TickSectorPhase(float Now)
 	{
 		return;
 	}
+	EndObjective();
 	ClearCombat();
 	const UDCTuning& T = UDCTuning::Get();
 	const bool bMore = T.Sectors.IsValidIndex(GS->SectorIndex + 1);

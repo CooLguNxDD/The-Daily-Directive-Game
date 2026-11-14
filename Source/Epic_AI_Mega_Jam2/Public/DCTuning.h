@@ -9,6 +9,7 @@
 #include "Rules/DCPhotoRules.h"
 #include "Rules/DCPressureRules.h"
 #include "Rules/DCFactionRules.h"
+#include "Rules/DCObjectiveRules.h"
 #include "Rules/DCNewsprint.h"
 #include "Rules/DCOutfit.h"
 #include "Rules/DCPostStack.h"
@@ -658,6 +659,9 @@ public:
 	/** R3 factions and how each map's mix is rolled. */
 	UPROPERTY(EditAnywhere, Config, Category = "Enemy") TArray<FDCFactionDef> Factions;
 	UPROPERTY(EditAnywhere, Config, Category = "Enemy") FDCFactionMixRule FactionMix;
+	/** R4 sector objectives (picked per sector by the run seed) and how they read in the world. */
+	UPROPERTY(EditAnywhere, Config, Category = "Objective") TArray<FDCObjectiveDef> Objectives;
+	UPROPERTY(EditAnywhere, Config, Category = "Objective") FDCObjectiveLook ObjectiveLook;
 	UPROPERTY(EditAnywhere, Config, Category = "Sector") TArray<FDCSectorDef> Sectors;
 	UPROPERTY(EditAnywhere, Config, Category = "Input") TArray<FDCActionDef> Actions;
 	UPROPERTY(EditAnywhere, Config, Category = "Input") TArray<FDCKeyBinding> Bindings;

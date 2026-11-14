@@ -49,6 +49,7 @@ private:
 	void DrawFinalCut(ADCGameState& GS, ADCCharacter* Me);
 	void DrawVote(ADCGameState& GS, ADCCharacter* Me);
 	void DrawFrontPage(ADCGameState& GS, ADCCharacter* Me);
+	void DrawObjective(ADCGameState& GS, ADCCharacter& Me);
 	void DrawScoop(ADCGameState& GS);
 	void DrawCrosshair(ADCCharacter& Me);
 	void DrawViewfinder(ADCCharacter& Me);

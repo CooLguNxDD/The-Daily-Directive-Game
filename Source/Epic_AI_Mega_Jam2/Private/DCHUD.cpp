@@ -1,5 +1,6 @@
 #include "DCHUD.h"
 #include "Rules/DCFactionRules.h"
+#include "DCObjective.h"
 #include "DCFonts.h"
 #include "CanvasItem.h"
 #include "EngineFontServices.h"
@@ -170,6 +171,7 @@ void ADCHUD::DrawSector(ADCGameState& GS, ADCCharacter* Me)
 		DrawStrikeInfo(*Me);
 	}
 	DrawStatus(GS, *Me);
+	DrawObjective(GS, *Me);
 	DrawScoop(GS);
 	DrawHurt(*Me);
 	if (ADCPlayerController* PC = Cast<ADCPlayerController>(PlayerOwner))
@@ -820,6 +822,55 @@ void ADCHUD::DrawToast(ADCCharacter& Me)
 		return;
 	}
 	Text(Me.Feedback().Toast, Canvas->ClipX * 0.5f, Canvas->ClipY * 0.62f, FLinearColor(1.f, 0.85f, 0.3f, FMath::Clamp((2.2f - Age) * 2.f, 0.f, 1.f)), 0.85f, true);
+}
+
+void ADCHUD::DrawObjective(ADCGameState& GS, ADCCharacter& Me)
+{
+	// R4: HQ's order for this sector (top left, under the points) and a waypoint diamond in signal yellow: the crew
+	// uses it. Off screen the diamond rides the edge toward it.
+	const ADCObjective* O = ADCObjective::Find(this);
+	const FDCObjectiveDef* Def = O ? O->GetDef() : nullptr;
+	if (!Def || O->Stage == EDCObjectiveStage::None)
+	{
+		return;
+	}
+	const float W = Canvas->ClipX, H = Canvas->ClipY;
+	const bool bRetrieve = Def->Kind == TEXT("Retrieve");
+	const bool bMine = O->Carrier && O->Carrier == Me.GetPlayerState();
+	const TMap<EDCObjectiveStage, FString> Lines = {
+		{EDCObjectiveStage::Active, Def->Title.Replace(TEXT("{N}"), *FString::FromInt(O->TargetsLeft()))},
+		{EDCObjectiveStage::Extract, bRetrieve && !O->Carrier ? TEXT("PICK THE PACKAGE BACK UP") : (bMine ? TEXT("YOU CARRY THE PACKAGE: GET TO THE BEACON") : TEXT("EXTRACT AT THE BEACON"))},
+		{EDCObjectiveStage::Done, TEXT("EXTRACTED")},
+		{EDCObjectiveStage::Failed, TEXT("OBJECTIVE FAILED")},
+	};
+	const FString* Line = Lines.Find(O->Stage);
+	const float X = Sx(24.f), Y = Sx(96.f);
+	Box(X - Sx(4.f), Y, Sx(4.f), Sx(44.f), Gold);
+	Text(TEXT("OBJECTIVE"), X + Sx(8.f), Y, FLinearColor(1.f, 1.f, 1.f, 0.7f), 0.5f);
+	Text(Line ? *Line : FString(), X + Sx(8.f), Y + Sx(16.f), O->Stage == EDCObjectiveStage::Failed ? Red : Gold, 0.72f);
+	FVector At;
+	if (!O->Waypoint(Me.GetActorLocation(), At))
+	{
+		return;
+	}
+	const FVector S = Project(At + FVector(0, 0, 200.f), false);
+	const float Margin = Sx(60.f);
+	FVector2D P(S.X, S.Y);
+	if (S.Z <= 0.f)
+	{
+		// Behind the camera: mirror to the bottom edge so the arrow still points the right way.
+		P = FVector2D(W - S.X, H - Margin);
+	}
+	P.X = FMath::Clamp(P.X, Margin, W - Margin);
+	P.Y = FMath::Clamp(P.Y, Margin + Sx(110.f), H - Margin);
+	const float Pulse = 0.7f + 0.3f * FMath::Sin(RealNow * 4.f);
+	const float R = Sx(11.f);
+	const FLinearColor C(Gold.R, Gold.G, Gold.B, Pulse);
+	DrawLine(P.X - R, P.Y, P.X, P.Y - R, C, 3.f);
+	DrawLine(P.X, P.Y - R, P.X + R, P.Y, C, 3.f);
+	DrawLine(P.X + R, P.Y, P.X, P.Y + R, C, 3.f);
+	DrawLine(P.X, P.Y + R, P.X - R, P.Y, C, 3.f);
+	Text(FString::Printf(TEXT("%.0f M"), FVector::Dist2D(Me.GetActorLocation(), At) / 100.f), P.X, P.Y + R + Sx(4.f), C, 0.55f, true);
 }
 
 void ADCHUD::DrawScoop(ADCGameState& GS)
