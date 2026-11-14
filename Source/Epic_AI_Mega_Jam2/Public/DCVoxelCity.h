@@ -236,6 +236,7 @@ private:
 	/** Falling-piece meshes come from a pool keyed by voxel size (advisor CP17, R13 collapse frames): released, never
 	 *  destroyed, during play; reset fully on release (sections, attachment, transform, visibility). */
 	UProceduralMeshComponent* AcquirePiece(int32 VoxelCm);
+	UProceduralMeshComponent* NewPiece(int32 VoxelCm);
 	void ReleasePiece(UPrimitiveComponent* Piece);
 	void PrewarmPieces(int32 PerFrame);
 	TMap<int32, TArray<TObjectPtr<UProceduralMeshComponent>>> FreePieces;

@@ -123,8 +123,16 @@ namespace
 			}
 			const FDCVoxelGrid& T = Sector.Terrain;
 			int32 Top = 0;
+			const int32 S = FDCVoxelChunk::Size;
 			for (int32 Z = Ceiling; Z >= 0; --Z)
 			{
+				// Whole empty chunks are skipped (per-voxel lookups through empty sky cost ~1 s per barrage settle).
+				const FDCVoxelChunk* Ch = T.Data.FindChunk(FIntVector(DCVoxelMath::FloorDiv(C.X, S), DCVoxelMath::FloorDiv(C.Y, S), DCVoxelMath::FloorDiv(Z, S)));
+				if (!Ch || Ch->Solid == 0)
+				{
+					Z = DCVoxelMath::FloorDiv(Z, S) * S;
+					continue;
+				}
 				if (T.Data.IsSolid(FIntVector(C.X, C.Y, Z)))
 				{
 					Top = Z + 1;
@@ -247,8 +255,25 @@ namespace DCVoxelOps
 		{
 			return 0;
 		}
+		const int32 S = FDCVoxelChunk::Size;
 		for (int32 Z = T.ScanMax.Z - 1; Z >= 0; --Z)
 		{
+			// Skip whole empty chunk layers (a fallen stump leaves hundreds of empty layers above it; per-voxel lookups
+			// there made every op on a toppled tower cost ~1 s: DCOPTIME structure, review CP26).
+			bool bAnyChunk = false;
+			for (int32 Cy = DCVoxelMath::FloorDiv(Ly0, S); Cy <= DCVoxelMath::FloorDiv(Ly1, S) && !bAnyChunk; ++Cy)
+			{
+				for (int32 Cx = DCVoxelMath::FloorDiv(Lx0, S); Cx <= DCVoxelMath::FloorDiv(Lx1, S) && !bAnyChunk; ++Cx)
+				{
+					const FDCVoxelChunk* C = T.Grid.Data.FindChunk(FIntVector(Cx, Cy, DCVoxelMath::FloorDiv(Z, S)));
+					bAnyChunk = C && C->Solid > 0;
+				}
+			}
+			if (!bAnyChunk)
+			{
+				Z = DCVoxelMath::FloorDiv(Z, S) * S; // the loop's --Z steps into the chunk layer below
+				continue;
+			}
 			for (int32 Ly = Ly0; Ly <= Ly1; ++Ly)
 			{
 				for (int32 Lx = Lx0; Lx <= Lx1; ++Lx)

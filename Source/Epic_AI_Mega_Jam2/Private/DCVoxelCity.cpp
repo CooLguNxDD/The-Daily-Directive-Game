@@ -471,6 +471,11 @@ UProceduralMeshComponent* ADCVoxelCity::AcquirePiece(int32 VoxelCm)
 			return Piece;
 		}
 	}
+	return NewPiece(VoxelCm);
+}
+
+UProceduralMeshComponent* ADCVoxelCity::NewPiece(int32 VoxelCm)
+{
 	UProceduralMeshComponent* Piece = NewObject<UProceduralMeshComponent>(this);
 	Piece->bUseAsyncCooking = true;
 	Piece->SetupAttachment(Root);
@@ -514,16 +519,8 @@ void ADCVoxelCity::PrewarmPieces(int32 PerFrame)
 	for (int32 n = 0; n < PerFrame && PieceCm.Num() < Want; ++n)
 	{
 		// A new component each time (acquiring would hand back the one just released: review CP26).
-		UProceduralMeshComponent* Piece = NewObject<UProceduralMeshComponent>(this);
-		Piece->bUseAsyncCooking = true;
-		Piece->SetupAttachment(Root);
-		Piece->SetCollisionProfileName(TEXT("NoCollision"));
-		Piece->SetCastShadow(true);
-		Piece->RegisterComponent();
+		UProceduralMeshComponent* Piece = NewPiece(Cm);
 		Piece->SetVisibility(false, false);
-		Piece->SetMaterial(0, VoxelMaterialFor(Cm));
-		PieceCm.Add(Piece, Cm);
-		PieceAll.Add(Piece);
 		FreePieces.FindOrAdd(Cm).Add(Piece);
 	}
 }
