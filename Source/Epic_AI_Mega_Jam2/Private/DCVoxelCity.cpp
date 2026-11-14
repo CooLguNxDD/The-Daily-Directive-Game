@@ -1373,7 +1373,8 @@ void ADCVoxelCity::UploadCells()
 	// 2. Everything else under the millisecond budget; a held op's cells wait for its commit.
 	const FDCVoxelTuning& Tn = UDCVoxelSettings::Get().Tuning;
 	const double Start = FPlatformTime::Seconds();
-	const int32 Cap = bLoading ? MAX_int32 : FMath::Max(1, Tn.UploadsPerFrame);
+	// Load cap in cells too: the render thread pays per new section, not per game-thread ms (perf-r13m load spikes).
+	const int32 Cap = bLoading ? FMath::Max(1, Tn.UploadLoadMaxCells) : FMath::Max(1, Tn.UploadsPerFrame);
 	const float BudgetMs = bLoading ? Tn.UploadLoadBudgetMs : Tn.UploadBudgetMs;
 	TArray<FIntVector4> Ready;
 	for (const FIntVector4& Cell : DirtyCells)

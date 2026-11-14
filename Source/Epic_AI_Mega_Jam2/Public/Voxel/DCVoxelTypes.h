@@ -187,6 +187,8 @@ struct FDCVoxelTuning
 	/** Load phase: after a Build (sector start, a reel clip's rebuild) until every cell is up, the budget is this many
 	 *  ms, so the city stands before the clip or the first strike (a 4 ms budget left the reel's city empty). */
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float UploadLoadBudgetMs = 60.f;
+	/** Most render cells uploaded per frame while the sector loads under the card. */
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 UploadLoadMaxCells = 12;
 	/** Per-vertex ambient occlusion strength (0 = flat faces). */
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float AOStrength = 0.38f;
 	/** Flying voxel chunks spawned when a piece lands (cosmetic, pooled). */
