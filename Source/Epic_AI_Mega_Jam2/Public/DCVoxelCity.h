@@ -238,6 +238,11 @@ private:
 	/** Aftermath firelights over fresh rubble piles (pooled, FireLights at most). */
 	UPROPERTY() TArray<TObjectPtr<class UPointLightComponent>> FireLightPool;
 	TArray<float> FireLightStart;
+	/** Street lamp spots (from the plan's props) and their pooled lights; a spot is cleared when a blast reaches it. */
+	TArray<FVector> LampSpots;
+	UPROPERTY() TArray<TObjectPtr<class UPointLightComponent>> LampPool;
+	float NextLampPick = 0.f;
+	void TickLampLights();
 	void StartFireLight(const FVector& Where);
 	void TickFireLights();
 	float NextSignPick = 0.f;

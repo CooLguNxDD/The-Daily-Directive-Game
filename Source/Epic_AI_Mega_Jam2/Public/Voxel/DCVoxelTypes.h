@@ -172,6 +172,14 @@ struct FDCVoxelTuning
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 SignLights = 10;
 	/** Aftermath firelight over each fresh rubble pile for DecaySeconds (pooled, shadowless, flickering). */
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 FireLights = 6;
+	/** Street lamps: the nearest LampLights props of model LampModel get a pooled warm shadowless light at LampHeightCm
+	 *  (a pool of light on the wet street); a blast that reaches a lamp puts it out. */
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") FName LampModel = TEXT("lamppost");
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 LampLights = 8;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float LampCandela = 900.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float LampRadiusCm = 1400.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float LampHeightCm = 380.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") FLinearColor LampColor = FLinearColor(1.f, 0.62f, 0.3f);
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float FireLightCandela = 1500.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float FireLightRadiusCm = 1800.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float FireLightHeightCm = 250.f;
