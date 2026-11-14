@@ -64,6 +64,12 @@ struct ADCVoxelCity::FFalling
 		float Mass = 1.f;
 		bool bSolid = false;
 		float LastChip = -10.f;
+		/** Chunk (Parent = INDEX_NONE) or one of a chunk's leaves. A chunk breaks off mid-fall as one body; a hard hit
+		 *  shatters it into its leaves (each its own body). Leaves carry the meshes; a chunk's Comp is an empty root. */
+		int32 Parent = INDEX_NONE;
+		TArray<int32> Children;
+		bool bSplitPending = false;
+		bool bSplit = false;
 	};
 	TArray<FFrag> Frags;
 	int32 PendingMeshes = 0;
@@ -483,6 +489,19 @@ void ADCVoxelCity::Clear()
 	}
 	Bodies.Reset();
 	BodiesReserved = 0;
+	PendingShards.Reset();
+	for (const FDCFading& Fd : Fading)
+	{
+		if (Fd.Mesh.IsValid())
+		{
+			Fd.Mesh->DestroyComponent();
+		}
+		if (Fd.Body.IsValid())
+		{
+			Fd.Body->DestroyComponent();
+		}
+	}
+	Fading.Reset();
 	DeadSigns.Reset();
 	for (URectLightComponent* L : SignLightPool)
 	{
@@ -667,6 +686,18 @@ void ADCVoxelCity::CommitOp(const FDCVoxelOp& Op, FDCVoxelOpResult& Result, bool
 	HoldTops.Reset();
 	CommittedFallen.SetNum(FMath::Max(CommittedFallen.Num(), Sector.Towers.Num()));
 	KillCarvedSigns(Result.TouchedLots);
+	if (bAnimate && Op.Kind != TEXT("Fell") && CollapseCamStep < 0)
+	{
+		static FString CamDir;
+		static const bool bCam = FParse::Value(FCommandLine::Get(), TEXT("dccollapsecam="), CamDir);
+		if (bCam)
+		{
+			CollapseCamStep = 0; // R26 evidence: a fixed wide camera on this collapse (TickCollapseCam)
+			CollapseCamOp = Op.Seq;
+			CollapseCamCenter = FVector(Op.CenterCm);
+			CollapseCamStart = GetWorld()->GetTimeSeconds();
+		}
+	}
 	for (int32 Lot : Result.FallenLots)
 	{
 		CommittedFallen[Lot] = true;
@@ -745,6 +776,10 @@ void ADCVoxelCity::PrepareOp(const FDCVoxelOp& Op, FDCVoxelOpResult& Result, boo
 	{
 		Physical.Add(BySize[i]);
 	}
+	if (bAnimate)
+	{
+		QueueShards(Op, Result, Now);
+	}
 	int32 PieceIndex = -1;
 	for (const FDCVoxelPiece& Piece : Result.Pieces)
 	{
@@ -787,14 +822,38 @@ void ADCVoxelCity::StartFall(const FDCVoxelPiece& Piece, float Now, const TArray
 	F->Comp = NewMesh(false, Grid.VoxelCm);
 	F->Comp->SetWorldLocation(F->Pivot);
 	F->Comp->SetVisibility(false);
+	// R26 true break-up: chunks (PhysicsFragmentCm blocks) that break off mid-fall, each made of leaves
+	// (PhysicsLeafCm blocks) that a hard impact shatters it into. Over the body budget: the piece falls scripted.
 	TArray<TArray<int32>> Split;
+	TArray<TArray<TArray<int32>>> Leaves;
+	int32 NumBodies = 0;
 	if (bPhysics)
 	{
-		const int32 BlockCells = FMath::Max(1, FMath::RoundToInt(Tn.PhysicsFragmentCm / FMath::Max(Grid.VoxelCm, 1)));
-		Split = DCVoxelOps::SplitFragments(Piece.Cells, BlockCells, Tn.PhysicsFragments);
-		if (BodiesReserved + Split.Num() > Tn.PhysicsMaxBodies)
+		const int32 Vox = FMath::Max(Grid.VoxelCm, 1);
+		Split = DCVoxelOps::SplitFragments(Piece.Cells, FMath::Max(1, FMath::RoundToInt(Tn.PhysicsFragmentCm / Vox)), Tn.PhysicsFragments);
+		for (const TArray<int32>& Group : Split)
 		{
-			Split.Reset(); // over the body budget: this piece falls scripted
+			TArray<FIntVector> GroupCells;
+			for (int32 i : Group)
+			{
+				GroupCells.Add(Piece.Cells[i]);
+			}
+			TArray<TArray<int32>>& L = Leaves.AddDefaulted_GetRef();
+			for (const TArray<int32>& Leaf : DCVoxelOps::SplitFragments(GroupCells, FMath::Max(1, FMath::RoundToInt(Tn.PhysicsLeafCm / Vox)), Tn.PhysicsLeavesPerChunk))
+			{
+				TArray<int32>& Mapped = L.AddDefaulted_GetRef();
+				for (int32 k : Leaf)
+				{
+					Mapped.Add(Group[k]); // back to piece cell indices
+				}
+			}
+			NumBodies += 1 + L.Num();
+		}
+		if (BodiesReserved + NumBodies > Tn.PhysicsMaxBodies)
+		{
+			Split.Reset();
+			Leaves.Reset();
+			NumBodies = 0;
 		}
 	}
 	F->Seed = DCVoxelOps::Hash(Piece.Pivot, static_cast<uint32>(Piece.Lot) * 7919u + static_cast<uint32>(Piece.Cells.Num()));
@@ -835,29 +894,152 @@ void ADCVoxelCity::StartFall(const FDCVoxelPiece& Piece, float Now, const TArray
 	}
 	else
 	{
-		BodiesReserved += Split.Num();
-		F->PendingMeshes = Split.Num();
+		BodiesReserved += NumBodies;
 		const FVector PivotWorld = Grid.ToWorld(Piece.Pivot);
-		for (int32 f = 0; f < Split.Num(); ++f)
+		auto BoundsOf = [&](const TArray<int32>& Idx, FBox& Out)
 		{
-			FFalling::FFrag& Fr = F->Frags.AddDefaulted_GetRef();
-			Fr.Comp = NewMesh(false, Grid.VoxelCm);
-			Fr.Comp->AttachToComponent(F->Comp, FAttachmentTransformRules::SnapToTargetNotIncludingScale);
-			Fr.Comp->SetVisibility(false);
-			TArray<FIntVector> FragCells;
-			TArray<uint8> FragMats;
-			for (int32 i : Split[f])
+			for (int32 i : Idx)
 			{
-				FragCells.Add(Piece.Cells[i]);
-				FragMats.Add(Piece.Materials.IsValidIndex(i) ? Piece.Materials[i] : 1);
-				Fr.Local += Grid.ToWorld(Piece.Cells[i]) - PivotWorld;
-				Fr.Local += Grid.ToWorld(Piece.Cells[i] + FIntVector(1)) - PivotWorld;
+				Out += Grid.ToWorld(Piece.Cells[i]) - PivotWorld;
+				Out += Grid.ToWorld(Piece.Cells[i] + FIntVector(1)) - PivotWorld;
 			}
-			Fr.Mass = FMath::Max(static_cast<float>(FragCells.Num()) * Vcm * Vcm * Vcm * Tn.PhysicsDensity, 20.f);
-			LaunchJob(MoveTemp(FragCells), MoveTemp(FragMats), f);
+		};
+		for (int32 g = 0; g < Split.Num(); ++g)
+		{
+			const int32 ChunkIndex = F->Frags.Num();
+			{
+				FFalling::FFrag& Chunk = F->Frags.AddDefaulted_GetRef();
+				Chunk.Comp = NewMesh(false, Grid.VoxelCm); // empty root the leaves ride on
+				Chunk.Comp->AttachToComponent(F->Comp, FAttachmentTransformRules::SnapToTargetNotIncludingScale);
+				BoundsOf(Split[g], Chunk.Local);
+				Chunk.Mass = FMath::Max(static_cast<float>(Split[g].Num()) * Vcm * Vcm * Vcm * Tn.PhysicsDensity, 20.f);
+			}
+			for (const TArray<int32>& Leaf : Leaves[g])
+			{
+				const int32 LeafIndex = F->Frags.Num();
+				FFalling::FFrag& Fr = F->Frags.AddDefaulted_GetRef();
+				Fr.Parent = ChunkIndex;
+				Fr.Comp = NewMesh(false, Grid.VoxelCm);
+				Fr.Comp->AttachToComponent(F->Frags[ChunkIndex].Comp, FAttachmentTransformRules::SnapToTargetNotIncludingScale);
+				Fr.Comp->SetVisibility(false);
+				TArray<FIntVector> FragCells;
+				TArray<uint8> FragMats;
+				for (int32 i : Leaf)
+				{
+					FragCells.Add(Piece.Cells[i]);
+					FragMats.Add(Piece.Materials.IsValidIndex(i) ? Piece.Materials[i] : 1);
+				}
+				BoundsOf(Leaf, Fr.Local);
+				Fr.Mass = FMath::Max(static_cast<float>(FragCells.Num()) * Vcm * Vcm * Vcm * Tn.PhysicsDensity, 5.f);
+				F->Frags[ChunkIndex].Children.Add(LeafIndex);
+				++F->PendingMeshes;
+				LaunchJob(MoveTemp(FragCells), MoveTemp(FragMats), LeafIndex);
+			}
 		}
 	}
 	DCAudio::PlayAt(this, TEXT("Creak"), F->Pivot, 1.f);
+}
+
+void ADCVoxelCity::QueueShards(const FDCVoxelOp& Op, const FDCVoxelOpResult& Result, float Start)
+{
+	// R26 shatter: the voxels the strike blew out of the towers fly as small bodies, single voxels near the blast
+	// centre and clusters of a few voxels further out (cluster edge grows by ShardGrowCm), capped and sampled by a
+	// seeded hash; they keep their palette colour and glow (lit windows stay lit in the air). Cosmetic and local.
+	const FDCVoxelTuning& Tn = UDCVoxelSettings::Get().Tuning;
+	if (Tn.ShardMax <= 0 || Result.Shards.Num() == 0)
+	{
+		return;
+	}
+	struct FCluster
+	{
+		FVector Sum = FVector::ZeroVector;
+		int32 Count = 0;
+		uint8 Mat = 0;
+		int32 Block = 1;
+		float Vcm = 10.f;
+		uint32 Key = 0;
+		float Rank = 0.f;
+	};
+	const FVector Center(Op.CenterCm);
+	TMap<FIntVector4, int32> Index;
+	TArray<FCluster> Clusters;
+	for (const FDCVoxelShard& S : Result.Shards)
+	{
+		if (!Sector.Towers.IsValidIndex(S.Lot))
+		{
+			continue;
+		}
+		const FDCVoxelGrid& G = Sector.Towers[S.Lot].Grid;
+		const FVector P = G.ToWorld(S.Cell) + FVector(G.VoxelCm * 0.5f);
+		const int32 Block = FMath::Clamp(1 + FMath::FloorToInt(FVector::Dist(P, Center) / FMath::Max(Tn.ShardGrowCm, 1.f)), 1, FMath::Max(Tn.ShardBlockMax, 1));
+		const FIntVector4 K(S.Lot * 8 + Block, FMath::FloorToInt(static_cast<float>(S.Cell.X) / Block), FMath::FloorToInt(static_cast<float>(S.Cell.Y) / Block), FMath::FloorToInt(static_cast<float>(S.Cell.Z) / Block));
+		int32* Found = Index.Find(K);
+		if (!Found)
+		{
+			Found = &Index.Add(K, Clusters.Num());
+			FCluster& C = Clusters.AddDefaulted_GetRef();
+			C.Mat = S.Material;
+			C.Block = Block;
+			C.Vcm = G.VoxelCm;
+			C.Key = DCVoxelOps::Hash(FIntVector(K.Y, K.Z, K.W), static_cast<uint32>(K.X));
+		}
+		FCluster& C = Clusters[*Found];
+		C.Sum += P;
+		++C.Count;
+	}
+	// A seeded sample under the cap, weighted toward the blast centre (the column carve reaches the whole height).
+	for (FCluster& C : Clusters)
+	{
+		const float Dist = FVector::Dist(C.Sum / C.Count, Center);
+		C.Rank = Dist * (0.35f + static_cast<float>(C.Key % 1000u) / 1000.f);
+	}
+	Clusters.Sort([](const FCluster& A, const FCluster& B) { return A.Rank != B.Rank ? A.Rank < B.Rank : A.Key < B.Key; });
+	if (Clusters.Num() > Tn.ShardMax)
+	{
+		Clusters.SetNum(Tn.ShardMax);
+	}
+	FDCShardBurst& Burst = PendingShards.AddDefaulted_GetRef();
+	Burst.Start = Start;
+	const float GlowScale = Tn.VoxelMaterialGlowScale;
+	FRandomStream Rng(static_cast<int32>(DCVoxelOps::Hash(Op.CenterCm, static_cast<uint32>(Op.Seq))));
+	for (const FCluster& C : Clusters)
+	{
+		const FVector P = C.Sum / C.Count;
+		const FVector Out = (P - Center).GetSafeNormal();
+		const float EdgeCm = C.Vcm * FMath::Max(1.f, FMath::Pow(static_cast<float>(C.Count), 1.f / 3.f));
+		FDCDebrisSpawn D;
+		D.Transform = FTransform(FRotator(Rng.FRandRange(0, 360), Rng.FRandRange(0, 360), 0), P, FVector(EdgeCm / 100.f));
+		const float Speed = Tn.ShardSpeedCms * Rng.FRandRange(0.5f, 1.1f) / FMath::Sqrt(static_cast<float>(C.Block));
+		D.LinearVelocity = (Out + Rng.VRand() * 0.35f).GetSafeNormal() * Speed + FVector(0, 0, Rng.FRandRange(0.f, Tn.ShardUpCms));
+		D.AngularVelocityDeg = Rng.VRand() * 720.f;
+		const FColor Col = Colors.IsValidIndex(C.Mat) ? Colors[C.Mat] : FColor(30, 30, 40, 0);
+		D.Color = FLinearColor::FromSRGBColor(FColor(Col.R, Col.G, Col.B, 255));
+		D.Glow = Col.A / 255.f * GlowScale;
+		D.LifeSeconds = Tn.ShardLifeSeconds * Rng.FRandRange(0.7f, 1.2f);
+		Burst.Spawns.Add(D);
+	}
+	UE_LOG(LogTemp, Display, TEXT("DCPHYS shards op=%d voxels=%d clusters=%d (cap %d)"), Op.Seq, Result.Shards.Num(), Burst.Spawns.Num(), Tn.ShardMax);
+}
+
+void ADCVoxelCity::SpawnDueShards(float Now)
+{
+	const ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>();
+	ADCDebrisPool* Pool = GS && GS->GetEnvironment() ? GS->GetEnvironment()->GetDebrisPool() : nullptr;
+	for (int32 i = PendingShards.Num() - 1; i >= 0; --i)
+	{
+		if (Now < PendingShards[i].Start)
+		{
+			continue;
+		}
+		for (const FDCDebrisSpawn& D : PendingShards[i].Spawns)
+		{
+			if (Pool)
+			{
+				Pool->Spawn(D);
+			}
+		}
+		PendingShards.RemoveAtSwap(i);
+	}
 }
 
 void ADCVoxelCity::QueueDirty(int32 GridIndex, const TSet<FIntVector>& Chunks)
@@ -1062,6 +1244,28 @@ void ADCVoxelCity::SetTowerOffset(int32 Lot, const FVector& Offset)
 
 void ADCVoxelCity::TickFalling(float Now)
 {
+	SpawnDueShards(Now);
+	// Rested bodies shrink away over the shared rubble, then go.
+	const float Fade = FMath::Max(UDCVoxelSettings::Get().Tuning.PhysicsFadeSeconds, 0.01f);
+	for (int32 i = Fading.Num() - 1; i >= 0; --i)
+	{
+		const float A = (GetWorld()->GetTimeSeconds() - Fading[i].Start) / Fade;
+		UPrimitiveComponent* Mesh = Fading[i].Mesh.Get();
+		if (A >= 1.f || !Mesh)
+		{
+			if (Mesh)
+			{
+				Mesh->DestroyComponent();
+			}
+			if (UPrimitiveComponent* B = Fading[i].Body.Get())
+			{
+				B->DestroyComponent();
+			}
+			Fading.RemoveAtSwap(i);
+			continue;
+		}
+		Mesh->SetRelativeScale3D(FVector(FMath::Max(1.f - A, 0.01f)));
+	}
 	for (int32 i = Falling.Num() - 1; i >= 0; --i)
 	{
 		FFalling& F = *Falling[i];
@@ -1073,7 +1277,7 @@ void ADCVoxelCity::TickFalling(float Now)
 		}
 		if (F.bBroken)
 		{
-			if (TickBodies(F, GetWorld()->GetDeltaSeconds() * UDCPresentationClock::Dilation(this)))
+			if (TickBodies(Falling[i], GetWorld()->GetDeltaSeconds() * UDCPresentationClock::Dilation(this)))
 			{
 				Land(F);
 				Falling.RemoveAtSwap(i);
@@ -1090,9 +1294,10 @@ void ADCVoxelCity::TickFalling(float Now)
 		}
 		if (F.Frags.Num() > 0)
 		{
-			if (F.bReady && Now >= F.Start && (Drop >= F.DropCm || U >= 1.f || LowestFragmentAboveGround(F) <= 0.f))
+			const bool bImpact = Drop >= F.DropCm || U >= 1.f || LowestFragmentAboveGround(F) <= 0.f;
+			if (F.bReady && Now >= F.Start && (bImpact || U >= UDCVoxelSettings::Get().Tuning.PhysicsBreakAtU))
 			{
-				BreakApart(Falling[i], Age, U); // it hits the street: the fragments come apart as bodies
+				BreakApart(Falling[i], Age, U, bImpact); // chunks break off as it falls (or at the impact)
 			}
 			continue;
 		}
@@ -1138,7 +1343,7 @@ float ADCVoxelCity::LowestFragmentAboveGround(const FFalling& F) const
 	float Lowest = TNumericLimits<float>::Max();
 	for (const FFalling::FFrag& Fr : F.Frags)
 	{
-		if (!Fr.Local.IsValid)
+		if (!Fr.Local.IsValid || Fr.Parent != INDEX_NONE)
 		{
 			continue;
 		}
@@ -1148,15 +1353,49 @@ float ADCVoxelCity::LowestFragmentAboveGround(const FFalling& F) const
 	return Lowest;
 }
 
-void ADCVoxelCity::BreakApart(const TSharedPtr<FFalling>& Shared, float Age, float U)
+UBoxComponent* ADCVoxelCity::MakeBody(const TSharedPtr<FFalling>& Shared, int32 Index, const FVector& At, const FQuat& Rot, const FVector& V, const FVector& SpinDeg, bool bSolid)
+{
+	const FDCVoxelTuning& Tn = UDCVoxelSettings::Get().Tuning;
+	FFalling::FFrag& Fr = Shared->Frags[Index];
+	UBoxComponent* Box = NewObject<UBoxComponent>(this);
+	Box->SetWorldLocationAndRotation(At, Rot);
+	Box->SetBoxExtent(Fr.Local.GetExtent() * Tn.PhysicsBoxScale);
+	Box->SetCollisionProfileName(TEXT("PhysicsActor"));
+	Box->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore); // pieces never shove players around
+	Box->SetCollisionResponseToChannel(ECC_Camera, ECR_Ignore);
+	Box->SetCollisionResponseToChannel(ECC_Visibility, ECR_Ignore); // photos and rifle traces see the shared state
+	// A ghost to the city until it is down near its rubble site: chunks that break off beside their own stump fall
+	// clear of it (the tower's async-cooked collision also lags the carve). Bodies collide with each other at once.
+	Box->SetCollisionResponseToChannel(ECC_WorldStatic, bSolid ? ECR_Block : ECR_Ignore);
+	Box->SetCollisionResponseToChannel(ECC_PhysicsBody, ECR_Block);
+	Box->SetNotifyRigidBodyCollision(true);
+	Box->BodyInstance.bUseCCD = true; // fast boxes over a thin street mesh
+	Box->SetHiddenInGame(true);
+	Box->RegisterComponent();
+	Box->SetSimulatePhysics(true);
+	Box->SetLinearDamping(Tn.PhysicsLinearDamping);
+	Box->SetAngularDamping(Tn.PhysicsAngularDamping);
+	Box->SetMassOverrideInKg(NAME_None, Fr.Mass, true);
+	Box->OnComponentHit.AddDynamic(this, &ADCVoxelCity::OnBodyHit);
+	Fr.Comp->AttachToComponent(Box, FAttachmentTransformRules::KeepWorldTransform); // keeps its emissive faces
+	Box->SetPhysicsLinearVelocity(V);
+	Box->SetPhysicsAngularVelocityInDegrees(SpinDeg);
+	Fr.Body = Box;
+	Fr.bSolid = bSolid;
+	Bodies.Add(Box, Shared);
+	return Box;
+}
+
+void ADCVoxelCity::BreakApart(const TSharedPtr<FFalling>& Shared, float Age, float U, bool bImpact)
 {
 	FFalling& F = *Shared;
 	const FDCVoxelTuning& Tn = UDCVoxelSettings::Get().Tuning;
 	F.bBroken = true;
 	F.BodyAge = 0.f;
 	const FTransform Xf = F.Comp->GetComponentTransform();
-	// Speed at the impact: what is left of the fall, plus the topple's swing (omega x r), plus scatter and a kick.
+	// Speed now: the fall (most of it lost if this is the impact), the topple's swing (omega x r), scatter and a kick.
 	const float FallCms = FMath::Min(Tn.FallGravityCm * Age, FMath::Sqrt(2.f * Tn.FallGravityCm * FMath::Max(F.DropCm, 1.f)));
+	const float Keep = bImpact ? Tn.PhysicsKeepFallSpeed : 1.f;
 	const float SwingRad = U < 1.f ? FMath::DegreesToRadians(F.MaxAngle * 2.f * U / FMath::Max(F.Duration, 0.05f)) : 0.f;
 	FBox All(ForceInit);
 	for (const FFalling::FFrag& Fr : F.Frags)
@@ -1166,61 +1405,82 @@ void ADCVoxelCity::BreakApart(const TSharedPtr<FFalling>& Shared, float Age, flo
 	const FVector Center = Xf.TransformPosition(All.GetCenter());
 	FRandomStream Rng(static_cast<int32>(F.Seed));
 	int32 Made = 0;
-	for (FFalling::FFrag& Fr : F.Frags)
+	for (int32 g = 0; g < F.Frags.Num(); ++g)
 	{
-		if (!Fr.Comp || !Fr.Local.IsValid)
+		FFalling::FFrag& Fr = F.Frags[g];
+		if (Fr.Parent != INDEX_NONE || !Fr.Comp || !Fr.Local.IsValid)
 		{
 			continue;
 		}
 		FVector At = Xf.TransformPosition(Fr.Local.GetCenter());
 		// Never start under the street (a body inside the street mesh falls through it): lift it to stand on it.
 		const FBox W = Fr.Local.TransformBy(Xf);
-		At.Z += FMath::Max(0.f, BodyGroundZ(At, F.LandCenter) + 5.f - (W.Min.Z + W.GetExtent().Z * (1.f - Tn.PhysicsBoxScale)));
-		Fr.Comp->SetWorldLocation(Fr.Comp->GetComponentLocation() + FVector(0, 0, At.Z - Xf.TransformPosition(Fr.Local.GetCenter()).Z));
-		UBoxComponent* Box = NewObject<UBoxComponent>(this);
-		Box->SetWorldLocationAndRotation(At, Xf.GetRotation());
-		Box->SetBoxExtent(Fr.Local.GetExtent() * Tn.PhysicsBoxScale);
-		Box->SetCollisionProfileName(TEXT("PhysicsActor"));
-		Box->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore); // pieces never shove players around
-		Box->SetCollisionResponseToChannel(ECC_Camera, ECR_Ignore);
-		Box->SetCollisionResponseToChannel(ECC_Visibility, ECR_Ignore); // photos and rifle traces see the shared state
-		// A ghost to the city until it is down near its rubble site: a top that broke against its own stump drops clear
-		// of it (async-cooked tower collision also lags the carve). Bodies collide with each other from the start.
-		Box->SetCollisionResponseToChannel(ECC_WorldStatic, ECR_Ignore);
-		Box->SetCollisionResponseToChannel(ECC_PhysicsBody, ECR_Block);
-		Box->SetNotifyRigidBodyCollision(true);
-		Box->BodyInstance.bUseCCD = true; // fast boxes over a thin street mesh
-		Box->SetHiddenInGame(true);
-		Box->RegisterComponent();
-		Box->SetSimulatePhysics(true);
-		Box->SetLinearDamping(Tn.PhysicsLinearDamping);
-		Box->SetAngularDamping(Tn.PhysicsAngularDamping);
-		Box->SetMassOverrideInKg(NAME_None, Fr.Mass, true);
-		Box->OnComponentHit.AddDynamic(this, &ADCVoxelCity::OnBodyHit);
-		Fr.Comp->AttachToComponent(Box, FAttachmentTransformRules::KeepWorldTransform); // keeps its emissive faces
+		const float Lift = FMath::Max(0.f, BodyGroundZ(At, F.LandCenter) + 5.f - (W.Min.Z + W.GetExtent().Z * (1.f - Tn.PhysicsBoxScale)));
+		At.Z += Lift;
+		Fr.Comp->SetWorldLocation(Fr.Comp->GetComponentLocation() + FVector(0, 0, Lift));
 		const FVector Swing = FVector::CrossProduct(F.Axis * SwingRad, At - Xf.GetLocation());
 		FVector Out = At - Center;
 		Out.Z *= 0.3f;
-		const FVector V = FVector(0, 0, -FallCms * Tn.PhysicsKeepFallSpeed + Tn.PhysicsKickUpCms) + Swing * Tn.PhysicsKeepFallSpeed
+		const FVector V = FVector(0, 0, -FallCms * Keep + (bImpact ? Tn.PhysicsKickUpCms : 0.f)) + Swing * Keep
 			+ Out.GetSafeNormal() * Tn.PhysicsScatterCms * Rng.FRandRange(0.5f, 1.2f);
-		Box->SetPhysicsLinearVelocity(V);
-		Box->SetPhysicsAngularVelocityInDegrees(Rng.VRand() * Tn.PhysicsSpinDegS + F.Axis * FMath::RadiansToDegrees(SwingRad));
-		Fr.Body = Box;
-		Bodies.Add(Box, Shared);
+		MakeBody(Shared, g, At, Xf.GetRotation(), V, Rng.VRand() * Tn.PhysicsSpinDegS + F.Axis * FMath::RadiansToDegrees(SwingRad), false);
 		++Made;
 	}
-	if (Fx)
+	if (Fx && bImpact)
 	{
 		Fx->Emit(TEXT("Landing"), F.LandCenter + FVector(0, 0, 100.f), Tn.TerrainVoxelCm * 10.f);
 	}
-	DCAudio::PlayAt(this, TEXT("Collapse"), Center, 1.f);
-	UE_LOG(LogTemp, Display, TEXT("DCPHYS break %d bodies at z=%.0f (rubble site z=%.0f) fall %.0f cm/s swing %.2f rad/s live=%d"), Made, Center.Z, F.LandCenter.Z, FallCms, SwingRad, BodiesReserved);
+	DCAudio::PlayAt(this, TEXT("Collapse"), Center, bImpact ? 1.f : 0.7f);
+	UE_LOG(LogTemp, Display, TEXT("DCPHYS break %d chunks (%d bodies reserved) at z=%.0f (rubble site z=%.0f) %s, fall %.0f cm/s swing %.2f rad/s"), Made, BodiesReserved, Center.Z, F.LandCenter.Z,
+		bImpact ? TEXT("at the impact") : TEXT("mid-fall"), FallCms, SwingRad);
 }
 
-bool ADCVoxelCity::TickBodies(FFalling& F, float Dt)
+void ADCVoxelCity::Shatter(const TSharedPtr<FFalling>& Shared, int32 ChunkIndex)
 {
+	FFalling& F = *Shared;
+	FFalling::FFrag& Chunk = F.Frags[ChunkIndex];
+	if (!Chunk.Body || Chunk.bSplit)
+	{
+		return;
+	}
+	const FDCVoxelTuning& Tn = UDCVoxelSettings::Get().Tuning;
+	// The chunk's leaves become bodies where they sit, moving as the chunk moved (v + omega x r) plus a burst.
+	const FTransform B = Chunk.Body->GetComponentTransform();
+	const FVector V = Chunk.Body->GetPhysicsLinearVelocity();
+	const FVector W = FMath::DegreesToRadians(1.f) * Chunk.Body->GetPhysicsAngularVelocityInDegrees();
+	const bool bSolid = Chunk.bSolid;
+	Bodies.Remove(Chunk.Body.Get());
+	UBoxComponent* Old = Chunk.Body;
+	Chunk.Body = nullptr;
+	Chunk.bSplit = true;
+	FRandomStream Rng(static_cast<int32>(F.Seed + ChunkIndex * 977u));
+	const TArray<int32> Kids = Chunk.Children;
+	const FVector ChunkCenter = Chunk.Local.GetCenter();
+	for (int32 k : Kids)
+	{
+		const FFalling::FFrag& Leaf = F.Frags[k];
+		const FVector At = B.TransformPosition(Leaf.Local.GetCenter() - ChunkCenter);
+		const FVector R = At - B.GetLocation();
+		const FVector LeafV = V + FVector::CrossProduct(W, R) + R.GetSafeNormal() * Tn.PhysicsShatterBurstCms * Rng.FRandRange(0.4f, 1.f) + FVector(0, 0, Tn.PhysicsShatterBurstCms * 0.5f);
+		MakeBody(Shared, k, At, B.GetRotation(), LeafV, Rng.VRand() * Tn.PhysicsSpinDegS * 1.5f, bSolid);
+	}
+	Old->DestroyComponent();
+	UE_LOG(LogTemp, Display, TEXT("DCPHYS shatter chunk into %d pieces at z=%.0f (%.0f cm/s)"), Kids.Num(), B.GetLocation().Z, V.Size());
+}
+
+bool ADCVoxelCity::TickBodies(const TSharedPtr<FFalling>& Shared, float Dt)
+{
+	FFalling& F = *Shared;
 	const FDCVoxelTuning& Tn = UDCVoxelSettings::Get().Tuning;
 	F.BodyAge += Dt;
+	for (int32 i = 0; i < F.Frags.Num(); ++i)
+	{
+		if (F.Frags[i].bSplitPending && !F.Frags[i].bSplit)
+		{
+			F.Frags[i].bSplitPending = false;
+			Shatter(Shared, i); // a hard hit last frame: break it here, never inside the physics callback
+		}
+	}
 	bool bAllAsleep = true;
 	for (FFalling::FFrag& Fr : F.Frags)
 	{
@@ -1265,6 +1525,10 @@ void ADCVoxelCity::OnBodyHit(UPrimitiveComponent* HitComp, AActor* Other, UPrimi
 	}
 	const FDCVoxelTuning& Tn = UDCVoxelSettings::Get().Tuning;
 	const float DeltaV = NormalImpulse.Size() / FMath::Max(Fr->Mass, 1.f); // cm/s of speed lost in this hit
+	if (Fr->Children.Num() > 1 && !Fr->bSplit && DeltaV >= Tn.PhysicsShatterCms && F->BodyAge >= Tn.PhysicsShatterGraceSeconds)
+	{
+		Fr->bSplitPending = true; // breaks again on the impact (next tick)
+	}
 	if (DeltaV < Tn.PhysicsBreakCms || F->BodyAge - Fr->LastChip < Tn.PhysicsBreakCooldown)
 	{
 		return;
@@ -1308,9 +1572,15 @@ void ADCVoxelCity::Land(FFalling& F)
 			{
 				Spread = FMath::Max(Spread, FVector::Dist2D(Fr.Body->GetComponentLocation(), F.LandCenter));
 				Awake += Fr.Body->IsAnyRigidBodyAwake() ? 1 : 0;
-				UE_LOG(LogTemp, Verbose, TEXT("DCPHYS body z=%.0f v=%.0f"), Fr.Body->GetComponentLocation().Z, Fr.Body->GetPhysicsLinearVelocity().Size());
 				Bodies.Remove(Fr.Body.Get());
-				Fr.Body->DestroyComponent();
+				Fr.Body->SetSimulatePhysics(false); // frozen where it lies, then shrinks away over PhysicsFadeSeconds
+				Fr.Body->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+				if (Fr.Comp)
+				{
+					MeshPool.Remove(Fr.Comp);
+					Fading.Add({Fr.Body, Fr.Comp, static_cast<float>(GetWorld()->GetTimeSeconds())});
+					Fr.Comp = nullptr;
+				}
 				Fr.Body = nullptr;
 			}
 			if (Fr.Comp)
@@ -1321,7 +1591,7 @@ void ADCVoxelCity::Land(FFalling& F)
 			}
 		}
 		BodiesReserved = FMath::Max(0, BodiesReserved - F.Frags.Num());
-		UE_LOG(LogTemp, Display, TEXT("DCPHYS rest %d bodies after %.1f s (%s), %d still awake, farthest %.0f cm from the shared rubble site"), F.Frags.Num(), F.BodyAge, F.StillFor > 0.f ? TEXT("still") : TEXT("timed out"), Awake, Spread);
+		UE_LOG(LogTemp, Display, TEXT("DCPHYS rest %d chunks and leaves after %.1f s (%s), %d still awake, farthest %.0f cm from the shared rubble site"), F.Frags.Num(), F.BodyAge, F.StillFor > 0.f ? TEXT("still") : TEXT("timed out"), Awake, Spread);
 		F.Frags.Reset();
 	}
 	const float RevealNow = GetWorld()->GetTimeSeconds() - FallOffset;
@@ -1443,6 +1713,7 @@ void ADCVoxelCity::Tick(float DeltaSeconds)
 	const double T3 = FPlatformTime::Seconds();
 	TickCityShot();
 	TickSignLights();
+	TickCollapseCam();
 	// Hitch log (R13): which stage of the city's frame went long.
 	if ((T3 - T0) * 1000.0 > UDCVoxelSettings::Get().Tuning.HitchLogMs)
 	{
@@ -1541,6 +1812,46 @@ void ADCVoxelCity::TickSignLights()
 		L->SetSourceWidth(P.SizeCm.X * Tn.SignSourceScale);
 		L->SetSourceHeight(P.SizeCm.Y * Tn.SignSourceScale);
 		L->SetVisibility(true);
+	}
+}
+
+void ADCVoxelCity::TickCollapseCam()
+{
+	// -dccollapsecam=<dir> (evidence only): when a strike commits, the view cuts to a fixed wide camera above the
+	// collapse and writes frames at fixed times after the detonation (before, mid-fall, settled), then hands back.
+	static const float Times[] = {0.f, 0.3f, 0.6f, 1.0f, 1.5f, 2.2f, 3.2f, 4.5f, 6.5f};
+	if (CollapseCamStep < 0)
+	{
+		return;
+	}
+	static FString Dir;
+	static const bool bWanted = FParse::Value(FCommandLine::Get(), TEXT("dccollapsecam="), Dir);
+	APlayerController* PC = GetWorld()->GetFirstPlayerController();
+	if (!bWanted || !PC)
+	{
+		return;
+	}
+	if (!ShotCamera)
+	{
+		ShotCamera = GetWorld()->SpawnActor<ACameraActor>(ACameraActor::StaticClass(), FTransform::Identity);
+		ShotCamera->GetCameraComponent()->SetFieldOfView(60.f);
+	}
+	const float T = GetWorld()->GetTimeSeconds() - CollapseCamStart;
+	const FVector Eye = CollapseCamCenter + FVector(-4200.f, -4200.f, 6500.f);
+	ShotCamera->SetActorLocationAndRotation(Eye, (CollapseCamCenter + FVector(0, 0, 800.f) - Eye).Rotation());
+	if (PC->GetViewTarget() != ShotCamera)
+	{
+		PC->SetViewTargetWithBlend(ShotCamera, 0.f);
+	}
+	if (CollapseCamStep < UE_ARRAY_COUNT(Times) && T >= Times[CollapseCamStep])
+	{
+		FScreenshotRequest::RequestScreenshot(Dir / FString::Printf(TEXT("collapse_op%d_%02d_t%.1f.png"), CollapseCamOp, CollapseCamStep, Times[CollapseCamStep]), false, false);
+		++CollapseCamStep;
+	}
+	if (CollapseCamStep >= UE_ARRAY_COUNT(Times) && T >= Times[UE_ARRAY_COUNT(Times) - 1] + 0.3f)
+	{
+		PC->SetViewTargetWithBlend(PC->GetPawn(), 0.f);
+		CollapseCamStep = -1;
 	}
 }
 

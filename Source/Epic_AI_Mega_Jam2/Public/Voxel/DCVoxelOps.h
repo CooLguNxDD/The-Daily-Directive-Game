@@ -25,8 +25,19 @@ struct EPIC_AI_MEGA_JAM2_API FDCVoxelPiece
 	int32 RubbleNum = 0;
 };
 
+/** A tower voxel the strike blew out (R26 shatter): where it was and what it was. Cosmetic: the city turns these
+ *  into flying shard bodies; never part of the hash or the rubble. */
+struct EPIC_AI_MEGA_JAM2_API FDCVoxelShard
+{
+	int32 Lot = INDEX_NONE;
+	FIntVector Cell = FIntVector::ZeroValue;
+	uint8 Material = 0;
+};
+
 struct EPIC_AI_MEGA_JAM2_API FDCVoxelOpResult
 {
+	/** Tower voxels the carve and the bite removed (shatter source, R26). */
+	TArray<FDCVoxelShard> Shards;
 	/** Lots whose tower broke at a layer and toppled (the host turns these into collapse records). */
 	TArray<int32> FallenLots;
 	/** Lots whose grid changed (remesh). */
@@ -75,11 +86,11 @@ namespace DCVoxelOps
 	EPIC_AI_MEGA_JAM2_API bool SightBlocked(const struct FDCVoxelSector& Sector, const FVector& From, const FVector& To, const TArray<int32>& IgnoreLots, float StepCm, float SkipNearCm, float SkipFarCm);
 	EPIC_AI_MEGA_JAM2_API int32 TowerTopCells(const struct FDCVoxelTower& T, const FDCVoxelGrid& G, int32 X, int32 Y);
 	/** MinZ: local layers below it are never carved (the terrain's bedrock). */
-	EPIC_AI_MEGA_JAM2_API int32 CarveSphere(FDCVoxelGrid& Grid, const FIntVector& CenterCm, int32 RadiusCm, int32 MinZ = 0);
+	EPIC_AI_MEGA_JAM2_API int32 CarveSphere(FDCVoxelGrid& Grid, const FIntVector& CenterCm, int32 RadiusCm, int32 MinZ = 0, TArray<TPair<FIntVector, uint8>>* Removed = nullptr);
 	/** Removes a vertical cylinder from the ground up to the grid's top. */
-	EPIC_AI_MEGA_JAM2_API int32 CarveColumn(FDCVoxelGrid& Grid, const FIntVector& CenterCm, int32 RadiusCm, int32 TopZ);
+	EPIC_AI_MEGA_JAM2_API int32 CarveColumn(FDCVoxelGrid& Grid, const FIntVector& CenterCm, int32 RadiusCm, int32 TopZ, TArray<TPair<FIntVector, uint8>>* Removed = nullptr);
 	/** Bites the base of a tower on the side facing FromCm: BiteFloors tall, BitePercent of the footprint deep, ragged. */
-	EPIC_AI_MEGA_JAM2_API int32 Bite(FDCVoxelTower& Tower, const FIntVector& FromCm, int32 BiteFloors, int32 BitePercent, int32 BayCm);
+	EPIC_AI_MEGA_JAM2_API int32 Bite(FDCVoxelTower& Tower, const FIntVector& FromCm, int32 BiteFloors, int32 BitePercent, int32 BayCm, TArray<TPair<FIntVector, uint8>>* Removed = nullptr);
 
 	/** Structure pass on one tower: the highest layer under SupportPercent of its intact count breaks and everything
 	 *  above it topples along Dir; then any island not connected to the ground drops. Removes pieces from the grid. */
