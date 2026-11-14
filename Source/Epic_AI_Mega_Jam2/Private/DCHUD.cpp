@@ -559,12 +559,14 @@ void ADCHUD::DrawPhotoCard(UTexture* Image, const FDCPhotoGrade& Grade, float X,
 	// Category words as ink type on signal-yellow tags, inset inside the print's border (a blown-out spotlit shot keeps
 	// a red tag: that one is a warning).
 	const float TagScale = FMath::Clamp(W / Sx(640.f), 0.45f, 1.f);
+	// The warning tag is matched by its label, not its slot: LAST FRAME is also inserted at index 0 (review CP40).
+	const FName SpotlitLabel = UDCTuning::Get().Photo.SpotlitLabel;
 	for (const FName& Category : Grade.Categories)
 	{
 		const FString Word = Upper(Category);
 		float Cw = 0.f, Ch = 0.f;
 		TextSize(BigFont, Word, 0.8f * TagScale * TextBoost * UiScale, Cw, Ch);
-		const bool bWarn = Grade.bSpotlit && Category == Grade.Categories[0];
+		const bool bWarn = Grade.bSpotlit && Category == SpotlitLabel;
 		Box(X + Sx(14.f), Ty, Cw + Sx(12.f), Ch + Sx(2.f), bWarn ? Red : Gold);
 		Text(Word, X + Sx(20.f), Ty, Night, 0.8f * TagScale);
 		Ty += Ch + Sx(6.f);
