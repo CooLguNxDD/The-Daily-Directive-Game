@@ -369,6 +369,11 @@ struct FDCEnemyDef
 	/** Spotlight: cone range (cm) and half-angle (deg) that blows out a photographer's exposure. */
 	UPROPERTY(EditAnywhere, Config, Category = "Enemy") float LightRange = 4500.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Enemy") float LightHalfAngle = 14.f;
+	/** Readable in the dark (R10, R25): a small danger-red glow light at the eyes (cd, reach cm, offset from the actor)
+	 *  that lights the body and the street under it. 0 = none. */
+	UPROPERTY(EditAnywhere, Config, Category = "Enemy") float GlowLight = 0.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Enemy") float GlowLightRadiusCm = 400.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Enemy") FVector GlowLightOffset = FVector::ZeroVector;
 	/** voxel-forge model (Content/DC/Voxel/<Model>.dcvox) worn instead of the basic shapes (R10, R17); None keeps the shapes. */
 	UPROPERTY(EditAnywhere, Config, Category = "Enemy") FName Model;
 	UPROPERTY(EditAnywhere, Config, Category = "Enemy") float ModelScale = 1.f;
