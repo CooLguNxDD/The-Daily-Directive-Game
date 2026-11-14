@@ -1,6 +1,8 @@
 #include "DCHUD.h"
 #include "Rules/DCFactionRules.h"
 #include "DCObjective.h"
+#include "DCEnemy.h"
+#include "EngineUtils.h"
 #include "DCFonts.h"
 #include "CanvasItem.h"
 #include "EngineFontServices.h"
@@ -732,10 +734,54 @@ void ADCHUD::TrackOnboarding(ADCCharacter& Me)
 	bDidStrike |= PS && PS->CooldownIds.Num() > 0;
 	bDidRaise |= Me.IsCameraRaised();
 	bDidSnap |= PS && PS->Photos.Num() > 0;
+	// R4/R3 steps: near the objective's waypoint, an extraction, a photo graded CLASH.
+	const ADCObjective* O = ADCObjective::Find(this);
+	FVector Way;
+	bDidObjective |= O && ((O->Stage != EDCObjectiveStage::Active && O->Stage != EDCObjectiveStage::None) || (O->Waypoint(Me.GetActorLocation(), Way) && FVector::Dist2D(Way, Me.GetActorLocation()) < 3000.f));
+	bDidExtract |= O && O->Stage == EDCObjectiveStage::Done;
+	bDidClash |= PS && PS->Photos.ContainsByPredicate([](const FDCPhotoRecord& R) { return R.Grade.Categories.Contains(FName(TEXT("CLASH"))); });
+	TrackFactionSightings(Me);
+}
+
+void ADCHUD::TrackFactionSightings(ADCCharacter& Me)
+{
+	// R3: the first time a faction's unit is within 40 m and in front of the player, name it once (cue colour).
+	const UDCTuning& T = UDCTuning::Get();
+	const FVector Eye = Me.GetActorLocation();
+	const FVector Fwd = Me.GetControlRotation().Vector();
+	for (TActorIterator<ADCEnemy> It(GetWorld()); It; ++It)
+	{
+		const FName Id = It->GetFaction();
+		const FDCFactionDef* F = It->IsAlive() && !Id.IsNone() && !SeenFactions.Contains(Id) ? DCFactionRules::Find(T.Factions, Id) : nullptr;
+		const FVector To = It->GetActorLocation() - Eye;
+		if (!F || F->Callout.IsEmpty() || To.Size() > 4000.f || FVector::DotProduct(To.GetSafeNormal(), Fwd) < 0.6f)
+		{
+			continue;
+		}
+		SeenFactions.Add(Id);
+		CalloutText = F->Callout;
+		CalloutColor = F->Cue;
+		CalloutUntilReal = RealNow + 4.0;
+		return;
+	}
+}
+
+void ADCHUD::DrawCallout()
+{
+	if (RealNow > CalloutUntilReal || CalloutText.IsEmpty())
+	{
+		return;
+	}
+	const float W = Canvas->ClipX;
+	const float A = static_cast<float>(FMath::Clamp(CalloutUntilReal - RealNow, 0.0, 1.0));
+	Box(W * 0.5f - Sx(360.f), Sx(240.f), Sx(720.f), Sx(40.f), FLinearColor(Paper.R, Paper.G, Paper.B, 0.85f * A));
+	Box(W * 0.5f - Sx(360.f), Sx(240.f), Sx(5.f), Sx(40.f), FLinearColor(CalloutColor.R, CalloutColor.G, CalloutColor.B, A));
+	Text(CalloutText, W * 0.5f, Sx(248.f), FLinearColor(CalloutColor.R, CalloutColor.G, CalloutColor.B, A), 0.7f, true);
 }
 
 void ADCHUD::DrawOnboarding(ADCCharacter& Me)
 {
+	DrawCallout();
 	struct FStep
 	{
 		bool bDone;
@@ -744,13 +790,17 @@ void ADCHUD::DrawOnboarding(ADCCharacter& Me)
 	// Hints name the player's saved bindings (a rebound key shows here, not the default).
 	const ADCPlayerController* KeysPC = Cast<ADCPlayerController>(PlayerOwner);
 	auto Key = [KeysPC](const TCHAR* Action, const TCHAR* Default) { return KeysPC ? KeysPC->KeyFor(Action).ToUpper() : FString(Default); };
-	const FStep Steps[] = {
-		{bDidMove, FString::Printf(TEXT("WASD MOVE   %s SPRINT   %s JUMP   %s CROUCH"), *Key(TEXT("Sprint"), TEXT("SHIFT")), *Key(TEXT("Jump"), TEXT("SPACE")), *Key(TEXT("Crouch"), TEXT("CTRL")))},
-		{bDidShoot, FString::Printf(TEXT("1 RIFLE   LMB SHOOT   %s RELOAD"), *Key(TEXT("Reload"), TEXT("R")))},
-		{bDidStrike, TEXT("2 STRIKE   AIM AT A TOWER   LMB CALL THE ORBITAL LASER")},
-		{bDidRaise, TEXT("3 CAMERA   HOLD RMB TO RAISE THE VIEWFINDER")},
-		{bDidSnap, TEXT("LMB SNAP THE BLAST - BEST 0.2-0.8s AFTER THE FLASH")},
-	};
+	// Steps are data rows (advisor a-7); completion comes from this registry by the row's Id.
+	const TMap<FName, bool> DoneById = {
+		{TEXT("Move"), bDidMove}, {TEXT("Shoot"), bDidShoot}, {TEXT("Strike"), bDidStrike}, {TEXT("Raise"), bDidRaise}, {TEXT("Snap"), bDidSnap},
+		{TEXT("Objective"), bDidObjective}, {TEXT("Extract"), bDidExtract}, {TEXT("Clash"), bDidClash}};
+	TArray<FStep> Steps;
+	for (const FDCOnboardStep& Row : UDCTuning::Get().Onboarding)
+	{
+		const FString Prompt = Row.Prompt.Replace(TEXT("{SPRINT}"), *Key(TEXT("Sprint"), TEXT("SHIFT"))).Replace(TEXT("{JUMP}"), *Key(TEXT("Jump"), TEXT("SPACE")))
+			.Replace(TEXT("{CROUCH}"), *Key(TEXT("Crouch"), TEXT("CTRL"))).Replace(TEXT("{RELOAD}"), *Key(TEXT("Reload"), TEXT("R")));
+		Steps.Add({DoneById.FindRef(Row.Id), Prompt});
+	}
 	const FStep* Next = nullptr;
 	int32 Done = 0;
 	for (const FStep& Step : Steps)
@@ -774,7 +824,7 @@ void ADCHUD::DrawOnboarding(ADCCharacter& Me)
 		{
 			// One line above the LMB SNAP / WINDING label (H - Bar - 110): they overlapped (self-critic CP21).
 			const float Bar = FMath::Max(0.f, (Canvas->ClipY - W * 9.f / 16.f) * 0.5f);
-			Text(FString::Printf(TEXT("%d/5  %s"), Done + 1, *Next->Prompt), W * 0.5f, Canvas->ClipY - Bar - Sx(165.f), Ink, 0.6f, true);
+			Text(FString::Printf(TEXT("%d/%d  %s"), Done + 1, Steps.Num(), *Next->Prompt), W * 0.5f, Canvas->ClipY - Bar - Sx(165.f), Ink, 0.6f, true);
 		}
 		return;
 	}
@@ -783,7 +833,7 @@ void ADCHUD::DrawOnboarding(ADCCharacter& Me)
 	Box(W * 0.5f - Sx(430.f), Y - Sx(6.f), Sx(860.f), Sx(78.f), Paper);
 	Box(W * 0.5f - Sx(430.f), Y - Sx(6.f), Sx(5.f), Sx(78.f), Ink);
 	Text(TEXT("ORDERS: SHOOT THE DESTRUCTION. PHOTOS PAY FOR BIGGER BOMBS."), W * 0.5f, Y, Ink, 0.65f, true);
-	Text(Next ? FString::Printf(TEXT("%d/5  %s"), Done + 1, *Next->Prompt) : FString(TEXT("YOU ARE A WAR PHOTOGRAPHER NOW. GET CLOSER.")), W * 0.5f, Y + Sx(32.f), Ink, 0.75f, true);
+	Text(Next ? FString::Printf(TEXT("%d/%d  %s"), Done + 1, Steps.Num(), *Next->Prompt) : FString(TEXT("YOU ARE A WAR PHOTOGRAPHER NOW. GET CLOSER.")), W * 0.5f, Y + Sx(32.f), Ink, 0.75f, true);
 }
 
 void ADCHUD::DrawDowned(ADCCharacter& Me)

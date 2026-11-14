@@ -23,6 +23,8 @@ struct FDCFactionDef
 	UPROPERTY(EditAnywhere, Config, Category = "Faction") FName Id;
 	/** Sector card and HUD name (ROBOTS, THE DEAD...). */
 	UPROPERTY(EditAnywhere, Config, Category = "Faction") FString DisplayName;
+	/** First sighting (once per run per machine): a short line naming the faction, its cue and whether it is friendly. */
+	UPROPERTY(EditAnywhere, Config, Category = "Faction") FString Callout;
 	UPROPERTY(EditAnywhere, Config, Category = "Faction") TArray<FDCFactionUnit> Units;
 	/** Weight to be a map's main faction (0 = never owns a map, e.g. the friendly army). */
 	UPROPERTY(EditAnywhere, Config, Category = "Faction") float MainWeight = 1.f;

@@ -653,6 +653,16 @@ struct FDCRunTuning
 	UPROPERTY(EditAnywhere, Config, Category = "Run") TMap<FName, FString> Subjects;
 };
 
+/** One onboarding step (advisor a-7: steps are data; completion is looked up by Id in the HUD's registry: Move, Shoot,
+ *  Strike, Raise, Snap, Objective, Extract, Clash). Prompt tokens {SPRINT} {JUMP} {CROUCH} {RELOAD} show the saved keys. */
+USTRUCT(BlueprintType)
+struct FDCOnboardStep
+{
+	GENERATED_BODY()
+	UPROPERTY(EditAnywhere, Config, Category = "Onboarding") FName Id;
+	UPROPERTY(EditAnywhere, Config, Category = "Onboarding") FString Prompt;
+};
+
 /** R5 shareable ID card: the builder's turntable (same recipe as the in-game character) at Angles yaw steps, one big
  *  hero view and a strip of the turn, the call sign and share code, in the noir look. Written to Saved/<OutDir>/. */
 USTRUCT(BlueprintType)
@@ -702,6 +712,7 @@ public:
 	UPROPERTY(EditAnywhere, Config, Category = "Objective") TArray<FDCObjectiveDef> Objectives;
 	UPROPERTY(EditAnywhere, Config, Category = "Objective") FDCObjectiveLook ObjectiveLook;
 	UPROPERTY(EditAnywhere, Config, Category = "Card") FDCCardTuning Card;
+	UPROPERTY(EditAnywhere, Config, Category = "Onboarding") TArray<FDCOnboardStep> Onboarding;
 	UPROPERTY(EditAnywhere, Config, Category = "Sector") TArray<FDCSectorDef> Sectors;
 	UPROPERTY(EditAnywhere, Config, Category = "Input") TArray<FDCActionDef> Actions;
 	UPROPERTY(EditAnywhere, Config, Category = "Input") TArray<FDCKeyBinding> Bindings;
