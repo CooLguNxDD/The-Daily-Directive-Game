@@ -843,6 +843,10 @@ void ADCVoxelCity::UploadCells()
 			Ready.Add(Cell);
 		}
 	}
+	if (bLoading)
+	{
+		Ready.StableSort([](const FIntVector4& A, const FIntVector4& B) { return (A.X == 0) > (B.X == 0); }); // the street first
+	}
 	int32 Done = 0;
 	for (const FIntVector4& Cell : Ready)
 	{

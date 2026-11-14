@@ -50,6 +50,8 @@ public:
 	void SetFollowGameState(bool bFollow) { bFollowGameState = bFollow; }
 
 	int32 GetBuiltSector() const { return BuiltSector; }
+	/** True once a build's cells are all up (the sector title card holds until then). */
+	bool IsLoaded() const { return BuiltSector != INDEX_NONE && !bLoading; }
 	class ADCVoxelFx* GetFx() const { return Fx; }
 	/** Surface wetness 0..1 from the weather (R18): every voxel material darkens and glosses its up faces. */
 	void SetWetness(float Wetness);

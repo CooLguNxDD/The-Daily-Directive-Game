@@ -68,6 +68,8 @@ struct FDCPhotoTuning
 	/** Solo only: world slow motion while the dying player frames the shot (co-op: a local look, no world slow-mo). */
 	UPROPERTY(EditAnywhere, Config, Category = "Photo") float LastFrameSlowMo = 0.35f;
 	UPROPERTY(EditAnywhere, Config, Category = "Photo") float LastFrameSlowMoSeconds = 2.f;
+	/** Enemies within this distance of the Last Frame lens are left out of that shot (they would fill it black). */
+	UPROPERTY(EditAnywhere, Config, Category = "Photo") float LastFrameClearCm = 160.f;
 	/** A wipe waits this long for the last downed player to take a Last Frame. */
 	UPROPERTY(EditAnywhere, Config, Category = "Photo") float LastFrameWipeGraceSeconds = 3.f;
 };

@@ -15,6 +15,7 @@
 #include "DCPlayerController.h"
 #include "DCPlayerState.h"
 #include "DCTuning.h"
+#include "DCVoxelCity.h"
 #include "Engine/Canvas.h"
 #include "Engine/Engine.h"
 #include "Engine/Font.h"
@@ -177,6 +178,42 @@ void ADCHUD::DrawSector(ADCGameState& GS, ADCCharacter* Me)
 	DrawOnboarding(*Me);
 	DrawDowned(*Me);
 	DrawToast(*Me);
+	DrawSectorCard(GS);
+}
+
+void ADCHUD::DrawSectorCard(ADCGameState& GS)
+{
+	const UDCTuning& T = UDCTuning::Get();
+	if (CardSector != GS.SectorIndex)
+	{
+		CardSector = GS.SectorIndex;
+		CardLoadedReal = -1.0;
+	}
+	const ADCVoxelCity* City = ADCVoxelCity::IsEnabled() ? ADCVoxelCity::Get(this) : nullptr;
+	const bool bLoaded = !City || (City->IsLoaded() && City->GetBuiltSector() == GS.SectorIndex);
+	if (bLoaded && CardLoadedReal < 0.0)
+	{
+		CardLoadedReal = RealNow;
+	}
+	// Hold while loading and a beat after, then lift away over SectorCardFadeSeconds.
+	const float Since = CardLoadedReal < 0.0 ? 0.f : static_cast<float>(RealNow - CardLoadedReal);
+	const float A = 1.f - FMath::Clamp((Since - T.Look.SectorCardHoldSeconds) / FMath::Max(T.Look.SectorCardFadeSeconds, 0.01f), 0.f, 1.f);
+	if (A <= 0.f || GS.Now() - GS.SectorStartTime > T.Look.SectorCardMaxSeconds)
+	{
+		return;
+	}
+	const float W = Canvas->ClipX, H = Canvas->ClipY;
+	const FDCSectorDef* Sector = T.Sectors.IsValidIndex(GS.SectorIndex) ? &T.Sectors[GS.SectorIndex] : nullptr;
+	const FString Name = Sector ? Sector->Name.ToString().ToUpper() : FString::Printf(TEXT("SECTOR %d"), GS.SectorIndex + 1);
+	const float Lift = (1.f - A) * H * 0.15f;
+	PaperSheet(0, -Lift, W, H);
+	Box(0, -Lift, W, H, FLinearColor(Paper.R, Paper.G, Paper.B, 1.f - A)); // fade toward the scene through paper, never black
+	const FLinearColor InkA(Ink.R, Ink.G, Ink.B, A);
+	Box(W * 0.2f, H * 0.36f - Lift, W * 0.6f, Sx(4.f), InkA);
+	Text(FString::Printf(TEXT("SECTOR %d OF %d"), GS.SectorIndex + 1, FMath::Max(T.Sectors.Num(), 1)), W * 0.5f, H * 0.39f - Lift, InkA, 0.9f, true);
+	Text(Name, W * 0.5f, H * 0.45f - Lift, InkA, 2.6f, true, HeadFont);
+	Box(W * 0.2f, H * 0.62f - Lift, W * 0.6f, Sx(4.f), InkA);
+	Text(TEXT("CAMERAS READY. THE CITY IS YOUR STUDIO."), W * 0.5f, H * 0.65f - Lift, InkA, 0.7f, true);
 }
 
 void ADCHUD::DrawFlashes(ADCGameState& GS, ADCCharacter& Me)
@@ -498,7 +535,7 @@ void ADCHUD::PaperSheet(float X, float Y, float W, float H)
 		return;
 	}
 	// The texture is about paper cream already; tinted to the palette paper so the sheet stays #F2E8D0 on average.
-	const float Tile = Sx(512.f);
+	const float Tile = FMath::Max(W, H); // one sheet: the generated paper is not seamless (tiles showed a grid)
 	DrawTexture(PaperTex, X, Y, W, H, 0.f, 0.f, W / Tile, H / Tile, FLinearColor(1.01f, 1.0f, 0.99f, 1.f), BLEND_Opaque);
 }
 

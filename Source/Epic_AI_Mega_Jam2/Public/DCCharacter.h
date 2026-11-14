@@ -200,6 +200,9 @@ private:
 	UPROPERTY(Replicated) bool bLastFrameReady = false;
 	/** Local Last Frame slow motion end (real seconds), 0 when none runs. */
 	double LocalSlowMoEndReal = 0.0;
+	/** Enemies hidden from one Last Frame capture (at the lens), shown again right after it. */
+	TArray<TWeakObjectPtr<AActor>> LensHidden;
+	virtual void EndPlay(const EEndPlayReason::Type Reason) override;
 	void TickLocalSlowMo();
 	/** Landing spring (local camera feel): offset in cm and its velocity. */
 	float LandDip = 0.f;

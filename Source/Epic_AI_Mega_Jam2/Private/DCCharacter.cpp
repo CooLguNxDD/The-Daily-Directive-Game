@@ -853,6 +853,16 @@ void ADCCharacter::TakePhoto()
 		FRotator Aim = GetControlRotation();
 		Aim.Pitch = FMath::Clamp(FRotator::NormalizeAxis(Aim.Pitch), -4.f, 35.f);
 		Capture->SetWorldLocationAndRotation(GetActorLocation() + FVector(0, 0, 35.f) + Aim.Vector() * 60.f, Aim);
+		// The swarmer biting a downed player sits on the lens: anything that close is hidden for this one shot (CP6:
+		// a Last Frame printed solid black from inside an ink swarmer).
+		for (ADCEnemy* E : TActorRange<ADCEnemy>(GetWorld()))
+		{
+			if (FVector::Dist(E->GetActorLocation(), Capture->GetComponentLocation()) < UDCTuning::Get().Photo.LastFrameClearCm)
+			{
+				Capture->HiddenActors.AddUnique(E);
+				LensHidden.Add(E);
+			}
+		}
 	}
 	if (const ADCVoxelCity* City = ADCVoxelCity::Get(this))
 	{
@@ -867,6 +877,11 @@ void ADCCharacter::TakePhoto()
 	}
 	Capture->CaptureScene();
 	Capture->SetWorldLocationAndRotation(Lens, LensRot);
+	for (const TWeakObjectPtr<AActor>& Hidden : LensHidden)
+	{
+		Capture->HiddenActors.Remove(Hidden.Get());
+	}
+	LensHidden.Reset();
 
 	// Instant preview grade from the same rules; the host's grade replaces it when it arrives.
 	const FDCShotView View = GetShotView();
@@ -932,7 +947,10 @@ void ADCCharacter::TickOutfit()
 void ADCCharacter::SetBase(FMovementBaseInterfaceData* MovementBaseInterfaceData, const FName BoneName, bool bNotifyActor)
 {
 	const UActorComponent* Base = MovementBaseInterfaceData ? Cast<UActorComponent>(MovementBaseInterfaceData->GetMovementBaseObject()) : nullptr;
-	if (Base && Cast<ADCVoxelCity>(Base->GetOwner()))
+	// No movement base a remote machine cannot resolve: voxel meshes (rebuilt per machine) and any actor spawned at run
+	// time without replication (the environment's Ground slab: co-op clients flooded unresolved-GUID warnings, CP6).
+	const AActor* BaseOwner = Base ? Base->GetOwner() : nullptr;
+	if (BaseOwner && (Cast<ADCVoxelCity>(BaseOwner) || (!BaseOwner->GetIsReplicated() && !BaseOwner->IsNetStartupActor())))
 	{
 		Super::SetBase(static_cast<FMovementBaseInterfaceData*>(nullptr), NAME_None, bNotifyActor);
 		return;
@@ -1086,6 +1104,17 @@ void ADCCharacter::ClientLastFrameSlowMo_Implementation(float Dilation, float Se
 	}
 	W->GetWorldSettings()->CinematicTimeDilation = Dilation; // local only: the host never reads it back
 	UE_LOG(LogTemp, Display, TEXT("DCLASTFRAME local slow motion %.2f for %.1f s"), Dilation, Seconds);
+}
+
+void ADCCharacter::EndPlay(const EEndPlayReason::Type Reason)
+{
+	// A pawn removed mid slow motion (respawn, travel) never leaves its machine's clock slowed.
+	if (LocalSlowMoEndReal > 0.0 && !HasAuthority() && GetWorld() && GetWorld()->GetWorldSettings())
+	{
+		GetWorld()->GetWorldSettings()->CinematicTimeDilation = 1.f;
+	}
+	LocalSlowMoEndReal = 0.0;
+	Super::EndPlay(Reason);
 }
 
 void ADCCharacter::TickLocalSlowMo()

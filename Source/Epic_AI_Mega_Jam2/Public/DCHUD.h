@@ -75,6 +75,11 @@ private:
 
 	/** Ink grit for stamps: a code-made mask of speckles and worn edges, drawn in paper over the stamp ink (R5). */
 	class UTexture2D* StampGrit();
+	/** Sector title card (CP6): paper and ink over the street while the sector's voxel city is still loading, then it
+	 *  slides away; the craft hitch and the empty street never show. */
+	void DrawSectorCard(ADCGameState& GS);
+	int32 CardSector = INDEX_NONE;
+	double CardLoadedReal = -1.0;
 	/** A newsprint sheet: the generated paper texture tiled at its own scale (R11), else flat paper. */
 	void PaperSheet(float X, float Y, float W, float H);
 	UPROPERTY() TObjectPtr<class UTexture2D> PaperTex;

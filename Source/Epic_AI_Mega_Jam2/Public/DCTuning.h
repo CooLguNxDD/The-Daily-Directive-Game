@@ -222,6 +222,10 @@ struct FDCLookTuning
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float SkyMinSunScale = 0.4f;
 	/** Sky light (ambient fill) multiplier: shaded facades and rubble read as ink-dark tone, not crushed black. */
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float SkyFill = 1.f;
+	/** Sector title card: held this long after the city is up, lifts away over FadeSeconds, never past MaxSeconds. */
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float SectorCardHoldSeconds = 0.6f;
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float SectorCardFadeSeconds = 0.5f;
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float SectorCardMaxSeconds = 6.f;
 	/** Backdrop skyline past the sector edge: towers in a ring starting GapCm out, DepthCm deep; footprint and height
 	 *  ranges in cm; the colour is an ink tone (the height fog hazes the far ones toward the sky). */
 	UPROPERTY(EditAnywhere, Config, Category = "Look") int32 BackdropTowers = 90;
