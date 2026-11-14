@@ -130,3 +130,14 @@ void ADCGameState::AddCollapse(int32 Sector, int32 Lot, const FVector& Epicenter
 	Rec.Time = Time >= 0.f ? Time : Now();
 	Rec.Epicenter = Epicenter;
 }
+
+void ADCGameState::OnRep_FactionMix()
+{
+	// Co-op evidence: the client logs the mix it received (the host logs DCFACTION when it rolls it).
+	FString Invaders;
+	for (const FName& I : FactionMix.Invaders)
+	{
+		Invaders += I.ToString() + TEXT(" ");
+	}
+	UE_LOG(LogTemp, Display, TEXT("DCFACTION client sector=%d main=%s invaders=%s"), SectorIndex + 1, *FactionMix.Main.ToString(), *Invaders);
+}

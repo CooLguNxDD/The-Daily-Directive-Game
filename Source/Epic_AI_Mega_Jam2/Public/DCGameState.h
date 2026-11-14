@@ -48,7 +48,8 @@ public:
 	UPROPERTY(Replicated) EDCRunPhase Phase = EDCRunPhase::Lobby;
 	UPROPERTY(Replicated) int32 SectorIndex = 0;
 	/** R3: this map's factions (rolled by the host from the run seed at sector start). */
-	UPROPERTY(Replicated) FDCFactionMix FactionMix;
+	UPROPERTY(ReplicatedUsing = OnRep_FactionMix) FDCFactionMix FactionMix;
+	UFUNCTION() void OnRep_FactionMix();
 	/** R3 territory: owner faction per zone (ZonesPerSide^2, row-major over the map). */
 	UPROPERTY(Replicated) TArray<FName> Zones;
 	UPROPERTY(Replicated) float ZoneHalfExtent = 0.f;

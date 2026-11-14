@@ -32,6 +32,10 @@ struct FDCFactionDef
 	UPROPERTY(EditAnywhere, Config, Category = "Faction") TArray<FName> Hostile;
 	/** Squad size per drop. */
 	UPROPERTY(EditAnywhere, Config, Category = "Faction") int32 SquadMin = 3;
+	/** Pressure packs of this faction are PackScale times the rule's pack size (crowds are crowds), and each live unit
+	 *  counts PressureWeight against the pressure's alive target (a shambler is less threat than a trooper). */
+	UPROPERTY(EditAnywhere, Config, Category = "Faction") float PackScale = 1.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Faction") float PressureWeight = 1.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Faction") int32 SquadMax = 6;
 	/** Faction-made destruction (advisor a-2): a +Stratagems row the host calls on the tower nearest the faction's
 	 *  squad, at most once per StrikeInterval seconds per faction (0 = never). */
@@ -42,6 +46,15 @@ struct FDCFactionDef
 	/** Played at a unit's feet on every machine when it appears (a voxel Fx emitter id; None = nothing). The Hive
 	 *  bursts out of the street in dust. */
 	UPROPERTY(EditAnywhere, Config, Category = "Faction") FName SpawnFx;
+	/** Nests: at sector start, NestCount units of NestUnit (a Behaviour="Nest" row) burst up in the ring around the
+	 *  crew when the faction is on the map (main or invader). */
+	UPROPERTY(EditAnywhere, Config, Category = "Faction") FName NestUnit;
+	UPROPERTY(EditAnywhere, Config, Category = "Faction") int32 NestCount = 0;
+	/** Night read: one unit in CueLightEvery carries a small shadowless light in the cue colour (0 = none), so a squad
+	 *  shows its colour on the street without a light per unit (advisor a-2). Cosmetic, picked per machine. */
+	UPROPERTY(EditAnywhere, Config, Category = "Faction") int32 CueLightEvery = 0;
+	UPROPERTY(EditAnywhere, Config, Category = "Faction") float CueLightCandela = 120.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Faction") float CueLightRadiusCm = 500.f;
 	/** The one light cue of the faction (HUD tag, sector card rule, tracer colour). */
 	UPROPERTY(EditAnywhere, Config, Category = "Faction") FLinearColor Cue = FLinearColor::White;
 };
@@ -64,6 +77,14 @@ struct FDCFactionMixRule
 	/** Faction strikes wait while the city's physics body load is above this (the crew's shots own the body budget). */
 	UPROPERTY(EditAnywhere, Config, Category = "Faction") float StrikeMaxBodyLoad = 0.35f;
 	UPROPERTY(EditAnywhere, Config, Category = "Faction") int32 SpawnsPerFrame = 2;
+	/** One cap on live faction units of every source (pressure, guards, allies, nests, opening; advisor a-7): a squad
+	 *  is clamped to the room left, counting spawns still queued. */
+	UPROPERTY(EditAnywhere, Config, Category = "Faction") int32 MaxUnitsAlive = 40;
+	/** The opening clash (first 10 seconds sell the game): OpeningSeconds into the sector a main-faction squad and an
+	 *  invader squad of OpeningSquad each land OpeningApartCm apart in the ring around the crew and fight (0 = off). */
+	UPROPERTY(EditAnywhere, Config, Category = "Faction") float OpeningSeconds = 4.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Faction") int32 OpeningSquad = 4;
+	UPROPERTY(EditAnywhere, Config, Category = "Faction") float OpeningApartCm = 1800.f;
 	/** Territory: the map splits into ZonesPerSide^2 zones, all the main faction's at the start; every
 	 *  TerritorySeconds a zone goes to the faction with the most live units in it, if it outnumbers the owner there. */
 	UPROPERTY(EditAnywhere, Config, Category = "Faction") int32 ZonesPerSide = 3;

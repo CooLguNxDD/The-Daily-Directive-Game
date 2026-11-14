@@ -58,6 +58,22 @@ namespace
 			return;
 		}
 		ADCCharacter* Target = E.FindTarget(FMath::Max(Def.SenseRange, Aggro), true);
+		if (!Target)
+		{
+			// R3: no crew in reach: a hostile faction's unit in sense range comes before hunting the crew (fights the
+			// player did not start).
+			if (Now >= E.NextRetarget)
+			{
+				E.NextRetarget = Now + 0.25f;
+				E.Foe = E.FindFoe(Def.SenseRange);
+			}
+			if (AActor* Foe = E.Foe.Get(); Foe && !Cast<ADCCharacter>(Foe) && Cast<ADCEnemy>(Foe)->IsAlive())
+			{
+				E.SteerTowards(Foe->GetActorLocation() + FVector(0, 0, 60.f), Def.Speed, Dt, Def.HoverHeight);
+				E.HostAttack(Foe, Now);
+				return;
+			}
+		}
 		const ADCCharacter* Hunted = Target ? nullptr : E.FindTarget(Def.HuntRangeCm, false);
 		if (Hunted)
 		{
@@ -68,18 +84,6 @@ namespace
 		}
 		if (!Target)
 		{
-			// R3: no crew in reach: the drones go for a hostile faction's unit (fights the player did not start).
-			if (Now >= E.NextRetarget)
-			{
-				E.NextRetarget = Now + 0.25f;
-				E.Foe = E.FindFoe(Def.SenseRange);
-			}
-			if (AActor* Foe = E.Foe.Get(); Foe && !Cast<ADCCharacter>(Foe))
-			{
-				E.SteerTowards(Foe->GetActorLocation() + FVector(0, 0, 60.f), Def.Speed, Dt, Def.HoverHeight);
-				E.HostAttack(Foe, Now);
-				return;
-			}
 			E.Heading = E.Heading.RotateAngleAxis(25.f * Dt, FVector::UpVector);
 			E.SteerTowards(E.GetActorLocation() + E.Heading * 600.f, Def.Speed * 0.4f, Dt, Def.HoverHeight);
 			E.bRushing = false;
@@ -270,6 +274,11 @@ namespace
 	void TickInfantry(ADCEnemy& E, const FDCEnemyDef& Def, float Dt, float Now)
 	{
 		// R3 ground unit: fight the nearest foe in sense range (crew or a hostile faction), else follow the squad goal.
+		if (!Def.IdleCue.IsNone() && Now >= E.NextCueTime)
+		{
+			E.NextCueTime = Now + Def.IdleCueSeconds * (0.6f + 0.8f * ((E.GetUniqueID() * 2654435761u) % 1000) / 1000.f);
+			E.Cue(Def.IdleCue);
+		}
 		if (Now >= E.NextRetarget || !IsLiveFoe(E.Foe.Get()))
 		{
 			E.NextRetarget = Now + 0.25f + (E.GetUniqueID() % 8) * 0.01f; // ~4 Hz, staggered (advisor a-2)
@@ -281,7 +290,14 @@ namespace
 			const FVector At = Foe->GetActorLocation();
 			const FVector To = (At - Here).GetSafeNormal2D();
 			const float Hold = (Def.ShotRange > 0.f ? Def.ShotRange : Def.AttackRange) * 0.6f;
-			if (FVector::Dist2D(At, Here) > Hold)
+			const float Dist = FVector::Dist2D(At, Here);
+			if (Def.KiteCm > 0.f && Dist < Def.KiteCm)
+			{
+				// Hit and run (Scavengers): back off at speed, still firing.
+				E.GroundMove(Here - To * 600.f, Def.Speed, Dt, Def.HoverHeight);
+				E.SetActorRotation(FMath::RInterpTo(E.GetActorRotation(), To.Rotation(), Dt, 8.f));
+			}
+			else if (Dist > Hold)
 			{
 				const float Speed = Def.Speed * (Def.ShotRange > 0.f ? 1.f : Def.RushMultiplier);
 				E.GroundMove(At + E.SlotOffset(Def, To) * 0.3f, Speed, Dt, Def.HoverHeight);
@@ -297,12 +313,39 @@ namespace
 		const FGoalFn* Fn = Goals().Find(Def.Goal);
 		if (Fn && (*Fn)(E, Def, Now, Goal))
 		{
+			if (!Def.GoalActCue.IsNone() && FVector::Dist2D(Goal, Here) < Def.GoalActRadiusCm)
+			{
+				// At the goal: act there (loot) instead of milling about.
+				if (Now >= E.NextAttackTime)
+				{
+					E.NextAttackTime = Now + Def.GoalActSeconds;
+					E.Cue(Def.GoalActCue);
+				}
+				return;
+			}
 			const FVector Facing = (Goal - Here).GetSafeNormal2D();
 			E.GroundMove(Goal + E.SlotOffset(Def, Facing.IsNearlyZero() ? E.Heading : Facing), Def.Speed * 0.7f, Dt, Def.HoverHeight);
 			return;
 		}
 		E.Heading = E.Heading.RotateAngleAxis(15.f * Dt, FVector::UpVector);
 		E.GroundMove(Here + E.Heading * 600.f, Def.Speed * 0.35f, Dt, Def.HoverHeight);
+	}
+
+	void TickNest(ADCEnemy& E, const FDCEnemyDef& Def, float Dt, float Now)
+	{
+		// R3 Hive nest: stays put, pulses its faction out while it stands.
+		if (Def.SpawnEverySeconds <= 0.f || Def.SpawnCount <= 0 || Now < E.NextAttackTime)
+		{
+			return;
+		}
+		E.NextAttackTime = Now + Def.SpawnEverySeconds;
+		const UDCUnits* Units = UDCUnits::Get(&E);
+		ADCGameMode* GM = E.GetWorld()->GetAuthGameMode<ADCGameMode>();
+		if (GM && Units && Units->CountAlive(E.GetFaction()) < Def.SpawnMaxAlive)
+		{
+			GM->HostSpawnSquad(E.GetFaction(), Def.SpawnCount, E.GetActorLocation(), 250.f);
+			E.Cue(TEXT("Groan"));
+		}
 	}
 
 	using FBehaviour = void (*)(ADCEnemy&, const FDCEnemyDef&, float, float);
@@ -313,6 +356,7 @@ namespace
 			{Spotlight, &TickSpotlight},
 			{Walker, &TickWalker},
 			{TEXT("Infantry"), &TickInfantry},
+			{TEXT("Nest"), &TickNest},
 		};
 		return Map;
 	}
@@ -592,6 +636,16 @@ void ADCEnemy::BeginPlay()
 	}
 	GaitLast = GetActorLocation();
 	const FDCFactionDef* F = DCFactionRules::Find(UDCTuning::Get().Factions, GetFaction());
+	const FDCEnemyDef* CueDef = GetDef();
+	if (F && CueDef && F->CueLightEvery > 0 && CueDef->GlowLight <= 0.f && GetUniqueID() % F->CueLightEvery == 0)
+	{
+		GlowLight->SetVisibility(true);
+		GlowLight->SetIntensityUnits(ELightUnits::Candelas);
+		GlowLight->SetIntensity(F->CueLightCandela);
+		GlowLight->SetAttenuationRadius(F->CueLightRadiusCm);
+		GlowLight->SetLightColor(F->Cue);
+		GlowLight->SetRelativeLocation(FVector(30.f, 0.f, 60.f));
+	}
 	const ADCVoxelCity* City = ADCVoxelCity::Get(this);
 	if (ADCVoxelFx* Fx = F && !F->SpawnFx.IsNone() && City ? City->GetFx() : nullptr)
 	{
@@ -872,8 +926,15 @@ void ADCEnemy::Die(AController* Killer)
 	{
 		if (ADCPlayerState* PS = Killer->GetPlayerState<ADCPlayerState>())
 		{
-			PS->AddPoints(Def ? Def->KillPoints : UDCTuning::Get().Economy.KillPoints);
-			++PS->Kills;
+			// R3: shooting the friendly army pays nothing and HQ notices (advisor a-7).
+			const bool bAlly = !GetFaction().IsNone() && !DCFactionRules::FightsCrew(UDCTuning::Get().Factions, GetFaction());
+			PS->AddPoints(bAlly ? 0 : (Def ? Def->KillPoints : UDCTuning::Get().Economy.KillPoints));
+			PS->Kills += bAlly ? 0 : 1;
+			ADCCharacter* Shooter = bAlly ? PS->GetPawn<ADCCharacter>() : nullptr;
+			if (Shooter)
+			{
+				Shooter->HostToast(TEXT("FRIENDLY FIRE. HQ WILL BILL YOU FOR THE UNIFORM."));
+			}
 		}
 	}
 	SetActorEnableCollision(false);
@@ -921,7 +982,13 @@ void ADCEnemy::PlayDeathFx()
 	{
 		return;
 	}
-	for (int32 i = 0; i < 6; ++i)
+	// R3: a unit bursts into voxel crumbs of its body and its light cue (instanced, cheap), plus a couple of tumbling
+	// debris blocks.
+	if (ADCVoxelCity* City = ADCVoxelCity::Get(this))
+	{
+		City->BurstCrumbs(GetActorLocation(), Def->Color * 3.f, Def->EyeColor, FMath::RoundToInt32(24 * FMath::Max(Def->Scale, 0.5f)), 5.f * FMath::Max(Def->Scale, 1.f) * 2.f);
+	}
+	for (int32 i = 0; i < 2; ++i)
 	{
 		FDCDebrisSpawn D;
 		D.Transform = FTransform(FRotator(FMath::FRandRange(0.f, 360.f), FMath::FRandRange(0.f, 360.f), 0.f), GetActorLocation(), FVector(0.2f * Def->Scale));

@@ -26,7 +26,8 @@ public:
 	static ADCObjective* Find(const UObject* WorldContext);
 
 	UPROPERTY(Replicated) FName DefId;
-	UPROPERTY(Replicated) EDCObjectiveStage Stage = EDCObjectiveStage::None;
+	UPROPERTY(ReplicatedUsing = OnRep_Stage) EDCObjectiveStage Stage = EDCObjectiveStage::None;
+	UFUNCTION() void OnRep_Stage();
 	UPROPERTY(Replicated) FVector_NetQuantize PackageAt;
 	/** Who carries the package (Retrieve); null while it lies on the street. */
 	UPROPERTY(Replicated) TObjectPtr<APlayerState> Carrier;
@@ -45,5 +46,6 @@ private:
 	UPROPERTY() TObjectPtr<UProceduralMeshComponent> Package;
 	UPROPERTY() TArray<TObjectPtr<UStaticMeshComponent>> Markers;
 	bool bBuilt = false;
+	EDCObjectiveStage ShownStage = EDCObjectiveStage::None;
 	void BuildVisuals();
 };
