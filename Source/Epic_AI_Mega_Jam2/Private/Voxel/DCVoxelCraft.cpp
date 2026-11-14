@@ -64,7 +64,7 @@ namespace
 
 	struct FCraftIds
 	{
-		uint8 Wall = 1, Window = 1, Trim = 1, Slab = 1, Poster = 1, Ink = 1;
+		uint8 Wall = 1, Window = 1, Trim = 1, Slab = 1, Poster = 1, Ink = 1, PosterEdge = 1;
 		/** About 25 cm in voxels: the roof and detail builders size their parts in units. */
 		int32 Unit = 1;
 	};
@@ -190,7 +190,9 @@ namespace
 			for (int32 Z = Z0; Z < Z0 + Height; ++Z)
 			{
 				const bool bEmblem = FMath::Abs(U - Cu) + FMath::Abs(Z - Cz) <= R;
-				W.Set(F.Cell(Face, -1, U, Z), bEmblem ? Ids.Ink : Ids.Poster);
+				const bool bEdge = U == U0 || U == U0 + Width - 1 || Z == Z0 || Z == Z0 + Height - 1;
+				// A neon tube round the edge (brightest), a dimmer lit face, the dark emblem.
+				W.Set(F.Cell(Face, -1, U, Z), bEdge ? Ids.PosterEdge : (bEmblem ? Ids.Ink : Ids.Poster));
 			}
 		}
 		FDCVoxelSign& Sign = OutSigns.AddDefaulted_GetRef();
@@ -277,6 +279,7 @@ namespace DCVoxelCraft
 		Ids.Trim = Ctx.MaterialId(R->Trim);
 		Ids.Slab = Ctx.MaterialId(R->Slab);
 		Ids.Poster = Ctx.MaterialId(R->Poster);
+		Ids.PosterEdge = R->PosterEdge.IsNone() ? Ids.Poster : Ctx.MaterialId(R->PosterEdge);
 		Ids.Ink = Ctx.MaterialId(TEXT("Ink"));
 		Ids.Unit = FMath::Max(1, 25 / Vcm);
 		FRandomStream Rng(Lot.Spec.Seed ^ 0xC2AF7);

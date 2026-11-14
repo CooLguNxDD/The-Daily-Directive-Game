@@ -55,6 +55,8 @@ struct FDCVoxelRecipe
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") FName Trim = TEXT("Trim");
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") FName Slab = TEXT("Slab");
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") FName Poster = TEXT("Paper");
+	/** The sign's outer ring (a neon tube edge, R25); None = the same as Poster. */
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") FName PosterEdge;
 };
 
 USTRUCT(BlueprintType)
