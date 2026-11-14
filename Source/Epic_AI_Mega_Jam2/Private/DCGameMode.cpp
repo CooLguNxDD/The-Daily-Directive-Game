@@ -960,6 +960,13 @@ void ADCGameMode::NoteReelStaged(APlayerController* PC, int32 ClipIndex)
 		return;
 	}
 	ReelStaged.Add(PC);
+	for (auto It = ReelStaged.CreateIterator(); It; ++It)
+	{
+		if (!It->IsValid())
+		{
+			It.RemoveCurrent(); // review CP36: a disconnected machine's entry never counts
+		}
+	}
 	if (ReelStaged.Num() < GetNumPlayers())
 	{
 		return; // another machine is still restaging (the ReelRestageMaxSeconds cap rolls it anyway)

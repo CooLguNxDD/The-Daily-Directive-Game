@@ -483,7 +483,8 @@ void ADCReelDirector::Tick(float DeltaSeconds)
 	}
 	if (bAwaitLive)
 	{
-		// The host starts the clip clock once its own city is in; every machine plays the clip from that start.
+		// This machine reports its stage; the host starts the clip clock once every player's machine reported (or at
+		// the ReelRestageMaxSeconds cap), and every machine plays the clip from that start.
 		ADCGameState* MGS = GetWorld()->GetGameState<ADCGameState>();
 		if (!bReportedStaged)
 		{
