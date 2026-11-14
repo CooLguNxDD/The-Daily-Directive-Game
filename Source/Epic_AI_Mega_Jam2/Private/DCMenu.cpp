@@ -43,21 +43,26 @@ namespace DCMenuStyle
 		return SNew(STextBlock).Text(FText::FromString(Text)).Font(Font(Size)).ColorAndOpacity(Color).Justification(ETextJustify::Center).AutoWrapText(false);
 	}
 
-	/** Flat buttons: a white brush the fill colour tints exactly (the engine's grey button turned yellow into olive). */
-	const FButtonStyle& FlatButton()
+	/** Dark-glass buttons (R25, V9.1: no solid yellow plates): a glass fill with a thin edge in the accent colour and
+	 *  light type; hover lights the glass with the accent and thickens the edge, press fills it further. One style per
+	 *  accent, kept for the session (Slate holds the style by pointer). */
+	const FButtonStyle& GlassButton(const FLinearColor& Accent)
 	{
-		static FButtonStyle Style = []
+		static TMap<uint32, TUniquePtr<FButtonStyle>> Styles;
+		const uint32 Key = GetTypeHash(Accent.ToFColor(false));
+		if (const TUniquePtr<FButtonStyle>* Found = Styles.Find(Key))
 		{
-			FButtonStyle S = FCoreStyle::Get().GetWidgetStyle<FButtonStyle>("Button");
-			S.SetNormal(FSlateColorBrush(FLinearColor::White));
-			// Hover and press read at a glance (critic CP6): a thick ink rule around the plate, pressed darker.
-			S.SetHovered(FSlateRoundedBoxBrush(FLinearColor::White, 0.f, FLinearColor(0.086f, 0.086f, 0.1f), 5.f));
-			S.SetPressed(FSlateRoundedBoxBrush(FLinearColor(0.72f, 0.72f, 0.72f), 0.f, FLinearColor(0.086f, 0.086f, 0.1f), 7.f));
-			S.SetNormalPadding(FMargin(0));
-			S.SetPressedPadding(FMargin(0));
-			return S;
-		}();
-		return Style;
+			return **Found;
+		}
+		const FLinearColor Glass(Paper.R, Paper.G, Paper.B, 0.92f);
+		const FLinearColor Edge(Accent.R, Accent.G, Accent.B, 0.85f);
+		FButtonStyle S = FCoreStyle::Get().GetWidgetStyle<FButtonStyle>("Button");
+		S.SetNormal(FSlateRoundedBoxBrush(Glass, 0.f, Edge, 2.f));
+		S.SetHovered(FSlateRoundedBoxBrush(FLinearColor(Accent.R * 0.22f, Accent.G * 0.22f, Accent.B * 0.22f, 0.95f), 0.f, Accent, 4.f));
+		S.SetPressed(FSlateRoundedBoxBrush(FLinearColor(Accent.R * 0.4f, Accent.G * 0.4f, Accent.B * 0.4f, 0.95f), 0.f, Accent, 5.f));
+		S.SetNormalPadding(FMargin(0));
+		S.SetPressedPadding(FMargin(0));
+		return *Styles.Add(Key, MakeUnique<FButtonStyle>(S));
 	}
 
 	TWeakPtr<SWidget> GSoloButton;
@@ -68,12 +73,11 @@ namespace DCMenuStyle
 		TSharedRef<SWidget> Box = SNew(SBox).WidthOverride(420.f).HeightOverride(64.f).Padding(FMargin(0, 6))
 			[
 				SAssignNew(Made, SButton)
-				.ButtonStyle(&FlatButton())
-				.ButtonColorAndOpacity(Fill)
+				.ButtonStyle(&GlassButton(Fill))
 				.HAlign(HAlign_Center).VAlign(VAlign_Center)
 				.OnClicked_Lambda([OnClick]() { OnClick(); return FReply::Handled(); })
 				[
-					SNew(STextBlock).Text(FText::FromString(Text)).Font(Font(22)).ColorAndOpacity(TextOn(Fill))
+					SNew(STextBlock).Text(FText::FromString(Text)).Font(Font(22)).ColorAndOpacity(Fill.GetLuminance() > 0.5f ? Ink : Fill) // light type on glass
 				]
 			];
 		if (OutButton)
