@@ -1,0 +1,9 @@
+dcvox 1
+name body_hand
+grid_cm 5
+size 3 2 2
+pivot 0 1 1
+slots Ink
+solid 12
+rle
+12*1

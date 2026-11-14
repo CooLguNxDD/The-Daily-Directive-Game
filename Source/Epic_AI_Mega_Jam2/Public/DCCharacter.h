@@ -182,6 +182,7 @@ private:
 	/** R23: the worn outfit parts, rebuilt when the player state's share code changes. */
 	UPROPERTY() TArray<TObjectPtr<class UProceduralMeshComponent>> OutfitMeshes;
 	FString AppliedOutfit;
+	bool bOutfitApplied = false;
 	void TickOutfit();
 	void HideBodyFromOwner(bool bHide);
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UStaticMeshComponent> BeaconMesh;

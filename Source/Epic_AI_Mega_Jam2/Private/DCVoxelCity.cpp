@@ -602,6 +602,20 @@ void ADCVoxelCity::Build(int32 RunSeed, int32 SectorIndex, int32 BuildId, bool b
 	BuiltId = BuildId; // SyncBuild sees this build as started
 }
 
+void ADCVoxelCity::FlushPendingCraft()
+{
+	if (!PendingCraft.IsValid())
+	{
+		return;
+	}
+	// An op that arrives mid-craft (review CP22) waits for the craft here instead of being dropped.
+	const TSharedPtr<FPendingCraft> Done = PendingCraft;
+	Done->Task.Wait();
+	Sector = MoveTemp(*Done->Out);
+	FinishBuild(Done->RunSeed, Done->SectorIndex, Done->BuildId, Done->Start);
+	PendingCraft.Reset();
+}
+
 void ADCVoxelCity::FinishBuild(int32 RunSeed, int32 SectorIndex, int32 BuildId, double Start)
 {
 	const UDCVoxelSettings& V = UDCVoxelSettings::Get();
@@ -621,6 +635,7 @@ void ADCVoxelCity::FinishBuild(int32 RunSeed, int32 SectorIndex, int32 BuildId, 
 
 FDCVoxelOpResult ADCVoxelCity::ApplyOp(const FDCVoxelOp& Op, bool bAnimate)
 {
+	FlushPendingCraft();
 	if (BuiltSector == INDEX_NONE || !OpCtx.Tuning)
 	{
 		SyncBuild(); // build only: following would also apply this very op, and the caller applies it again below
@@ -642,6 +657,7 @@ FDCVoxelOpResult ADCVoxelCity::ApplyOp(const FDCVoxelOp& Op, bool bAnimate)
 
 void ADCVoxelCity::ApplyOpAsync(const FDCVoxelOp& Op, bool bAnimate, TFunction<void(const FDCVoxelOpResult&, uint32)> OnDone)
 {
+	FlushPendingCraft();
 	if (BuiltSector == INDEX_NONE || !OpCtx.Tuning)
 	{
 		SyncBuild();
@@ -1082,7 +1098,7 @@ void ADCVoxelCity::QueueShards(const FDCVoxelOp& Op, const FDCVoxelOpResult& Res
 		const bool bLit = Colors.IsValidIndex(C.Material) && Colors[C.Material].A > 0;
 		const uint8 Rub = !bLit && OpCtx.RubbleOf.IsValidIndex(C.Material) && OpCtx.RubbleOf[C.Material] != 0 ? OpCtx.RubbleOf[C.Material] : C.Material;
 		const FColor Col = Colors.IsValidIndex(Rub) ? Colors[Rub] : FColor(30, 30, 40, 0);
-		const bool bEmber = Rng.RandRange(0, 99) < Tn.ShardEmberPercent;
+		const bool bEmber = Rng.RandRange(0, 99) < Tn.ShardEmberPercent && !bLit; // embers only from dull voxels
 		D.Color = bEmber ? Tn.ShardEmberColor : FLinearColor::FromSRGBColor(FColor(Col.R, Col.G, Col.B, 255));
 		D.Glow = bEmber ? Tn.ShardEmberGlow : Col.A / 255.f * GlowScale * Tn.ShardGlowScale;
 		D.LifeSeconds = Tn.ShardLifeSeconds * Rng.FRandRange(0.7f, 1.2f);
@@ -1843,11 +1859,7 @@ void ADCVoxelCity::Tick(float DeltaSeconds)
 	Super::Tick(DeltaSeconds);
 	if (PendingCraft.IsValid() && PendingCraft->Task.IsCompleted())
 	{
-		// The off-thread craft is done: swap it in and go live (meshing then runs under the sector card).
-		const TSharedPtr<FPendingCraft> Done = PendingCraft;
-		Sector = MoveTemp(*Done->Out);
-		FinishBuild(Done->RunSeed, Done->SectorIndex, Done->BuildId, Done->Start);
-		PendingCraft.Reset();
+		FlushPendingCraft(); // done off-thread: swap it in and go live (meshing then runs under the sector card)
 	}
 	if (bFollowGameState) // the host drives Build and ApplyOp directly first, so following is a no-op there
 	{

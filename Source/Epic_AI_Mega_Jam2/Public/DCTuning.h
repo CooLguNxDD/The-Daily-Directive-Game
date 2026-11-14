@@ -630,6 +630,8 @@ public:
 	/** Photographer builder (R23): the slots in recipe order, the parts per slot, and the palette swatches. */
 	UPROPERTY(EditAnywhere, Config, Category = "Outfit") TArray<FName> OutfitSlots;
 	UPROPERTY(EditAnywhere, Config, Category = "Outfit") TArray<FDCOutfitPart> OutfitParts;
+	/** The voxel body under the outfit (empty = the mannequin stays visible). */
+	UPROPERTY(EditAnywhere, Config, Category = "Outfit") TArray<FDCBodySegment> BodySegments;
 	UPROPERTY(EditAnywhere, Config, Category = "Outfit") TArray<FDCOutfitSwatch> OutfitSwatches;
 	UPROPERTY(EditAnywhere, Config, Category = "Run") TArray<FDCScoopDef> Scoops;
 	/** Full edition front page (R22): satirical headline rows per photo category. */

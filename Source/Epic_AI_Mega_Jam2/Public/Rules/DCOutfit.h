@@ -5,6 +5,23 @@
 #include "CoreMinimal.h"
 #include "DCOutfit.generated.h"
 
+/** The voxel photographer's own body (advisor CP14, review R10/R23): one rigid voxel segment per bone of the
+ *  mannequin skeleton, which stays as the hidden animation driver. With an Aim bone the segment runs from Bone to Aim
+ *  in the reference pose (model X along the bone, stretched to the bone length plus OverlapCm so joints close; model
+ *  Z toward the actor's front), so mirrored right-side bone axes need no data; without one it sits at Offset and
+ *  Rotation in actor space like an outfit part. Colours use the outfit swatches (SwatchMain / SwatchAccent). */
+USTRUCT(BlueprintType)
+struct FDCBodySegment
+{
+	GENERATED_BODY()
+	UPROPERTY(EditAnywhere, Config, Category = "Outfit") FName Bone;
+	UPROPERTY(EditAnywhere, Config, Category = "Outfit") FName Aim;
+	UPROPERTY(EditAnywhere, Config, Category = "Outfit") FName Model;
+	UPROPERTY(EditAnywhere, Config, Category = "Outfit") FVector Offset = FVector::ZeroVector;
+	UPROPERTY(EditAnywhere, Config, Category = "Outfit") FRotator Rotation = FRotator::ZeroRotator;
+	UPROPERTY(EditAnywhere, Config, Category = "Outfit") float OverlapCm = 4.f;
+};
+
 /** One voxel part: a voxel-forge model worn on a mannequin bone (data rows in Config/DefaultGame.ini). */
 USTRUCT(BlueprintType)
 struct FDCOutfitPart

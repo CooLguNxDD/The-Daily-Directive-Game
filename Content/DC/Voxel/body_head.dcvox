@@ -1,0 +1,9 @@
+dcvox 1
+name body_head
+grid_cm 5
+size 5 4 5
+pivot 2 2 0
+slots SwatchMain NeonCyan
+solid 100
+rle
+44*1 1*2 4*1 1*2 4*1 1*2 4*1 1*2 40*1

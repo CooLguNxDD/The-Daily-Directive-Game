@@ -1,0 +1,10 @@
+# Voxel photographer body (advisor CP14): hips, pelvis -> spine_02. Segment convention: x along the bone from the
+# pivot (stretched to the bone length in game), y across the body, z toward the front.
+name body_hips
+grid 5
+size 5 7 4
+slot suit SwatchMain
+slot belt Trim
+box 0 0 0 5 7 4 suit
+box 3 0 0 4 7 4 belt
+pivot 0 3 2

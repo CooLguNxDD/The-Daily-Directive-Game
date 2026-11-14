@@ -1,0 +1,13 @@
+# Voxel photographer body: chest, spine_02 -> neck_01, with dim cyan piping down the front edges (the rim the
+# night needs) and an accent harness band.
+name body_chest
+grid 5
+size 8 7 4
+slot suit SwatchMain
+slot band SwatchAccent
+slot pipe NeonCyan
+box 0 0 0 8 7 4 suit
+box 3 0 3 4 7 4 band
+box 1 0 3 8 1 4 pipe
+box 1 6 3 8 7 4 pipe
+pivot 0 3 2

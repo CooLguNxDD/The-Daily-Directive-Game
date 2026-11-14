@@ -60,4 +60,25 @@ bool FDCOutfitCodeTest::RunTest(const FString&)
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDCVoxelBodyTest, "Epic_AI_Mega_Jam2.Outfit.VoxelBody", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FDCVoxelBodyTest::RunTest(const FString&)
+{
+	// R10/R23 (advisor CP14): the photographer is built from voxel segments on the skeleton: head, torso, both arms
+	// and both legs are shipped rows, and every row's model is a forged voxel model that parses.
+	const UDCTuning& T = UDCTuning::Get();
+	TSet<FName> Bones;
+	for (const FDCBodySegment& S : T.BodySegments)
+	{
+		Bones.Add(S.Bone);
+		TestNotNull(FString::Printf(TEXT("segment %s model %s parses"), *S.Bone.ToString(), *S.Model.ToString()), DCVoxelModels::Parsed(S.Model));
+		const FDCVoxelModel* M = DCVoxelModels::Parsed(S.Model);
+		TestTrue(FString::Printf(TEXT("segment %s starts at its bone (pivot x 0)"), *S.Bone.ToString()), !M || S.Aim.IsNone() || M->Pivot.X == 0);
+	}
+	for (const TCHAR* Need : {TEXT("pelvis"), TEXT("spine_02"), TEXT("head"), TEXT("upperarm_l"), TEXT("upperarm_r"), TEXT("lowerarm_l"), TEXT("lowerarm_r"), TEXT("thigh_l"), TEXT("thigh_r"), TEXT("calf_l"), TEXT("calf_r")})
+	{
+		TestTrue(FString::Printf(TEXT("body covers %s"), Need), Bones.Contains(FName(Need)));
+	}
+	return true;
+}
+
 #endif

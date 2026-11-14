@@ -1,0 +1,7 @@
+# Voxel photographer body: upper or lower arm (x along the bone).
+name body_arm
+grid 5
+size 5 2 2
+slot suit SwatchMain
+box 0 0 0 5 2 2 suit
+pivot 0 1 1
