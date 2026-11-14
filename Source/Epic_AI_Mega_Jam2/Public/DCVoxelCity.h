@@ -14,6 +14,8 @@
 #include "DCDebrisPool.h"
 #include "DCVoxelCity.generated.h"
 
+class UBoxComponent;
+
 class UProceduralMeshComponent;
 class UMaterialInterface;
 
@@ -108,6 +110,12 @@ private:
 	void BreakApart(const TSharedPtr<FFalling>& F, float Age, float U, bool bImpact);
 	/** One fragment (chunk or leaf) becomes a simulating box body carrying its mesh. */
 	class UBoxComponent* MakeBody(const TSharedPtr<FFalling>& F, int32 Index, const FVector& At, const FQuat& Rot, const FVector& V, const FVector& SpinDeg, bool bSolid);
+	/** Pooled body boxes (advisor CP10): prewarmed to PhysicsMaxBodies at build, parked with collision off. */
+	UPROPERTY() TArray<TObjectPtr<UBoxComponent>> BoxAll;
+	UPROPERTY() TArray<TObjectPtr<UBoxComponent>> BoxFree;
+	class UBoxComponent* AcquireBox();
+	void ReleaseBox(UPrimitiveComponent* Body);
+	void PrewarmBodies();
 	/** A chunk that took a hard hit breaks into its leaves (each a body). */
 	void Shatter(const TSharedPtr<FFalling>& F, int32 ChunkIndex);
 	/** Steers, solidifies and shatters the bodies; true when they rest (all still or out of air time). */
