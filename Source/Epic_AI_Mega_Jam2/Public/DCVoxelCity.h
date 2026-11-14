@@ -88,6 +88,14 @@ private:
 	void WaitInFlight();
 	void FinishInFlight();
 	void FinishOp(const FDCVoxelOp& Op, FDCVoxelOpResult& Result, bool bAnimate, float ApplyMs, uint32 Hash, bool bOffThread);
+	/** Two-phase ops, visual half: meshes the op's chunks and pieces while it is held (uploads wait), falls start at
+	 *  StartWorldTime. CommitOp is the rest at the apply time (uploads released, fx, player lift, log). */
+	void PrepareOp(const FDCVoxelOp& Op, FDCVoxelOpResult& Result, bool bAnimate, float StartWorldTime);
+	void CommitOp(const FDCVoxelOp& Op, FDCVoxelOpResult& Result, bool bAnimate, float ApplyMs, uint32 Hash, bool bOffThread);
+	/** Set while a prepared op waits for its apply time: chunk uploads hold so the old mesh shows until the commit. */
+	bool bHoldUploads = false;
+	/** The commit frame uploads every ready cell at once (crater and broken towers in the detonation frame). */
+	bool bCommitBurst = false;
 	struct FQueuedOp
 	{
 		FDCVoxelOp Op;
@@ -96,6 +104,7 @@ private:
 		FDCVoxelOpResult Result;
 		uint32 Hash = 0;
 		float ApplyMs = 0.f;
+		bool bPrepared = false;
 	};
 	TArray<FQueuedOp> QueuedOps;
 	TSharedPtr<FQueuedOp> InFlight;

@@ -264,6 +264,7 @@ void ADCVoxelCity::EndPlay(const EEndPlayReason::Type Reason)
 	{
 		InFlightTask.Wait();
 		InFlight.Reset();
+		bHoldUploads = false; // a dropped held op never blocks later uploads
 	}
 	for (const TSharedPtr<FMeshJob>& Job : Jobs)
 	{
@@ -315,6 +316,7 @@ void ADCVoxelCity::Clear()
 	{
 		InFlightTask.Wait();
 		InFlight.Reset();
+		bHoldUploads = false; // a dropped held op never blocks later uploads
 	}
 	QueuedOps.Reset();
 	SurfaceCache.Reset();
@@ -458,7 +460,16 @@ void ADCVoxelCity::FinishInFlight()
 	TSharedPtr<FQueuedOp> Done = InFlight;
 	InFlight.Reset();
 	SurfaceCache.Reset();
-	FinishOp(Done->Op, Done->Result, Done->bAnimate, Done->ApplyMs, Done->Hash, true);
+	if (Done->bPrepared)
+	{
+		bHoldUploads = false;
+		bCommitBurst = true;
+		CommitOp(Done->Op, Done->Result, Done->bAnimate, Done->ApplyMs, Done->Hash, true);
+	}
+	else
+	{
+		FinishOp(Done->Op, Done->Result, Done->bAnimate, Done->ApplyMs, Done->Hash, true);
+	}
 	if (Done->OnDone)
 	{
 		Done->OnDone(Done->Result, Done->Hash);
@@ -466,6 +477,12 @@ void ADCVoxelCity::FinishInFlight()
 }
 
 void ADCVoxelCity::FinishOp(const FDCVoxelOp& Op, FDCVoxelOpResult& Result, bool bAnimate, float ApplyMs, uint32 Hash, bool bOffThread)
+{
+	PrepareOp(Op, Result, bAnimate, GetWorld()->GetTimeSeconds());
+	CommitOp(Op, Result, bAnimate, ApplyMs, Hash, bOffThread);
+}
+
+void ADCVoxelCity::CommitOp(const FDCVoxelOp& Op, FDCVoxelOpResult& Result, bool bAnimate, float ApplyMs, uint32 Hash, bool bOffThread)
 {
 	for (int32 Lot : Result.FallenLots)
 	{
@@ -484,7 +501,23 @@ void ADCVoxelCity::FinishOp(const FDCVoxelOp& Op, FDCVoxelOpResult& Result, bool
 			}
 		}
 	}
-	const float Now = GetWorld()->GetTimeSeconds();
+	if (bAnimate && Fx && Op.Kind != TEXT("Fell"))
+	{
+		const FDCVoxelCarveDef& Carve = OpCtx.CarveFor(Op.Stratagem);
+		Fx->Emit(TEXT("Crater"), FVector(Op.CenterCm), Carve.CraterRadiusCm);
+		Fx->Burn(TEXT("CraterFire"), FVector(Op.CenterCm), Carve.CraterRadiusCm * 0.6f, OpCtx.Tuning->DecaySeconds * 0.5f);
+	}
+	// commit-late: seconds between the op's apply time (a strike's detonation) and this commit (0 = on time).
+	const ADCGameState* OpState = GetWorld()->GetGameState<ADCGameState>();
+	const float Late = OpState ? OpState->Now() - Op.Time : 0.f;
+	UE_LOG(LogTemp, Display, TEXT("DCVOXEL op seq=%d kind=%s lot=%d carved=%d fallen=%d pieces=%d rubble=%d %.0f ms off-thread=%d commit-late=%.3f hash=%08x%s"), Op.Seq, *Op.Kind.ToString(), Op.Lot,
+		Result.Carved, Result.FallenLots.Num(), Result.Pieces.Num(), Result.Rubble.Num(), ApplyMs, bOffThread ? 1 : 0, Late, Hash,
+		Op.ResultHash == 0 ? TEXT("") : (Op.ResultHash == Hash ? TEXT(" match=host") : TEXT(" MISMATCH=host")));
+}
+
+void ADCVoxelCity::PrepareOp(const FDCVoxelOp& Op, FDCVoxelOpResult& Result, bool bAnimate, float StartWorldTime)
+{
+	const float Now = StartWorldTime;
 
 	// The crater shows now; rubble chunks wait for their piece to land.
 	TSet<FIntVector> Defer;
@@ -520,22 +553,10 @@ void ADCVoxelCity::FinishOp(const FDCVoxelOp& Op, FDCVoxelOpResult& Result, bool
 			DeferList.Reset(); // the first piece to land shows the rubble
 		}
 	}
-	if (bAnimate && Fx && Op.Kind != TEXT("Fell"))
-	{
-		const FDCVoxelCarveDef& Carve = OpCtx.CarveFor(Op.Stratagem);
-		Fx->Emit(TEXT("Crater"), FVector(Op.CenterCm), Carve.CraterRadiusCm);
-		Fx->Burn(TEXT("CraterFire"), FVector(Op.CenterCm), Carve.CraterRadiusCm * 0.6f, OpCtx.Tuning->DecaySeconds * 0.5f);
-	}
 	for (const FIntVector& C : DeferList)
 	{
 		DeferredTerrain.Add({Now, C});
 	}
-	// commit-late: seconds between the op's apply time (a strike's detonation) and this commit (0 = on time).
-	const ADCGameState* OpState = GetWorld()->GetGameState<ADCGameState>();
-	const float Late = OpState ? OpState->Now() - Op.Time : 0.f;
-	UE_LOG(LogTemp, Display, TEXT("DCVOXEL op seq=%d kind=%s lot=%d carved=%d fallen=%d pieces=%d rubble=%d %.0f ms off-thread=%d commit-late=%.3f hash=%08x%s"), Op.Seq, *Op.Kind.ToString(), Op.Lot,
-		Result.Carved, Result.FallenLots.Num(), Result.Pieces.Num(), Result.Rubble.Num(), ApplyMs, bOffThread ? 1 : 0, Late, Hash,
-		Op.ResultHash == 0 ? TEXT("") : (Op.ResultHash == Hash ? TEXT(" match=host") : TEXT(" MISMATCH=host")));
 }
 
 void ADCVoxelCity::StartFall(const FDCVoxelPiece& Piece, float Now, const TArray<FIntVector>& Deferred, const FVector& LandAt)
@@ -638,7 +659,7 @@ void ADCVoxelCity::PollJobs()
 			if (F.Comp && !F.bLanded)
 			{
 				F.Comp->CreateMeshSection(0, Job->Mesh.Positions, Job->Mesh.Indices, Job->Mesh.Normals, Job->Mesh.UVs, Job->Mesh.Colors, {}, false);
-				F.Comp->SetVisibility(true);
+				F.Comp->SetVisibility(GetWorld()->GetTimeSeconds() >= F.Start); // a piece meshed ahead shows at the detonation
 				F.bReady = true;
 			}
 			continue;
@@ -673,7 +694,16 @@ void ADCVoxelCity::UploadCells()
 			Busy.Add(Key(Job->Grid, CellOf(Job->Grid, Job->Chunk)));
 		}
 	}
+	if (bHoldUploads)
+	{
+		return; // a prepared op waits for its apply time: the old mesh stays until the commit
+	}
 	int32 Budget = FMath::Max(1, UDCVoxelSettings::Get().Tuning.UploadsPerFrame);
+	if (bCommitBurst)
+	{
+		bCommitBurst = false;
+		Budget = MAX_int32; // the commit frame shows the whole op at once
+	}
 	TArray<FIntVector4> Ready;
 	for (const FIntVector4& Cell : DirtyCells)
 	{
@@ -756,6 +786,10 @@ void ADCVoxelCity::TickFalling(float Now)
 		FFalling& F = *Falling[i];
 		const float Age = FMath::Max(Now - F.Start, 0.f);
 		const float U = FMath::Clamp(Age / F.Duration, 0.f, 1.f);
+		if (F.Comp && F.bReady && Now >= F.Start && !F.Comp->IsVisible())
+		{
+			F.Comp->SetVisibility(true);
+		}
 		if (F.Comp)
 		{
 			// Drops from the first frame under (exaggerated) gravity, so the top never hangs over the bitten floors,
@@ -880,10 +914,21 @@ void ADCVoxelCity::Tick(float DeltaSeconds)
 	}
 	// Two-phase ops: a planned op is held until its apply time (a strike's detonation), then committed.
 	const ADCGameState* State = GetWorld()->GetGameState<ADCGameState>();
-	if (InFlight.IsValid() && InFlightTask.IsCompleted() && (!State || State->Now() >= InFlight->Op.Time))
+	if (InFlight.IsValid() && InFlightTask.IsCompleted())
 	{
-		FinishInFlight();
-		StartNextOp();
+		const float Lead = State ? InFlight->Op.Time - State->Now() : 0.f;
+		if (Lead > 0.f && !InFlight->bPrepared)
+		{
+			// Planned ahead: mesh it now (the worker is done writing), show it at the apply time.
+			InFlight->bPrepared = true;
+			bHoldUploads = true;
+			PrepareOp(InFlight->Op, InFlight->Result, InFlight->bAnimate, GetWorld()->GetTimeSeconds() + Lead);
+		}
+		if (Lead <= 0.f)
+		{
+			FinishInFlight();
+			StartNextOp();
+		}
 	}
 	PollJobs();
 	UploadCells();
