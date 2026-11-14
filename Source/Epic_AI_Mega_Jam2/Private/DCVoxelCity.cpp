@@ -1069,7 +1069,7 @@ void ADCVoxelCity::TickCityShot()
 		return;
 	}
 	const float Half = Sector.Terrain.OriginCm.X < 0 ? -static_cast<float>(Sector.Terrain.OriginCm.X) : 10000.f;
-	static const FVector Eyes[3] = {FVector(-1.1f, -1.1f, 0.55f), FVector(1.15f, -0.4f, 0.35f), FVector(-1.2f, 0.f, 0.06f)};
+	static const FVector Eyes[3] = {FVector(-0.95f, -0.95f, 0.55f), FVector(0.97f, -0.35f, 0.35f), FVector(-0.97f, 0.f, 0.06f)}; // inside the terrain margin, clear of the skyline ring
 	if (ShotStep > 0)
 	{
 		FScreenshotRequest::RequestScreenshot(Dir / FString::Printf(TEXT("cityshot_sector%d_%d.png"), BuiltSector, ShotStep - 1), false, false);

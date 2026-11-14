@@ -34,6 +34,7 @@ void ADCVoxelFx::BeginPlay()
 		Ism->AddInstances(Hidden, false);
 		Meshes.Add(Ism);
 		Puffs.AddDefaulted();
+		Shown.Add(0);
 	}
 }
 
@@ -151,12 +152,18 @@ void ADCVoxelFx::Tick(float DeltaSeconds)
 			const float Size = FMath::Lerp(K.SizeStart, K.SizeEnd, U) * Pop * Near;
 			Xf.Add(FTransform(K.Stretch > 1.f ? FRotator::ZeroRotator : P.Spin, P.Pos, FVector(Size / 100.f, Size / 100.f, Size * K.Stretch / 100.f)));
 		}
-		const int32 Pool = Meshes[k]->GetInstanceCount();
-		while (Xf.Num() < Pool)
+		const int32 Live = Xf.Num();
+		const int32 Touch = FMath::Min(FMath::Max(Live, Shown[k]), Meshes[k]->GetInstanceCount());
+		if (Touch == 0)
+		{
+			continue; // nothing live now or last frame: the pool stays hidden untouched
+		}
+		while (Xf.Num() < Touch)
 		{
 			Xf.Add(FTransform(FQuat::Identity, FVector(0, 0, -100000.f), FVector::ZeroVector));
 		}
-		Xf.SetNum(Pool);
+		Xf.SetNum(Touch);
 		Meshes[k]->BatchUpdateInstancesTransforms(0, Xf, true, true, true);
+		Shown[k] = Live;
 	}
 }

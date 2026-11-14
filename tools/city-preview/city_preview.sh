@@ -9,9 +9,6 @@ ROOT="$(cd "$(dirname "$0")/../.." && pwd -W 2>/dev/null || pwd)"
 PROJECT="$ROOT/Epic_AI_Mega_Jam2.uproject"
 mkdir -p "$OUT"
 OUTW="$(cd "$OUT" && (pwd -W 2>/dev/null || pwd))"
-"$UE_ROOT/Engine/Binaries/Win64/UnrealEditor-Cmd.exe" "$PROJECT" -run=DCCityPreview -seed="$SEED" -sectors="$SECTORS" -out="$OUTW" -unattended -nullrhi -nosplash > "$OUT/plan.log" 2>&1
-for ((S = 0; S < SECTORS; ++S)); do
-  timeout 300 "$UE_ROOT/Engine/Binaries/Win64/UnrealEditor.exe" "$PROJECT" -game -windowed -resx=1600 -resy=900 \
-    -dcdemo -dcseed="$SEED" -dcstartsector="$S" -dccityshot="$OUTW" -unattended -nosplash -nosound > "$OUT/render_sector$S.log" 2>&1 || true
-done
+# One commandlet writes both: the plans, then (-render) it starts the game per sector for the rendered aerials.
+"$UE_ROOT/Engine/Binaries/Win64/UnrealEditor-Cmd.exe" "$PROJECT" -run=DCCityPreview -seed="$SEED" -sectors="$SECTORS" -out="$OUTW" -render -unattended -nullrhi -nosplash > "$OUT/plan.log" 2>&1
 ls "$OUT"/*.png

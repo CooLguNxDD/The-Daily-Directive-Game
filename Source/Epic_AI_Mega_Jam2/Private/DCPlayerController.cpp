@@ -596,7 +596,8 @@ void ADCPlayerController::TickMenuFlow()
 		{8.3, [&]() { Shot(TEXT("03_after_click.png")); return true; }},
 		{14.0, [&]() { Shot(TEXT("04_run_started_street.png")); return true; }},
 		{19.0, [&]() { Shot(TEXT("05_street_5s_later.png")); return true; }},
-		{20.0, [&]() { FGenericPlatformMisc::RequestExit(false); return true; }},
+		// With -dcdemo the pilot plays on from the street (R14: one timed run from the menu to the front page).
+		{20.0, [&]() { if (!FParse::Param(FCommandLine::Get(), TEXT("dcdemo"))) { FGenericPlatformMisc::RequestExit(false); } return true; }},
 	};
 	if (Steps.IsValidIndex(Step) && T >= Steps[Step].Key && Steps[Step].Value())
 	{
@@ -707,7 +708,7 @@ void ADCPlayerController::UpdateReel()
 void ADCPlayerController::UpdateMenu()
 {
 	const ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>();
-	const bool bWant = GS && GS->Phase == EDCRunPhase::Lobby && !FParse::Param(FCommandLine::Get(), TEXT("dcdemo"));
+	const bool bWant = GS && GS->Phase == EDCRunPhase::Lobby && (!FParse::Param(FCommandLine::Get(), TEXT("dcdemo")) || FCString::Strifind(FCommandLine::Get(), TEXT("dcmenuflow=")));
 	const uint8 Base = MenuModeFor(*this);
 	const uint8 Mode = !bWant ? 255 : (Base == 0 && bBuilderOpen ? 3 : (Base == 0 && bSettingsOpen ? 4 : Base));
 	// The title menu listens for LAN hosts and rebuilds when the list changes.
@@ -773,7 +774,7 @@ void ADCPlayerController::UpdateMenu()
 void ADCPlayerController::UpdateCursor()
 {
 	const ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>();
-	const bool bCursor = GS && WantsCursor(GS->Phase) && !FParse::Param(FCommandLine::Get(), TEXT("dcdemo"));
+	const bool bCursor = GS && WantsCursor(GS->Phase) && (!FParse::Param(FCommandLine::Get(), TEXT("dcdemo")) || (GS->Phase == EDCRunPhase::Lobby && FCString::Strifind(FCommandLine::Get(), TEXT("dcmenuflow="))));
 	if (bCursor == bShowMouseCursor)
 	{
 		return;

@@ -45,7 +45,9 @@ void ADCGameMode::InitGame(const FString& MapName, const FString& Options, FStri
 	RequestedSeed = UGameplayStatics::GetIntOption(Options, TEXT("seed"), 0);
 	FParse::Value(FCommandLine::Get(), TEXT("dcseed="), RequestedSeed);
 	// Solo from the menu (?solo) and the scripted demo start at once; a listen host waits in the lobby.
-	bAutoStart = UGameplayStatics::HasOption(Options, TEXT("solo")) || ADCDemoPilot::IsRequested() || FParse::Param(FCommandLine::Get(), TEXT("dcsolo"))
+	// With -dcmenuflow the pilot starts from the title menu (a real click on SOLO RUN reopens the map with ?solo).
+	const bool bMenuFirst = FCString::Strifind(FCommandLine::Get(), TEXT("dcmenuflow=")) != nullptr;
+	bAutoStart = UGameplayStatics::HasOption(Options, TEXT("solo")) || (ADCDemoPilot::IsRequested() && !bMenuFirst) || FParse::Param(FCommandLine::Get(), TEXT("dcsolo"))
 		|| FParse::Param(FCommandLine::Get(), TEXT("dcsmoke"));
 }
 
@@ -369,8 +371,11 @@ void ADCGameMode::TickSectorPhase(float Now)
 	// Evidence runs (-dcdownhost=S): the host player is knocked down S seconds into the first sector, so a
 	// teammate's revive can be recorded. Never active otherwise.
 	// -dcdownall=S knocks every player down instead (a co-op wipe: the run fails and the reel still plays).
-	static const TPair<const TCHAR*, int32> DownSwitches[] = {{TEXT("dcdownhost="), 1}, {TEXT("dcdownall="), MAX_int32}};
-	for (const TPair<const TCHAR*, int32>& Switch : DownSwitches)
+	// -dcdownclient=S knocks down every player but the host (R21: the dying client's own slow motion).
+	struct FDownSwitch { const TCHAR* Key; int32 First; int32 Last; const TCHAR* Who; };
+	static const FDownSwitch DownSwitches[] = {
+		{TEXT("dcdownhost="), 0, 1, TEXT("host")}, {TEXT("dcdownall="), 0, MAX_int32, TEXT("all")}, {TEXT("dcdownclient="), 1, MAX_int32, TEXT("client")}};
+	for (const FDownSwitch& Switch : DownSwitches)
 	{
 		float DownAt = 0.f;
 		if (bScriptedDownDone || !FParse::Value(FCommandLine::Get(), Switch.Key, DownAt) || Now < SectorStartTime + DownAt)
@@ -379,14 +384,14 @@ void ADCGameMode::TickSectorPhase(float Now)
 		}
 		bScriptedDownDone = true;
 		const TArray<ADCPlayerState*> All = Players();
-		for (int32 i = 0; i < All.Num() && i < Switch.Value; ++i)
+		for (int32 i = Switch.First; i < All.Num() && i < Switch.Last; ++i)
 		{
 			if (ADCCharacter* C = All[i]->GetPawn<ADCCharacter>())
 			{
 				C->HostApplyHurt(10000.f, C->GetActorLocation() + FVector(500, 0, 0));
 			}
 		}
-		UE_LOG(LogTemp, Display, TEXT("DCDOWN scripted %s players knocked down"), Switch.Value == 1 ? TEXT("host") : TEXT("all"));
+		UE_LOG(LogTemp, Display, TEXT("DCDOWN scripted %s players knocked down"), Switch.Who);
 	}
 	CheckWipe();
 	if (GetGameState<ADCGameState>()->Phase != EDCRunPhase::Sector)
