@@ -1017,6 +1017,7 @@ void ADCVoxelCity::PrepareOp(const FDCVoxelOp& Op, FDCVoxelOpResult& Result, boo
 		}
 	};
 
+	const double P0 = FPlatformTime::Seconds();
 	// The crater shows now; rubble chunks wait for their piece to land.
 	TSet<FIntVector> Defer;
 	if (bAnimate && Result.Pieces.Num() > 0)
@@ -1035,6 +1036,7 @@ void ADCVoxelCity::PrepareOp(const FDCVoxelOp& Op, FDCVoxelOpResult& Result, boo
 		QueueDirty(0, Crater);
 	}
 	QueueAllDirty(nullptr);
+	const double P1 = FPlatformTime::Seconds();
 	TArray<FIntVector> DeferList = Defer.Array();
 	// R26: the N biggest pieces of this op break into physics bodies at impact (index order breaks ties).
 	TArray<int32> BySize;
@@ -1053,13 +1055,17 @@ void ADCVoxelCity::PrepareOp(const FDCVoxelOp& Op, FDCVoxelOpResult& Result, boo
 	{
 		PendingPieces.FindOrAdd(Op.Seq).Add(P.Key, MoveTemp(P.Value));
 	}
+	const double P2 = FPlatformTime::Seconds();
 	if (bAnimate)
 	{
 		QueueShards(Op, Result, Now);
 	}
+	const double P3 = FPlatformTime::Seconds();
 	int32 PieceIndex = -1;
-	for (const FDCVoxelPiece& Piece : Result.Pieces)
+	int32 PieceCells = 0;
+	for (FDCVoxelPiece& Piece : Result.Pieces)
 	{
+		PieceCells += Piece.Cells.Num(); // counted before StartFall moves the cells into its mesh tasks
 		++PieceIndex;
 		if (bAnimate)
 		{
@@ -1078,9 +1084,15 @@ void ADCVoxelCity::PrepareOp(const FDCVoxelOp& Op, FDCVoxelOpResult& Result, boo
 	{
 		DeferredTerrain.Add({Now, C});
 	}
+	const double P4 = FPlatformTime::Seconds();
+	if ((P4 - P0) * 1000.0 > UDCVoxelSettings::Get().Tuning.HitchLogMs)
+	{
+		UE_LOG(LogTemp, Display, TEXT("DCPREP op=%d queue=%.1f pend=%.1f shards=%.1f falls=%.1f ms pieces=%d cells=%d jobs=%d"), Op.Seq, (P1 - P0) * 1000.0, (P2 - P1) * 1000.0,
+			(P3 - P2) * 1000.0, (P4 - P3) * 1000.0, Result.Pieces.Num(), PieceCells, Jobs.Num());
+	}
 }
 
-void ADCVoxelCity::StartFall(const FDCVoxelPiece& Piece, float Now, const TArray<FIntVector>& Deferred, const FVector& LandAt, bool bPhysics, int32 OpSeq, int32 PieceIndex)
+void ADCVoxelCity::StartFall(FDCVoxelPiece& Piece, float Now, const TArray<FIntVector>& Deferred, const FVector& LandAt, bool bPhysics, int32 OpSeq, int32 PieceIndex)
 {
 	const FDCVoxelTuning& Tn = UDCVoxelSettings::Get().Tuning;
 	const FDCVoxelGrid& Grid = Sector.Towers[Piece.Lot].Grid;
@@ -1154,12 +1166,16 @@ void ADCVoxelCity::StartFall(const FDCVoxelPiece& Piece, float Now, const TArray
 	if (!Pend)
 	{
 		F->PendingMeshes = 1;
-		LaunchJob(Piece.Cells, Piece.Materials, INDEX_NONE);
+		LaunchJob(MoveTemp(Piece.Cells), MoveTemp(Piece.Materials), INDEX_NONE); // nothing reads them after the fall starts
 	}
 	else
 	{
 		BodiesReserved += NumBodies;
 		const FVector PivotWorld = Grid.ToWorld(Piece.Pivot);
+		// One copy of the piece's cells shared by every fragment's mesh task; each task gathers its own cells (the
+		// game thread only takes integer bounds: R13 collapse frames, advisor CP26).
+		const TSharedRef<const TArray<FIntVector>> AllCells = MakeShared<const TArray<FIntVector>>(MoveTemp(Piece.Cells));
+		const TSharedRef<const TArray<uint8>> AllMats = MakeShared<const TArray<uint8>>(MoveTemp(Piece.Materials));
 		for (int32 f = 0; f < Pend->FragParent.Num(); ++f)
 		{
 			const TArray<int32>& Idx = Pend->FragCells[f];
@@ -1168,10 +1184,11 @@ void ADCVoxelCity::StartFall(const FDCVoxelPiece& Piece, float Now, const TArray
 			Fr.Parent = Parent;
 			Fr.Comp = AcquirePiece(Grid.VoxelCm); // a chunk's stays empty: its leaves ride on it
 			Fr.Comp->AttachToComponent(Parent == INDEX_NONE ? F->Comp.Get() : F->Frags[Parent].Comp.Get(), FAttachmentTransformRules::SnapToTargetNotIncludingScale);
-			for (int32 i : Idx)
+			if (Idx.Num() > 0 && Pend->FragLo.IsValidIndex(f) && Pend->FragHi.IsValidIndex(f))
 			{
-				Fr.Local += Grid.ToWorld(Piece.Cells[i]) - PivotWorld;
-				Fr.Local += Grid.ToWorld(Piece.Cells[i] + FIntVector(1)) - PivotWorld;
+				const FIntVector& Lo = Pend->FragLo[f]; // bounds derived on the worker (DeriveCosmetics)
+				const FIntVector& Hi = Pend->FragHi[f];
+				Fr.Local = FBox(Grid.ToWorld(Lo) - PivotWorld, Grid.ToWorld(Hi + FIntVector(1)) - PivotWorld); // ToWorld is affine
 			}
 			Fr.Mass = FMath::Max(static_cast<float>(Idx.Num()) * Vcm * Vcm * Vcm * Tn.PhysicsDensity, 5.f);
 			if (Parent == INDEX_NONE)
@@ -1180,15 +1197,27 @@ void ADCVoxelCity::StartFall(const FDCVoxelPiece& Piece, float Now, const TArray
 			}
 			F->Frags[Parent].Children.Add(f);
 			Fr.Comp->SetVisibility(false);
-			TArray<FIntVector> FragCells;
-			TArray<uint8> FragMats;
-			for (int32 i : Idx)
-			{
-				FragCells.Add(Piece.Cells[i]);
-				FragMats.Add(Piece.Materials.IsValidIndex(i) ? Piece.Materials[i] : 1);
-			}
 			++F->PendingMeshes;
-			LaunchJob(MoveTemp(FragCells), MoveTemp(FragMats), f);
+			TSharedPtr<FMeshJob> Job = MakeShared<FMeshJob>();
+			Job->Grid = INDEX_NONE;
+			Job->BuildId = BuiltId;
+			Job->Piece = F;
+			Job->Frag = f;
+			FDCVoxelMeshData* Out = &Job->Mesh;
+			Job->Task = UE::Tasks::Launch(TEXT("DCVoxelPieceMesh"), [AllCells, AllMats, Idx, Pivot, PieceColors = Colors, Vcm, Out]()
+			{
+				TArray<FIntVector> FragCells;
+				TArray<uint8> FragMats;
+				FragCells.Reserve(Idx.Num());
+				FragMats.Reserve(Idx.Num());
+				for (int32 i : Idx)
+				{
+					FragCells.Add((*AllCells)[i]);
+					FragMats.Add(AllMats->IsValidIndex(i) ? (*AllMats)[i] : 1);
+				}
+				DCVoxelMesher::MeshCells(FragCells, FragMats, Pivot, PieceColors, Vcm, *Out);
+			});
+			Jobs.Add(Job);
 		}
 	}
 	DCAudio::PlayAt(this, TEXT("Creak"), F->Pivot, 1.f);

@@ -101,7 +101,7 @@ private:
 	void PollJobs();
 	void UploadCells();
 	void TickFalling(float Now);
-	void StartFall(const FDCVoxelPiece& Piece, float Now, const TArray<FIntVector>& DeferredTerrain, const FVector& LandAt, bool bPhysics = false, int32 OpSeq = 0, int32 PieceIndex = INDEX_NONE);
+	void StartFall(FDCVoxelPiece& Piece, float Now, const TArray<FIntVector>& DeferredTerrain, const FVector& LandAt, bool bPhysics = false, int32 OpSeq = 0, int32 PieceIndex = INDEX_NONE);
 	/** R26 host-owned rubble: physics pieces kept per op Seq and piece index until their Rest op lands. */
 	TMap<int32, TMap<int32, FDCPendingPiece>> PendingPieces;
 	FDCPendingPiece PendingFor(const FDCVoxelOp& Op) const;
