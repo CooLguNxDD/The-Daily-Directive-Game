@@ -1557,6 +1557,7 @@ void ADCVoxelCity::UploadCells()
 
 bool ADCVoxelCity::UploadCell(const FIntVector4& Cell)
 {
+	const double T0 = FPlatformTime::Seconds(); // R13: slow cell uploads are logged with their grid and size (DCUPLOAD)
 	DirtyCells.Remove(Cell);
 	FDCVoxelMeshData Merged;
 	const int32 G = Cell.X;
@@ -1597,7 +1598,14 @@ bool ADCVoxelCity::UploadCell(const FIntVector4& Cell)
 		Mesh->SetRelativeLocation(GridAt(G).ToWorld(FIntVector::ZeroValue));
 		Mesh->ComponentTags.Add(G == 0 ? FName(TEXT("Terrain")) : FName(*FString::Printf(TEXT("Lot%d"), G - 1)));
 	}
+	const double T1 = FPlatformTime::Seconds();
 	Mesh->CreateMeshSection(0, Merged.Positions, Merged.Indices, Merged.Normals, Merged.UVs, Merged.Colors, {}, true);
+	const double T2 = FPlatformTime::Seconds();
+	if ((T2 - T0) * 1000.0 >= UDCVoxelSettings::Get().Tuning.HitchLogMs)
+	{
+		UE_LOG(LogTemp, Display, TEXT("DCUPLOAD slow grid=%d cm=%d cell=%s verts=%d tris=%d merge=%.1f section=%.1f ms loading=%d"), G, GridAt(G).VoxelCm,
+			*FIntVector(Cell.Y, Cell.Z, Cell.W).ToString(), Merged.Positions.Num(), Merged.Indices.Num() / 3, (T1 - T0) * 1000.0, (T2 - T1) * 1000.0, bLoading ? 1 : 0);
+	}
 	return true;
 }
 
