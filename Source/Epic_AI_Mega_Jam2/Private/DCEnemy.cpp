@@ -591,6 +591,12 @@ void ADCEnemy::BeginPlay()
 		SetNetUpdateFrequency(Def->NetHz);
 	}
 	GaitLast = GetActorLocation();
+	const FDCFactionDef* F = DCFactionRules::Find(UDCTuning::Get().Factions, GetFaction());
+	const ADCVoxelCity* City = ADCVoxelCity::Get(this);
+	if (ADCVoxelFx* Fx = F && !F->SpawnFx.IsNone() && City ? City->GetFx() : nullptr)
+	{
+		Fx->Emit(F->SpawnFx, FVector(GetActorLocation().X, GetActorLocation().Y, City->SurfaceZCm(GetActorLocation())), 150.f);
+	}
 }
 
 void ADCEnemy::EndPlay(const EEndPlayReason::Type Reason)

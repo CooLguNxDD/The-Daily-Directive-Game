@@ -26,6 +26,18 @@ Unreal Engine 5.9 jam game. Engine: `L:/unreal/UE_5.9` (registered source build,
   frames of each strike's collapse), `-dcmedic` / `-dccostar` (co-op client helper), `-dcperf` (per-second DCPERF lines),
   `-dcsectorseconds=N`, `-dccityshot=<dir>`. From Git Bash, `export MSYS_NO_PATHCONV=1` before passing `/Game/...` maps.
 
+## Factions, objectives, ID card (final run)
+- Factions (R3): `+Factions`, `FactionMix`, unit rows on `Behaviour="Infantry"` in `Config/DefaultGame.ini`; pure rules
+  `Rules/DCFactionRules` (mix roll, hostility, territory); host director `DCFactionDirector.cpp` (squads, allies,
+  faction strikes via `CallStrike`, territory); live unit list `UDCUnits`; behaviour/goal/formation registries in
+  `DCEnemy.cpp`. Faction strikes are `+Stratagems` rows with `bStartsUnlocked=False` and `+Carves` detail rows.
+- Objectives (R4): `+Objectives`, `ObjectiveLook`; pure stage table `Rules/DCObjectiveRules`; replicated state and
+  visuals `ADCObjective`; host logic `DCObjectiveDirector.cpp`.
+- ID card (R5): `DCIdCard.cpp` (`ADCOutfitPreview::ExportCard`), `Card=` data, PNGs in `Saved/IdCards/`.
+- Destruction budget: `ADCVoxelCity::BodyLoad`; crumbs `UDCCrumbField` (`Crumb*` in `Tuning=`).
+- Evidence flags: `-dcmain=<Faction>`, `-dcobjective=<Id>`, `-dcobjrun` (pilot runs the objective), `-dcenemytrace`;
+  look numbers `tools/evidence/look_metrics.py`.
+
 ## Editor MCP
 - Epic's MCP server (`ModelContextProtocol` + `AllToolsets` in the `.uproject`) serves `unreal-mcp` on `http://127.0.0.1:23444/mcp` (auto-start and port in the per-user `Saved/Config/WindowsEditor/EditorPerProjectUserSettings.ini`; `.mcp.json` and the other client configs point there).
 - Claude Code: the `unreal-mcp` skill of the `unreal-engine-skills-for-claude-code` plugin. Start a session with `cats game-dev` from the monorepo root.

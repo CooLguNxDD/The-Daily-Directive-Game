@@ -6,6 +6,20 @@
 #include "DCVoxelTypes.generated.h"
 
 /** One palette entry. Voxel material id = index in the palette + 1 (0 is air). */
+/** R25 prop light pools (advisor a-5): a prop model that casts light on the wet street when the camera is near: lamps
+ *  warm, signs, kiosks and billboards magenta or cyan. The nearest LampLights spots of any row get a pooled shadowless
+ *  point light; a blast that reaches one puts it out. */
+USTRUCT(BlueprintType)
+struct FDCPropLightDef
+{
+	GENERATED_BODY()
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") FName Model;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") FLinearColor Color = FLinearColor(1.f, 0.62f, 0.3f);
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float Candela = 600.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float RadiusCm = 900.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float HeightCm = 250.f;
+};
+
 USTRUCT(BlueprintType)
 struct FDCVoxelMaterial
 {
@@ -112,6 +126,11 @@ struct FDCVoxelCarveDef
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 CraterRadiusCm = 300;
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 BiteFloors = 2;
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 BitePercent = 70;
+	/** Physics detail of this strike's collapse (advisor a-3 step 2): pieces and fragments per piece; -1 = the Tuning
+	 *  values. It travels with the op (the stratagem id), so every machine builds the same fragment tree. Faction
+	 *  strikes use less so the crew's own shots keep the body budget. */
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 PhysicsPieces = -1;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 PhysicsFragments = -1;
 };
 
 /** Engine tuning (R1). Integer where the result must match across machines. */

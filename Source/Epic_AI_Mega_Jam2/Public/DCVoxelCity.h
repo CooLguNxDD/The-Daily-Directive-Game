@@ -294,7 +294,13 @@ private:
 	UPROPERTY() TArray<TObjectPtr<class UPointLightComponent>> FireLightPool;
 	TArray<float> FireLightStart;
 	/** Street lamp spots (from the plan's props) and their pooled lights; a spot is cleared when a blast reaches it. */
-	TArray<FVector> LampSpots;
+	/** Lit prop spots (R25): where, and which PropLights row (INDEX_NONE = the legacy lamp row). */
+	struct FLightSpot
+	{
+		FVector At = FVector::ZeroVector;
+		int32 Row = INDEX_NONE;
+	};
+	TArray<FLightSpot> LampSpots;
 	UPROPERTY() TArray<TObjectPtr<class UPointLightComponent>> LampPool;
 	float NextLampPick = 0.f;
 	void TickLampLights();
