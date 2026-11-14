@@ -618,6 +618,13 @@ void ADCDemoPilot::TickDefend()
 		}
 		AimAt(Nearest->GetActorLocation());
 	}
+	// A swarmer inside 4 m: backpedal while firing (a player kites the bite; standing still let packs down the pilot).
+	const bool bBack = Nearest && Best < 400.f && !Me->IsCameraRaised();
+	if (bBack != bRetreating)
+	{
+		bRetreating = bBack;
+		(bRetreating ? Press(TEXT("Move"), FVector(0, -1, 0)) : Release(TEXT("Move")));
+	}
 	if ((Nearest != nullptr) != bDefendFiring)
 	{
 		bDefendFiring = Nearest != nullptr;

@@ -79,6 +79,8 @@ private:
 	bool bSpotlitFramed = false;
 	TSet<TObjectKey<class ADCSupplyPod>> FramedPods;
 	bool bDefendFiring = false;
+	/** Backpedalling away from a swarmer at arm's length (only this pilot's own Move press is released). */
+	bool bRetreating = false;
 	void TickDefend();
 	void TickMedic();
 	bool bMedic = false;
