@@ -48,8 +48,10 @@ public:
 	int32 GetPostQuality() const { return PostQuality; }
 	const FDCWeatherState& GetWeather() const { return Weather; }
 
-private:
+	/** Applies the post preset (saved quality, or -dcpost=): scalability console variables and screen percentage. */
 	void ApplyPreset();
+
+private:
 	void UpdateWeather(float DeltaSeconds);
 	void UpdatePostWeights();
 	void BuildStreets();

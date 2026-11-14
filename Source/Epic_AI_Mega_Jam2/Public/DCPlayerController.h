@@ -62,6 +62,7 @@ public:
 	bool bAlbumSaved = false;
 	bool bOutfitSent = false;
 	bool bBuilderOpen = false;
+	bool bSettingsOpen = false;
 	FDCOutfit BuilderOutfit;
 	int32 BuilderSlot = 0;
 	FString BuilderMessage;
@@ -133,6 +134,11 @@ public:
 	void SendOutfit();
 
 	// Photographer builder (R23), a title-menu screen with a live turntable; saves through the save manager (R24).
+	/** Settings screen (R24): rows by id, each a handler that steps its value, applies it and saves. */
+	void OpenSettings() { bSettingsOpen = true; MenuMode = 254; }
+	void CloseSettings() { bSettingsOpen = false; MenuMode = 254; }
+	void SettingsStep(FName Row, int32 Step);
+	FString SettingsValue(FName Row) const;
 	void OpenBuilder();
 	void CloseBuilder();
 	void BuilderCycle(int32 SlotIndex, int32 Step);

@@ -1,4 +1,5 @@
 #include "DCEnvironment.h"
+#include "DCSave.h"
 
 #include "DCVoxelCity.h"
 #include "DCVoxelFx.h"
@@ -177,6 +178,14 @@ void ADCEnvironment::ApplyPreset()
 {
 	const UDCTuning& T = UDCTuning::Get();
 	FString Wanted = T.PostPreset.ToString();
+	if (const UDCSaveSubsystem* Save = UDCSaveSubsystem::Get(this))
+	{
+		// The player's saved quality (R24) picks the preset with that quality level.
+		if (const FDCPostPreset* Saved = T.PostPresets.FindByPredicate([Save](const FDCPostPreset& P) { return P.Quality == Save->Settings.Quality; }))
+		{
+			Wanted = Saved->Id.ToString();
+		}
+	}
 	FParse::Value(FCommandLine::Get(), TEXT("dcpost="), Wanted);
 	const FDCPostPreset* Preset = T.PostPresets.FindByPredicate([&Wanted](const FDCPostPreset& P) { return P.Id.ToString() == Wanted; });
 	if (!Preset)

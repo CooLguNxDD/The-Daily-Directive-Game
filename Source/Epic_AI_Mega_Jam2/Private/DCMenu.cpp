@@ -127,6 +127,7 @@ namespace DCMenu
 			Column->AddSlot().AutoHeight().HAlign(HAlign_Center)[Button(TEXT("SOLO RUN"), Click(&ADCPlayerController::MenuSolo), Gold, &GSoloButton)];
 			Column->AddSlot().AutoHeight().HAlign(HAlign_Center)[Button(TEXT("HOST CO-OP (1-4)"), Click(&ADCPlayerController::MenuHost))];
 			Column->AddSlot().AutoHeight().HAlign(HAlign_Center)[Button(TEXT("YOUR PHOTOGRAPHER"), Click(&ADCPlayerController::OpenBuilder))];
+			Column->AddSlot().AutoHeight().HAlign(HAlign_Center)[Button(TEXT("SETTINGS"), Click(&ADCPlayerController::OpenSettings))];
 			Column->AddSlot().AutoHeight().HAlign(HAlign_Center).Padding(0, 14, 0, 0)[Label(TEXT("JOIN A FRIEND: HOST IP"), 14, Ink)];
 			Column->AddSlot().AutoHeight().HAlign(HAlign_Center)[SNew(SBox).WidthOverride(420.f).HeightOverride(44.f)[Address]];
 			Column->AddSlot().AutoHeight().HAlign(HAlign_Center)[Button(TEXT("JOIN"), [Weak, Address]()
@@ -222,6 +223,23 @@ namespace DCMenu
 				Column->AddSlot().AutoHeight().HAlign(HAlign_Center).Padding(0, 6)[Label(PC->GetBuilderMessage(), 14, Ink)];
 			}
 			Column->AddSlot().AutoHeight().HAlign(HAlign_Center).Padding(0, 10, 0, 0)[Button(TEXT("SAVE AND BACK"), Click(&ADCPlayerController::CloseBuilder), Ink)];
+		},
+		[&]()
+		{
+			// Settings (R24): every change is saved at once (Saved/DCSave/settings.json).
+			Column->AddSlot().AutoHeight().HAlign(HAlign_Center).Padding(0, 0, 0, 10)[Label(TEXT("SETTINGS"), 30, Ink)];
+			for (const TPair<FName, const TCHAR*>& R : {TPair<FName, const TCHAR*>(TEXT("Volume"), TEXT("VOLUME")), TPair<FName, const TCHAR*>(TEXT("Mouse"), TEXT("MOUSE")),
+				TPair<FName, const TCHAR*>(TEXT("Quality"), TEXT("QUALITY")), TPair<FName, const TCHAR*>(TEXT("Window"), TEXT("WINDOW"))})
+			{
+				const FName Id = R.Key;
+				auto Stepper = [Weak, Id](int32 D) { return [Weak, Id, D]() { if (ADCPlayerController* P = Weak.Get()) { P->SettingsStep(Id, D); } }; };
+				Column->AddSlot().AutoHeight().HAlign(HAlign_Center)
+					[SNew(SHorizontalBox)
+						+ SHorizontalBox::Slot().AutoWidth()[SNew(SBox).WidthOverride(70.f).HeightOverride(52.f)[Button(TEXT("<"), Stepper(-1))]]
+						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[SNew(SBox).WidthOverride(300.f)[Label(FString::Printf(TEXT("%s: %s"), R.Value, *PC->SettingsValue(Id)), 20, Ink)]]
+						+ SHorizontalBox::Slot().AutoWidth()[SNew(SBox).WidthOverride(70.f).HeightOverride(52.f)[Button(TEXT(">"), Stepper(1))]]];
+			}
+			Column->AddSlot().AutoHeight().HAlign(HAlign_Center).Padding(0, 10, 0, 0)[Button(TEXT("BACK"), Click(&ADCPlayerController::CloseSettings), Ink)];
 		}};
 		Modes[FMath::Min<int32>(Mode, UE_ARRAY_COUNT(Modes) - 1)]();
 		Column->AddSlot().AutoHeight().HAlign(HAlign_Center).Padding(0, 20, 0, 0)

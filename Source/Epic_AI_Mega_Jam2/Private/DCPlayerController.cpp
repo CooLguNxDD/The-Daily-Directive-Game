@@ -1,4 +1,6 @@
 #include "DCPlayerController.h"
+#include "DCEnvironment.h"
+#include "GameFramework/GameUserSettings.h"
 #include "HAL/PlatformApplicationMisc.h"
 #include "DCOutfitBuild.h"
 #include "DCOutfitPreview.h"
@@ -166,6 +168,61 @@ void ADCPlayerController::ServerSetOutfit_Implementation(const FString& Code)
 		PS->SetOutfitCode(DCOutfit::Encode(Outfit));
 		UE_LOG(LogTemp, Display, TEXT("DCOUTFIT %s wears %s"), *PS->GetPlayerName(), *PS->OutfitCode);
 	}
+}
+
+void ADCPlayerController::SettingsStep(FName Row, int32 Step)
+{
+	UDCSaveSubsystem* Save = UDCSaveSubsystem::Get(this);
+	if (!Save)
+	{
+		return;
+	}
+	FDCSettingsSave& S = Save->Settings;
+	using FStep = TFunction<void(ADCPlayerController&, FDCSettingsSave&, int32)>;
+	static const TMap<FName, FStep> Steps = {
+		{TEXT("Volume"), [](ADCPlayerController&, FDCSettingsSave& S, int32 D) { S.MasterVolume = FMath::Clamp(FMath::RoundToFloat((S.MasterVolume + D * 0.1f) * 10.f) / 10.f, 0.f, 1.f); }},
+		{TEXT("Mouse"), [](ADCPlayerController& P, FDCSettingsSave&, int32 D) { P.SetSensitivity(P.GetSensitivity() * (D > 0 ? 1.15f : 1.f / 1.15f)); }},
+		{TEXT("Quality"), [](ADCPlayerController&, FDCSettingsSave& S, int32 D) { S.Quality = FMath::Clamp(S.Quality + D, 0, 2); }},
+		{TEXT("Window"), [](ADCPlayerController&, FDCSettingsSave& S, int32) { S.bFullscreen = !S.bFullscreen; }},
+	};
+	if (const FStep* Fn = Steps.Find(Row))
+	{
+		(*Fn)(*this, S, Step);
+	}
+	Save->SaveSettings();
+	if (Row == TEXT("Quality"))
+	{
+		if (ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>(); GS && GS->GetEnvironment())
+		{
+			GS->GetEnvironment()->ApplyPreset();
+		}
+	}
+	if (Row == TEXT("Window") && GEngine && GEngine->GetGameUserSettings())
+	{
+		GEngine->GetGameUserSettings()->SetFullscreenMode(S.bFullscreen ? EWindowMode::WindowedFullscreen : EWindowMode::Windowed);
+		GEngine->GetGameUserSettings()->ApplySettings(false);
+	}
+	DCAudio::Play2D(this, TEXT("UIClick"));
+	MenuMode = 254;
+}
+
+FString ADCPlayerController::SettingsValue(FName Row) const
+{
+	const UDCSaveSubsystem* Save = UDCSaveSubsystem::Get(this);
+	if (!Save)
+	{
+		return FString();
+	}
+	const FDCSettingsSave& S = Save->Settings;
+	static const TCHAR* QualityNames[] = {TEXT("LOW"), TEXT("MEDIUM"), TEXT("HIGH")};
+	const TMap<FName, FString> Values = {
+		{TEXT("Volume"), FString::Printf(TEXT("%d%%"), FMath::RoundToInt32(S.MasterVolume * 100.f))},
+		{TEXT("Mouse"), FString::Printf(TEXT("%.2f"), GetSensitivity())},
+		{TEXT("Quality"), QualityNames[FMath::Clamp(S.Quality, 0, 2)]},
+		{TEXT("Window"), S.bFullscreen ? FString(TEXT("FULLSCREEN")) : FString(TEXT("WINDOWED"))},
+	};
+	const FString* V = Values.Find(Row);
+	return V ? *V : FString();
 }
 
 void ADCPlayerController::OpenBuilder()
@@ -367,14 +424,26 @@ void ADCPlayerController::TickBuilderFlow()
 	// -dcbuilderflow=<dir>: open the photographer builder, step parts and swatches, load a share code; a frame each.
 	static FString Dir;
 	static const bool bFlow = FParse::Value(FCommandLine::Get(), TEXT("dcbuilderflow="), Dir);
-	if (!bFlow)
+	static FString SettingsDir;
+	static const bool bSettingsFlow = FParse::Value(FCommandLine::Get(), TEXT("dcsettingsflow="), SettingsDir);
+	if (!bFlow && !bSettingsFlow)
 	{
 		return;
 	}
 	static int32 Step = 0;
 	const double T = FPlatformTime::Seconds() - GStartTime;
-	auto Shot = [](const FString& Name) { FScreenshotRequest::RequestScreenshot(Dir / Name, true, false); };
-	const TArray<TPair<double, TFunction<void()>>> Steps = {
+	auto Shot = [](const FString& Name) { FScreenshotRequest::RequestScreenshot((bSettingsFlow ? SettingsDir : Dir) / Name, true, false); };
+	// -dcsettingsflow=<dir>: open settings, turn the volume down and the quality to medium, frame, back.
+	const TArray<TPair<double, TFunction<void()>>> SettingsSteps = {
+		{5.0, [this]() { OpenSettings(); }},
+		{6.5, [&]() { Shot(TEXT("01_settings_open.png")); }},
+		{7.0, [this]() { SettingsStep(TEXT("Volume"), -1); SettingsStep(TEXT("Volume"), -1); SettingsStep(TEXT("Quality"), -1); SettingsStep(TEXT("Mouse"), 1); }},
+		{8.5, [&]() { Shot(TEXT("02_settings_changed_and_saved.png")); }},
+		{9.0, [this]() { CloseSettings(); }},
+		{10.0, [&]() { Shot(TEXT("03_back_to_menu.png")); }},
+		{10.5, []() { FGenericPlatformMisc::RequestExit(false); }},
+	};
+	const TArray<TPair<double, TFunction<void()>>> BuilderSteps = {
 		{5.0, [this]() { OpenBuilder(); }},
 		{7.0, [&]() { Shot(TEXT("01_builder_default.png")); }},
 		{8.5, [&]() { Shot(TEXT("02_builder_turned.png")); }},
@@ -388,6 +457,7 @@ void ADCPlayerController::TickBuilderFlow()
 		{15.8, [&]() { Shot(TEXT("06_builder_bad_code_rejected.png")); }},
 		{16.5, []() { FGenericPlatformMisc::RequestExit(false); }},
 	};
+	const TArray<TPair<double, TFunction<void()>>>& Steps = bSettingsFlow ? SettingsSteps : BuilderSteps;
 	if (Steps.IsValidIndex(Step) && T >= Steps[Step].Key)
 	{
 		Steps[Step].Value();
@@ -559,7 +629,8 @@ void ADCPlayerController::UpdateMenu()
 {
 	const ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>();
 	const bool bWant = GS && GS->Phase == EDCRunPhase::Lobby && !FParse::Param(FCommandLine::Get(), TEXT("dcdemo"));
-	const uint8 Mode = bWant ? (bBuilderOpen && MenuModeFor(*this) == 0 ? 3 : MenuModeFor(*this)) : 255;
+	const uint8 Base = MenuModeFor(*this);
+	const uint8 Mode = !bWant ? 255 : (Base == 0 && bBuilderOpen ? 3 : (Base == 0 && bSettingsOpen ? 4 : Base));
 	// The title menu listens for LAN hosts and rebuilds when the list changes.
 	UDCLanBeacon* Beacon = GetGameInstance()->GetSubsystem<UDCLanBeacon>();
 	TArray<FDCLanHost> Hosts = Mode == 0 && Beacon ? Beacon->GetHosts() : TArray<FDCLanHost>();
