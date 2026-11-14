@@ -78,6 +78,10 @@ struct ADCVoxelCity::FFalling
 	float StillFor = 0.f;
 	uint32 Seed = 0;
 	TArray<FIntVector> RevealOnRest;
+	/** Which op and piece this is (the host's Rest op names them); set when the Rest op lands here. */
+	int32 OpSeq = 0;
+	int32 PieceIndex = INDEX_NONE;
+	bool bRestNow = false;
 };
 
 namespace
@@ -490,6 +494,7 @@ void ADCVoxelCity::Clear()
 	Bodies.Reset();
 	BodiesReserved = 0;
 	PendingShards.Reset();
+	PendingPieces.Reset();
 	for (const FDCFading& Fd : Fading)
 	{
 		if (Fd.Mesh.IsValid())
@@ -574,7 +579,7 @@ FDCVoxelOpResult ADCVoxelCity::ApplyOp(const FDCVoxelOp& Op, bool bAnimate)
 	}
 	WaitInFlight(); // the synchronous path (reel re-staging) never overlaps a queued op
 	const double Start = FPlatformTime::Seconds();
-	FDCVoxelOpResult Result = DCVoxelOps::Apply(Sector, Op, OpCtx);
+	FDCVoxelOpResult Result = Op.Kind == TEXT("Rest") ? DCVoxelOps::ApplyRest(Sector, Op, PendingFor(Op), OpCtx) : DCVoxelOps::Apply(Sector, Op, OpCtx);
 	AppliedSeq = FMath::Max(AppliedSeq, Op.Seq);
 	const uint32 Hash = Sector.Hash();
 	FinishOp(Op, Result, bAnimate, static_cast<float>((FPlatformTime::Seconds() - Start) * 1000.0), Hash, false);
@@ -633,12 +638,69 @@ void ADCVoxelCity::StartNextOp()
 	TSharedPtr<FQueuedOp> Job = InFlight;
 	FDCVoxelSector* Target = &Sector;
 	const FDCVoxelOpContext* Ctx = &OpCtx;
-	InFlightTask = UE::Tasks::Launch(TEXT("DCVoxelOp"), [Job, Target, Ctx]()
+	FDCPendingPiece Pend = PendingFor(Job->Op);
+	InFlightTask = UE::Tasks::Launch(TEXT("DCVoxelOp"), [Job, Target, Ctx, Pend = MoveTemp(Pend)]()
 	{
 		const double Start = FPlatformTime::Seconds();
-		Job->Result = DCVoxelOps::Apply(*Target, Job->Op, *Ctx);
+		Job->Result = Job->Op.Kind == TEXT("Rest") ? DCVoxelOps::ApplyRest(*Target, Job->Op, Pend, *Ctx) : DCVoxelOps::Apply(*Target, Job->Op, *Ctx);
 		Job->Hash = Target->Hash();
 		Job->ApplyMs = static_cast<float>((FPlatformTime::Seconds() - Start) * 1000.0);
+	});
+}
+
+FDCPendingPiece ADCVoxelCity::PendingFor(const FDCVoxelOp& Op) const
+{
+	if (Op.Kind != TEXT("Rest"))
+	{
+		return FDCPendingPiece();
+	}
+	const TMap<int32, FDCPendingPiece>* M = PendingPieces.Find(Op.RestOf);
+	const FDCPendingPiece* P = M ? M->Find(Op.RestPiece) : nullptr;
+	return P ? *P : FDCPendingPiece();
+}
+
+void ADCVoxelCity::HostRest(FFalling& F)
+{
+	// R26 host-owned rubble: where the host's bodies came to rest becomes a Rest op every machine applies.
+	ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>();
+	if (!GS || !GS->HasAuthority() || !bHostRests || GS->Phase != EDCRunPhase::Sector || F.OpSeq <= 0 || F.PieceIndex == INDEX_NONE)
+	{
+		return;
+	}
+	FDCVoxelOp Op;
+	Op.Kind = TEXT("Rest");
+	Op.RestOf = F.OpSeq;
+	Op.RestPiece = F.PieceIndex;
+	for (int32 f = 0; f < F.Frags.Num(); ++f)
+	{
+		const UBoxComponent* B = F.Frags[f].Body;
+		if (!B)
+		{
+			continue;
+		}
+		FDCVoxelRest& R = Op.Rests.AddDefaulted_GetRef();
+		R.Frag = f;
+		R.PosCm = DCVoxelMath::ToCm(B->GetComponentLocation());
+		R.AxisX = DCVoxelOps::AxisIndex(B->GetForwardVector());
+		R.AxisZ = DCVoxelOps::AxisIndex(B->GetUpVector());
+	}
+	if (Op.Rests.Num() == 0)
+	{
+		return;
+	}
+	Op.CenterCm = DCVoxelMath::ToCm(F.LandCenter);
+	const int32 Seq = GS->AddVoxelOp(Op).Seq;
+	TWeakObjectPtr<ADCGameState> WeakGS(GS);
+	UE_LOG(LogTemp, Display, TEXT("DCREST host op=%d rests op %d piece %d: %d bodies"), Seq, F.OpSeq, F.PieceIndex, Op.Rests.Num());
+	ApplyOpAsync(GS->VoxelOps.Last(), true, [WeakGS, Seq](const FDCVoxelOpResult&, uint32 Hash)
+	{
+		if (ADCGameState* State = WeakGS.Get())
+		{
+			if (FDCVoxelOp* Rec = State->VoxelOps.FindByPredicate([Seq](const FDCVoxelOp& O) { return O.Seq == Seq; }))
+			{
+				Rec->ResultHash = Hash;
+			}
+		}
 	});
 }
 
@@ -686,7 +748,15 @@ void ADCVoxelCity::CommitOp(const FDCVoxelOp& Op, FDCVoxelOpResult& Result, bool
 	HoldTops.Reset();
 	CommittedFallen.SetNum(FMath::Max(CommittedFallen.Num(), Sector.Towers.Num()));
 	KillCarvedSigns(Result.TouchedLots);
-	if (bAnimate && Op.Kind != TEXT("Fell") && CollapseCamStep < 0)
+	if (Op.Kind == TEXT("Rest"))
+	{
+		for (const TSharedPtr<FFalling>& Fl : Falling)
+		{
+			Fl->bRestNow |= Fl->OpSeq == Op.RestOf && Fl->PieceIndex == Op.RestPiece; // the host's rest decides
+		}
+		UE_LOG(LogTemp, Display, TEXT("DCREST op=%d rests op %d piece %d: %d bodies, %d rubble cells"), Op.Seq, Op.RestOf, Op.RestPiece, Op.Rests.Num(), Result.Rubble.Num());
+	}
+	if (bAnimate && Op.Kind == TEXT("Strike") && CollapseCamStep < 0)
 	{
 		static FString CamDir;
 		static const bool bCam = FParse::Value(FCommandLine::Get(), TEXT("dccollapsecam="), CamDir);
@@ -716,7 +786,7 @@ void ADCVoxelCity::CommitOp(const FDCVoxelOp& Op, FDCVoxelOpResult& Result, bool
 			}
 		}
 	}
-	if (bAnimate && Fx && Op.Kind != TEXT("Fell"))
+	if (bAnimate && Fx && Op.Kind == TEXT("Strike"))
 	{
 		const FDCVoxelCarveDef& Carve = OpCtx.CarveFor(Op.Stratagem);
 		Fx->Emit(TEXT("Crater"), FVector(Op.CenterCm), Carve.CraterRadiusCm);
@@ -776,6 +846,23 @@ void ADCVoxelCity::PrepareOp(const FDCVoxelOp& Op, FDCVoxelOpResult& Result, boo
 	{
 		Physical.Add(BySize[i]);
 	}
+	// Kept for the host's Rest op (R26): the cells, the provisional rubble and the fragment tree of each physics piece.
+	for (int32 Pi : Physical)
+	{
+		const FDCVoxelPiece& Pc = Result.Pieces[Pi];
+		const FDCVoxelTuning& Tn = *OpCtx.Tuning;
+		FDCPendingPiece P;
+		P.Lot = Pc.Lot;
+		P.Cells = Pc.Cells;
+		P.Materials = Pc.Materials;
+		for (int32 r = Pc.RubbleStart; r < Pc.RubbleStart + Pc.RubbleNum && Result.Rubble.IsValidIndex(r); ++r)
+		{
+			P.Rubble.Add(Result.Rubble[r]);
+			P.RubbleMaterials.Add(Result.RubbleMaterials.IsValidIndex(r) ? Result.RubbleMaterials[r] : 0);
+		}
+		DCVoxelOps::FragmentTree(Pc.Cells, Sector.Towers[Pc.Lot].Grid.VoxelCm, Tn.PhysicsFragmentCm, Tn.PhysicsFragments, Tn.PhysicsLeafCm, Tn.PhysicsLeavesPerChunk, P.FragParent, P.FragCells);
+		PendingPieces.FindOrAdd(Op.Seq).Add(Pi, MoveTemp(P));
+	}
 	if (bAnimate)
 	{
 		QueueShards(Op, Result, Now);
@@ -793,7 +880,7 @@ void ADCVoxelCity::PrepareOp(const FDCVoxelOp& Op, FDCVoxelOpResult& Result, boo
 				Sum += Sector.Terrain.ToWorld(Result.Rubble[i]);
 			}
 			const FVector Land = Piece.RubbleNum > 0 ? Sum / Piece.RubbleNum : Sector.Towers[Piece.Lot].Grid.ToWorld(Piece.Pivot);
-			StartFall(Piece, Now, DeferList, Land, Physical.Contains(PieceIndex));
+			StartFall(Piece, Now, DeferList, Land, Physical.Contains(PieceIndex), Op.Seq, PieceIndex);
 			DeferList.Reset(); // the first piece to land shows the rubble
 		}
 	}
@@ -803,7 +890,7 @@ void ADCVoxelCity::PrepareOp(const FDCVoxelOp& Op, FDCVoxelOpResult& Result, boo
 	}
 }
 
-void ADCVoxelCity::StartFall(const FDCVoxelPiece& Piece, float Now, const TArray<FIntVector>& Deferred, const FVector& LandAt, bool bPhysics)
+void ADCVoxelCity::StartFall(const FDCVoxelPiece& Piece, float Now, const TArray<FIntVector>& Deferred, const FVector& LandAt, bool bPhysics, int32 OpSeq, int32 PieceIndex)
 {
 	const FDCVoxelTuning& Tn = UDCVoxelSettings::Get().Tuning;
 	const FDCVoxelGrid& Grid = Sector.Towers[Piece.Lot].Grid;
@@ -824,43 +911,26 @@ void ADCVoxelCity::StartFall(const FDCVoxelPiece& Piece, float Now, const TArray
 	F->Comp->SetVisibility(false);
 	// R26 true break-up: chunks (PhysicsFragmentCm blocks) that break off mid-fall, each made of leaves
 	// (PhysicsLeafCm blocks) that a hard impact shatters it into. Over the body budget: the piece falls scripted.
-	TArray<TArray<int32>> Split;
-	TArray<TArray<TArray<int32>>> Leaves;
-	int32 NumBodies = 0;
+	// The piece's fragment tree was kept with its op (PendingPieces): the same tree the host's Rest op names.
+	const FDCPendingPiece* Pend = nullptr;
 	if (bPhysics)
 	{
-		const int32 Vox = FMath::Max(Grid.VoxelCm, 1);
-		Split = DCVoxelOps::SplitFragments(Piece.Cells, FMath::Max(1, FMath::RoundToInt(Tn.PhysicsFragmentCm / Vox)), Tn.PhysicsFragments);
-		for (const TArray<int32>& Group : Split)
-		{
-			TArray<FIntVector> GroupCells;
-			for (int32 i : Group)
-			{
-				GroupCells.Add(Piece.Cells[i]);
-			}
-			TArray<TArray<int32>>& L = Leaves.AddDefaulted_GetRef();
-			for (const TArray<int32>& Leaf : DCVoxelOps::SplitFragments(GroupCells, FMath::Max(1, FMath::RoundToInt(Tn.PhysicsLeafCm / Vox)), Tn.PhysicsLeavesPerChunk))
-			{
-				TArray<int32>& Mapped = L.AddDefaulted_GetRef();
-				for (int32 k : Leaf)
-				{
-					Mapped.Add(Group[k]); // back to piece cell indices
-				}
-			}
-			NumBodies += 1 + L.Num();
-		}
-		if (BodiesReserved + NumBodies > Tn.PhysicsMaxBodies)
-		{
-			Split.Reset();
-			Leaves.Reset();
-			NumBodies = 0;
-		}
+		const TMap<int32, FDCPendingPiece>* M = PendingPieces.Find(OpSeq);
+		Pend = M ? M->Find(PieceIndex) : nullptr;
 	}
+	int32 NumBodies = Pend ? Pend->FragParent.Num() : 0;
+	if (!Pend || NumBodies == 0 || BodiesReserved + NumBodies > Tn.PhysicsMaxBodies)
+	{
+		Pend = nullptr; // over the body budget: this piece falls scripted
+		NumBodies = 0;
+	}
+	F->OpSeq = OpSeq;
+	F->PieceIndex = PieceIndex;
 	F->Seed = DCVoxelOps::Hash(Piece.Pivot, static_cast<uint32>(Piece.Lot) * 7919u + static_cast<uint32>(Piece.Cells.Num()));
 	Falling.Add(F);
 	for (const FIntVector& C : Deferred)
 	{
-		if (Split.Num() > 0)
+		if (Pend)
 		{
 			F->RevealOnRest.Add(C); // a body's rubble shows when it comes to rest
 			continue;
@@ -887,7 +957,7 @@ void ADCVoxelCity::StartFall(const FDCVoxelPiece& Piece, float Now, const TArray
 		});
 		Jobs.Add(Job);
 	};
-	if (Split.Num() == 0)
+	if (!Pend)
 	{
 		F->PendingMeshes = 1;
 		LaunchJob(Piece.Cells, Piece.Materials, INDEX_NONE);
@@ -896,45 +966,35 @@ void ADCVoxelCity::StartFall(const FDCVoxelPiece& Piece, float Now, const TArray
 	{
 		BodiesReserved += NumBodies;
 		const FVector PivotWorld = Grid.ToWorld(Piece.Pivot);
-		auto BoundsOf = [&](const TArray<int32>& Idx, FBox& Out)
+		for (int32 f = 0; f < Pend->FragParent.Num(); ++f)
 		{
+			const TArray<int32>& Idx = Pend->FragCells[f];
+			const int32 Parent = Pend->FragParent[f];
+			FFalling::FFrag& Fr = F->Frags.AddDefaulted_GetRef();
+			Fr.Parent = Parent;
+			Fr.Comp = NewMesh(false, Grid.VoxelCm); // a chunk's stays empty: its leaves ride on it
+			Fr.Comp->AttachToComponent(Parent == INDEX_NONE ? F->Comp.Get() : F->Frags[Parent].Comp.Get(), FAttachmentTransformRules::SnapToTargetNotIncludingScale);
 			for (int32 i : Idx)
 			{
-				Out += Grid.ToWorld(Piece.Cells[i]) - PivotWorld;
-				Out += Grid.ToWorld(Piece.Cells[i] + FIntVector(1)) - PivotWorld;
+				Fr.Local += Grid.ToWorld(Piece.Cells[i]) - PivotWorld;
+				Fr.Local += Grid.ToWorld(Piece.Cells[i] + FIntVector(1)) - PivotWorld;
 			}
-		};
-		for (int32 g = 0; g < Split.Num(); ++g)
-		{
-			const int32 ChunkIndex = F->Frags.Num();
+			Fr.Mass = FMath::Max(static_cast<float>(Idx.Num()) * Vcm * Vcm * Vcm * Tn.PhysicsDensity, 5.f);
+			if (Parent == INDEX_NONE)
 			{
-				FFalling::FFrag& Chunk = F->Frags.AddDefaulted_GetRef();
-				Chunk.Comp = NewMesh(false, Grid.VoxelCm); // empty root the leaves ride on
-				Chunk.Comp->AttachToComponent(F->Comp, FAttachmentTransformRules::SnapToTargetNotIncludingScale);
-				BoundsOf(Split[g], Chunk.Local);
-				Chunk.Mass = FMath::Max(static_cast<float>(Split[g].Num()) * Vcm * Vcm * Vcm * Tn.PhysicsDensity, 20.f);
+				continue;
 			}
-			for (const TArray<int32>& Leaf : Leaves[g])
+			F->Frags[Parent].Children.Add(f);
+			Fr.Comp->SetVisibility(false);
+			TArray<FIntVector> FragCells;
+			TArray<uint8> FragMats;
+			for (int32 i : Idx)
 			{
-				const int32 LeafIndex = F->Frags.Num();
-				FFalling::FFrag& Fr = F->Frags.AddDefaulted_GetRef();
-				Fr.Parent = ChunkIndex;
-				Fr.Comp = NewMesh(false, Grid.VoxelCm);
-				Fr.Comp->AttachToComponent(F->Frags[ChunkIndex].Comp, FAttachmentTransformRules::SnapToTargetNotIncludingScale);
-				Fr.Comp->SetVisibility(false);
-				TArray<FIntVector> FragCells;
-				TArray<uint8> FragMats;
-				for (int32 i : Leaf)
-				{
-					FragCells.Add(Piece.Cells[i]);
-					FragMats.Add(Piece.Materials.IsValidIndex(i) ? Piece.Materials[i] : 1);
-				}
-				BoundsOf(Leaf, Fr.Local);
-				Fr.Mass = FMath::Max(static_cast<float>(FragCells.Num()) * Vcm * Vcm * Vcm * Tn.PhysicsDensity, 5.f);
-				F->Frags[ChunkIndex].Children.Add(LeafIndex);
-				++F->PendingMeshes;
-				LaunchJob(MoveTemp(FragCells), MoveTemp(FragMats), LeafIndex);
+				FragCells.Add(Piece.Cells[i]);
+				FragMats.Add(Piece.Materials.IsValidIndex(i) ? Piece.Materials[i] : 1);
 			}
+			++F->PendingMeshes;
+			LaunchJob(MoveTemp(FragCells), MoveTemp(FragMats), f);
 		}
 	}
 	DCAudio::PlayAt(this, TEXT("Creak"), F->Pivot, 1.f);
@@ -1277,8 +1337,12 @@ void ADCVoxelCity::TickFalling(float Now)
 		}
 		if (F.bBroken)
 		{
-			if (TickBodies(Falling[i], GetWorld()->GetDeltaSeconds() * UDCPresentationClock::Dilation(this)))
+			if (F.bRestNow || TickBodies(Falling[i], GetWorld()->GetDeltaSeconds() * UDCPresentationClock::Dilation(this)))
 			{
+				if (!F.bRestNow)
+				{
+					HostRest(F); // host only: its rest poses become the shared rubble
+				}
 				Land(F);
 				Falling.RemoveAtSwap(i);
 			}
@@ -1501,7 +1565,7 @@ bool ADCVoxelCity::TickBodies(const TSharedPtr<FFalling>& Shared, float Dt)
 			Fr.Body->SetCollisionResponseToChannel(ECC_WorldStatic, ECR_Block);
 		}
 		const FVector Vel = Fr.Body->GetPhysicsLinearVelocity();
-		if (F.BodyAge < Tn.PhysicsSteerSeconds) // drawn over the shared rubble (a critically damped spring), then left to rest
+		if (Tn.PhysicsSteer > 0.f && F.BodyAge < Tn.PhysicsSteerSeconds) // optional pull toward the plan-time site
 		{
 			const FVector At = Fr.Body->GetComponentLocation();
 			const FVector Off(F.LandCenter.X - At.X, F.LandCenter.Y - At.Y, 0.f);

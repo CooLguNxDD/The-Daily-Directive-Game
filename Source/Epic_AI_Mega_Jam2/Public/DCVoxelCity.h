@@ -94,7 +94,16 @@ private:
 	void PollJobs();
 	void UploadCells();
 	void TickFalling(float Now);
-	void StartFall(const FDCVoxelPiece& Piece, float Now, const TArray<FIntVector>& DeferredTerrain, const FVector& LandAt, bool bPhysics = false);
+	void StartFall(const FDCVoxelPiece& Piece, float Now, const TArray<FIntVector>& DeferredTerrain, const FVector& LandAt, bool bPhysics = false, int32 OpSeq = 0, int32 PieceIndex = INDEX_NONE);
+	/** R26 host-owned rubble: physics pieces kept per op Seq and piece index until their Rest op lands. */
+	TMap<int32, TMap<int32, FDCPendingPiece>> PendingPieces;
+	FDCPendingPiece PendingFor(const FDCVoxelOp& Op) const;
+	/** Host: its bodies of a piece came to rest; append and apply the Rest op (poses snapped to cm and axis frames). */
+	void HostRest(FFalling& F);
+public:
+	/** Off for cities that never append ops (the reel's re-staged city replays the recorded Rest ops instead). */
+	bool bHostRests = true;
+private:
 	/** R26: a fragmented piece hits the street: each fragment becomes a Chaos body carrying its mesh. */
 	void BreakApart(const TSharedPtr<FFalling>& F, float Age, float U, bool bImpact);
 	/** One fragment (chunk or leaf) becomes a simulating box body carrying its mesh. */

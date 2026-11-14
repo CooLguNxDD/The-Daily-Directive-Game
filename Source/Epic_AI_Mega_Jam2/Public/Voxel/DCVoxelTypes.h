@@ -213,7 +213,7 @@ struct FDCVoxelTuning
 	/** Fraction of the fall speed the fragments keep at the break (the rest went into the impact). */
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float PhysicsKeepFallSpeed = 0.35f;
 	/** Horizontal pull (1/s^2) toward the rubble site for SteerSeconds, so the bodies rest over the shared rubble. */
-	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float PhysicsSteer = 1.5f;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float PhysicsSteer = 0.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float PhysicsSteerSeconds = 2.f;
 	/** A group rests once every body is asleep or slower than RestCms / RestDegS for RestSeconds. */
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float PhysicsRestCms = 40.f;
@@ -304,6 +304,19 @@ struct FDCFxEmitter
 /** One replicated voxel operation (R3): the host appends, every machine applies in Seq order. Positions are integer
  *  cm, quantized once on the host, so every machine carves exactly the same voxels in every grid. */
 USTRUCT(BlueprintType)
+struct FDCVoxelRest
+{
+	GENERATED_BODY()
+	/** Fragment index in the piece's fragment tree (DCVoxelOps::FragmentTree order). */
+	UPROPERTY() int32 Frag = 0;
+	/** Where the host's body came to rest: its centre in sector cm, and its orientation snapped to the nearest axis
+	 *  frame (AxisX/AxisZ: 0..5 = +X -X +Y -Y +Z -Z, where the fragment's local X and Z axes ended up). */
+	UPROPERTY() FIntVector PosCm = FIntVector::ZeroValue;
+	UPROPERTY() uint8 AxisX = 0;
+	UPROPERTY() uint8 AxisZ = 4;
+};
+
+USTRUCT()
 struct FDCVoxelOp
 {
 	GENERATED_BODY()
@@ -322,4 +335,9 @@ struct FDCVoxelOp
 	UPROPERTY() int32 Lot = -1;
 	/** Host's voxel content hash after applying this op: clients compare theirs and log a mismatch (R3 evidence). */
 	UPROPERTY() uint32 ResultHash = 0;
+	/** Kind "Rest" (R26, host-owned rubble): the host's physics bodies of piece RestPiece of op RestOf came to rest
+	 *  here; every machine replaces that piece's provisional rubble with the fragments settled at these poses. */
+	UPROPERTY() int32 RestOf = 0;
+	UPROPERTY() int32 RestPiece = -1;
+	UPROPERTY() TArray<FDCVoxelRest> Rests;
 };

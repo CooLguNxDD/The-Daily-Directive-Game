@@ -206,14 +206,18 @@ void ADCHUD::DrawSectorCard(ADCGameState& GS)
 	const FDCSectorDef* Sector = T.Sectors.IsValidIndex(GS.SectorIndex) ? &T.Sectors[GS.SectorIndex] : nullptr;
 	const FString Name = Sector ? Sector->Name.ToString().ToUpper() : FString::Printf(TEXT("SECTOR %d"), GS.SectorIndex + 1);
 	const float Lift = (1.f - A) * H * 0.15f;
-	PaperSheet(0, -Lift, W, H);
-	Box(0, -Lift, W, H, FLinearColor(Paper.R, Paper.G, Paper.B, 1.f - A)); // fade toward the scene through paper, never black
-	const FLinearColor InkA(Ink.R, Ink.G, Ink.B, A);
-	Box(W * 0.2f, H * 0.36f - Lift, W * 0.6f, Sx(4.f), InkA);
-	Text(FString::Printf(TEXT("SECTOR %d OF %d"), GS.SectorIndex + 1, FMath::Max(T.Sectors.Num(), 1)), W * 0.5f, H * 0.39f - Lift, InkA, 0.9f, true);
-	Text(Name, W * 0.5f, H * 0.45f - Lift, InkA, 2.6f, true, HeadFont);
-	Box(W * 0.2f, H * 0.62f - Lift, W * 0.6f, Sx(4.f), InkA);
-	Text(TEXT("CAMERAS READY. THE CITY IS YOUR STUDIO."), W * 0.5f, H * 0.65f - Lift, InkA, 0.7f, true);
+	// The dark glass fades with the card (V9.6: it used to stay opaque through the fade); type and rules come from
+	// Look data, light on the glass, and lift away with it.
+	PaperSheet(0, -Lift, W, H, A);
+	const FLinearColor& TitleC = T.Look.SectorCardTitle;
+	const FLinearColor& RuleC = T.Look.SectorCardRule;
+	const FLinearColor TitleA(TitleC.R, TitleC.G, TitleC.B, TitleC.A * A);
+	const FLinearColor RuleA(RuleC.R, RuleC.G, RuleC.B, RuleC.A * A);
+	Box(W * 0.2f, H * 0.36f - Lift, W * 0.6f, Sx(3.f), RuleA);
+	Text(FString::Printf(TEXT("SECTOR %d OF %d"), GS.SectorIndex + 1, FMath::Max(T.Sectors.Num(), 1)), W * 0.5f, H * 0.385f - Lift, RuleA, 1.1f, true);
+	Text(Name, W * 0.5f, H * 0.44f - Lift, TitleA, T.Look.SectorCardTitleScale, true, HeadFont);
+	Box(W * 0.2f, H * 0.62f - Lift, W * 0.6f, Sx(3.f), RuleA);
+	Text(TEXT("CAMERAS READY. THE CITY IS YOUR STUDIO."), W * 0.5f, H * 0.645f - Lift, TitleA, 0.95f, true);
 }
 
 void ADCHUD::DrawFlashes(ADCGameState& GS, ADCCharacter& Me)
@@ -224,13 +228,17 @@ void ADCHUD::DrawFlashes(ADCGameState& GS, ADCCharacter& Me)
 		const float A = Env->GetFlashAlpha();
 		if (A > 0.01f)
 		{
-			Box(0, 0, W, H, FLinearColor(1.f, 0.97f, 0.9f, A * 0.55f));
+			const FLinearColor& Tint = UDCTuning::Get().Look.FlashOverlay; // a warm tint at the peak, not a white sheet
+			Box(0, 0, W, H, FLinearColor(Tint.R, Tint.G, Tint.B, Tint.A * A));
 		}
 	}
 	const float Shutter = static_cast<float>(RealNow - Me.Feedback().ShutterTime);
-	if (Shutter < 0.18f)
+	// The shutter blink (data): a short dark blink, the lens closing; a white sheet here made PEAK CINEMA a white frame.
+	const FDCLookTuning& FlashLook = UDCTuning::Get().Look;
+	if (Shutter < FlashLook.ShutterBlinkSeconds)
 	{
-		Box(0, 0, W, H, FLinearColor(1, 1, 1, 0.9f * (1.f - Shutter / 0.18f)));
+		const FLinearColor& Blink = FlashLook.ShutterBlink;
+		Box(0, 0, W, H, FLinearColor(Blink.R, Blink.G, Blink.B, Blink.A * (1.f - Shutter / FMath::Max(FlashLook.ShutterBlinkSeconds, 0.01f))));
 	}
 	if (Me.IsSpotlit())
 	{
@@ -527,7 +535,7 @@ void ADCHUD::DrawPhotoCard(UTexture* Image, const FDCPhotoGrade& Grade, float X,
 	}
 }
 
-void ADCHUD::PaperSheet(float X, float Y, float W, float H)
+void ADCHUD::PaperSheet(float X, float Y, float W, float H, float Alpha)
 {
 	if (!bPaperTried)
 	{
@@ -535,13 +543,13 @@ void ADCHUD::PaperSheet(float X, float Y, float W, float H)
 		PaperTex = Cast<UTexture2D>(UDCTuning::Get().Assets.PaperGrain.TryLoad());
 	}
 	// R25: a dark glass sheet (no paper left): night ground, faint scanlines, thin cyan rules at the top and bottom.
-	Box(X, Y, W, H, Paper);
+	Box(X, Y, W, H, FLinearColor(Paper.R, Paper.G, Paper.B, Alpha));
 	for (float Ly = Y; Ly < Y + H; Ly += Sx(4.f))
 	{
-		Box(X, Ly, W, 1.f, FLinearColor(Ink.R, Ink.G, Ink.B, 0.025f));
+		Box(X, Ly, W, 1.f, FLinearColor(Ink.R, Ink.G, Ink.B, 0.025f * Alpha));
 	}
-	Box(X, Y + Sx(4.f), W, Sx(2.f), FLinearColor(Cyan.R, Cyan.G, Cyan.B, 0.8f));
-	Box(X, Y + H - Sx(6.f), W, Sx(2.f), FLinearColor(Cyan.R, Cyan.G, Cyan.B, 0.8f));
+	Box(X, Y + Sx(4.f), W, Sx(2.f), FLinearColor(Cyan.R, Cyan.G, Cyan.B, 0.8f * Alpha));
+	Box(X, Y + H - Sx(6.f), W, Sx(2.f), FLinearColor(Cyan.R, Cyan.G, Cyan.B, 0.8f * Alpha));
 }
 
 UTexture2D* ADCHUD::StampGrit()
