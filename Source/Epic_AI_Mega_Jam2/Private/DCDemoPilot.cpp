@@ -560,8 +560,8 @@ void ADCDemoPilot::AddClashShot(const FString& S)
 
 void ADCDemoPilot::AddLineupShot()
 {
-	// R3 readability evidence (-dclineup): one unit of every +Factions row (its middle unit roll), stood in a row on
-	// the street in front of the pawn, frozen (time dilation 0), framed with the real camera in the sector's own light;
+	// R3/R10 readability evidence (-dclineup): every unit kind of every +Factions row (columns = factions, rows = its
+	// units), stood on the street in front of the pawn, frozen (time dilation 0), framed with the real camera in the sector's own light;
 	// frames lineup_wide and lineup_close, then the row is removed and the run goes on. Host (solo) only.
 	Add(0.f, [this]
 	{
@@ -580,26 +580,31 @@ void ADCDemoPilot::AddLineupShot()
 		const FVector Fwd = FVector(Me->GetActorForwardVector().X, Me->GetActorForwardVector().Y, 0.f).GetSafeNormal();
 		const FVector Right = FVector::CrossProduct(FVector::UpVector, Fwd);
 		const int32 N = T.Factions.Num();
-		LineupMid = Me->GetActorLocation() + Fwd * 900.f;
+		LineupMid = Me->GetActorLocation() + Fwd * 1100.f;
+		// Columns are factions, rows their unit kinds front to back (R3 silhouettes and R10 shapes in one frame).
 		for (int32 i = 0; i < N; ++i)
 		{
-			const FName Kind = DCFactionRules::PickUnit(T.Factions[i], 0.5f);
-			const FDCEnemyDef* Def = T.FindEnemy(Kind);
-			if (!Def)
+			const TArray<FDCFactionUnit>& Units = T.Factions[i].Units;
+			for (int32 r = 0; r < Units.Num(); ++r)
 			{
-				continue;
-			}
-			FVector Where = LineupMid + Right * ((i - (N - 1) * 0.5f) * 260.f);
-			Where.Z = (City ? City->SurfaceZCm(Where) : Me->GetActorLocation().Z - 90.f) + Def->HoverHeight;
-			const FTransform Xf((-Fwd).Rotation(), Where);
-			ADCEnemy* E = GetWorld()->SpawnActorDeferred<ADCEnemy>(ADCEnemy::StaticClass(), Xf, nullptr, nullptr, ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
-			if (E)
-			{
-				E->InitKind(Kind);
-				E->FinishSpawning(Xf);
-				E->CustomTimeDilation = 0.f;
-				Lineup.Add(E);
-				UE_LOG(LogDCDemo, Display, TEXT("DEMO lineup %d faction=%s unit=%s at %s"), i, *T.Factions[i].Id.ToString(), *Kind.ToString(), *Where.ToCompactString());
+				const FName Kind = Units[r].Enemy;
+				const FDCEnemyDef* Def = T.FindEnemy(Kind);
+				if (!Def)
+				{
+					continue;
+				}
+				FVector Where = LineupMid + Right * ((i - (N - 1) * 0.5f) * 320.f) + Fwd * (r * 280.f);
+				Where.Z = (City ? City->SurfaceZCm(Where) : Me->GetActorLocation().Z - 90.f) + Def->HoverHeight;
+				const FTransform Xf((-Fwd).Rotation(), Where);
+				ADCEnemy* E = GetWorld()->SpawnActorDeferred<ADCEnemy>(ADCEnemy::StaticClass(), Xf, nullptr, nullptr, ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
+				if (E)
+				{
+					E->InitKind(Kind);
+					E->FinishSpawning(Xf);
+					E->CustomTimeDilation = 0.f;
+					Lineup.Add(E);
+					UE_LOG(LogDCDemo, Display, TEXT("DEMO lineup col=%d row=%d faction=%s unit=%s at %s"), i, r, *T.Factions[i].Id.ToString(), *Kind.ToString(), *Where.ToCompactString());
+				}
 			}
 		}
 		return true;
