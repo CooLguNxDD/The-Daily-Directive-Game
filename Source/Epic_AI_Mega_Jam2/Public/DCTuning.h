@@ -470,6 +470,10 @@ struct FDCRunTuning
 	UPROPERTY(EditAnywhere, Config, Category = "Run") int32 AlbumPicksPerRun = 3;
 	/** Photographer builder (R23): save slots, and where the turntable stands (high above the city, alone in shot). */
 	UPROPERTY(EditAnywhere, Config, Category = "Run") int32 CharacterSlots = 3;
+	/** Music level before the player's master volume. */
+	UPROPERTY(EditAnywhere, Config, Category = "Run") float MusicVolume = 0.35f;
+	/** Actions a player may rebind in SETTINGS (axes like Move and Look keep their keys). */
+	UPROPERTY(EditAnywhere, Config, Category = "Run") TArray<FName> RebindableActions = {TEXT("Jump"), TEXT("Sprint"), TEXT("Crouch"), TEXT("Fire"), TEXT("Aim"), TEXT("Reload"), TEXT("Cycle"), TEXT("Interact")};
 	UPROPERTY(EditAnywhere, Config, Category = "Run") FVector PreviewLocation = FVector(0.f, 0.f, 30000.f);
 	UPROPERTY(EditAnywhere, Config, Category = "Run") float ScoopFirstSeconds = 35.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Run") float ScoopGapSeconds = 20.f;

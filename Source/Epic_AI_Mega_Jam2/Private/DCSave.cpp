@@ -163,6 +163,41 @@ void UDCSaveSubsystem::SaveAlbum()
 	DCSave::SaveFile(Folder() / AlbumKind().File, FDCAlbumSave::StaticStruct(), &Album);
 }
 
+FString UDCSaveSubsystem::NewAlbumImage(const FString& Kind)
+{
+	const FString Stamp = FDateTime::Now().ToString(TEXT("%Y%m%d-%H%M%S"));
+	for (int32 N = 0;; ++N)
+	{
+		const FString Name = FString::Printf(TEXT("album/%s_%s_%02d.png"), *Stamp, *Kind, N);
+		const bool bTaken = Album.Entries.ContainsByPredicate([&Name](const FDCAlbumEntry& E) { return E.Image == Name; }) || IFileManager::Get().FileExists(*(Folder() / Name));
+		if (!bTaken)
+		{
+			return Name;
+		}
+	}
+}
+
+FString UDCSaveSubsystem::AddFrontPageToAlbum(const FString& Headline, const FString& CallSign)
+{
+	FDCAlbumEntry Entry;
+	Entry.Kind = TEXT("frontpage");
+	Entry.Image = NewAlbumImage(Entry.Kind);
+	Entry.Headline = Headline;
+	Entry.CallSign = CallSign;
+	Entry.Date = FDateTime::Now().ToIso8601();
+	const FString File = Folder() / Entry.Image;
+	IFileManager::Get().MakeDirectory(*FPaths::GetPath(File), true);
+	Album.Entries.Add(MoveTemp(Entry));
+	const int32 Max = FMath::Max(1, UDCTuning::Get().Run.AlbumMaxEntries);
+	while (Album.Entries.Num() > Max)
+	{
+		IFileManager::Get().Delete(*(Folder() / Album.Entries[0].Image));
+		Album.Entries.RemoveAt(0);
+	}
+	SaveAlbum();
+	return File;
+}
+
 void UDCSaveSubsystem::AddToAlbum(const FString& Kind, const TArray<FColor>& Pixels, int32 Width, int32 Height, int32 Score, const FString& Headline, const FString& CallSign)
 {
 	if (Pixels.Num() != Width * Height || Width <= 0)
@@ -178,7 +213,7 @@ void UDCSaveSubsystem::AddToAlbum(const FString& Kind, const TArray<FColor>& Pix
 	const FDateTime Now = FDateTime::Now();
 	FDCAlbumEntry Entry;
 	Entry.Kind = Kind;
-	Entry.Image = FString::Printf(TEXT("album/%s_%s_%d.png"), *Now.ToString(TEXT("%Y%m%d-%H%M%S")), *Kind, Score);
+	Entry.Image = NewAlbumImage(Kind);
 	Entry.Score = Score;
 	Entry.Headline = Headline;
 	Entry.CallSign = CallSign;

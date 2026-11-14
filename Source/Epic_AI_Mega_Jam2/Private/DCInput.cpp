@@ -1,4 +1,5 @@
 #include "DCInput.h"
+#include "DCSave.h"
 
 #include "DCPlayerController.h"
 #include "DCTuning.h"
@@ -27,8 +28,17 @@ void UDCInputSet::Build()
 		Action->ValueType = AxisTypes[FMath::Clamp(Def.Axes, 0, 2)];
 		Actions.Add(Def.Action, Action);
 	}
-	for (const FDCKeyBinding& Row : T.Bindings)
+	// The player's rebinds (R24, settings.json): an action's first binding row takes the saved key.
+	TSet<FName> Rebound;
+	const UDCSaveSubsystem* Save = UDCSaveSubsystem::Get(GetOuter());
+	for (FDCKeyBinding Row : T.Bindings)
 	{
+		const FString* Saved = Save ? Save->Settings.KeyBindings.Find(Row.Action.ToString()) : nullptr;
+		if (Saved && !Rebound.Contains(Row.Action) && FKey(**Saved).IsValid())
+		{
+			Row.Key = FKey(**Saved);
+			Rebound.Add(Row.Action);
+		}
 		const TObjectPtr<UInputAction>* Action = Actions.Find(Row.Action);
 		if (!Action || !Row.Key.IsValid())
 		{

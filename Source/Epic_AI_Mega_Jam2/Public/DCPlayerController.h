@@ -63,6 +63,7 @@ public:
 	bool bOutfitSent = false;
 	bool bBuilderOpen = false;
 	bool bSettingsOpen = false;
+	FName AwaitingKey;
 	FDCOutfit BuilderOutfit;
 	int32 BuilderSlot = 0;
 	FString BuilderMessage;
@@ -138,6 +139,13 @@ public:
 	void OpenSettings() { bSettingsOpen = true; MenuMode = 254; }
 	void CloseSettings() { bSettingsOpen = false; MenuMode = 254; }
 	void SettingsStep(FName Row, int32 Step);
+	/** Key rebinding (R24): the next key pressed is saved for Action, the input mapping rebuilt. */
+	void BeginRebind(FName Action) { AwaitingKey = Action; MenuMode = 254; }
+	void ResetKeys();
+	FName GetAwaitingKey() const { return AwaitingKey; }
+	FString KeyFor(FName Action) const;
+	virtual bool InputKey(const FInputKeyEventArgs& Params) override;
+	void RebuildInput();
 	FString SettingsValue(FName Row) const;
 	void OpenBuilder();
 	void CloseBuilder();

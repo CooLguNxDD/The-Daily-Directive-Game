@@ -1,4 +1,5 @@
 #include "DCMenu.h"
+#include "Widgets/Layout/SUniformGridPanel.h"
 #include "Engine/TextureRenderTarget2D.h"
 #include "Rules/DCOutfit.h"
 #include "DCFonts.h"
@@ -178,7 +179,7 @@ namespace DCMenu
 			{
 				return SNew(SHorizontalBox)
 					+ SHorizontalBox::Slot().AutoWidth()[SNew(SBox).WidthOverride(70.f).HeightOverride(52.f)[Button(TEXT("<"), [Step]() { Step(-1); }, Gold)]]
-					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[SNew(SBox).WidthOverride(300.f)[Label(Name, 20, Ink)]]
+					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[SNew(SBox).WidthOverride(380.f)[Label(Name, 20, Ink)]]
 					+ SHorizontalBox::Slot().AutoWidth()[SNew(SBox).WidthOverride(70.f).HeightOverride(52.f)[Button(TEXT(">"), [Step]() { Step(1); }, Gold)]];
 			};
 			auto Act = [Weak](TFunction<void(ADCPlayerController&)> Fn)
@@ -239,6 +240,20 @@ namespace DCMenu
 						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[SNew(SBox).WidthOverride(300.f)[Label(FString::Printf(TEXT("%s: %s"), R.Value, *PC->SettingsValue(Id)), 20, Ink)]]
 						+ SHorizontalBox::Slot().AutoWidth()[SNew(SBox).WidthOverride(70.f).HeightOverride(52.f)[Button(TEXT(">"), Stepper(1))]]];
 			}
+			// Keys: click a row, then press the new key (Esc cancels).
+			Column->AddSlot().AutoHeight().HAlign(HAlign_Center).Padding(0, 10, 0, 4)[Label(TEXT("KEYS (CLICK, THEN PRESS A KEY)"), 14, Ink)];
+			TSharedRef<SUniformGridPanel> Keys = SNew(SUniformGridPanel).SlotPadding(FMargin(3.f));
+			int32 Cell = 0;
+			for (const FName& Action : UDCTuning::Get().Run.RebindableActions)
+			{
+				const bool bWaiting = PC->GetAwaitingKey() == Action;
+				const FString Text = FString::Printf(TEXT("%s: %s"), *Action.ToString().ToUpper(), bWaiting ? TEXT("PRESS A KEY") : *PC->KeyFor(Action));
+				Keys->AddSlot(Cell % 2, Cell / 2)[SNew(SBox).WidthOverride(320.f).HeightOverride(62.f)
+					[Button(Text, [Weak, Action]() { if (ADCPlayerController* P = Weak.Get()) { P->BeginRebind(Action); } }, bWaiting ? Ink : Gold)]];
+				++Cell;
+			}
+			Column->AddSlot().AutoHeight().HAlign(HAlign_Center)[Keys];
+			Column->AddSlot().AutoHeight().HAlign(HAlign_Center).Padding(0, 4, 0, 0)[SNew(SBox).WidthOverride(260.f)[Button(TEXT("RESET KEYS"), Click(&ADCPlayerController::ResetKeys))]];
 			Column->AddSlot().AutoHeight().HAlign(HAlign_Center).Padding(0, 10, 0, 0)[Button(TEXT("BACK"), Click(&ADCPlayerController::CloseSettings), Ink)];
 		}};
 		Modes[FMath::Min<int32>(Mode, UE_ARRAY_COUNT(Modes) - 1)]();

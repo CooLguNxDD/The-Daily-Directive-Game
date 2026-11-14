@@ -41,6 +41,12 @@ public:
 
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 	virtual void BeginPlay() override;
+	/** Binds the input actions again (after a key rebind rebuilt the mapping, R24). */
+	void RebindInput()
+	{
+		DestroyPlayerInputComponent();
+		PawnClientRestart();
+	}
 	/** Voxel city meshes are built locally on every machine and are not net-addressable: never a movement base (the
 	 *  city never moves), so co-op movement replication carries no unresolvable component (CP4 review). */
 	virtual void SetBase(FMovementBaseInterfaceData* MovementBaseInterfaceData, const FName BoneName = NAME_None, bool bNotifyActor = true) override;

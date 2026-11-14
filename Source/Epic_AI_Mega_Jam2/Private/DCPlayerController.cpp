@@ -1,4 +1,5 @@
 #include "DCPlayerController.h"
+#include "DCCharacter.h"
 #include "DCEnvironment.h"
 #include "GameFramework/GameUserSettings.h"
 #include "HAL/PlatformApplicationMisc.h"
@@ -86,6 +87,12 @@ void ADCPlayerController::BeginPlay()
 	if (const UDCSaveSubsystem* Save = UDCSaveSubsystem::Get(this))
 	{
 		Sensitivity = FMath::Clamp(Save->Settings.MouseSensitivity, 0.05f, 5.f); // saved settings (R24)
+		// Saved window mode, unless a run asked for a window on the command line (evidence and perf runs).
+		if (Save->Settings.bFullscreen && IsLocalController() && GEngine && GEngine->GetGameUserSettings() && !FParse::Param(FCommandLine::Get(), TEXT("windowed")))
+		{
+			GEngine->GetGameUserSettings()->SetFullscreenMode(EWindowMode::WindowedFullscreen);
+			GEngine->GetGameUserSettings()->ApplySettings(false);
+		}
 	}
 	if (!IsLocalController())
 	{
@@ -102,7 +109,7 @@ void ADCPlayerController::BeginPlay()
 	}
 	if (UDCAudioSubsystem* Audio = GetGameInstance()->GetSubsystem<UDCAudioSubsystem>())
 	{
-		Audio->StartMusic(this, TEXT("Music"), 0.35f);
+		Audio->StartMusic(this, TEXT("Music"), UDCTuning::Get().Run.MusicVolume); // times the saved master volume
 	}
 }
 
@@ -190,6 +197,13 @@ void ADCPlayerController::SettingsStep(FName Row, int32 Step)
 		(*Fn)(*this, S, Step);
 	}
 	Save->SaveSettings();
+	if (Row == TEXT("Volume"))
+	{
+		if (UDCAudioSubsystem* Audio = GetGameInstance()->GetSubsystem<UDCAudioSubsystem>())
+		{
+			Audio->ApplyMasterVolume(this); // the music follows at once
+		}
+	}
 	if (Row == TEXT("Quality"))
 	{
 		if (ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>(); GS && GS->GetEnvironment())
@@ -204,6 +218,67 @@ void ADCPlayerController::SettingsStep(FName Row, int32 Step)
 	}
 	DCAudio::Play2D(this, TEXT("UIClick"));
 	MenuMode = 254;
+}
+
+FString ADCPlayerController::KeyFor(FName Action) const
+{
+	const UDCSaveSubsystem* Save = UDCSaveSubsystem::Get(this);
+	if (const FString* Saved = Save ? Save->Settings.KeyBindings.Find(Action.ToString()) : nullptr)
+	{
+		return FKey(**Saved).GetDisplayName().ToString().ToUpper();
+	}
+	const FDCKeyBinding* Row = UDCTuning::Get().Bindings.FindByPredicate([Action](const FDCKeyBinding& B) { return B.Action == Action; });
+	return Row ? Row->Key.GetDisplayName().ToString().ToUpper() : FString(TEXT("-"));
+}
+
+bool ADCPlayerController::InputKey(const FInputKeyEventArgs& Params)
+{
+	if (!AwaitingKey.IsNone() && Params.Event == IE_Pressed && !Params.Key.IsAnalog())
+	{
+		UDCSaveSubsystem* Save = UDCSaveSubsystem::Get(this);
+		if (Save && Params.Key != EKeys::Escape)
+		{
+			Save->Settings.KeyBindings.Add(AwaitingKey.ToString(), Params.Key.GetFName().ToString());
+			Save->SaveSettings();
+			RebuildInput();
+			UE_LOG(LogTemp, Display, TEXT("DCKEYS %s -> %s (saved)"), *AwaitingKey.ToString(), *Params.Key.GetFName().ToString());
+		}
+		AwaitingKey = NAME_None;
+		MenuMode = 254;
+		return true;
+	}
+	return Super::InputKey(Params);
+}
+
+void ADCPlayerController::ResetKeys()
+{
+	if (UDCSaveSubsystem* Save = UDCSaveSubsystem::Get(this))
+	{
+		Save->Settings.KeyBindings.Reset();
+		Save->SaveSettings();
+	}
+	AwaitingKey = NAME_None;
+	RebuildInput();
+	MenuMode = 254;
+}
+
+void ADCPlayerController::RebuildInput()
+{
+	UEnhancedInputLocalPlayerSubsystem* Sub = IsLocalController() ? ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(GetLocalPlayer()) : nullptr;
+	if (Sub && InputSet)
+	{
+		Sub->RemoveMappingContext(InputSet->GetContext());
+	}
+	InputSet = nullptr; // rebuilt from the data rows plus the saved rebinds
+	if (Sub)
+	{
+		Sub->AddMappingContext(GetInputSet()->GetContext(), 0);
+	}
+	// The pawn's bound actions are found by name in the set: rebind them to the new objects.
+	if (ADCCharacter* Me = Cast<ADCCharacter>(GetPawn()))
+	{
+		Me->RebindInput();
+	}
 }
 
 FString ADCPlayerController::SettingsValue(FName Row) const
@@ -355,7 +430,7 @@ void ADCPlayerController::TickAlbum()
 		}
 	}
 	// The page itself, once it has drawn: a screenshot into the album folder.
-	const FString PageFile = UDCSaveSubsystem::Folder() / FString::Printf(TEXT("album/%s_frontpage.png"), *FDateTime::Now().ToString(TEXT("%Y%m%d-%H%M%S")));
+	const FString PageFile = Save->AddFrontPageToAlbum(GS->Headline, Me ? Me->GetPlayerName() : FString());
 	FTimerHandle Later;
 	GetWorldTimerManager().SetTimer(Later, FTimerDelegate::CreateWeakLambda(this, [PageFile] { FScreenshotRequest::RequestScreenshot(PageFile, true, false); }), 1.5f, false);
 	UE_LOG(LogTemp, Display, TEXT("DCALBUM front page: %d own picks saved, page shot %s"), Added, *PageFile);
@@ -439,9 +514,13 @@ void ADCPlayerController::TickBuilderFlow()
 		{6.5, [&]() { Shot(TEXT("01_settings_open.png")); }},
 		{7.0, [this]() { SettingsStep(TEXT("Volume"), -1); SettingsStep(TEXT("Volume"), -1); SettingsStep(TEXT("Quality"), -1); SettingsStep(TEXT("Mouse"), 1); }},
 		{8.5, [&]() { Shot(TEXT("02_settings_changed_and_saved.png")); }},
-		{9.0, [this]() { CloseSettings(); }},
-		{10.0, [&]() { Shot(TEXT("03_back_to_menu.png")); }},
-		{10.5, []() { FGenericPlatformMisc::RequestExit(false); }},
+		{9.0, [this]() { BeginRebind(TEXT("Jump")); }},
+		{9.8, [&]() { Shot(TEXT("03_rebind_waiting_for_key.png")); }},
+		{10.2, [this]() { InputKey(FInputKeyEventArgs(GetWorld()->GetGameViewport() ? GetWorld()->GetGameViewport()->Viewport : nullptr, FInputDeviceId::CreateFromInternalId(0), EKeys::J, IE_Pressed, FPlatformTime::Cycles64())); }},
+		{11.0, [&]() { Shot(TEXT("04_jump_rebound_to_J.png")); }},
+		{11.5, [this]() { CloseSettings(); }},
+		{12.5, [&]() { Shot(TEXT("05_back_to_menu.png")); }},
+		{13.0, []() { FGenericPlatformMisc::RequestExit(false); }},
 	};
 	const TArray<TPair<double, TFunction<void()>>> BuilderSteps = {
 		{5.0, [this]() { OpenBuilder(); }},

@@ -314,6 +314,8 @@ void UDCAudioSubsystem::Play2D(const UObject* WorldContext, FName Cue, float Vol
 
 void UDCAudioSubsystem::StartMusic(const UObject* WorldContext, FName Cue, float Volume)
 {
+	MusicBase = Volume;
+	Volume *= DCAudio::Master(WorldContext);
 	if (Music && Music->IsPlaying() && MusicCue == Cue)
 	{
 		Music->SetVolumeMultiplier(Volume);
@@ -349,8 +351,17 @@ void UDCAudioSubsystem::StartMusic(const UObject* WorldContext, FName Cue, float
 
 void UDCAudioSubsystem::SetMusicVolume(float Volume)
 {
+	MusicBase = Volume;
 	if (Music)
 	{
-		Music->SetVolumeMultiplier(Volume);
+		Music->SetVolumeMultiplier(Volume * DCAudio::Master(Music));
+	}
+}
+
+void UDCAudioSubsystem::ApplyMasterVolume(const UObject* WorldContext)
+{
+	if (Music)
+	{
+		Music->SetVolumeMultiplier(MusicBase * DCAudio::Master(WorldContext));
 	}
 }

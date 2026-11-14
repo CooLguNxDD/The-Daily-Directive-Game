@@ -909,7 +909,8 @@ void ADCCharacter::TickOutfit()
 	AppliedOutfit = PS->OutfitCode;
 	// The outfit's camera replaces the default chest camera (same rule: shown while the camera is not in hand).
 	UProceduralMeshComponent* Cam = DCOutfitBuild::Apply(GetMesh(), DCOutfitBuild::FromCode(AppliedOutfit), OutfitMeshes);
-	if (ChestCam && Cam)
+	// The default chest camera goes once an outfit camera exists; an earlier outfit camera was already destroyed by Apply.
+	if (Cam && IsValid(ChestCam) && !ChestCam->IsBeingDestroyed() && ChestCam != Cam)
 	{
 		ChestCam->DestroyComponent();
 	}

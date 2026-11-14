@@ -95,6 +95,10 @@ public:
 	void SaveCharacters();
 	/** Adds a printed photo (BGRA pixels) to the album as a PNG and an entry; the oldest drop past the album limit. */
 	void AddToAlbum(const FString& Kind, const TArray<FColor>& Pixels, int32 Width, int32 Height, int32 Score, const FString& Headline, const FString& CallSign);
+	/** A front page: returns the album file the caller's screenshot must be written to, and records it. */
+	FString AddFrontPageToAlbum(const FString& Headline, const FString& CallSign);
+	/** A file name no other album entry has: date, kind, a running number. */
+	FString NewAlbumImage(const FString& Kind);
 
 private:
 	void SaveAlbum();

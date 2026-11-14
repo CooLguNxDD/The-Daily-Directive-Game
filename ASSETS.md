@@ -33,6 +33,8 @@ art) is in the game.
 |-------|------|----------------|
 | Voxel city, terrain, rubble | spawned at run time | C++ voxel engine (`Source/.../Voxel/`) from recipes and districts in `Config/DefaultGame.ini` |
 | `M_DCVoxel` vertex-colour voxel material | `Content/DC/Materials/M_DCVoxel.uasset` | `tools/content/build_content.py` |
+| `M_DCFlatUnlit` unlit flat colour (danger beam, rings) | `Content/DC/Materials/M_DCFlatUnlit.uasset` | `tools/content/build_content.py` |
+| Photographer outfit parts (R23): `outfit_cap`, `outfit_helmet`, `outfit_beret`, `outfit_vest`, `outfit_trench`, `outfit_backpack`, `outfit_filmbelt`, `outfit_boxcam` | `Content/DC/Voxel/outfit_*.dcvox` | `tools/voxel-forge/forge.py` from `tools/voxel-forge/recipes/outfit_*.vfr` |
 | `M_DCInkOutline` ink-edge post material | `Content/DC/Materials/M_DCInkOutline.uasset` | `tools/content/build_content.py` (HLSL in the script) |
 | Enemy, prop and player-gear voxel models (swarmer, spotlight, walker, props, the chest press camera `presscam`) | `Content/DC/Voxel/*.dcvox` | `tools/voxel-forge/forge.py` from `tools/voxel-forge/recipes/*.vfr` (R17) |
 | Newsprint photo print, stamp grit | at run time | C++ (`Rules/DCNewsprint.cpp`, `DCHUD::StampGrit`) |

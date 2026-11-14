@@ -1,6 +1,7 @@
 // Save manager (R24): versioned JSON, migration steps, corrupt / newer / gapped files fall back to defaults, and a
 // save round-trips. Pure parts plus a temp-folder file round trip; runs under -nullrhi.
 #include "DCSave.h"
+#include "Engine/GameInstance.h"
 #include "Dom/JsonObject.h"
 #include "HAL/FileManager.h"
 #include "Misc/AutomationTest.h"
@@ -78,6 +79,25 @@ bool FDCSaveSchemaTest::RunTest(const FString&)
 	TestTrue(TEXT("corrupt file kept aside"), IFileManager::Get().FileExists(*(File + TEXT(".bad"))));
 	TestEqual(TEXT("corrupt file gives defaults"), AfterCorrupt.MasterVolume, 1.f);
 	IFileManager::Get().DeleteDirectory(*Dir, false, true);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDCAlbumNamesTest, "Epic_AI_Mega_Jam2.Save.AlbumNames", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FDCAlbumNamesTest::RunTest(const FString&)
+{
+	// Two pictures of the same kind and score in the same second never share a file (CP5 review: they overwrote).
+	UDCSaveSubsystem* Save = NewObject<UDCSaveSubsystem>(NewObject<UGameInstance>()); // a subsystem lives in a game instance
+	TSet<FString> Seen;
+	for (int32 i = 0; i < 5; ++i)
+	{
+		FDCAlbumEntry E;
+		E.Kind = TEXT("photo");
+		E.Score = 600;
+		E.Image = Save->NewAlbumImage(E.Kind);
+		TestFalse(FString::Printf(TEXT("%s is new"), *E.Image), Seen.Contains(E.Image));
+		Seen.Add(E.Image);
+		Save->Album.Entries.Add(E);
+	}
 	return true;
 }
 
