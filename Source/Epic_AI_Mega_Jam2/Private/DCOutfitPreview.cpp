@@ -31,9 +31,16 @@ ADCOutfitPreview::ADCOutfitPreview()
 	Capture->FOVAngle = 30.f;
 }
 
+float ADCOutfitPreview::ImageAlpha() const
+{
+	const UWorld* W = GetWorld();
+	return W ? FMath::Clamp(static_cast<float>(W->GetRealTimeSeconds() - StartReal - 0.6) / 0.3f, 0.f, 1.f) : 0.f;
+}
+
 void ADCOutfitPreview::BeginPlay()
 {
 	Super::BeginPlay();
+	StartReal = GetWorld()->GetRealTimeSeconds();
 	const UDCTuning& T = UDCTuning::Get();
 	if (USkeletalMesh* Mannequin = Cast<USkeletalMesh>(T.Assets.PlayerMesh.TryLoad()))
 	{

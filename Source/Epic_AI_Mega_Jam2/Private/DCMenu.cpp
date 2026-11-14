@@ -289,7 +289,11 @@ namespace DCMenu
 			PreviewBrush.DrawAs = ESlateBrushDrawType::Image;
 			Root->AddSlot().HAlign(HAlign_Fill).VAlign(VAlign_Fill)[SNew(SBorder).BorderImage(FCoreStyle::Get().GetBrush("WhiteBrush")).BorderBackgroundColor(Paper)];
 			Root->AddSlot().HAlign(HAlign_Right).VAlign(VAlign_Center).Padding(FMargin(0, 0, 160, 0))
-				[SNew(SBox).WidthOverride(640.f).HeightOverride(800.f)[SNew(SImage).Image(&PreviewBrush)]];
+				[SNew(SBox).WidthOverride(640.f).HeightOverride(800.f)[SNew(SImage).Image(&PreviewBrush).ColorAndOpacity(TAttribute<FSlateColor>::CreateLambda([WeakPC = TWeakObjectPtr<ADCPlayerController>(PC)]()
+					{
+						// Paper shows through until the turntable has lit frames (no black box on open).
+						return FSlateColor(FLinearColor(1.f, 1.f, 1.f, WeakPC.IsValid() ? WeakPC->GetBuilderImageAlpha() : 0.f));
+					}))]];
 		}
 		Root->AddSlot().HAlign(HAlign_Left).VAlign(VAlign_Center).Padding(FMargin(60, 0, 0, 0))
 			[

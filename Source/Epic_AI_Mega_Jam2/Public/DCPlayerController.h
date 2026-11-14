@@ -159,6 +159,7 @@ public:
 	int32 GetBuilderSlot() const { return BuilderSlot; }
 	const FString& GetBuilderMessage() const { return BuilderMessage; }
 	class UTextureRenderTarget2D* GetBuilderImage() const;
+	float GetBuilderImageAlpha() const;
 private:
 	UFUNCTION(Server, Reliable) void ServerRestartRun();
 	UFUNCTION(Server, Reliable) void ServerPickUpgrade(FName Id);

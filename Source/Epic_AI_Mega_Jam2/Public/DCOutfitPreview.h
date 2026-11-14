@@ -24,6 +24,8 @@ public:
 
 	void Show(const FDCOutfit& Outfit);
 	UTextureRenderTarget2D* GetImage() const { return Image; }
+	/** 0 until the capture has had a moment to light the scene, then 1 (the first captures came out black, V5.5). */
+	float ImageAlpha() const;
 
 private:
 	UPROPERTY(VisibleAnywhere) TObjectPtr<USceneComponent> Turn;
@@ -32,4 +34,5 @@ private:
 	UPROPERTY(VisibleAnywhere) TObjectPtr<USceneCaptureComponent2D> Capture;
 	UPROPERTY() TObjectPtr<UTextureRenderTarget2D> Image;
 	UPROPERTY() TArray<TObjectPtr<UProceduralMeshComponent>> Parts;
+	double StartReal = 0.0;
 };

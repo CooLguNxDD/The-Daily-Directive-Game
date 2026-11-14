@@ -331,6 +331,11 @@ UTextureRenderTarget2D* ADCPlayerController::GetBuilderImage() const
 	return OutfitPreview ? OutfitPreview->GetImage() : nullptr;
 }
 
+float ADCPlayerController::GetBuilderImageAlpha() const
+{
+	return OutfitPreview ? OutfitPreview->ImageAlpha() : 0.f;
+}
+
 void ADCPlayerController::BuilderSelectSlot(int32 Slot)
 {
 	const UDCTuning& T = UDCTuning::Get();
