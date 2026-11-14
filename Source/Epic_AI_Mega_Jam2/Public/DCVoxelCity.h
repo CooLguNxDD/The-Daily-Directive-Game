@@ -141,6 +141,8 @@ private:
 		TWeakObjectPtr<UPrimitiveComponent> Body;
 		TWeakObjectPtr<UPrimitiveComponent> Mesh;
 		float Start = 0.f;
+		/** A still-simulating body keeps its body reservation until the fade releases it (review CP34). */
+		bool bReserved = false;
 	};
 	TArray<FDCFading> Fading;
 	/** -dccollapsecam evidence camera (step -1 = off). */
