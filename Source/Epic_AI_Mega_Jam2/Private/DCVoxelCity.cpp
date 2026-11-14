@@ -722,6 +722,7 @@ void ADCVoxelCity::FinishBuild(int32 RunSeed, int32 SectorIndex, int32 BuildId, 
 	BuiltId = BuildId;
 	BuiltSeed = RunSeed;
 	AppliedSeq = 0;
+	bAsyncLoad = Pads != nullptr;
 	if (Pads)
 	{
 		QueuePadded(*Pads);
@@ -1374,8 +1375,11 @@ void ADCVoxelCity::UploadCells()
 	const FDCVoxelTuning& Tn = UDCVoxelSettings::Get().Tuning;
 	const double Start = FPlatformTime::Seconds();
 	// Load cap in cells too: the render thread pays per new section, not per game-thread ms (perf-r13m load spikes).
-	const int32 Cap = bLoading ? FMath::Max(1, Tn.UploadLoadMaxCells) : FMath::Max(1, Tn.UploadsPerFrame);
-	const float BudgetMs = bLoading ? Tn.UploadLoadBudgetMs : Tn.UploadBudgetMs;
+	// Only under the sector card: a synchronous build (the reel) uploads at the old load pace so a clip never plays
+	// in a half-uploaded city (review CP29).
+	const bool bCardLoad = bLoading && bAsyncLoad;
+	const int32 Cap = bLoading ? (bCardLoad ? FMath::Max(1, Tn.UploadLoadMaxCells) : MAX_int32) : FMath::Max(1, Tn.UploadsPerFrame);
+	const float BudgetMs = bLoading ? (bCardLoad ? Tn.UploadLoadBudgetMs : Tn.UploadSyncLoadBudgetMs) : Tn.UploadBudgetMs;
 	TArray<FIntVector4> Ready;
 	for (const FIntVector4& Cell : DirtyCells)
 	{

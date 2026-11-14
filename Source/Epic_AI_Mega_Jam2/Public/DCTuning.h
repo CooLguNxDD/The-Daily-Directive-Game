@@ -308,6 +308,9 @@ struct FDCLookTuning
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float BlastLightBehind = 0.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float BlastLightRadiusScale = 0.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float BlastLightHeightCm = 600.f;
+	/** Camera-side blast fill: BlastFillScale of the blast light, BlastFillOffset blast radii toward the camera (0 = off). */
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float BlastFillScale = 0.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float BlastFillOffset = 1.2f;
 	/** Fire cubes of the blast core near the local camera shrink away: gone inside HideCm, full size past FadeCm (a
 	 *  big hot cube against the lens washes the frame). The cubes are unlit when bFireCubesUnlit (their glow is the
 	 *  only light on them; the blast light no longer bleaches them white). */
@@ -318,6 +321,8 @@ struct FDCLookTuning
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float CoreFlareGlow = 40.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float CoreFlareSeconds = 0.45f;
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float CoreFlareHeightCm = 250.f;
+	/** Closer than this the core flare scales down with distance (never under 15 %). */
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float CoreFlareNearCm = 2500.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float FireCubeNearFadeCm = 0.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Look") bool bFireCubesUnlit = false;
 	/** The blast's colour at the first instant (white-gold) and once it cools (orange), then the ember it fades to. */

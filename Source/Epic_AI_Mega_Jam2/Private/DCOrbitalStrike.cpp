@@ -69,6 +69,10 @@ ADCOrbitalStrike::ADCOrbitalStrike()
 	Light->SetIntensity(0.f);
 	Light->SetAttenuationRadius(9000.f);
 	Light->SetCastShadows(false);
+	FillLight = CreateDefaultSubobject<UPointLightComponent>(TEXT("FillLight"));
+	FillLight->SetupAttachment(RootComponent);
+	FillLight->SetIntensity(0.f);
+	FillLight->SetCastShadows(false);
 }
 
 void ADCOrbitalStrike::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -252,6 +256,11 @@ void ADCOrbitalStrike::DetonateLocal(const FDCStratagemDef& Def)
 	Light->SetRelativeLocation(Away * Def.BlastRadius * BlastLook.BlastLightBehind + FVector(0, 0, BlastLook.BlastLightHeightCm));
 	Light->SetLightColor(BlastLook.Fire);
 	Light->SetAttenuationRadius(BlastLook.BlastLightRadiusScale > 0.f ? Def.BlastRadius * BlastLook.BlastLightRadiusScale : BlastLook.BlastLightRadiusCm);
+	// Camera-side fill (advisor CP22 GrokBot, review CP29: the peak target read black): a weak warm light between the
+	// blast and this machine's camera lights the facade the lens sees; the core behind keeps the rim and the halo.
+	FillLight->SetRelativeLocation(-Away * Def.BlastRadius * BlastLook.BlastFillOffset + FVector(0, 0, BlastLook.BlastLightHeightCm));
+	FillLight->SetLightColor(BlastLook.Fire);
+	FillLight->SetAttenuationRadius(FMath::Max(Def.BlastRadius * (BlastLook.BlastFillOffset + 1.5f), 1500.f));
 	float Proximity = 0.4f;
 	if (APlayerController* PC = UGameplayStatics::GetPlayerController(this, 0))
 	{
@@ -316,7 +325,16 @@ void ADCOrbitalStrike::TickBlast(float Now, const FDCStratagemDef& Def)
 	// The hot core: white-gold, far over the bloom threshold (a halo), shrinking away within CoreFlareSeconds.
 	{
 		const float CoreU = FMath::Clamp(T / FMath::Max(Look.CoreFlareSeconds, 0.01f), 0.f, 1.f);
-		const float CoreD = Look.CoreFlareMeters * (1.f - CoreU * CoreU) * FMath::Clamp(T / 0.04f, 0.2f, 1.f);
+		// Near the lens the core shrinks (a 1.8 m sphere a few metres away read as a flat white dome: critic V20.2).
+		float Near = 1.f;
+		if (const APlayerController* ViewPC = UGameplayStatics::GetPlayerController(this, 0))
+		{
+			FVector CoreEye;
+			FRotator CoreEyeRot;
+			ViewPC->GetPlayerViewPoint(CoreEye, CoreEyeRot);
+			Near = FMath::Clamp(FVector::Dist(CoreEye, GetActorLocation()) / FMath::Max(Look.CoreFlareNearCm, 1.f), 0.15f, 1.f);
+		}
+		const float CoreD = Look.CoreFlareMeters * Near * (1.f - CoreU * CoreU) * FMath::Clamp(T / 0.04f, 0.2f, 1.f);
 		Fireball->SetRelativeLocation(FVector(0, 0, Look.CoreFlareHeightCm));
 		Fireball->SetRelativeScale3D(FVector(CoreD));
 		DCAssets::SetFlat(CoreMat, Look.BlastHotColor, Look.CoreFlareGlow * (1.f - CoreU));
@@ -342,6 +360,7 @@ void ADCOrbitalStrike::TickBlast(float Now, const FDCStratagemDef& Def)
 	const float LightFade = FMath::Clamp(1.f - (T - FireballGrowSeconds) / FMath::Max(Look.BlastLightSeconds, 0.1f), 0.f, 1.f);
 	const float Tail = FMath::Clamp(Look.BlastLightTailFraction, 0.f, 1.f);
 	Light->SetIntensity(Look.BlastLightIntensity * (LightFade * LightFade * LightFade * (1.f - Tail) + Tail * FMath::Sqrt(LightFade)));
+	FillLight->SetIntensity(Look.BlastLightIntensity * Look.BlastFillScale * LightFade * LightFade);
 }
 
 void ADCOrbitalStrike::TickBehaviour(const FDCStratagemDef& Def, float U, float DeltaSeconds)
