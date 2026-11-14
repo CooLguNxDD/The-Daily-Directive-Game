@@ -69,6 +69,9 @@ public:
 	UPROPERTY(Replicated) uint8 ReelStage = 0;
 	/** Server time when the current clip started playing. */
 	UPROPERTY(Replicated) float ReelClipStart = 0.f;
+	/** False while the host holds the clip clock for its restage (review CP34): ReelClipStart is then only the
+	 *  fallback cap; the host's reel director sets the real start and this flag once its city is in. */
+	UPROPERTY(Replicated) bool bReelClipLive = true;
 
 	// Front page (R15).
 	UPROPERTY(Replicated) TArray<FDCPagePick> PagePicks;
