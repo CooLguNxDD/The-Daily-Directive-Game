@@ -1,0 +1,22 @@
+# Rooftop billboard: steel truss legs, ink frame, a dim magenta panel with a hot edge and dark glyph strokes
+# (an original pictogram: an eye over three bars, the press's "we are watching" ad). Faces +x.
+grid 10
+size 8 64 46
+slot steel Steel
+slot frame Ink
+slot face Paper
+slot edge PaperEdge
+beam 3 10 0 3 10 14 0.8 steel
+beam 3 54 0 3 54 14 0.8 steel
+beam 3 10 0 3 22 14 0.5 steel
+beam 3 54 0 3 42 14 0.5 steel
+beam 3 10 4 3 54 4 0.5 steel
+box 1 2 14 5 62 46 frame
+box 5 3 15 6 61 45 edge
+box 5 4 16 6 60 44 face
+paint ellipsoid 5.5 32 36 1 10 5 frame
+paint ellipsoid 5.5 32 36 1 7 3.2 face
+paint sphere 5.5 32 36 2 frame
+paint box 5 14 20 6 50 22 frame
+paint box 5 18 24 6 46 26 frame
+paint box 5 22 28 6 42 29 frame

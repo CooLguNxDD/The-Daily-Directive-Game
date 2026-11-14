@@ -1,0 +1,20 @@
+# Burnt delivery van: tall ink box, smouldering char cab, rubble wheels, torn panels.
+grid 5
+size 100 42 48
+slot body Ink
+slot burnt Char
+slot wheel Rubble
+slot rust InkBrown
+box 4 2 6 70 40 44 body
+poly 6 34 body 70,2 90,2 96,12 96,30 90,40 70,40
+box 72 4 22 92 38 32 burnt
+carve box 20 0 14 50 3 36
+box 20 2 14 50 4 36 burnt
+paint box 4 2 36 70 40 44 rust
+ellipsoid 18 3 6 7 3 6 wheel
+ellipsoid 18 39 6 7 3 6 wheel
+ellipsoid 80 3 6 7 3 6 wheel
+ellipsoid 80 39 6 7 3 6 wheel
+carve box 7 5 9 68 37 40
+noise 0.08 17 body
+noise 0.12 4 rust

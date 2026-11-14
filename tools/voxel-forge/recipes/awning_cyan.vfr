@@ -1,0 +1,16 @@
+# Shop awning (wall mount): dark cloth slanting out from the wall (x = 0 at the wall), a thin cyan neon valance edge.
+grid 10
+size 9 32 8
+slot cloth InkBlue
+slot rib Trim
+slot edge NeonCyanEdge
+pivot 0 16 0
+box 0 0 6 3 32 8 cloth
+box 3 0 5 6 32 7 cloth
+box 6 0 4 9 32 6 cloth
+box 8 0 2 9 32 4 cloth
+paint box 0 0 0 9 1 8 rib
+paint box 0 31 0 9 32 8 rib
+paint box 0 10 0 9 11 8 rib
+paint box 0 21 0 9 22 8 rib
+box 8 0 2 9 32 3 edge

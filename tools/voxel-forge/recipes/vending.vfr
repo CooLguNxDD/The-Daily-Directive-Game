@@ -1,0 +1,13 @@
+# Vending machine: ink cabinet, cyan lit front, dark tray (faces +x).
+grid 5
+size 12 18 40
+slot body InkBlue
+slot glow NeonCyan
+slot dark Ink
+box 0 0 0 12 18 38 body
+box 0 0 38 12 18 40 dark
+box 11 2 14 12 16 35 glow
+box 11 3 4 12 15 8 dark
+box 11 2 36 12 16 37 dark
+paint box 11 2 20 12 16 21 dark
+paint box 11 2 27 12 16 28 dark

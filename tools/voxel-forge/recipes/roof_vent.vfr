@@ -1,0 +1,11 @@
+# Roof vent stack: steel pipe with a rain cap, beside a small duct box.
+grid 10
+size 12 8 16
+slot pipe Steel
+slot cap Trim
+slot duct Slab
+cyl 4 4 0 12 2.2 pipe
+box 1 1 12 7 7 13 cap
+box 2 2 13 6 6 14 cap
+box 7 1 0 12 7 5 duct
+box 7 1 5 12 7 6 cap
