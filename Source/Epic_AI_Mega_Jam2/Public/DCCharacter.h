@@ -61,9 +61,8 @@ public:
 	bool IsCameraRaised() const { return bCameraRaised; }
 	bool IsDowned() const { return bDowned; }
 	bool HasLastFrame() const { return bDowned && bLastFrameReady; }
-	/** Last Frame in co-op (R21): slow motion on the dying player's own machine only. A remote client slows its local
-	 *  world clock (CinematicTimeDilation, never sent back to the host); a listen host who dies while others stand
-	 *  keeps the shared clock and slows only its own pawn and camera. Restored after Seconds of real time. */
+	/** Last Frame in co-op (R21): slow motion on the dying player's own machine only, as presentation
+	 *  (UDCPresentationClock: fx and animation slow, simulation stays real time). Same on a listen host and a client. */
 	UFUNCTION(Client, Reliable) void ClientLastFrameSlowMo(float Dilation, float Seconds);
 	bool IsDrawing() const;
 	bool IsReloading() const;
@@ -198,12 +197,8 @@ private:
 	UPROPERTY(ReplicatedUsing = OnRep_Downed) bool bDowned = false;
 	/** Last Frame (R21): a downed player keeps one shutter, spent or lost on revive. */
 	UPROPERTY(Replicated) bool bLastFrameReady = false;
-	/** Local Last Frame slow motion end (real seconds), 0 when none runs. */
-	double LocalSlowMoEndReal = 0.0;
 	/** Enemies hidden from one Last Frame capture (at the lens), shown again right after it. */
 	TArray<TWeakObjectPtr<AActor>> LensHidden;
-	virtual void EndPlay(const EEndPlayReason::Type Reason) override;
-	void TickLocalSlowMo();
 	/** Landing spring (local camera feel): offset in cm and its velocity. */
 	float LandDip = 0.f;
 	float LandDipVel = 0.f;

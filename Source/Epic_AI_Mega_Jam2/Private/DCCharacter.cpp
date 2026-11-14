@@ -19,6 +19,7 @@
 #include "DCOrbitalStrike.h"
 #include "DCPlayerController.h"
 #include "DCPlayerState.h"
+#include "DCPresentationClock.h"
 #include "DCReelDirector.h"
 #include "DCTuning.h"
 #include "Interfaces/MovementBaseInterface.h"
@@ -1099,55 +1100,14 @@ void ADCCharacter::ClientCue_Implementation(FName Cue) { DCAudio::Play2D(this, C
 
 void ADCCharacter::ClientLastFrameSlowMo_Implementation(float Dilation, float Seconds)
 {
-	UWorld* W = GetWorld();
-	if (!W || Dilation <= 0.f || Seconds <= 0.f)
+	// Presentation only (advisor CP6): this machine's cosmetic clock slows; no world or actor time dilation in co-op,
+	// so host and client behave the same and the simulation never drifts.
+	if (UDCPresentationClock* Clock = GetWorld() ? GetWorld()->GetSubsystem<UDCPresentationClock>() : nullptr)
 	{
-		return;
+		Clock->Begin(Dilation, Seconds);
 	}
-	LocalSlowMoEndReal = W->GetRealTimeSeconds() + Seconds;
-	if (HasAuthority())
-	{
-		// Listen host with teammates still standing: the shared clock keeps running for them.
-		CustomTimeDilation = Dilation;
-		if (APlayerController* PC = Cast<APlayerController>(GetController()); PC && PC->PlayerCameraManager)
-		{
-			PC->PlayerCameraManager->CustomTimeDilation = Dilation;
-		}
-		return;
-	}
-	W->GetWorldSettings()->CinematicTimeDilation = Dilation; // local only: the host never reads it back
-	UE_LOG(LogTemp, Display, TEXT("DCLASTFRAME local slow motion %.2f for %.1f s"), Dilation, Seconds);
 }
 
-void ADCCharacter::EndPlay(const EEndPlayReason::Type Reason)
-{
-	// A pawn removed mid slow motion (respawn, travel) never leaves its machine's clock slowed.
-	if (LocalSlowMoEndReal > 0.0 && !HasAuthority() && GetWorld() && GetWorld()->GetWorldSettings())
-	{
-		GetWorld()->GetWorldSettings()->CinematicTimeDilation = 1.f;
-	}
-	LocalSlowMoEndReal = 0.0;
-	Super::EndPlay(Reason);
-}
-
-void ADCCharacter::TickLocalSlowMo()
-{
-	UWorld* W = GetWorld();
-	if (LocalSlowMoEndReal <= 0.0 || !W || W->GetRealTimeSeconds() < LocalSlowMoEndReal)
-	{
-		return;
-	}
-	LocalSlowMoEndReal = 0.0;
-	CustomTimeDilation = 1.f;
-	if (APlayerController* PC = Cast<APlayerController>(GetController()); PC && PC->PlayerCameraManager)
-	{
-		PC->PlayerCameraManager->CustomTimeDilation = 1.f;
-	}
-	if (!HasAuthority())
-	{
-		W->GetWorldSettings()->CinematicTimeDilation = 1.f;
-	}
-}
 
 void ADCCharacter::ClientSyncAmmo_Implementation(int32 NewAmmo, int32 NewReserve)
 {
@@ -1446,7 +1406,6 @@ void ADCCharacter::Tick(float DeltaSeconds)
 	{
 		return;
 	}
-	TickLocalSlowMo();
 	UpdateView(DeltaSeconds);
 	UpdateStrikeAim();
 

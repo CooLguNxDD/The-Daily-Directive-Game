@@ -1,4 +1,5 @@
 #include "DCVoxelFx.h"
+#include "DCPresentationClock.h"
 
 #include "Components/InstancedStaticMeshComponent.h"
 #include "DCAssets.h"
@@ -47,7 +48,7 @@ void ADCVoxelFx::Spawn(int32 Kind, const FVector& Where, float Radius, int32 Cou
 {
 	const FDCFxKind& K = UDCVoxelSettings::Get().FxKinds[Kind];
 	TArray<FPuff>& List = Puffs[Kind];
-	const float Now = GetWorld()->GetTimeSeconds();
+	const float Now = FxTime;
 	for (int32 i = 0; i < Count; ++i)
 	{
 		if (List.Num() >= K.Pool)
@@ -94,7 +95,7 @@ void ADCVoxelFx::SpawnKind(FName Kind, const FVector& Where, float Radius, int32
 
 void ADCVoxelFx::Burn(FName Emitter, const FVector& Where, float Radius, float Seconds)
 {
-	const float Now = GetWorld()->GetTimeSeconds();
+	const float Now = FxTime;
 	Burns.Add({Emitter, Where, Radius, Now + Seconds, Now});
 }
 
@@ -107,10 +108,13 @@ void ADCVoxelFx::ClearAll()
 	}
 }
 
-void ADCVoxelFx::Tick(float DeltaSeconds)
+void ADCVoxelFx::Tick(float WorldDeltaSeconds)
 {
-	Super::Tick(DeltaSeconds);
-	const float Now = GetWorld()->GetTimeSeconds();
+	Super::Tick(WorldDeltaSeconds);
+	// Puffs live on this machine's presentation clock (a dying player's Last Frame slows them, R21).
+	const float DeltaSeconds = WorldDeltaSeconds * UDCPresentationClock::Dilation(this);
+	FxTime += DeltaSeconds;
+	const float Now = FxTime;
 	for (int32 i = Burns.Num() - 1; i >= 0; --i)
 	{
 		FBurn& B = Burns[i];
