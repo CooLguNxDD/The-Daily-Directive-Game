@@ -1,4 +1,5 @@
 #include "DCVoxelCity.h"
+#include "Materials/MaterialInstanceDynamic.h"
 
 #include "DCVoxelFx.h"
 #include "DCCharacter.h"
@@ -295,6 +296,22 @@ UMaterialInterface* ADCVoxelCity::VoxelMaterial()
 	return Material;
 }
 
+UMaterialInterface* ADCVoxelCity::VoxelMaterialFor(int32 VoxelCm)
+{
+	if (const TObjectPtr<UMaterialInstanceDynamic>* Found = VoxelMIDs.Find(VoxelCm))
+	{
+		return *Found;
+	}
+	UMaterialInstanceDynamic* Mid = UMaterialInstanceDynamic::Create(VoxelMaterial(), this);
+	const FDCVoxelTuning& Tn = UDCVoxelSettings::Get().Tuning;
+	Mid->SetScalarParameterValue(TEXT("VoxelCm"), static_cast<float>(VoxelCm));
+	Mid->SetScalarParameterValue(TEXT("EdgeWidth"), Tn.VoxelEdgeWidth);
+	Mid->SetScalarParameterValue(TEXT("EdgeDark"), Tn.VoxelEdgeDark);
+	Mid->SetScalarParameterValue(TEXT("Jitter"), Tn.VoxelJitter);
+	VoxelMIDs.Add(VoxelCm, Mid);
+	return Mid;
+}
+
 void ADCVoxelCity::BeginPlay()
 {
 	Super::BeginPlay();
@@ -342,7 +359,7 @@ FIntVector ADCVoxelCity::CellOf(int32 GridIndex, const FIntVector& Chunk) const
 	return DCVoxelMath::FloorDiv(Chunk, PerCell);
 }
 
-UProceduralMeshComponent* ADCVoxelCity::NewMesh(bool bCollision)
+UProceduralMeshComponent* ADCVoxelCity::NewMesh(bool bCollision, int32 VoxelCm)
 {
 	UProceduralMeshComponent* Mesh = NewObject<UProceduralMeshComponent>(this);
 	Mesh->bUseAsyncCooking = true;
@@ -350,7 +367,7 @@ UProceduralMeshComponent* ADCVoxelCity::NewMesh(bool bCollision)
 	Mesh->SetCollisionProfileName(bCollision ? TEXT("BlockAll") : TEXT("NoCollision"));
 	Mesh->SetCastShadow(true);
 	Mesh->RegisterComponent();
-	Mesh->SetMaterial(0, VoxelMaterial());
+	Mesh->SetMaterial(0, VoxelMaterialFor(VoxelCm));
 	MeshPool.Add(Mesh);
 	return Mesh;
 }
@@ -650,7 +667,7 @@ void ADCVoxelCity::StartFall(const FDCVoxelPiece& Piece, float Now, const TArray
 	F->LandCenter = LandAt;
 	const uint8 Mat = Piece.Materials.Num() > 0 ? Piece.Materials[0] : 1;
 	F->Color = Colors.IsValidIndex(Mat) ? FLinearColor::FromSRGBColor(Colors[Mat]) : FLinearColor::Black;
-	F->Comp = NewMesh(false);
+	F->Comp = NewMesh(false, Grid.VoxelCm);
 	F->Comp->SetWorldLocation(F->Pivot);
 	F->Comp->SetVisibility(false);
 	Falling.Add(F);
@@ -830,7 +847,7 @@ void ADCVoxelCity::UploadCells()
 		}
 		if (!Mesh)
 		{
-			Mesh = NewMesh(true);
+			Mesh = NewMesh(true, GridAt(G).VoxelCm);
 			Mesh->SetRelativeLocation(GridAt(G).ToWorld(FIntVector::ZeroValue));
 			Mesh->ComponentTags.Add(G == 0 ? FName(TEXT("Terrain")) : FName(*FString::Printf(TEXT("Lot%d"), G - 1)));
 		}
@@ -1005,10 +1022,21 @@ void ADCVoxelCity::Tick(float DeltaSeconds)
 			StartNextOp();
 		}
 	}
+	const double T0 = FPlatformTime::Seconds();
 	PollJobs();
+	const double T1 = FPlatformTime::Seconds();
+	const int32 DirtyBefore = DirtyCells.Num();
 	UploadCells();
+	const double T2 = FPlatformTime::Seconds();
 	TickFalling(GetWorld()->GetTimeSeconds());
+	const double T3 = FPlatformTime::Seconds();
 	TickCityShot();
+	// Hitch log (R13): which stage of the city's frame went long.
+	if ((T3 - T0) * 1000.0 > UDCVoxelSettings::Get().Tuning.HitchLogMs)
+	{
+		UE_LOG(LogTemp, Display, TEXT("DCHITCH city poll=%.1f upload=%.1f falling=%.1f ms cells=%d->%d jobs=%d"), (T1 - T0) * 1000.0, (T2 - T1) * 1000.0, (T3 - T2) * 1000.0,
+			DirtyBefore, DirtyCells.Num(), Jobs.Num());
+	}
 }
 
 void ADCVoxelCity::TickCityShot()

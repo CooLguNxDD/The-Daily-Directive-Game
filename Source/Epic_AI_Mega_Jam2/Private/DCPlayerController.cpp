@@ -1,4 +1,6 @@
 #include "DCPlayerController.h"
+#include "RenderTimer.h"
+#include "Framework/Application/SlateApplication.h"
 #include "Misc/App.h"
 #include "RHI.h"
 #include "DCVoxelCity.h"
@@ -139,7 +141,14 @@ void ADCPlayerController::TickPerf()
 	{
 		return;
 	}
-	PerfFrameMs.Add(static_cast<float>(FApp::GetDeltaTime() * 1000.0));
+	const float FrameMs = static_cast<float>(FApp::GetDeltaTime() * 1000.0);
+	PerfFrameMs.Add(FrameMs);
+	if (FrameMs > 50.f)
+	{
+		// Which thread stalled: game, render, GPU (previous frame's timings, the closest the engine keeps).
+		UE_LOG(LogTemp, Display, TEXT("DCSPIKE frame_ms=%.1f game_ms=%.1f render_ms=%.1f gpu_ms=%.1f"), FrameMs, FPlatformTime::ToMilliseconds(GGameThreadTime),
+			FPlatformTime::ToMilliseconds(GRenderThreadTime), FPlatformTime::ToMilliseconds(RHIGetGPUFrameCycles()));
+	}
 	if (const ADCVoxelCity* City = ADCVoxelCity::Get(this))
 	{
 		PerfMaxFalling = FMath::Max(PerfMaxFalling, City->GetFallingCount());
@@ -172,12 +181,73 @@ void ADCPlayerController::TickPerf()
 	PerfWindowStart = Now;
 }
 
+void ADCPlayerController::TickMenuFlow()
+{
+	static FString Dir;
+	static const bool bFlow = FParse::Value(FCommandLine::Get(), TEXT("dcmenuflow="), Dir);
+	if (!bFlow || !FSlateApplication::IsInitialized())
+	{
+		return;
+	}
+	// Steps run once each, in order, on real seconds since start (the travel replaces this controller; state is static).
+	static int32 Step = 0;
+	const double T = FPlatformTime::Seconds() - GStartTime;
+	FSlateApplication& App = FSlateApplication::Get();
+	auto Shot = [](const FString& Name) { FScreenshotRequest::RequestScreenshot(Dir / Name, true, false); };
+	auto ButtonCentre = []() -> TOptional<FVector2D>
+	{
+		const TSharedPtr<SWidget> B = DCMenu::SoloButton().Pin();
+		if (!B.IsValid())
+		{
+			return {};
+		}
+		return FVector2D(B->GetTickSpaceGeometry().GetAbsolutePositionAtCoordinates(FVector2f(0.5f, 0.5f)));
+	};
+	using FFlowStep = TFunction<bool()>;
+	const TArray<TPair<double, FFlowStep>> Steps = { // rebuilt each tick: the steps capture this tick's locals
+		{6.0, [&]() { Shot(TEXT("01_menu.png")); return true; }},
+		{7.0, [&]()
+			{
+				const TOptional<FVector2D> At = ButtonCentre();
+				if (!At)
+				{
+					return false;
+				}
+				App.SetCursorPos(*At);
+				App.ProcessMouseMoveEvent(FPointerEvent(App.GetUserIndexForMouse(), *At, *At, TSet<FKey>(), EKeys::Invalid, 0.f, FModifierKeysState()));
+				return true;
+			}},
+		{7.6, [&]() { Shot(TEXT("02_menu_cursor_on_solo_run.png")); return true; }},
+		{8.2, [&]()
+			{
+				const TOptional<FVector2D> At = ButtonCentre();
+				if (!At)
+				{
+					return false;
+				}
+				UE_LOG(LogTemp, Display, TEXT("DCMENUFLOW click SOLO RUN at %s"), *At->ToString());
+				App.ProcessMouseButtonDownEvent(nullptr, FPointerEvent(App.GetUserIndexForMouse(), *At, *At, TSet<FKey>{EKeys::LeftMouseButton}, EKeys::LeftMouseButton, 0.f, FModifierKeysState()));
+				App.ProcessMouseButtonUpEvent(FPointerEvent(App.GetUserIndexForMouse(), *At, *At, TSet<FKey>(), EKeys::LeftMouseButton, 0.f, FModifierKeysState()));
+				return true;
+			}},
+		{8.3, [&]() { Shot(TEXT("03_after_click.png")); return true; }},
+		{14.0, [&]() { Shot(TEXT("04_run_started_street.png")); return true; }},
+		{19.0, [&]() { Shot(TEXT("05_street_5s_later.png")); return true; }},
+		{20.0, [&]() { FGenericPlatformMisc::RequestExit(false); return true; }},
+	};
+	if (Steps.IsValidIndex(Step) && T >= Steps[Step].Key && Steps[Step].Value())
+	{
+		++Step;
+	}
+}
+
 void ADCPlayerController::PlayerTick(float DeltaTime)
 {
 	Super::PlayerTick(DeltaTime);
 	if (IsLocalController())
 	{
 		TickPerf();
+		TickMenuFlow();
 		UpdateMenu();
 		UpdateCursor();
 		UpdateReel();

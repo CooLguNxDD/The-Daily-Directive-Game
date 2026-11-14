@@ -91,11 +91,11 @@ void ADCDemoPilot::TickMedic()
 void ADCDemoPilot::BeginPlay()
 {
 	Super::BeginPlay();
-	if (!FParse::Value(FCommandLine::Get(), TEXT("dcshots="), ShotDir))
+	// Frames only when asked (-dcshots=<dir>): a 1080p screenshot costs ~250 ms and would pollute perf runs (R13).
+	if (FParse::Value(FCommandLine::Get(), TEXT("dcshots="), ShotDir))
 	{
-		ShotDir = FPaths::ProjectSavedDir() / TEXT("DemoShots");
+		IFileManager::Get().MakeDirectory(*ShotDir, true);
 	}
-	IFileManager::Get().MakeDirectory(*ShotDir, true);
 	bQuit = FParse::Param(FCommandLine::Get(), TEXT("dcdemoquit"));
 	bMedic = IsMedicRequested() && !IsRequested();
 	if (bMedic)
@@ -160,6 +160,11 @@ void ADCDemoPilot::AimAt(const FVector& LookTarget)
 
 void ADCDemoPilot::Shot(const FString& Name)
 {
+	if (ShotDir.IsEmpty())
+	{
+		UE_LOG(LogDCDemo, Display, TEXT("DEMO step %s (no frame: -dcshots not set)"), *Name);
+		return;
+	}
 	const FString File = ShotDir / FString::Printf(TEXT("%02d_%s.png"), ShotIndex++, *Name);
 	FScreenshotRequest::RequestScreenshot(File, true, false);
 	UE_LOG(LogDCDemo, Display, TEXT("DEMO shot %s"), *File);

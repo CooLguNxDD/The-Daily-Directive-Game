@@ -52,6 +52,9 @@ public:
 	virtual void PlayerTick(float DeltaTime) override;
 	/** -dcperf: once a real second, logs DCPERF with this machine's frame and GPU times (R13 evidence). */
 	void TickPerf();
+	/** -dcmenuflow=<dir>: frames the title menu, moves the real cursor onto SOLO RUN, clicks it with Slate mouse events
+	 *  (the same path as a player), and frames the travel and the first street, then quits (menu evidence). */
+	void TickMenuFlow();
 	TArray<float> PerfFrameMs;
 	double PerfWindowStart = 0.0;
 	int32 PerfMaxFalling = 0;

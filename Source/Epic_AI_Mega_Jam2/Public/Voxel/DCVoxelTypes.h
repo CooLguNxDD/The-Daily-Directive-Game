@@ -129,6 +129,12 @@ struct FDCVoxelTuning
 	/** Photo sight march: step along the ray (cm), and the stretch at the lens and before the subject that never blocks. */
 	/** Around a planned op, street tops are served from a snapshot until it commits: blast radius plus this (cm). */
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float HoldReachCm = 1500.f;
+	/** City frame stages longer than this (ms) are logged as DCHITCH (perf evidence). */
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float HitchLogMs = 20.f;
+	/** Voxel readability in M_DCVoxel: edge bevel width (fraction of a voxel), its darkening, and per-voxel jitter. */
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float VoxelEdgeWidth = 0.08f;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float VoxelEdgeDark = 0.35f;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float VoxelJitter = 0.12f;
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float SightStepCm = 25.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float SightSkipNearCm = 60.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float SightSkipFarCm = 250.f;

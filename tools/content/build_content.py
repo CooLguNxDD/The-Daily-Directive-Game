@@ -7,7 +7,8 @@ Creates (or rebuilds):
   /Game/DC/Materials/M_DCFlat  - opaque flat colour: BaseColor = Color, Emissive = Color * Glow (bloom source)
   /Game/DC/Materials/M_DCFlatUnlit - unlit flat colour: Emissive = Color * Glow (danger red stays palette red)
   /Game/DC/Maps/L_City         - an empty level; the city, lights and sky are spawned from C++ at run time
-  /Game/DC/Materials/M_DCVoxel - voxel meshes: BaseColor = sRGB vertex colour decoded to linear, Emissive = colour *
+  /Game/DC/Materials/M_DCVoxel - voxel meshes: BaseColor = sRGB vertex colour decoded to linear with a per-voxel
+                                 jitter and edge bevel (VoxelCm per grid size), Emissive = colour *
                                  vertex alpha * GlowScale (lit windows); colours come from the voxel palette in
                                  Config/DefaultGame.ini, so the material holds no colour of its own
   /Game/DC/Materials/M_DCInkOutline - post material: ink lines where depth or normal jumps (Sobel-style cross of
@@ -94,52 +95,71 @@ def build_flat_unlit_material():
     unreal.log("build_content: M_DCFlatUnlit saved")
 
 
+VOXEL_HLSL = r"""
+// Voxel readability (V4.2, advisor CP2): each voxel gets a small value jitter from its cell id and a dark bevel at its
+// edges, in grid-local space (LocalPos, cm) so the lines sit on the real voxel grid. Both fade as a voxel shrinks
+// under a few pixels (no moire at distance).
+float3 P = LocalPos / max(VoxelCm, 1.0);
+float3 N = abs(Normal);
+float2 UV = N.x > 0.5 ? P.yz : (N.y > 0.5 ? P.xz : P.xy);
+float3 Cell = floor(P - Normal * 0.5);
+float H = frac(sin(dot(Cell, float3(12.9898, 78.233, 37.719))) * 43758.5453);
+float2 F = frac(UV);
+float2 D = min(F, 1.0 - F);
+float Edge = 1.0 - saturate(min(D.x, D.y) / max(EdgeWidth, 0.01));
+float Px = length(fwidth(UV));
+float Fade = saturate(1.0 - (Px - 0.12) / 0.3);
+float Shade = 1.0 - (Edge * EdgeDark + (H - 0.5) * Jitter) * Fade;
+return Base * Shade;
+"""
+
+
 def build_voxel_material():
     if keep(f"{MAT_DIR}/M_DCVoxel"):
         return
     mat = fresh(MAT_DIR, "M_DCVoxel", unreal.Material, unreal.MaterialFactoryNew())
-    vc = lib.create_material_expression(mat, unreal.MaterialExpressionVertexColor, -900, 0)
+    vc = lib.create_material_expression(mat, unreal.MaterialExpressionVertexColor, -1100, 0)
     # Vertex colours carry sRGB bytes (dark ink tones keep their precision); decode to linear here.
-    pw = lib.create_material_expression(mat, unreal.MaterialExpressionPower, -600, 0)
+    pw = lib.create_material_expression(mat, unreal.MaterialExpressionPower, -850, 0)
     pw.set_editor_property("const_exponent", 2.2)
     lib.connect_material_expressions(vc, "", pw, "Base")
-    glow = lib.create_material_expression(mat, unreal.MaterialExpressionScalarParameter, -900, 300)
+    custom = lib.create_material_expression(mat, unreal.MaterialExpressionCustom, -550, 0)
+    custom.set_editor_property("code", VOXEL_HLSL)
+    custom.set_editor_property("output_type", unreal.CustomMaterialOutputType.CMOT_FLOAT3)
+    custom.set_editor_property("description", "VoxelEdges")
+    inputs = []
+    for n in ["Base", "LocalPos", "Normal", "VoxelCm", "EdgeWidth", "EdgeDark", "Jitter"]:
+        ci = unreal.CustomInput()
+        ci.set_editor_property("input_name", n)
+        inputs.append(ci)
+    custom.set_editor_property("inputs", inputs)
+    lib.connect_material_expressions(pw, "", custom, "Base")
+    lp = lib.create_material_expression(mat, unreal.MaterialExpressionLocalPosition, -850, 150)
+    lib.connect_material_expressions(lp, "", custom, "LocalPos")
+    nrm = lib.create_material_expression(mat, unreal.MaterialExpressionVertexNormalWS, -850, 250)
+    lib.connect_material_expressions(nrm, "", custom, "Normal")
+    for i, (n, v) in enumerate([("VoxelCm", 10.0), ("EdgeWidth", 0.08), ("EdgeDark", 0.35), ("Jitter", 0.12)]):
+        prm = lib.create_material_expression(mat, unreal.MaterialExpressionScalarParameter, -850, 350 + i * 90)
+        prm.set_editor_property("parameter_name", n)
+        prm.set_editor_property("default_value", v)
+        lib.connect_material_expressions(prm, "", custom, n)
+    glow = lib.create_material_expression(mat, unreal.MaterialExpressionScalarParameter, -850, 750)
     glow.set_editor_property("parameter_name", "GlowScale")
     glow.set_editor_property("default_value", 3.0)
-    alpha_glow = lib.create_material_expression(mat, unreal.MaterialExpressionMultiply, -600, 250)
+    alpha_glow = lib.create_material_expression(mat, unreal.MaterialExpressionMultiply, -550, 650)
     lib.connect_material_expressions(vc, "A", alpha_glow, "A")
     lib.connect_material_expressions(glow, "", alpha_glow, "B")
-    emissive = lib.create_material_expression(mat, unreal.MaterialExpressionMultiply, -300, 200)
+    emissive = lib.create_material_expression(mat, unreal.MaterialExpressionMultiply, -300, 400)
     lib.connect_material_expressions(pw, "", emissive, "A")
     lib.connect_material_expressions(alpha_glow, "", emissive, "B")
-    rough = lib.create_material_expression(mat, unreal.MaterialExpressionConstant, -600, 450)
+    rough = lib.create_material_expression(mat, unreal.MaterialExpressionConstant, -550, 850)
     rough.set_editor_property("r", 0.9)
-    lib.connect_material_property(pw, "", unreal.MaterialProperty.MP_BASE_COLOR)
+    lib.connect_material_property(custom, "", unreal.MaterialProperty.MP_BASE_COLOR)
     lib.connect_material_property(emissive, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
     lib.connect_material_property(rough, "", unreal.MaterialProperty.MP_ROUGHNESS)
     lib.recompile_material(mat)
     eal.save_asset(f"{MAT_DIR}/M_DCVoxel")
     unreal.log("build_content: M_DCVoxel saved")
-
-
-OUTLINE_HLSL = r"""
-float2 Px = float2(Thickness, Thickness);
-float Dc = SceneTextureFetch(PPI_SceneDepth, float2(0, 0)).r;
-float3 Nc = SceneTextureFetch(PPI_WorldNormal, float2(0, 0)).rgb;
-float Edge = 0;
-float2 Taps[4] = { float2(Px.x, 0), float2(-Px.x, 0), float2(0, Px.y), float2(0, -Px.y) };
-for (int i = 0; i < 4; ++i)
-{
-    float D = SceneTextureFetch(PPI_SceneDepth, Taps[i]).r;
-    float3 N = SceneTextureFetch(PPI_WorldNormal, Taps[i]).rgb;
-    // Only the nearer side of a depth step inks, so silhouettes stay one line wide.
-    Edge = max(Edge, saturate(((D - Dc) / max(Dc, 1.0) - DepthThreshold) * 25.0));
-    Edge = max(Edge, saturate((1.0 - dot(N, Nc) - NormalThreshold) * 4.0));
-}
-Edge *= saturate(1.0 - Dc / max(FadeDistance, 1.0)) * saturate(Strength);
-float3 Scene = SceneTextureFetch(PPI_PostProcessInput0, float2(0, 0)).rgb;
-return lerp(Scene, InkColor.rgb * min(Scene, 1.0), Edge);
-"""
 
 
 def build_outline_material():

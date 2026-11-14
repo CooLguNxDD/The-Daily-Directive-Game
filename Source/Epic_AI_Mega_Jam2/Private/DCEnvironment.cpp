@@ -56,6 +56,10 @@ ADCEnvironment::ADCEnvironment()
 	Ground->SetMobility(EComponentMobility::Movable); // placed at run time (top face at z = 0); Static refused the move
 	Ground->SetCollisionProfileName(TEXT("BlockAll"));
 
+	Backdrop = CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("Backdrop"));
+	Backdrop->SetupAttachment(Root);
+	Backdrop->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	Backdrop->SetCastShadow(false);
 	for (TObjectPtr<UInstancedStaticMeshComponent>* Ism : {&Sidewalks, &Dashes})
 	{
 		*Ism = CreateDefaultSubobject<UInstancedStaticMeshComponent>(Ism == &Sidewalks ? TEXT("Sidewalks") : TEXT("Dashes"));
@@ -320,9 +324,42 @@ void ADCEnvironment::UpdateWeather(float DeltaSeconds)
 	}
 }
 
+void ADCEnvironment::BuildBackdrop(const ADCVoxelCity& City, int32 RunSeed, int32 SectorIndex)
+{
+	// Seeded per sector, the same on every machine (cosmetic only, no collision).
+	const FDCLookTuning& L = UDCTuning::Get().Look;
+	Backdrop->ClearInstances();
+	Backdrop->SetStaticMesh(DCAssets::Cube());
+	Backdrop->SetMaterial(0, DCAssets::MakeFlat(this, L.BackdropColor));
+	const float Half = FMath::Abs(static_cast<float>(City.GetSector().Terrain.OriginCm.X));
+	FRandomStream Rng(HashCombine(GetTypeHash(RunSeed), GetTypeHash(SectorIndex * 7919 + 13)));
+	for (int32 i = 0; i < L.BackdropTowers; ++i)
+	{
+		const float A = 2.f * PI * (i + Rng.FRand() * 0.6f) / FMath::Max(L.BackdropTowers, 1);
+		const float R = Half + L.BackdropGapCm + Rng.FRand() * L.BackdropDepthCm;
+		const FVector2D Dir(FMath::Cos(A), FMath::Sin(A));
+		// The sector is a square: push each tower out to clear its corners.
+		const float Square = Half / FMath::Max(FMath::Abs(Dir.X), FMath::Abs(Dir.Y));
+		const FVector2D At = Dir * (R - Half + Square);
+		const float W = Rng.FRandRange(L.BackdropWidthCm.X, L.BackdropWidthCm.Y);
+		const float D = Rng.FRandRange(L.BackdropWidthCm.X, L.BackdropWidthCm.Y);
+		const float H = Rng.FRandRange(L.BackdropHeightCm.X, L.BackdropHeightCm.Y);
+		Backdrop->AddInstance(FTransform(FRotator(0.f, Rng.FRandRange(0.f, 90.f), 0.f), FVector(At.X, At.Y, H * 0.5f), FVector(W / 100.f, D / 100.f, H / 100.f)));
+	}
+}
+
 void ADCEnvironment::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
+	if (const ADCGameState* BGS = GetWorld()->GetGameState<ADCGameState>())
+	{
+		const ADCVoxelCity* City = ADCVoxelCity::IsEnabled() ? ADCVoxelCity::Get(this) : nullptr;
+		if (City && City->GetBuiltSector() != INDEX_NONE && City->GetBuildId() != BackdropBuild)
+		{
+			BackdropBuild = City->GetBuildId();
+			BuildBackdrop(*City, BGS->RunSeed, City->GetBuiltSector());
+		}
+	}
 	const FDCLookTuning& Look = UDCTuning::Get().Look;
 	const double Elapsed = GetWorld()->GetRealTimeSeconds() - FlashStartReal;
 	const float T = FMath::Clamp(static_cast<float>(Elapsed) / FMath::Max(Look.FlashDecaySeconds, 0.01f), 0.f, 1.f);
@@ -346,6 +383,10 @@ void ADCEnvironment::Tick(float DeltaSeconds)
 	Sun->SetIntensity(Look.SunIntensityLux * Light * W.SunScale);
 	Sun->SetLightColor(Look.SunColor * W.SunTint);
 	SkyLight->SetIntensity(Light * W.SkyScale);
+	// The poster sky holds cream to the zenith under any weather: dimming the sun would grey the sky with it, so the
+	// sky luminance makes up for the weather's sun scale (V4.3). Mutators (eclipse) still darken it through Light.
+	const float SkyKeep = Look.SkyLuminance * Light / FMath::Max(W.SunScale, Look.SkyMinSunScale);
+	Atmosphere->SetSkyLuminanceFactor(FLinearColor(SkyKeep, SkyKeep, SkyKeep));
 	Fog->SetFogDensity(W.FogDensity);
 	Fog->SetFogInscatteringColor(MutatorFog.A > 0.f ? MutatorFog : W.FogColor);
 	UpdatePostWeights();

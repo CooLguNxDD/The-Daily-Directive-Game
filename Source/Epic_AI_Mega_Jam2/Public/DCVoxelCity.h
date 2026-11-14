@@ -133,8 +133,11 @@ private:
 	const FDCVoxelGrid& GridAt(int32 GridIndex) const;
 	int32 NumGrids() const { return Sector.Towers.Num() + 2; }
 	FIntVector CellOf(int32 GridIndex, const FIntVector& Chunk) const;
-	UProceduralMeshComponent* NewMesh(bool bCollision);
+	UProceduralMeshComponent* NewMesh(bool bCollision, int32 VoxelCm);
 	UMaterialInterface* VoxelMaterial();
+	/** One instance of the voxel material per voxel size: its edge bevel sits on that grid (V4.2). */
+	UMaterialInterface* VoxelMaterialFor(int32 VoxelCm);
+	UPROPERTY() TMap<int32, TObjectPtr<class UMaterialInstanceDynamic>> VoxelMIDs;
 
 	FDCVoxelSector Sector;
 	FDCVoxelOpContext OpCtx;

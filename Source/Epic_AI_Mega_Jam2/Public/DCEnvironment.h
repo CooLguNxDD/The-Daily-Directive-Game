@@ -64,6 +64,10 @@ private:
 	/** The street grid read from the city tuning (same on every machine and every sector): kerbed blocks and lane dashes. */
 	UPROPERTY(VisibleAnywhere) TObjectPtr<class UInstancedStaticMeshComponent> Sidewalks;
 	UPROPERTY(VisibleAnywhere) TObjectPtr<class UInstancedStaticMeshComponent> Dashes;
+	/** The skyline beyond the sector edge: ink tower silhouettes in a ring (no barren plain past the last street). */
+	UPROPERTY(VisibleAnywhere) TObjectPtr<class UInstancedStaticMeshComponent> Backdrop;
+	int32 BackdropBuild = INDEX_NONE;
+	void BuildBackdrop(const class ADCVoxelCity& City, int32 RunSeed, int32 Sector);
 	UPROPERTY() TObjectPtr<ADCDebrisPool> DebrisPool;
 
 	float FlashPeak = 0.f;

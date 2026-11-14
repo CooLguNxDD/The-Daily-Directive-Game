@@ -55,11 +55,14 @@ namespace DCMenuStyle
 		return Style;
 	}
 
-	TSharedRef<SWidget> Button(const FString& Text, TFunction<void()> OnClick, const FLinearColor& Fill = Gold)
+	TWeakPtr<SWidget> GSoloButton;
+
+	TSharedRef<SWidget> Button(const FString& Text, TFunction<void()> OnClick, const FLinearColor& Fill = Gold, TWeakPtr<SWidget>* OutButton = nullptr)
 	{
-		return SNew(SBox).WidthOverride(420.f).HeightOverride(64.f).Padding(FMargin(0, 6))
+		TSharedPtr<SButton> Made;
+		TSharedRef<SWidget> Box = SNew(SBox).WidthOverride(420.f).HeightOverride(64.f).Padding(FMargin(0, 6))
 			[
-				SNew(SButton)
+				SAssignNew(Made, SButton)
 				.ButtonStyle(&FlatButton())
 				.ButtonColorAndOpacity(Fill)
 				.HAlign(HAlign_Center).VAlign(VAlign_Center)
@@ -68,6 +71,11 @@ namespace DCMenuStyle
 					SNew(STextBlock).Text(FText::FromString(Text)).Font(Font(22)).ColorAndOpacity(Fill.Equals(Ink) ? Paper : Ink)
 				]
 			];
+		if (OutButton)
+		{
+			*OutButton = Made;
+		}
+		return Box;
 	}
 
 	FString LocalAddress()
@@ -114,7 +122,7 @@ namespace DCMenu
 		[&]()
 		{
 			TSharedRef<SEditableTextBox> Address = SNew(SEditableTextBox).Text(FText::FromString(TEXT("127.0.0.1"))).Font(Font(20, "Regular")).Justification(ETextJustify::Center);
-			Column->AddSlot().AutoHeight().HAlign(HAlign_Center)[Button(TEXT("SOLO RUN"), Click(&ADCPlayerController::MenuSolo))];
+			Column->AddSlot().AutoHeight().HAlign(HAlign_Center)[Button(TEXT("SOLO RUN"), Click(&ADCPlayerController::MenuSolo), Gold, &GSoloButton)];
 			Column->AddSlot().AutoHeight().HAlign(HAlign_Center)[Button(TEXT("HOST CO-OP (1-4)"), Click(&ADCPlayerController::MenuHost))];
 			Column->AddSlot().AutoHeight().HAlign(HAlign_Center).Padding(0, 14, 0, 0)[Label(TEXT("JOIN A FRIEND: HOST IP"), 14, Ink)];
 			Column->AddSlot().AutoHeight().HAlign(HAlign_Center)[SNew(SBox).WidthOverride(420.f).HeightOverride(44.f)[Address]];
@@ -191,4 +199,9 @@ namespace DCMenu
 			];
 		return Root;
 	}
+}
+
+TWeakPtr<SWidget> DCMenu::SoloButton()
+{
+	return GSoloButton;
 }

@@ -212,6 +212,17 @@ struct FDCLookTuning
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float SkyMieScale = 0.012f;
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float SkyMieHeightKm = 3.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Look") FLinearColor SkyMieAlbedo = FLinearColor(1.f, 0.92f, 0.78f);
+	/** Sky luminance factor; divided by the weather's sun scale (floored at SkyMinSunScale) so overcast never greys it. */
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float SkyLuminance = 1.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float SkyMinSunScale = 0.4f;
+	/** Backdrop skyline past the sector edge: towers in a ring starting GapCm out, DepthCm deep; footprint and height
+	 *  ranges in cm; the colour is an ink tone (the height fog hazes the far ones toward the sky). */
+	UPROPERTY(EditAnywhere, Config, Category = "Look") int32 BackdropTowers = 90;
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float BackdropGapCm = 2500.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float BackdropDepthCm = 9000.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Look") FVector2D BackdropWidthCm = FVector2D(1200.f, 3200.f);
+	UPROPERTY(EditAnywhere, Config, Category = "Look") FVector2D BackdropHeightCm = FVector2D(2500.f, 9000.f);
+	UPROPERTY(EditAnywhere, Config, Category = "Look") FLinearColor BackdropColor = FLinearColor(0.035f, 0.032f, 0.03f);
 	/** Ink outline (its strength is the post stack's Outline): line width in pixels, the relative depth step and the
 	 *  normal change that count as an edge, and the distance (cm) where lines fade out (far towers stay soft). */
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float OutlineThicknessPx = 1.5f;
