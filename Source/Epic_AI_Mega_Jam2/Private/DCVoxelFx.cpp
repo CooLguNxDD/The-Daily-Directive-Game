@@ -2,6 +2,8 @@
 #include "DCPresentationClock.h"
 
 #include "Components/InstancedStaticMeshComponent.h"
+#include "Components/StaticMeshComponent.h"
+#include "Materials/MaterialInstanceDynamic.h"
 #include "DCAssets.h"
 #include "Engine/World.h"
 #include "Camera/PlayerCameraManager.h"
@@ -37,6 +39,46 @@ void ADCVoxelFx::BeginPlay()
 		Puffs.AddDefaulted();
 		Shown.Add(0);
 	}
+}
+
+void ADCVoxelFx::Tracer(const FVector& From, const FVector& To, const FLinearColor& Color, float Glow)
+{
+	const FDCVoxelTuning& Tn = UDCVoxelSettings::Get().Tuning;
+	if (Tn.TracerPool <= 0)
+	{
+		return;
+	}
+	if (BoltMeshes.Num() == 0)
+	{
+		// Prewarmed on first use (most sectors have some faction fire; the pool stays bounded).
+		for (int32 i = 0; i < Tn.TracerPool; ++i)
+		{
+			UStaticMeshComponent* M = NewObject<UStaticMeshComponent>(this);
+			M->SetupAttachment(RootComponent);
+			M->SetMobility(EComponentMobility::Movable);
+			M->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+			M->SetCastShadow(false);
+			M->SetStaticMesh(DCAssets::Cube());
+			M->SetVisibility(false);
+			M->RegisterComponent();
+			BoltMeshes.Add(M);
+			Bolts.Add({M, 0.f});
+		}
+	}
+	FBolt& B = Bolts[NextBolt];
+	NextBolt = (NextBolt + 1) % Bolts.Num();
+	const uint32 Key = HashCombine(GetTypeHash(Color.ToFColor(true)), GetTypeHash(FMath::RoundToInt(Glow)));
+	TObjectPtr<UMaterialInstanceDynamic>* Found = BoltMaterials.Find(Key);
+	UMaterialInstanceDynamic* Mid = Found ? Found->Get() : BoltMaterials.Add(Key, DCAssets::MakeFlatUnlit(this, Color, Glow)).Get();
+	const FVector D = To - From;
+	const float Len = FMath::Max(D.Size(), 1.f);
+	// A short bolt riding the shot line (not the whole line): reads as a fired round, not a laser.
+	const float BoltLen = FMath::Min(Len, Tn.TracerLengthCm);
+	const FVector Mid3 = From + D / Len * (Len - BoltLen * 0.5f) * Rng.FRandRange(0.35f, 1.f);
+	B.Mesh->SetMaterial(0, Mid);
+	B.Mesh->SetWorldTransform(FTransform(D.Rotation(), Mid3, FVector(BoltLen / 100.f, Tn.TracerWidthCm / 100.f, Tn.TracerWidthCm / 100.f)));
+	B.Mesh->SetVisibility(true);
+	B.Until = FxTime + Tn.TracerSeconds;
 }
 
 int32 ADCVoxelFx::KindIndex(FName Kind) const
@@ -115,6 +157,14 @@ void ADCVoxelFx::Tick(float WorldDeltaSeconds)
 	const float DeltaSeconds = WorldDeltaSeconds * UDCPresentationClock::Dilation(this);
 	FxTime += DeltaSeconds;
 	const float Now = FxTime;
+	for (FBolt& B : Bolts)
+	{
+		if (B.Until > 0.f && Now >= B.Until)
+		{
+			B.Until = 0.f;
+			B.Mesh->SetVisibility(false);
+		}
+	}
 	for (int32 i = Burns.Num() - 1; i >= 0; --i)
 	{
 		FBurn& B = Burns[i];

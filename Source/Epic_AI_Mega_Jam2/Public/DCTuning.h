@@ -8,6 +8,8 @@
 #include "DCTypes.h"
 #include "Rules/DCPhotoRules.h"
 #include "Rules/DCPressureRules.h"
+#include "Rules/DCFactionRules.h"
+#include "Rules/DCObjectiveRules.h"
 #include "Rules/DCNewsprint.h"
 #include "Rules/DCOutfit.h"
 #include "Rules/DCPostStack.h"
@@ -416,6 +418,25 @@ struct FDCEnemyDef
 	UPROPERTY(EditAnywhere, Config, Category = "Enemy") float ModelScale = 1.f;
 	/** Model pivot (its bottom centre) relative to the actor, which flies at HoverHeight. */
 	UPROPERTY(EditAnywhere, Config, Category = "Enemy") FVector ModelOffset = FVector::ZeroVector;
+	/** R3: the faction this unit fights for (+Factions row). None = the regime's own machines (old behaviour: they
+	 *  hunt the crew only). */
+	UPROPERTY(EditAnywhere, Config, Category = "Enemy") FName Faction;
+	/** Ranged attack (cm): 0 = melee at AttackRange. A ranged unit fires a tracer every AttackInterval at a foe inside
+	 *  ShotRange it can see (host voxel sight line), Damage per hit, ShotSpread degrees of miss. */
+	UPROPERTY(EditAnywhere, Config, Category = "Enemy") float ShotRange = 0.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Enemy") float ShotSpread = 2.f;
+	/** Squad shape for ground infantry (formation registry): Crowd, Line, Skirmish. Spacing between slots (cm). */
+	UPROPERTY(EditAnywhere, Config, Category = "Enemy") FName Formation = TEXT("Crowd");
+	UPROPERTY(EditAnywhere, Config, Category = "Enemy") float FormationSpacingCm = 220.f;
+	/** Without a foe the squad heads for: Players (hunt the crew), Rubble (loot the newest collapse), Front (the
+	 *  nearest hostile unit anywhere). Goal registry in DCEnemy.cpp. */
+	UPROPERTY(EditAnywhere, Config, Category = "Enemy") FName Goal = TEXT("Players");
+	/** Gait read (rigid voxel models): body bob (cm) and sway (deg) per step at StepHz while moving. */
+	UPROPERTY(EditAnywhere, Config, Category = "Enemy") float BobCm = 0.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Enemy") float SwayDeg = 0.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Enemy") float StepHz = 2.f;
+	/** Replication rate (Hz): ground infantry is fine at 10 (advisor a-2). */
+	UPROPERTY(EditAnywhere, Config, Category = "Enemy") float NetHz = 30.f;
 };
 
 /** One wave inside a sector: Count enemies of EnemyId, one every Interval seconds from StartSeconds. */
@@ -617,6 +638,30 @@ struct FDCRunTuning
 	UPROPERTY(EditAnywhere, Config, Category = "Run") TMap<FName, FString> Subjects;
 };
 
+/** R5 shareable ID card: the builder's turntable (same recipe as the in-game character) at Angles yaw steps, one big
+ *  hero view and a strip of the turn, the call sign and share code, in the noir look. Written to Saved/<OutDir>/. */
+USTRUCT(BlueprintType)
+struct FDCCardTuning
+{
+	GENERATED_BODY()
+	UPROPERTY(EditAnywhere, Config, Category = "Card") int32 Width = 1200;
+	UPROPERTY(EditAnywhere, Config, Category = "Card") int32 Height = 675;
+	UPROPERTY(EditAnywhere, Config, Category = "Card") int32 Angles = 6;
+	/** Yaw of the hero view (deg; 0 = facing the lens). */
+	UPROPERTY(EditAnywhere, Config, Category = "Card") float HeroYaw = 25.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Card") FLinearColor Background = FLinearColor(0.012f, 0.014f, 0.03f);
+	UPROPERTY(EditAnywhere, Config, Category = "Card") FLinearColor Panel = FLinearColor(0.03f, 0.035f, 0.07f);
+	UPROPERTY(EditAnywhere, Config, Category = "Card") FLinearColor Ink = FLinearColor(0.92f, 0.94f, 1.f);
+	UPROPERTY(EditAnywhere, Config, Category = "Card") FLinearColor AccentA = FLinearColor(1.f, 0.03f, 0.22f);
+	UPROPERTY(EditAnywhere, Config, Category = "Card") FLinearColor AccentB = FLinearColor(0.03f, 0.75f, 1.f);
+	UPROPERTY(EditAnywhere, Config, Category = "Card") float ScanlineAlpha = 0.12f;
+	UPROPERTY(EditAnywhere, Config, Category = "Card") FString Title = TEXT("DIRECTOR'S CUT: FRONT PAGE");
+	UPROPERTY(EditAnywhere, Config, Category = "Card") FString Subtitle = TEXT("PRESS CREDENTIAL  //  WAR PHOTOGRAPHER");
+	UPROPERTY(EditAnywhere, Config, Category = "Card") FString Footer = TEXT("PASTE THE CODE IN THE BUILDER TO WEAR THIS PHOTOGRAPHER");
+	UPROPERTY(EditAnywhere, Config, Category = "Card") FString Stamp = TEXT("CLEARED FOR THE FRONT");
+	UPROPERTY(EditAnywhere, Config, Category = "Card") FString OutDir = TEXT("IdCards");
+};
+
 UCLASS(Config = Game, DefaultConfig, meta = (DisplayName = "Director's Cut Tuning"))
 class EPIC_AI_MEGA_JAM2_API UDCTuning : public UDeveloperSettings
 {
@@ -635,6 +680,13 @@ public:
 	UPROPERTY(EditAnywhere, Config, Category = "Look") FDCLookTuning Look;
 	UPROPERTY(EditAnywhere, Config, Category = "Strike") TArray<FDCStratagemDef> Stratagems;
 	UPROPERTY(EditAnywhere, Config, Category = "Enemy") TArray<FDCEnemyDef> Enemies;
+	/** R3 factions and how each map's mix is rolled. */
+	UPROPERTY(EditAnywhere, Config, Category = "Enemy") TArray<FDCFactionDef> Factions;
+	UPROPERTY(EditAnywhere, Config, Category = "Enemy") FDCFactionMixRule FactionMix;
+	/** R4 sector objectives (picked per sector by the run seed) and how they read in the world. */
+	UPROPERTY(EditAnywhere, Config, Category = "Objective") TArray<FDCObjectiveDef> Objectives;
+	UPROPERTY(EditAnywhere, Config, Category = "Objective") FDCObjectiveLook ObjectiveLook;
+	UPROPERTY(EditAnywhere, Config, Category = "Card") FDCCardTuning Card;
 	UPROPERTY(EditAnywhere, Config, Category = "Sector") TArray<FDCSectorDef> Sectors;
 	UPROPERTY(EditAnywhere, Config, Category = "Input") TArray<FDCActionDef> Actions;
 	UPROPERTY(EditAnywhere, Config, Category = "Input") TArray<FDCKeyBinding> Bindings;

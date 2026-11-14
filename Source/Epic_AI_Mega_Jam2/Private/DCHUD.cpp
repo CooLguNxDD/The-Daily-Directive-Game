@@ -1,4 +1,6 @@
 #include "DCHUD.h"
+#include "Rules/DCFactionRules.h"
+#include "DCObjective.h"
 #include "DCFonts.h"
 #include "CanvasItem.h"
 #include "EngineFontServices.h"
@@ -169,6 +171,8 @@ void ADCHUD::DrawSector(ADCGameState& GS, ADCCharacter* Me)
 		DrawStrikeInfo(*Me);
 	}
 	DrawStatus(GS, *Me);
+	DrawObjective(GS, *Me);
+	DrawTerritory(GS, *Me);
 	DrawScoop(GS);
 	DrawHurt(*Me);
 	if (ADCPlayerController* PC = Cast<ADCPlayerController>(PlayerOwner))
@@ -224,6 +228,33 @@ void ADCHUD::DrawSectorCard(ADCGameState& GS)
 	Box(W * 0.2f, H * 0.36f - Lift, W * 0.6f, Sx(3.f), RuleA);
 	Text(FString::Printf(TEXT("SECTOR %d OF %d"), GS.SectorIndex + 1, FMath::Max(T.Sectors.Num(), 1)), W * 0.5f, H * 0.385f - Lift, RuleA, 1.1f, true);
 	Text(Name, W * 0.5f, H * 0.44f - Lift, TitleA, T.Look.SectorCardTitleScale, true, HeadFont);
+	// R3: whose ground this is and who is raiding it, each name in its faction's light cue.
+	const FDCFactionMix& Mix = GS.FactionMix;
+	auto CueA = [&T, A](FName Id)
+	{
+		const FDCFactionDef* F = DCFactionRules::Find(T.Factions, Id);
+		const FLinearColor C = F ? F->Cue : FLinearColor::White;
+		return FLinearColor(C.R, C.G, C.B, A);
+	};
+	auto NameOf = [&T](FName Id)
+	{
+		const FDCFactionDef* F = DCFactionRules::Find(T.Factions, Id);
+		return F ? F->DisplayName : Id.ToString().ToUpper();
+	};
+	if (!Mix.Main.IsNone())
+	{
+		Text(FString::Printf(TEXT("TERRITORY OF %s"), *NameOf(Mix.Main)), W * 0.5f, H * 0.535f - Lift, CueA(Mix.Main), 1.15f, true);
+		const int32 N = Mix.Invaders.Num();
+		if (N > 0)
+		{
+			Text(TEXT("RAIDED BY"), W * 0.5f, H * 0.572f - Lift, TitleA, 0.8f, true);
+		}
+		for (int32 i = 0; i < N; ++i)
+		{
+			const float X = W * (0.5f + (i - (N - 1) * 0.5f) * 0.16f);
+			Text(NameOf(Mix.Invaders[i]), X, H * 0.597f - Lift, CueA(Mix.Invaders[i]), 0.9f, true);
+		}
+	}
 	Box(W * 0.2f, H * 0.62f - Lift, W * 0.6f, Sx(3.f), RuleA);
 	Text(TEXT("CAMERAS READY. THE CITY IS YOUR STUDIO."), W * 0.5f, H * 0.645f - Lift, TitleA, 0.95f, true);
 }
@@ -792,6 +823,85 @@ void ADCHUD::DrawToast(ADCCharacter& Me)
 		return;
 	}
 	Text(Me.Feedback().Toast, Canvas->ClipX * 0.5f, Canvas->ClipY * 0.62f, FLinearColor(1.f, 0.85f, 0.3f, FMath::Clamp((2.2f - Age) * 2.f, 0.f, 1.f)), 0.85f, true);
+}
+
+void ADCHUD::DrawTerritory(ADCGameState& GS, ADCCharacter& Me)
+{
+	// R3: who holds which part of the map, a small grid of zones in each owner's light cue (top right, under the film);
+	// the crew's own zone is outlined. North up, like the street grid.
+	const UDCTuning& T = UDCTuning::Get();
+	const int32 N = FMath::Max(1, T.FactionMix.ZonesPerSide);
+	if (GS.Zones.Num() != N * N)
+	{
+		return;
+	}
+	const float W = Canvas->ClipX;
+	const float Cell = Sx(16.f), Gap = Sx(2.f);
+	const float X0 = W - Sx(24.f) - N * (Cell + Gap), Y0 = Sx(112.f);
+	Text(TEXT("TERRITORY"), X0, Y0 - Sx(16.f), FLinearColor(1.f, 1.f, 1.f, 0.7f), 0.5f);
+	const float Half = GS.ZoneHalfExtent;
+	const int32 Mine = Half > 0.f ? DCFactionRules::ZoneOf(Me.GetActorLocation(), Half, N) : INDEX_NONE;
+	for (int32 z = 0; z < GS.Zones.Num(); ++z)
+	{
+		const FDCFactionDef* F = DCFactionRules::Find(T.Factions, GS.Zones[z]);
+		const FLinearColor C = F ? F->Cue : FLinearColor(0.2f, 0.2f, 0.25f);
+		// Row 0 is the map's -Y edge; draw +X to the right and +Y up.
+		const float X = X0 + (z % N) * (Cell + Gap), Y = Y0 + (N - 1 - z / N) * (Cell + Gap);
+		Box(X, Y, Cell, Cell, FLinearColor(C.R, C.G, C.B, 0.75f));
+		if (z == Mine)
+		{
+			Frame(X - Sx(2.f), Y - Sx(2.f), Cell + Sx(4.f), Cell + Sx(4.f), Sx(2.f), FLinearColor::White);
+		}
+	}
+}
+
+void ADCHUD::DrawObjective(ADCGameState& GS, ADCCharacter& Me)
+{
+	// R4: HQ's order for this sector (top left, under the points) and a waypoint diamond in signal yellow: the crew
+	// uses it. Off screen the diamond rides the edge toward it.
+	const ADCObjective* O = ADCObjective::Find(this);
+	const FDCObjectiveDef* Def = O ? O->GetDef() : nullptr;
+	if (!Def || O->Stage == EDCObjectiveStage::None)
+	{
+		return;
+	}
+	const float W = Canvas->ClipX, H = Canvas->ClipY;
+	const bool bRetrieve = Def->Kind == TEXT("Retrieve");
+	const bool bMine = O->Carrier && O->Carrier == Me.GetPlayerState();
+	const TMap<EDCObjectiveStage, FString> Lines = {
+		{EDCObjectiveStage::Active, Def->Title.Replace(TEXT("{N}"), *FString::FromInt(O->TargetsLeft()))},
+		{EDCObjectiveStage::Extract, bRetrieve && !O->Carrier ? TEXT("PICK THE PACKAGE BACK UP") : (bMine ? TEXT("YOU CARRY THE PACKAGE: GET TO THE BEACON") : TEXT("EXTRACT AT THE BEACON"))},
+		{EDCObjectiveStage::Done, TEXT("EXTRACTED")},
+		{EDCObjectiveStage::Failed, TEXT("OBJECTIVE FAILED")},
+	};
+	const FString* Line = Lines.Find(O->Stage);
+	const float X = Sx(24.f), Y = Sx(96.f);
+	Box(X - Sx(4.f), Y, Sx(4.f), Sx(44.f), Gold);
+	Text(TEXT("OBJECTIVE"), X + Sx(8.f), Y, FLinearColor(1.f, 1.f, 1.f, 0.7f), 0.5f);
+	Text(Line ? *Line : FString(), X + Sx(8.f), Y + Sx(16.f), O->Stage == EDCObjectiveStage::Failed ? Red : Gold, 0.72f);
+	FVector At;
+	if (!O->Waypoint(Me.GetActorLocation(), At))
+	{
+		return;
+	}
+	const FVector S = Project(At + FVector(0, 0, 200.f), false);
+	const float Margin = Sx(60.f);
+	FVector2D P(S.X, S.Y);
+	if (S.Z <= 0.f)
+	{
+		// Behind the camera: mirror to the bottom edge so the arrow still points the right way.
+		P = FVector2D(W - S.X, H - Margin);
+	}
+	P.X = FMath::Clamp(P.X, Margin, W - Margin);
+	P.Y = FMath::Clamp(P.Y, Margin + Sx(110.f), H - Margin);
+	const float Pulse = 0.7f + 0.3f * FMath::Sin(RealNow * 4.f);
+	const float R = Sx(11.f);
+	const FLinearColor C(Gold.R, Gold.G, Gold.B, Pulse);
+	DrawLine(P.X - R, P.Y, P.X, P.Y - R, C, 3.f);
+	DrawLine(P.X, P.Y - R, P.X + R, P.Y, C, 3.f);
+	DrawLine(P.X + R, P.Y, P.X, P.Y + R, C, 3.f);
+	DrawLine(P.X, P.Y + R, P.X - R, P.Y, C, 3.f);
+	Text(FString::Printf(TEXT("%.0f M"), FVector::Dist2D(Me.GetActorLocation(), At) / 100.f), P.X, P.Y + R + Sx(4.f), C, 0.55f, true);
 }
 
 void ADCHUD::DrawScoop(ADCGameState& GS)

@@ -46,6 +46,9 @@ art) is in the game.
 | City props (R2), wall mounts (stamped into tower grids): `awning_cyan`, `awning_magenta`, `pipes`, `wall_billboard`, `wall_ac` | `Content/DC/Voxel/<name>.dcvox` | `tools/voxel-forge/forge.py` from `tools/voxel-forge/recipes/<name>.vfr` |
 | Street cables with lit beads and their poles (R2) | at run time | C++ (`DCVoxelCraft::CraftProps`) from the `Cable` prop layer row in `Config/DefaultGame.ini` |
 | City props (R2), signs from generated art: `billboard_noodle`, `billboard_eye` (rooftop), `sign_koi` (wall) | `Content/DC/Voxel/<name>.dcvox` | `tools/voxel-forge/forge.py` `image` op quantizes the generated pictures below into palette slots |
+| Faction unit models (trooper, shambler, raider, soldier, skitter; Brute and Brood are scaled shamblers/skitters) and the objective package (`package`) | `Content/DC/Voxel/*.dcvox` | `tools/voxel-forge/forge.py` from `tools/voxel-forge/recipes/{trooper,shambler,raider,soldier,skitter,package}.vfr` (R3, R4; original designs) |
+| Faction sound cues (FactionShot, Groan, FactionStrike) | synthesised at run time | C++ synth in `DCAudio.cpp` |
+| Shareable ID card (turntable PNG) | written to `Saved/IdCards/` at run time | C++ canvas render target from the builder's turntable capture (`DCIdCard.cpp`, R5) |
 | Newsprint photo print (halftone, grain, border); fallback stamp grit when `T_StampGrit` is missing | at run time | C++ (`Rules/DCNewsprint.cpp`, `DCHUD::StampGrit`) |
 | Decay effects, voxel blast core, weather precipitation | at run time | C++ pooled instanced cubes (`DCVoxelFx`, `DCOrbitalStrike`) from ini rows |
 

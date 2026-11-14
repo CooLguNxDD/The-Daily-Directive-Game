@@ -20,6 +20,7 @@
 #include "GameFramework/WorldSettings.h"
 #include "Kismet/GameplayStatics.h"
 #include "Rules/DCRunRules.h"
+#include "Rules/DCFactionRules.h"
 #include "TimerManager.h"
 
 namespace
@@ -263,6 +264,7 @@ void ADCGameMode::RestartRun()
 
 void ADCGameMode::ClearCombat()
 {
+	PendingSpawns.Reset();
 	for (ADCEnemy* E : TActorRange<ADCEnemy>(GetWorld()))
 	{
 		E->Destroy();
@@ -335,6 +337,8 @@ void ADCGameMode::EnterSector(float Now)
 	HitstopEndReal = 0.0;
 	ClearCombat();
 	BuildCity(GS->SectorIndex);
+	RollFactions();
+	StartObjective();
 
 	SectorStartTime = Now;
 	LastPackTime = -1e6f;
@@ -403,6 +407,9 @@ void ADCGameMode::TickSectorPhase(float Now)
 	}
 	TickWaves(Now);
 	TickPressure(Now);
+	TickFactions(Now);
+	TickSpawns();
+	TickObjective(Now);
 	TickPendingCollapses(Now);
 	TickScoop(Now);
 	TickRogueStrikes(Now);
@@ -411,6 +418,7 @@ void ADCGameMode::TickSectorPhase(float Now)
 	{
 		return;
 	}
+	EndObjective();
 	ClearCombat();
 	const UDCTuning& T = UDCTuning::Get();
 	const bool bMore = T.Sectors.IsValidIndex(GS->SectorIndex + 1);
@@ -462,7 +470,10 @@ void ADCGameMode::TickWaves(float Now)
 			continue;
 		}
 		const FDCEnemyDef* Def = T.FindEnemy(Wave.EnemyId);
-		if (!Def)
+		// R3: a faction's special units only come to maps that faction owns or raids.
+		const FDCFactionMix& Mix = GS->FactionMix;
+		const bool bAbsent = Def && !Def->Faction.IsNone() && FactionMode() && Def->Faction != Mix.Main && !Mix.Invaders.Contains(Def->Faction);
+		if (!Def || bAbsent)
 		{
 			WaveSpawned[W] = Wave.Count;
 			continue;
@@ -504,9 +515,12 @@ void ADCGameMode::TickPressure(float Now)
 	{
 		In.SinceCollapse = C.Time <= Now ? FMath::Min(In.SinceCollapse, Now - C.Time) : In.SinceCollapse;
 	}
+	const bool bFactions = FactionMode();
 	for (ADCEnemy* E : TActorRange<ADCEnemy>(GetWorld()))
 	{
-		In.Alive += E->IsAlive() && E->GetKind() == Def->Id ? 1 : 0;
+		// R3: every unit that fights the crew counts against the pressure, whatever its faction.
+		const bool bCounts = bFactions ? DCFactionRules::FightsCrew(T.Factions, E->GetFaction()) : E->GetKind() == Def->Id;
+		In.Alive += E->IsAlive() && bCounts ? 1 : 0;
 	}
 	TArray<ADCCharacter*> Standing;
 	for (ADCPlayerState* PS : Players())
@@ -525,6 +539,17 @@ void ADCGameMode::TickPressure(float Now)
 	}
 	// A pack lands on a street point in a ring around one standing player, then hunts.
 	const FVector Near = Standing[SectorRng.RandRange(0, Standing.Num() - 1)]->GetActorLocation();
+	if (bFactions)
+	{
+		// R3: the pack belongs to the map's main faction (big share) or an invader crossing in from the edge.
+		const FName Faction = DCFactionRules::PickDropFaction(GS->FactionMix, SectorRng.FRand());
+		const bool bInvader = Faction != GS->FactionMix.Main;
+		const int32 Landed = SpawnSquad(Faction, D.PackSize, DropPoint(Near, bInvader, Sector.Pressure, bInvader ? Faction : FName()), 400.f);
+		LastPackTime = Now;
+		UE_LOG(LogTemp, Display, TEXT("DCPACK sector=%d t=%.0f pack=%d (%s%s) landed=%d alive=%d target=%d lag=%.2f photo=%d/%d"), GS->SectorIndex + 1, In.SectorElapsed, D.PackSize,
+			*Faction.ToString(), bInvader ? TEXT(" invader") : TEXT(""), Landed, In.Alive, D.TargetAlive, D.Lag, In.PhotoPoints, In.QuotaPoints);
+		return;
+	}
 	TArray<FVector> Ring;
 	for (const FVector& P : CityPlan.StreetPoints)
 	{
@@ -1220,9 +1245,10 @@ void ADCGameMode::EnterFrontPage(float Now)
 	}
 	UE_LOG(LogTemp, Display, TEXT("DCPAGE headline=\"%s\"%s"), *GS->Headline, GS->bRunFailed ? TEXT(" CORRECTION EDITION") : TEXT(""));
 	const int32 QuotasMet = GS->QuotaResults.FilterByPredicate([](bool b) { return b; }).Num();
-	GS->Subhead = FString::Printf(TEXT("%s  |  %d PHOTOGRAPHER%s  |  %s PROPAGANDA POINTS RAISED  |  QUOTAS MET %d/%d  |  RUN SEED %d"),
+	const int32 Extracted = GS->ObjectiveResults.FilterByPredicate([](uint8 b) { return b != 0; }).Num();
+	GS->Subhead = FString::Printf(TEXT("%s  |  %d PHOTOGRAPHER%s  |  %s PROPAGANDA POINTS RAISED  |  QUOTAS MET %d/%d  |  HQ ORDERS EXTRACTED %d/%d  |  RUN SEED %d"),
 		GS->bRunFailed ? TEXT("UNIT LOST IN ACTION, REEL RECOVERED") : TEXT("ALL SECTORS LIBERATED"),
-		All.Num(), All.Num() == 1 ? TEXT("") : TEXT("S"), *FText::AsNumber(Total).ToString(), QuotasMet, GS->QuotaResults.Num(), GS->RunSeed);
+		All.Num(), All.Num() == 1 ? TEXT("") : TEXT("S"), *FText::AsNumber(Total).ToString(), QuotasMet, GS->QuotaResults.Num(), Extracted, GS->ObjectiveResults.Num(), GS->RunSeed);
 	GS->ForceNetUpdate();
 }
 

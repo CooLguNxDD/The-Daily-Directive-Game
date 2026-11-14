@@ -46,6 +46,10 @@ void ADCGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLife
 	DOREPLIFETIME(ADCGameState, Blasts);
 	DOREPLIFETIME(ADCGameState, Phase);
 	DOREPLIFETIME(ADCGameState, SectorIndex);
+	DOREPLIFETIME(ADCGameState, FactionMix);
+	DOREPLIFETIME(ADCGameState, Zones);
+	DOREPLIFETIME(ADCGameState, ZoneHalfExtent);
+	DOREPLIFETIME(ADCGameState, ObjectiveResults);
 	DOREPLIFETIME(ADCGameState, SectorEndTime);
 	DOREPLIFETIME(ADCGameState, SectorStartTime);
 	DOREPLIFETIME(ADCGameState, RunSeed);

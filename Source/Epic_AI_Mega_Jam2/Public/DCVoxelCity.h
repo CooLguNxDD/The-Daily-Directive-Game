@@ -12,6 +12,7 @@
 #include "Voxel/DCVoxelOps.h"
 #include "Rules/DCWeather.h"
 #include "DCDebrisPool.h"
+#include "DCCrumbField.h"
 #include "DCVoxelCity.generated.h"
 
 class UBoxComponent;
@@ -66,6 +67,9 @@ public:
 
 	/** Top of the street, rubble included, at a point (cm): what walkers stand on and players are lifted onto. */
 	float SurfaceZCm(const FVector& Where) const;
+	/** 0..1+: physics bodies reserved over the PhysicsMaxBodies budget (advisor a-3: one destruction budget every new
+	 *  cost source reads: faction strikes wait, crumbs thin out). */
+	float BodyLoad() const;
 	/** Is this world point inside a solid voxel (towers, terrain, props)? Photos never shoot from inside one. */
 	bool IsSolidAt(const FVector& Where) const;
 	/** Photo sight (host grading): is the straight line From -> To blocked by city voxels? Marches the voxel city,
@@ -134,7 +138,12 @@ private:
 	{
 		float Start = 0.f;
 		TArray<FDCDebrisSpawn> Spawns;
+		TArray<FDCCrumbSpawn> Crumbs;
 	};
+	/** R26 crumb tier: single-voxel crumbs thrown by breaks, shatters and carves (local, instanced, cosmetic). */
+	UPROPERTY() TObjectPtr<UDCCrumbField> Crumbs;
+	/** Throws Count crumbs from a fragment's world box, coloured from its voxels, moving with V plus a scatter. */
+	void ThrowCrumbs(const FFalling& F, int32 FragIndex, const FBox& WorldBox, const FVector& V, int32 Count, FRandomStream& Rng);
 	TArray<FDCShardBurst> PendingShards;
 	struct FDCFading
 	{

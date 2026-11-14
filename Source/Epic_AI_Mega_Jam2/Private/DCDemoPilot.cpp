@@ -1,4 +1,5 @@
 #include "DCDemoPilot.h"
+#include "DCObjective.h"
 #include "DCAudio.h"
 
 #include "DCBuilding.h"
@@ -224,6 +225,27 @@ ADCBuilding* ADCDemoPilot::PickTower()
 	}
 	ADCBuilding* Best = nullptr;
 	float BestDist = TNumericLimits<float>::Max();
+	// R4 evidence: with a Destroy objective live, strike the marked towers first (any distance).
+	if (const ADCObjective* O = ADCObjective::Find(this); O && O->Stage == EDCObjectiveStage::Active)
+	{
+		for (int32 i = 0; i < O->TargetAt.Num(); ++i)
+		{
+			if (O->TargetDown.IsValidIndex(i) && O->TargetDown[i])
+			{
+				continue;
+			}
+			for (ADCBuilding* B : TActorRange<ADCBuilding>(GetWorld()))
+			{
+				const float D = B->IsCollapsed() ? BestDist : FVector::Dist2D(B->GetActorLocation(), O->TargetAt[i]);
+				Best = D < BestDist ? B : Best;
+				BestDist = FMath::Min(BestDist, D);
+			}
+			if (Best)
+			{
+				return Best;
+			}
+		}
+	}
 	for (ADCBuilding* B : TActorRange<ADCBuilding>(GetWorld()))
 	{
 		if (B->IsCollapsed() || UsedTowers.Contains(B))
@@ -498,6 +520,52 @@ void ADCDemoPilot::AddStratagemOnSwarm(const FString& S)
 		});
 	}
 	Add(0.2f, [this] { Release(TEXT("Aim")); Tap(TEXT("Slot1")); return true; });
+}
+
+void ADCDemoPilot::AddObjectiveRun(const FString& S)
+{
+	// R4 evidence (-dcobjrun): run the sector's objective with the real Move and Sprint actions toward the HUD's
+	// waypoint (package, marked tower, beacon); frames at every stage change and every 8 s. When the street blocks the
+	// straight line for 1.5 s the pawn is nudged 6 m along it (logged DEMO nudge: a pathing aid, not a player move).
+	Add(0.f, [this, S]
+	{
+		const ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>();
+		APawn* Me = GetWorld()->GetFirstPlayerController() ? GetWorld()->GetFirstPlayerController()->GetPawn() : nullptr;
+		const ADCObjective* O = ADCObjective::Find(this);
+		const double Real = GetWorld()->GetRealTimeSeconds();
+		const bool bOver = !GS || GS->Phase != EDCRunPhase::Sector || !O || O->Stage == EDCObjectiveStage::Done || O->Stage == EDCObjectiveStage::Failed;
+		const uint8 Stage = O ? static_cast<uint8>(O->Stage) : 0;
+		if (Stage != ObjStage || Real >= ObjNextShotReal)
+		{
+			ObjStage = Stage;
+			ObjNextShotReal = Real + 8.0;
+			Shot(FString::Printf(TEXT("%s_obj_stage%d"), *S, Stage));
+			UE_LOG(LogDCDemo, Display, TEXT("DEMO objective stage %d"), Stage);
+		}
+		FVector At;
+		if (bOver || !Me || !O->Waypoint(Me->GetActorLocation(), At))
+		{
+			Release(TEXT("Move"));
+			Release(TEXT("Sprint"));
+			return bOver;
+		}
+		AimAt(FVector(At.X, At.Y, Me->GetActorLocation().Z + 60.f));
+		Press(TEXT("Move"), FVector(0, 1, 0));
+		Press(TEXT("Sprint"));
+		if (Real >= ObjCheckReal)
+		{
+			if (FVector::Dist2D(Me->GetActorLocation(), ObjLastPos) < 150.f)
+			{
+				const FVector Dir = (At - Me->GetActorLocation()).GetSafeNormal2D();
+				Me->SetActorLocation(Me->GetActorLocation() + Dir * 600.f + FVector(0, 0, 100.f), false, nullptr, ETeleportType::TeleportPhysics);
+				UE_LOG(LogDCDemo, Display, TEXT("DEMO nudge toward the waypoint"));
+			}
+			ObjLastPos = Me->GetActorLocation();
+			ObjCheckReal = Real + 1.5;
+		}
+		return false;
+	}, 200.f);
+	Add(0.5f, [this, S] { Release(TEXT("Move")); Release(TEXT("Sprint")); Shot(S + TEXT("_obj_end")); return true; });
 }
 
 void ADCDemoPilot::AddEnemyFight(const FString& S)
@@ -824,6 +892,10 @@ void ADCDemoPilot::BuildScript()
 		for (int32 Cycle = 0; Cycle < Cycles; ++Cycle)
 		{
 			AddCycle(FString::Printf(TEXT("%s_c%d"), *S, Cycle));
+		}
+		if (FParse::Param(FCommandLine::Get(), TEXT("dcobjrun")))
+		{
+			AddObjectiveRun(S);
 		}
 		AddEnemyFight(S);
 		if (Sector + 1 < Sectors)

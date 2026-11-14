@@ -224,7 +224,8 @@ namespace DCMenu
 			Column->AddSlot().AutoHeight().HAlign(HAlign_Center)
 				[SNew(SHorizontalBox)
 					+ SHorizontalBox::Slot().AutoWidth().Padding(4, 0)[SNew(SBox).WidthOverride(206.f)[Button(TEXT("COPY CODE"), Act([](ADCPlayerController& P) { P.BuilderCopyCode(); }))]]
-					+ SHorizontalBox::Slot().AutoWidth().Padding(4, 0)[SNew(SBox).WidthOverride(206.f)[Button(TEXT("LOAD CODE"), Act([CodeBox](ADCPlayerController& P) { P.BuilderImport(CodeBox->GetText().ToString()); }))]]];
+					+ SHorizontalBox::Slot().AutoWidth().Padding(4, 0)[SNew(SBox).WidthOverride(206.f)[Button(TEXT("LOAD CODE"), Act([CodeBox](ADCPlayerController& P) { P.BuilderImport(CodeBox->GetText().ToString()); }))]]
+					+ SHorizontalBox::Slot().AutoWidth().Padding(4, 0)[SNew(SBox).WidthOverride(206.f)[Button(TEXT("ID CARD"), Act([](ADCPlayerController& P) { P.BuilderExportCard(); }))]]];
 			if (!PC->GetBuilderMessage().IsEmpty())
 			{
 				Column->AddSlot().AutoHeight().HAlign(HAlign_Center).Padding(0, 6)[Label(PC->GetBuilderMessage(), 14, Ink)];

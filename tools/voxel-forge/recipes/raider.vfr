@@ -1,0 +1,20 @@
+# Raider (R3, the Scavengers): flared long coat, a hook hand, rifle; a glowing magenta bandana (its light cue).
+# Hit and run, loots the rubble, shoots at anyone.
+name raider
+grid 5
+size 16 14 36
+slot body InkBrown
+slot coat Ink
+slot band PaperEdge
+slot steel Steel
+box 6 3 0 9 6 14 coat
+box 6 8 0 9 11 14 coat
+poly 10 27 coat 4,2 11,3 11,11 4,12
+box 5 3 26 11 11 29 body
+box 6 5 29 11 9 34 body
+box 6 5 32 11 9 33 band
+box 5 6 31 6 8 33 band
+beam 8 12 27 13 13 20 1.1 body
+box 13 12 18 15 13 21 steel
+beam 8 2 27 14 2 23 1.1 steel
+pivot 8 7 0

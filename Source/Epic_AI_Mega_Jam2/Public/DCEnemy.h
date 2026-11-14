@@ -22,6 +22,7 @@ public:
 
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 	virtual void BeginPlay() override;
+	virtual void EndPlay(const EEndPlayReason::Type Reason) override;
 	virtual void Tick(float DeltaSeconds) override;
 	virtual float TakeDamage(float Damage, const FDamageEvent& DamageEvent, AController* EventInstigator, AActor* DamageCauser) override;
 
@@ -34,6 +35,23 @@ public:
 	bool IsWalker() const;
 	FName GetKind() const { return Kind; }
 	const FDCEnemyDef* GetDef() const;
+	/** R3: the unit's faction (its +Enemies row); None = the regime's machines of old (they fight the crew only). */
+	FName GetFaction() const;
+	/** Host: squad membership for formations (slot offsets from the squad's goal). */
+	void HostSetSquad(int32 InSquad, int32 InSlot, int32 InSize) { Squad = InSquad; Slot = InSlot; SquadSize = InSize; }
+	/** Host: the nearest live foe (a player this faction fights, or a hostile faction's unit) within Range. */
+	AActor* FindFoe(float Range) const;
+	/** Host: walk the street toward Goal (cheap: voxel column tops and solid tests, no sweeps; advisor a-2). */
+	void GroundMove(const FVector& Goal, float Speed, float DeltaSeconds, float Hover);
+	/** Host: hit a foe (player or unit) in reach: melee at AttackRange, or a tracer shot when ShotRange > 0. */
+	void HostAttack(AActor* Victim, float Now);
+	/** Formation slot offset (world, XY) from the squad goal along a heading. */
+	FVector SlotOffset(const FDCEnemyDef& Def, const FVector& Facing) const;
+	TWeakObjectPtr<AActor> Foe;
+	float NextRetarget = 0.f;
+	int32 Squad = 0;
+	int32 Slot = 0;
+	int32 SquadSize = 1;
 
 	// Behaviour helpers (host).
 	ADCCharacter* FindTarget(float Range, bool bPreferPhotographers) const;
@@ -70,6 +88,14 @@ public:
 private:
 	UFUNCTION() void OnRep_Health();
 	UFUNCTION(NetMulticast, Unreliable) void MulticastCue(FName Cue);
+	/** Every machine draws the shot's tracer in the faction's cue colour. */
+	UFUNCTION(NetMulticast, Unreliable) void MulticastShot(FVector_NetQuantize From, FVector_NetQuantize To);
+	/** Gait read for rigid voxel models (local, every machine): bob and sway while the actor moves. */
+	void TickGait(float DeltaSeconds);
+	UPROPERTY() TObjectPtr<class UProceduralMeshComponent> ModelComp;
+	FVector GaitLast = FVector::ZeroVector;
+	float GaitPhase = 0.f;
+	FVector SmoothModel = FVector::ZeroVector;
 	void Die(AController* Killer);
 	void BuildVisual();
 	bool BuildModel(const struct FDCEnemyDef& Def);

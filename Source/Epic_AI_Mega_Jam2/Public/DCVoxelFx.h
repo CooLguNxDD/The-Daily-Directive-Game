@@ -27,6 +27,8 @@ public:
 	void ClearAll();
 	/** Spawns Count puffs of a kind by id (weather precipitation around the camera). */
 	void SpawnKind(FName Kind, const FVector& Where, float Radius, int32 Count);
+	/** R3 faction fire: a thin glowing bolt from From to To for a few frames (pooled, unlit, faction cue colour). */
+	void Tracer(const FVector& From, const FVector& To, const FLinearColor& Color, float Glow);
 	/** Wind (cm/s) every puff drifts with (weather, R18). */
 	void SetWind(const FVector& InWind) { Wind = InWind; }
 
@@ -54,6 +56,15 @@ private:
 	void Spawn(int32 Kind, const FVector& Where, float Radius, int32 Count);
 
 	UPROPERTY() TArray<TObjectPtr<UInstancedStaticMeshComponent>> Meshes;
+	struct FBolt
+	{
+		TObjectPtr<UStaticMeshComponent> Mesh;
+		float Until = 0.f;
+	};
+	TArray<FBolt> Bolts;
+	UPROPERTY() TArray<TObjectPtr<UStaticMeshComponent>> BoltMeshes;
+	UPROPERTY() TMap<uint32, TObjectPtr<class UMaterialInstanceDynamic>> BoltMaterials;
+	int32 NextBolt = 0;
 	TArray<TArray<FPuff>> Puffs;
 	/** The fx timeline: world delta scaled by the presentation clock (puff birth, life and burns use it). */
 	float FxTime = 0.f;

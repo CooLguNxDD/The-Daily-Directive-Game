@@ -422,6 +422,56 @@ void ADCVoxelCity::BeginPlay()
 	FActorSpawnParameters Params;
 	Params.Owner = this;
 	Fx = GetWorld()->SpawnActor<ADCVoxelFx>(ADCVoxelFx::StaticClass(), FTransform::Identity, Params);
+	Crumbs = NewObject<UDCCrumbField>(this, TEXT("Crumbs"));
+	Crumbs->SetupAttachment(GetRootComponent());
+	Crumbs->RegisterComponent();
+	TWeakObjectPtr<ADCVoxelCity> Weak(this);
+	Crumbs->GroundZ = [Weak](const FVector& P) { return Weak.IsValid() ? Weak->SurfaceZCm(P) : 0.f; };
+}
+
+float ADCVoxelCity::BodyLoad() const
+{
+	return static_cast<float>(BodiesReserved) / FMath::Max(1, UDCVoxelSettings::Get().Tuning.PhysicsMaxBodies);
+}
+
+void ADCVoxelCity::ThrowCrumbs(const FFalling& F, int32 FragIndex, const FBox& WorldBox, const FVector& V, int32 Count, FRandomStream& Rng)
+{
+	const FDCVoxelTuning& Tn = UDCVoxelSettings::Get().Tuning;
+	if (!Crumbs || Count <= 0 || !F.Frags.IsValidIndex(FragIndex) || !WorldBox.IsValid)
+	{
+		return;
+	}
+	// Colours come from the fragment's own voxels (a chunk's root is empty: its leaves carry the meshes).
+	TArray<const FProcMeshSection*, TInlineAllocator<8>> Sections;
+	auto AddSection = [&Sections](const UProceduralMeshComponent* Comp)
+	{
+		const FProcMeshSection* S = Comp ? const_cast<UProceduralMeshComponent*>(Comp)->GetProcMeshSection(0) : nullptr;
+		if (S && S->ProcVertexBuffer.Num() > 0)
+		{
+			Sections.Add(S);
+		}
+	};
+	const FFalling::FFrag& Fr = F.Frags[FragIndex];
+	AddSection(Fr.Comp);
+	for (int32 k : Fr.Children)
+	{
+		AddSection(F.Frags.IsValidIndex(k) ? F.Frags[k].Comp.Get() : nullptr);
+	}
+	const float GlowScale = Tn.VoxelMaterialGlowScale * Tn.CrumbGlowScale;
+	Count = FMath::RoundToInt32(Count * FMath::Clamp(1.f - Tn.CrumbLoadCut * BodyLoad(), 0.f, 1.f)); // thin out under load
+	for (int32 i = 0; i < Count; ++i)
+	{
+		FDCCrumbSpawn C;
+		C.At = FVector(Rng.FRandRange(WorldBox.Min.X, WorldBox.Max.X), Rng.FRandRange(WorldBox.Min.Y, WorldBox.Max.Y), Rng.FRandRange(WorldBox.Min.Z, WorldBox.Max.Z));
+		const FVector Out = (C.At - WorldBox.GetCenter()).GetSafeNormal2D();
+		C.Velocity = V + (Out + Rng.VRand() * 0.6f).GetSafeNormal() * Tn.CrumbSpeedCms * Rng.FRandRange(0.3f, 1.f) + FVector(0, 0, Rng.FRandRange(0.f, Tn.CrumbUpCms));
+		C.SizeCm = Tn.CrumbSizeCm * Rng.RandRange(1, FMath::Max(1, Tn.CrumbClusterMax));
+		const FProcMeshSection* S = Sections.Num() > 0 ? Sections[Rng.RandRange(0, Sections.Num() - 1)] : nullptr;
+		const FColor Pick = S ? S->ProcVertexBuffer[Rng.RandRange(0, S->ProcVertexBuffer.Num() - 1)].Color : FColor(30, 30, 40, 0);
+		C.Color = FLinearColor::FromSRGBColor(FColor(Pick.R, Pick.G, Pick.B, 255));
+		C.Glow = Pick.A / 255.f * GlowScale;
+		Crumbs->Spawn(C);
+	}
 }
 
 void ADCVoxelCity::EndPlay(const EEndPlayReason::Type Reason)
@@ -545,6 +595,10 @@ void ADCVoxelCity::PrewarmPieces(int32 PerFrame)
 
 void ADCVoxelCity::Clear()
 {
+	if (Crumbs)
+	{
+		Crumbs->ClearAll();
+	}
 	CommittedFallen.Reset();
 	HoldRadiusCm = -1.f;
 	HoldTops.Reset();
@@ -1244,6 +1298,7 @@ void ADCVoxelCity::QueueShards(const FDCVoxelOp& Op, const FDCVoxelOpResult& Res
 	Burst.Start = Start;
 	const float GlowScale = Tn.VoxelMaterialGlowScale;
 	FRandomStream Rng(static_cast<int32>(DCVoxelOps::Hash(Op.CenterCm, static_cast<uint32>(Op.Seq))));
+	FRandomStream CrumbRng(static_cast<int32>(DCVoxelOps::Hash(Op.CenterCm, static_cast<uint32>(Op.Seq) ^ 0xC0B5u)));
 	for (const FDCShardCluster& C : Result.ShardClusters)
 	{
 		const FVector P = C.Pos;
@@ -1264,6 +1319,16 @@ void ADCVoxelCity::QueueShards(const FDCVoxelOp& Op, const FDCVoxelOpResult& Res
 		D.Glow = bEmber ? Tn.ShardEmberGlow : Col.A / 255.f * GlowScale * Tn.ShardGlowScale;
 		D.LifeSeconds = Tn.ShardLifeSeconds * Rng.FRandRange(0.7f, 1.2f);
 		Burst.Spawns.Add(D);
+		// Crumbs: single voxels around each cluster, so the blast throws grit, not only blocks.
+		for (int32 c = 0; c < Tn.CrumbsPerShardCluster; ++c)
+		{
+			FDCCrumbSpawn& Cr = Burst.Crumbs.AddDefaulted_GetRef();
+			Cr.At = P + CrumbRng.VRand() * EdgeCm;
+			Cr.Velocity = (Out + CrumbRng.VRand() * 0.6f).GetSafeNormal() * Tn.ShardSpeedCms * CrumbRng.FRandRange(0.4f, 1.2f) + FVector(0, 0, CrumbRng.FRandRange(0.f, Tn.ShardUpCms));
+			Cr.SizeCm = C.VoxelCm * CrumbRng.RandRange(1, FMath::Max(1, Tn.CrumbClusterMax));
+			Cr.Color = D.Color;
+			Cr.Glow = bEmber ? D.Glow : D.Glow * Tn.CrumbGlowScale / FMath::Max(Tn.ShardGlowScale, 0.01f);
+		}
 	}
 	UE_LOG(LogTemp, Display, TEXT("DCPHYS shards op=%d clusters=%d (cap %d)"), Op.Seq, Burst.Spawns.Num(), Tn.ShardMax);
 }
@@ -1283,6 +1348,13 @@ void ADCVoxelCity::SpawnDueShards(float Now)
 			if (Pool)
 			{
 				Pool->Spawn(D);
+			}
+		}
+		for (const FDCCrumbSpawn& C : PendingShards[i].Crumbs)
+		{
+			if (Crumbs)
+			{
+				Crumbs->Spawn(C);
 			}
 		}
 		PendingShards.RemoveAtSwap(i);
@@ -1732,6 +1804,7 @@ void ADCVoxelCity::BreakApart(const TSharedPtr<FFalling>& Shared, float Age, flo
 	}
 	const FVector Center = Xf.TransformPosition(All.GetCenter());
 	FRandomStream Rng(static_cast<int32>(F.Seed));
+	FRandomStream CrumbRng(static_cast<int32>(F.Seed ^ 0xC0B5u)); // own stream: crumbs never shift the bodies' draws
 	int32 Made = 0;
 	for (int32 g = 0; g < F.Frags.Num(); ++g)
 	{
@@ -1752,6 +1825,7 @@ void ADCVoxelCity::BreakApart(const TSharedPtr<FFalling>& Shared, float Age, flo
 		const FVector V = FVector(0, 0, -FallCms * Keep + (bImpact ? Tn.PhysicsKickUpCms : 0.f)) + Swing * Keep
 			+ Out.GetSafeNormal() * Tn.PhysicsScatterCms * Rng.FRandRange(0.5f, 1.2f);
 		MakeBody(Shared, g, At, Xf.GetRotation(), V, Rng.VRand() * Tn.PhysicsSpinDegS + F.Axis * FMath::RadiansToDegrees(SwingRad), false);
+		ThrowCrumbs(F, g, W.ShiftBy(FVector(0, 0, Lift)), V, Tn.CrumbsPerChunk, CrumbRng); // R26: the break throws crumbs, not only chunks
 		++Made;
 	}
 	if (Fx && bImpact)
@@ -1792,6 +1866,8 @@ void ADCVoxelCity::Shatter(const TSharedPtr<FFalling>& Shared, int32 ChunkIndex)
 		const FVector LeafV = V + FVector::CrossProduct(W, R) + R.GetSafeNormal() * Tn.PhysicsShatterBurstCms * Rng.FRandRange(0.4f, 1.f) + FVector(0, 0, Tn.PhysicsShatterBurstCms * 0.5f);
 		MakeBody(Shared, k, At, B.GetRotation(), LeafV, Rng.VRand() * Tn.PhysicsSpinDegS * 1.5f, bSolid);
 	}
+	FRandomStream CrumbRng(static_cast<int32>(F.Seed + ChunkIndex * 977u) ^ 0xC0B5);
+	ThrowCrumbs(F, ChunkIndex, FBox::BuildAABB(B.GetLocation(), Chunk.Local.GetExtent()), V * 0.5f, Tn.CrumbsPerShatter, CrumbRng);
 	if (Chunk.Comp)
 	{
 		Chunk.Comp->DetachFromComponent(FDetachmentTransformRules::KeepWorldTransform);
@@ -2125,8 +2201,8 @@ void ADCVoxelCity::Tick(float DeltaSeconds)
 	// Hitch log (R13): which stage of the city's frame went long.
 	if ((T3 - T0) * 1000.0 + PrepMs + CommitMs > UDCVoxelSettings::Get().Tuning.HitchLogMs)
 	{
-		UE_LOG(LogTemp, Display, TEXT("DCHITCH city prep=%.1f commit=%.1f poll=%.1f upload=%.1f falling=%.1f ms cells=%d->%d jobs=%d"), PrepMs, CommitMs, (T1 - T0) * 1000.0, (T2 - T1) * 1000.0, (T3 - T2) * 1000.0,
-			DirtyBefore, DirtyCells.Num(), Jobs.Num());
+		UE_LOG(LogTemp, Display, TEXT("DCHITCH city prep=%.1f commit=%.1f poll=%.1f upload=%.1f falling=%.1f crumb=%.1f ms (%d live) bodies=%d cells=%d->%d jobs=%d"), PrepMs, CommitMs, (T1 - T0) * 1000.0, (T2 - T1) * 1000.0, (T3 - T2) * 1000.0,
+			Crumbs ? Crumbs->LastTickMs : 0.f, Crumbs ? Crumbs->LiveCount() : 0, BodiesReserved, DirtyBefore, DirtyCells.Num(), Jobs.Num());
 	}
 }
 

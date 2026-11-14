@@ -269,6 +269,34 @@ struct FDCVoxelTuning
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 ShardEmberPercent = 18;
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float ShardEmberGlow = 6.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") FLinearColor ShardEmberColor = FLinearColor(1.f, 0.32f, 0.04f);
+	/** Crumb tier (R26, human 2026-11-14 "many small voxel pieces"): every chunk that breaks off mid-fall throws
+	 *  CrumbsPerChunk single-voxel crumbs from its volume, every shatter CrumbsPerShatter, every carve CrumbsPerShardCluster
+	 *  per shard cluster; edge CrumbSizeCm (x1-CrumbClusterMax voxels), ballistic at CrumbSpeedCms with CrumbBounce
+	 *  restitution, lying CrumbLifeSeconds then shrinking over CrumbShrinkSeconds. CrumbMax live at most (oldest recycled).
+	 *  Cosmetic, local, instanced: never a Chaos body, never rubble. 0 crumbs = off. */
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 CrumbMax = 1400;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 CrumbsPerChunk = 14;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 CrumbsPerShatter = 18;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 CrumbsPerShardCluster = 2;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float CrumbSizeCm = 10.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 CrumbClusterMax = 3;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float CrumbSpeedCms = 420.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float CrumbUpCms = 260.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float CrumbBounce = 0.3f;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float CrumbLifeSeconds = 7.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float CrumbShrinkSeconds = 1.2f;
+	/** Crumbs keep this share of their voxel's glow (lit windows sparkle as they fall, never cream confetti). */
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float CrumbGlowScale = 0.35f;
+	/** Crumbs start at most CrumbSpawnPerFrame per frame (the rest queue), and a break throws (1 - CrumbLoadCut x body
+	 *  load) of its count, so a busy collapse frame is not where crumbs pile on (advisor a-3). */
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 CrumbSpawnPerFrame = 120;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float CrumbLoadCut = 0.7f;
+	/** R3 faction fire tracers: pool size, bolt length and width (cm), seconds on screen. */
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 TracerPool = 48;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float TracerLengthCm = 420.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float TracerWidthCm = 6.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float TracerSeconds = 0.07f;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float TracerGlow = 6.f;
 	/** Collider = fragment bounds times this (adjacent fragments start apart, never nested). */
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float PhysicsBoxScale = 0.85f;
 	/** Per-body rest deadline = free fall from its release height + SettleSeconds, capped by MaxAirSeconds; a group

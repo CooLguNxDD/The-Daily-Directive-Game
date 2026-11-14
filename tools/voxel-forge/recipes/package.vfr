@@ -1,0 +1,13 @@
+# Package (R4 Retrieve): a rugged courier case with signal-yellow straps (the crew uses it: lime-yellow) and a handle.
+name package
+grid 5
+size 14 10 10
+slot body Ink
+slot strap Signal
+slot trim Steel
+box 0 0 0 14 10 8 body
+box 3 0 0 4 10 8 strap
+box 10 0 0 11 10 8 strap
+box 0 0 7 14 10 8 trim
+box 5 4 8 9 6 10 trim
+pivot 7 5 0
