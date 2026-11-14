@@ -185,3 +185,8 @@ void ADCObjective::Tick(float DeltaSeconds)
 		}
 	}
 }
+
+void ADCObjective::OnRep_Stage()
+{
+	UE_LOG(LogTemp, Display, TEXT("DCOBJECTIVE client %s stage %d"), *DefId.ToString(), static_cast<int32>(Stage)); // co-op evidence
+}
