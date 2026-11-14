@@ -112,6 +112,11 @@ struct FDCVoxelCarveDef
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 CraterRadiusCm = 300;
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 BiteFloors = 2;
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 BitePercent = 70;
+	/** Physics detail of this strike's collapse (advisor a-3 step 2): pieces and fragments per piece; -1 = the Tuning
+	 *  values. It travels with the op (the stratagem id), so every machine builds the same fragment tree. Faction
+	 *  strikes use less so the crew's own shots keep the body budget. */
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 PhysicsPieces = -1;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 PhysicsFragments = -1;
 };
 
 /** Engine tuning (R1). Integer where the result must match across machines. */
