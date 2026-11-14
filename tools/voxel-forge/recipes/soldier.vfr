@@ -15,6 +15,8 @@ box 5 3 14 11 11 27 body
 box 3 4 17 5 10 26 dark
 box 6 5 27 11 9 31 dark
 ellipsoid 8 7 32 3.4 3 2.2 body
-box 11 5 30 12 9 32 lamp
+box 11 4 30 13 10 32 lamp
+# Cue band round the chest, readable from every side (lineup2).
+box 4 2 22 12 12 23 lamp
 beam 7 2 24 15 5 25 1.0 steel
 pivot 8 7 0
