@@ -1,4 +1,6 @@
 #include "DCPhotoProbe.h"
+#include "DCUnits.h"
+#include "Rules/DCFactionRules.h"
 
 #include "DCCharacter.h"
 #include "GameFramework/PlayerState.h"
@@ -335,6 +337,17 @@ namespace DCPhotoProbe
 				static const FTagRule Rules[] = {
 					{[](const ADCEnemy& En, float T) { return En.IsStunned(T); }, TEXT("STUNNED")},
 					{[](const ADCEnemy& En, float) { return En.IsWalker(); }, TEXT("WAR MACHINE")},
+					// R3: a hostile faction's unit close by (any machine can tell: factions and positions replicate).
+					{[](const ADCEnemy& En, float)
+						{
+							const UDCUnits* Units = UDCUnits::Get(&En);
+							const TArray<FDCFactionDef>& Factions = UDCTuning::Get().Factions;
+							return Units && Units->All().ContainsByPredicate([&En, &Factions](const ADCEnemy* U)
+							{
+								return U && U != &En && U->IsAlive() && FVector::DistSquared(U->GetActorLocation(), En.GetActorLocation()) < 1500.f * 1500.f
+									&& DCFactionRules::IsHostile(Factions, En.GetFaction(), U->GetFaction());
+							});
+						}, TEXT("CLASH")},
 					{[](const ADCEnemy&, float) { return true; }, TEXT("BRUTALITY")},
 				};
 				const FTagRule* Rule = Algo::FindByPredicate(Rules, [Enemy, Now](const FTagRule& R) { return R.Key(*Enemy, Now); });
