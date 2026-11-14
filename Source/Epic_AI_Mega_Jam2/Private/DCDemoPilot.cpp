@@ -590,8 +590,10 @@ void ADCDemoPilot::TickDefend()
 	const ADCCharacter* Me = Cast<ADCCharacter>(GetWorld()->GetFirstPlayerController() ? GetWorld()->GetFirstPlayerController()->GetPawn() : nullptr);
 	const ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>();
 	ADCEnemy* Nearest = nullptr;
-	float Best = 2500.f;
-	if (bDefend && Me && !Me->IsDowned() && GS && GS->Phase == EDCRunPhase::Sector)
+	// Defending: anything within 12 m (holding fire at 25 m emptied the rifle by sector 2). Mid-script: a 6 m guard
+	// bubble, so a swarmer biting at 1-2 m is shot instead of downing the pilot while it frames a photo.
+	float Best = bDefend ? 1200.f : 600.f;
+	if (Me && !Me->IsDowned() && GS && GS->Phase == EDCRunPhase::Sector && (bDefend || !Me->IsCameraRaised()))
 	{
 		for (ADCEnemy* E : TActorRange<ADCEnemy>(GetWorld()))
 		{
