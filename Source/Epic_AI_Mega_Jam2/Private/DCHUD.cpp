@@ -654,11 +654,14 @@ void ADCHUD::DrawOnboarding(ADCCharacter& Me)
 	struct FStep
 	{
 		bool bDone;
-		const TCHAR* Prompt;
+		FString Prompt;
 	};
+	// Hints name the player's saved bindings (a rebound key shows here, not the default).
+	const ADCPlayerController* KeysPC = Cast<ADCPlayerController>(PlayerOwner);
+	auto Key = [KeysPC](const TCHAR* Action, const TCHAR* Default) { return KeysPC ? KeysPC->KeyFor(Action).ToUpper() : FString(Default); };
 	const FStep Steps[] = {
-		{bDidMove, TEXT("WASD MOVE   SHIFT SPRINT   SPACE JUMP   CTRL CROUCH")},
-		{bDidShoot, TEXT("1 RIFLE   LMB SHOOT   R RELOAD")},
+		{bDidMove, FString::Printf(TEXT("WASD MOVE   %s SPRINT   %s JUMP   %s CROUCH"), *Key(TEXT("Sprint"), TEXT("SHIFT")), *Key(TEXT("Jump"), TEXT("SPACE")), *Key(TEXT("Crouch"), TEXT("CTRL")))},
+		{bDidShoot, FString::Printf(TEXT("1 RIFLE   LMB SHOOT   %s RELOAD"), *Key(TEXT("Reload"), TEXT("R")))},
 		{bDidStrike, TEXT("2 STRIKE   AIM AT A TOWER   LMB CALL THE ORBITAL LASER")},
 		{bDidRaise, TEXT("3 CAMERA   HOLD RMB TO RAISE THE VIEWFINDER")},
 		{bDidSnap, TEXT("LMB SNAP THE BLAST - BEST 0.2-0.8s AFTER THE FLASH")},
@@ -684,7 +687,7 @@ void ADCHUD::DrawOnboarding(ADCCharacter& Me)
 	Box(W * 0.5f - Sx(430.f), Y - Sx(6.f), Sx(860.f), Sx(78.f), Paper);
 	Box(W * 0.5f - Sx(430.f), Y - Sx(6.f), Sx(5.f), Sx(78.f), Ink);
 	Text(TEXT("ORDERS: SHOOT THE DESTRUCTION. PHOTOS PAY FOR BIGGER BOMBS."), W * 0.5f, Y, Ink, 0.65f, true);
-	Text(Next ? FString::Printf(TEXT("%d/5  %s"), Done + 1, Next->Prompt) : FString(TEXT("YOU ARE A WAR PHOTOGRAPHER NOW. GET CLOSER.")), W * 0.5f, Y + Sx(32.f), Ink, 0.75f, true);
+	Text(Next ? FString::Printf(TEXT("%d/5  %s"), Done + 1, *Next->Prompt) : FString(TEXT("YOU ARE A WAR PHOTOGRAPHER NOW. GET CLOSER.")), W * 0.5f, Y + Sx(32.f), Ink, 0.75f, true);
 }
 
 void ADCHUD::DrawDowned(ADCCharacter& Me)

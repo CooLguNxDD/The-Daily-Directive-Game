@@ -26,6 +26,7 @@
 #include "DCDemoPilot.h"
 #include "DCTuning.h"
 #include "Engine/GameViewportClient.h"
+#include "GameFramework/CharacterMovementComponent.h"
 #include "Widgets/SWindow.h"
 #include "Engine/LocalPlayer.h"
 #include "Engine/Texture2D.h"
@@ -528,9 +529,9 @@ void ADCPlayerController::TickBuilderFlow()
 		{12.5, [&]() { Shot(TEXT("05_back_to_menu.png")); }},
 		// The saved binding in play (critic CP6): start a run and press the rebound key; the photographer jumps.
 		{13.0, [this]() { MenuSolo(); }},
-		{22.0, [&]() { Shot(TEXT("06_street_before_J.png")); }},
+		{22.0, [&, this]() { Shot(TEXT("06_street_before_J.png")); UE_LOG(LogTemp, Display, TEXT("DCSETTINGSFLOW before J: pawn z=%.0f"), GetPawn() ? GetPawn()->GetActorLocation().Z : -1.f); }},
 		{22.3, [this]() { InputKey(FInputKeyEventArgs(GetWorld()->GetGameViewport() ? GetWorld()->GetGameViewport()->Viewport : nullptr, FInputDeviceId::CreateFromInternalId(0), EKeys::J, IE_Pressed, FPlatformTime::Cycles64())); }},
-		{22.55, [&]() { Shot(TEXT("07_J_pressed_photographer_in_the_air.png")); }},
+		{22.55, [&, this]() { Shot(TEXT("07_J_pressed_photographer_in_the_air.png")); UE_LOG(LogTemp, Display, TEXT("DCSETTINGSFLOW 0.25 s after J: pawn z=%.0f falling=%d"), GetPawn() ? GetPawn()->GetActorLocation().Z : -1.f, GetCharacter() && GetCharacter()->GetCharacterMovement() ? (GetCharacter()->GetCharacterMovement()->IsFalling() ? 1 : 0) : -1); }},
 		{22.7, [this]() { InputKey(FInputKeyEventArgs(GetWorld()->GetGameViewport() ? GetWorld()->GetGameViewport()->Viewport : nullptr, FInputDeviceId::CreateFromInternalId(0), EKeys::J, IE_Released, FPlatformTime::Cycles64())); }},
 		{23.5, [this]() { UE_LOG(LogTemp, Display, TEXT("DCSETTINGSFLOW J press done, pawn z=%.0f"), GetPawn() ? GetPawn()->GetActorLocation().Z : -1.f); }},
 		{24.0, []() { FGenericPlatformMisc::RequestExit(false); }},
