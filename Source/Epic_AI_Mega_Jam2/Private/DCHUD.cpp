@@ -257,11 +257,12 @@ void ADCHUD::DrawSectorCard(ADCGameState& GS)
 			Text(NameOf(Mix.Invaders[i]), X, H * 0.597f - Lift, CueA(Mix.Invaders[i]), 0.9f, true);
 		}
 	}
-	Box(W * 0.2f, H * 0.62f - Lift, W * 0.6f, Sx(3.f), RuleA);
+	// The lower rule sits below the invader names (packaged 1601df6 frame 00_spawn: the names sat on it).
+	Box(W * 0.2f, H * 0.637f - Lift, W * 0.6f, Sx(3.f), RuleA);
 	// R4: HQ's order for the sector replaces the tagline once the objective is in.
 	const ADCObjective* Order = ADCObjective::Find(this);
 	const FDCObjectiveDef* OrderDef = Order ? Order->GetDef() : nullptr;
-	Text(OrderDef ? OrderDef->Brief : FString(TEXT("CAMERAS READY. THE CITY IS YOUR STUDIO.")), W * 0.5f, H * 0.645f - Lift, OrderDef ? FLinearColor(Gold.R, Gold.G, Gold.B, A) : TitleA, 0.95f, true);
+	Text(OrderDef ? OrderDef->Brief : FString(TEXT("CAMERAS READY. THE CITY IS YOUR STUDIO.")), W * 0.5f, H * 0.66f - Lift, OrderDef ? FLinearColor(Gold.R, Gold.G, Gold.B, A) : TitleA, 0.95f, true);
 }
 
 void ADCHUD::DrawFlashes(ADCGameState& GS, ADCCharacter& Me)

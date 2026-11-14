@@ -35,6 +35,24 @@ bool FDCFactionMixTest::RunTest(const FString&)
 		}
 	}
 	TestTrue(TEXT("seeds vary the main faction"), Mains.Num() >= 3);
+	// A sector's Owners list (data) narrows the main roll; the shipped first sector keeps the Hive out (advisor a-10).
+	const TArray<FName> Owners = {TEXT("Dead"), TEXT("Machines")};
+	for (int32 Seed = 1; Seed <= 60; ++Seed)
+	{
+		const FDCFactionMix Mix = DCFactionRules::RollMix(T.Factions, T.FactionMix, Seed * 7919, 0, Owners);
+		TestTrue(TEXT("the main faction is a listed owner"), Owners.Contains(Mix.Main));
+		TestFalse(TEXT("an owner-limited main is not an invader"), Mix.Invaders.Contains(Mix.Main));
+	}
+	const FDCFactionMix Unlisted = DCFactionRules::RollMix(T.Factions, T.FactionMix, 7919, 0, {TEXT("NoSuchFaction")});
+	TestFalse(TEXT("no listed hostile falls back to any hostile"), Unlisted.Main.IsNone());
+	if (T.Sectors.Num() > 0)
+	{
+		for (int32 Seed = 1; Seed <= 60; ++Seed)
+		{
+			const FDCFactionMix Mix = DCFactionRules::RollMix(T.Factions, T.FactionMix, Seed * 7919, 0, T.Sectors[0].Owners);
+			TestNotEqual(TEXT("sector 1 is never Hive ground"), Mix.Main, FName(TEXT("Hive")));
+		}
+	}
 	return true;
 }
 

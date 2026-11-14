@@ -1,6 +1,8 @@
 #include "DCDemoPilot.h"
 #include "DCObjective.h"
 #include "DCUnits.h"
+#include "DCVoxelCity.h"
+#include "Rules/DCFactionRules.h"
 #include "DCAudio.h"
 
 #include "DCBuilding.h"
@@ -556,6 +558,72 @@ void ADCDemoPilot::AddClashShot(const FString& S)
 	Add(0.6f, [this, S] { Shot(S + TEXT("_clash_stamp")); LogPhoto(); Release(TEXT("Aim")); return true; });
 }
 
+void ADCDemoPilot::AddLineupShot()
+{
+	// R3 readability evidence (-dclineup): one unit of every +Factions row (its middle unit roll), stood in a row on
+	// the street in front of the pawn, frozen (time dilation 0), framed with the real camera in the sector's own light;
+	// frames lineup_wide and lineup_close, then the row is removed and the run goes on. Host (solo) only.
+	Add(0.f, [this]
+	{
+		const ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>();
+		return GS && GS->Phase == EDCRunPhase::Sector;
+	}, 120.f);
+	Add(2.f, [this]
+	{
+		APawn* Me = GetWorld()->GetFirstPlayerController() ? GetWorld()->GetFirstPlayerController()->GetPawn() : nullptr;
+		const ADCVoxelCity* City = ADCVoxelCity::Get(this);
+		if (!Me || !GetWorld()->GetAuthGameMode())
+		{
+			return true;
+		}
+		const UDCTuning& T = UDCTuning::Get();
+		const FVector Fwd = FVector(Me->GetActorForwardVector().X, Me->GetActorForwardVector().Y, 0.f).GetSafeNormal();
+		const FVector Right = FVector::CrossProduct(FVector::UpVector, Fwd);
+		const int32 N = T.Factions.Num();
+		LineupMid = Me->GetActorLocation() + Fwd * 900.f;
+		for (int32 i = 0; i < N; ++i)
+		{
+			const FName Kind = DCFactionRules::PickUnit(T.Factions[i], 0.5f);
+			const FDCEnemyDef* Def = T.FindEnemy(Kind);
+			if (!Def)
+			{
+				continue;
+			}
+			FVector Where = LineupMid + Right * ((i - (N - 1) * 0.5f) * 260.f);
+			Where.Z = (City ? City->SurfaceZCm(Where) : Me->GetActorLocation().Z - 90.f) + Def->HoverHeight;
+			const FTransform Xf((-Fwd).Rotation(), Where);
+			ADCEnemy* E = GetWorld()->SpawnActorDeferred<ADCEnemy>(ADCEnemy::StaticClass(), Xf, nullptr, nullptr, ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
+			if (E)
+			{
+				E->InitKind(Kind);
+				E->FinishSpawning(Xf);
+				E->CustomTimeDilation = 0.f;
+				Lineup.Add(E);
+				UE_LOG(LogDCDemo, Display, TEXT("DEMO lineup %d faction=%s unit=%s at %s"), i, *T.Factions[i].Id.ToString(), *Kind.ToString(), *Where.ToCompactString());
+			}
+		}
+		return true;
+	});
+	Add(0.5f, [this] { AimAt(LineupMid + FVector(0, 0, 60.f)); return true; });
+	Add(1.5f, [this] { AimAt(LineupMid + FVector(0, 0, 60.f)); Shot(TEXT("lineup_wide")); return true; });
+	Add(0.3f, [this] { Tap(TEXT("Slot3")); return true; });
+	Add(0.6f, [this] { Press(TEXT("Aim")); AimAt(LineupMid + FVector(0, 0, 60.f)); return true; });
+	Add(1.0f, [this] { AimAt(LineupMid + FVector(0, 0, 60.f)); Shot(TEXT("lineup_close")); Release(TEXT("Aim")); return true; });
+	Add(0.3f, [this]
+	{
+		for (const TWeakObjectPtr<ADCEnemy>& E : Lineup)
+		{
+			if (E.IsValid())
+			{
+				E->Destroy();
+			}
+		}
+		Lineup.Reset();
+		Tap(TEXT("Slot1"));
+		return true;
+	});
+}
+
 void ADCDemoPilot::AddObjectiveRun(const FString& S)
 {
 	// R4 evidence (-dcobjrun): run the sector's objective with the real Move and Sprint actions toward the HUD's
@@ -926,6 +994,10 @@ void ADCDemoPilot::BuildScript()
 		for (int32 Cycle = 0; Cycle < Cycles; ++Cycle)
 		{
 			AddCycle(FString::Printf(TEXT("%s_c%d"), *S, Cycle));
+		}
+		if (Sector == 0 && FParse::Param(FCommandLine::Get(), TEXT("dclineup")))
+		{
+			AddLineupShot();
 		}
 		if (FParse::Param(FCommandLine::Get(), TEXT("dcclashshot")))
 		{

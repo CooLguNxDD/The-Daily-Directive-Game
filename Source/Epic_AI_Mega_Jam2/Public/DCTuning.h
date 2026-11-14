@@ -480,6 +480,8 @@ struct FDCSectorDef
 	UPROPERTY(EditAnywhere, Config, Category = "Sector") int32 QuotaPoints = 1500;
 	/** Swarm packs follow the crew's quota lag (Rules/DCPressureRules); Waves keep the special units. */
 	UPROPERTY(EditAnywhere, Config, Category = "Sector") FDCPressureTuning Pressure;
+	/** R3: factions that may own this map (empty = any hostile). Sector 1 keeps the Hive out (advisor a-10). */
+	UPROPERTY(EditAnywhere, Config, Category = "Sector") TArray<FName> Owners;
 };
 
 /** Soft references to the few binary assets the game uses; each has an engine fallback. */

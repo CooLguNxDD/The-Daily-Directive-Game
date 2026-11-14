@@ -93,6 +93,13 @@ struct FDCFactionMixRule
 	UPROPERTY(EditAnywhere, Config, Category = "Faction") float TerritorySeconds = 2.f;
 	/** Units a faction needs in a zone to take it at all. */
 	UPROPERTY(EditAnywhere, Config, Category = "Faction") int32 TakeMinUnits = 2;
+	/** Crew grace (advisor a-10): for CrewGraceSeconds after a sector starts, units only fight the crew inside
+	 *  CrewSelfDefenceCm (the opening clash, nests and early raiders fight each other, not the players). */
+	UPROPERTY(EditAnywhere, Config, Category = "Faction") float CrewGraceSeconds = 20.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Faction") float CrewSelfDefenceCm = 600.f;
+	/** Ground units never step closer to a standing crew member than their body radius + the capsule radius + this
+	 *  margin (unswept moves used to walk into the capsule and pin the player). */
+	UPROPERTY(EditAnywhere, Config, Category = "Faction") float CrewContactMarginCm = 25.f;
 };
 
 /** One map's factions: the owner and its raiders with their shares of the hostile drops (sum 1). */
@@ -119,7 +126,8 @@ namespace DCFactionRules
 	/** A faction that fights the crew. */
 	EPIC_AI_MEGA_JAM2_API bool FightsCrew(const TArray<FDCFactionDef>& Factions, FName Id);
 	/** Rolls a map's mix from the run seed and the sector index (weights in the rows, counts in the rule). */
-	EPIC_AI_MEGA_JAM2_API FDCFactionMix RollMix(const TArray<FDCFactionDef>& Factions, const FDCFactionMixRule& Rule, int32 Seed, int32 Sector);
+	EPIC_AI_MEGA_JAM2_API FDCFactionMix RollMix(const TArray<FDCFactionDef>& Factions, const FDCFactionMixRule& Rule, int32 Seed, int32 Sector,
+		const TArray<FName>& Owners = TArray<FName>());
 	/** Which hostile faction a drop belongs to, from a 0..1 roll. */
 	EPIC_AI_MEGA_JAM2_API FName PickDropFaction(const FDCFactionMix& Mix, float Roll);
 	/** Zone index of a point on a ZonesPerSide grid over [-HalfExtent, HalfExtent]^2 (clamped to the edge zones). */
