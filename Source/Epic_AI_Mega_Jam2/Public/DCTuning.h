@@ -394,6 +394,10 @@ struct FDCAssetTuning
 	UPROPERTY(EditAnywhere, Config, Category = "Assets") FVector ChestCamLocation = FVector(0.f, 18.f, 0.f);
 	UPROPERTY(EditAnywhere, Config, Category = "Assets") FRotator ChestCamRotation = FRotator(0.f, 90.f, -90.f);
 	UPROPERTY(EditAnywhere, Config, Category = "Assets") float ChestCamScale = 1.f;
+	/** The rifle as a voxel-forge model on the rifle prop (R10): x forward, placed relative to the hand/holster prop. */
+	UPROPERTY(EditAnywhere, Config, Category = "Assets") FName RifleModel = TEXT("rifle");
+	UPROPERTY(EditAnywhere, Config, Category = "Assets") FVector RifleModelLocation = FVector(0.f, 0.f, 0.f);
+	UPROPERTY(EditAnywhere, Config, Category = "Assets") FRotator RifleModelRotation = FRotator(0.f, 0.f, 0.f);
 	/** Holster (R1): with another slot out, the rifle rides on the back at this bone and offset instead of vanishing. */
 	UPROPERTY(EditAnywhere, Config, Category = "Assets") FName HolsterSocket = TEXT("spine_03");
 	UPROPERTY(EditAnywhere, Config, Category = "Assets") FVector HolsterLocation = FVector(18.f, -22.f, 0.f);

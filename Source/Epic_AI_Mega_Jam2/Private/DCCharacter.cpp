@@ -183,6 +183,19 @@ void ADCCharacter::BeginPlay()
 	RifleMesh->SetMaterial(0, DCAssets::MakeFlat(this, FLinearColor(0.08f, 0.08f, 0.07f)));
 	RifleMesh->SetRelativeLocation(FVector(-10.f, 30.f, 0.f));
 	RifleMesh->SetRelativeRotation(FRotator(0.f, 90.f, 0.f));
+	if (const FDCVoxelMeshData* Gun = DCVoxelModels::Mesh(T.Assets.RifleModel))
+	{
+		// The forge rifle replaces the cube; it rides on the rifle prop, so hand and holster placement still apply.
+		RifleMesh->SetStaticMesh(nullptr);
+		UProceduralMeshComponent* RifleVox = NewObject<UProceduralMeshComponent>(this, TEXT("RifleVox"));
+		RifleVox->SetupAttachment(RifleMesh);
+		RifleVox->SetUsingAbsoluteScale(true); // the prop squashes its cube by scale; the model keeps its own proportions
+		RifleVox->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		RifleVox->RegisterComponent();
+		RifleVox->CreateMeshSection(0, Gun->Positions, Gun->Indices, Gun->Normals, Gun->UVs, Gun->Colors, {}, false);
+		RifleVox->SetMaterial(0, Cast<UMaterialInterface>(UDCVoxelSettings::Get().VoxelMaterial.TryLoad()));
+		RifleVox->SetRelativeLocationAndRotation(T.Assets.RifleModelLocation, T.Assets.RifleModelRotation);
+	}
 	PhotoCamMesh->AttachToComponent(GetMesh(), FAttachmentTransformRules::SnapToTargetNotIncludingScale, Hand);
 	PhotoCamMesh->SetStaticMesh(DCAssets::Cube());
 	PhotoCamMesh->SetMaterial(0, DCAssets::MakeFlat(this, FLinearColor(0.9f, 0.85f, 0.75f)));
