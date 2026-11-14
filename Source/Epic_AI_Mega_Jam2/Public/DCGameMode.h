@@ -127,6 +127,7 @@ private:
 	TMap<FName, float> FactionStrikeReady;
 	int32 NextSquadId = 1;
 	float NextTerritoryTime = 0.f;
+	bool bOpeningDone = false;
 	/** Rolled spawns waiting their frame (advisor a-3: a squad drop is N model meshes; at most FactionMix.SpawnsPerFrame
 	 *  start per tick). Rolls happen at queue time, so the seeded sequence is unchanged. */
 	struct FPendingSpawn

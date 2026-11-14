@@ -69,6 +69,11 @@ struct FDCFactionMixRule
 	/** Faction strikes wait while the city's physics body load is above this (the crew's shots own the body budget). */
 	UPROPERTY(EditAnywhere, Config, Category = "Faction") float StrikeMaxBodyLoad = 0.35f;
 	UPROPERTY(EditAnywhere, Config, Category = "Faction") int32 SpawnsPerFrame = 2;
+	/** The opening clash (first 10 seconds sell the game): OpeningSeconds into the sector a main-faction squad and an
+	 *  invader squad of OpeningSquad each land OpeningApartCm apart in the ring around the crew and fight (0 = off). */
+	UPROPERTY(EditAnywhere, Config, Category = "Faction") float OpeningSeconds = 4.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Faction") int32 OpeningSquad = 4;
+	UPROPERTY(EditAnywhere, Config, Category = "Faction") float OpeningApartCm = 1800.f;
 	/** Territory: the map splits into ZonesPerSide^2 zones, all the main faction's at the start; every
 	 *  TerritorySeconds a zone goes to the faction with the most live units in it, if it outnumbers the owner there. */
 	UPROPERTY(EditAnywhere, Config, Category = "Faction") int32 ZonesPerSide = 3;

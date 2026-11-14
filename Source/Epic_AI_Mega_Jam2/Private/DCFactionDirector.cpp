@@ -39,6 +39,7 @@ void ADCGameMode::RollFactions()
 	GS->Zones.Init(GS->FactionMix.Main, Side * Side);
 	GS->ZoneHalfExtent = CityPlan.HalfExtent;
 	NextTerritoryTime = 0.f;
+	bOpeningDone = false;
 	NextFactionStrike = 0.f;
 	FactionStrikeReady.Reset();
 	FString Invaders;
@@ -148,6 +149,25 @@ void ADCGameMode::TickFactions(float Now)
 		{
 			Standing.Add(C);
 		}
+	}
+	// The opening clash: a fight already under way in sight of the crew within seconds of landing.
+	if (!bOpeningDone && Standing.Num() > 0 && T.FactionMix.OpeningSquad > 0 && Now >= SectorStartTime + T.FactionMix.OpeningSeconds)
+	{
+		bOpeningDone = true;
+		const FName Raider = GS->FactionMix.Invaders.Num() > 0 ? GS->FactionMix.Invaders[0] : (GS->FactionMix.Allies.Num() > 0 ? GS->FactionMix.Allies[0] : NAME_None);
+		const FVector A = DropPoint(Standing[0]->GetActorLocation(), false, P);
+		// The other side lands on the street point nearest OpeningApartCm away from the first.
+		FVector B = A;
+		float BestGap = TNumericLimits<float>::Max();
+		for (const FVector& Pt : CityPlan.StreetPoints)
+		{
+			const float Gap = FMath::Abs(FVector::Dist2D(Pt, A) - T.FactionMix.OpeningApartCm);
+			B = Gap < BestGap ? Pt : B;
+			BestGap = FMath::Min(BestGap, Gap);
+		}
+		const int32 Main = SpawnSquad(GS->FactionMix.Main, T.FactionMix.OpeningSquad, A, 300.f);
+		const int32 Other = SpawnSquad(Raider, T.FactionMix.OpeningSquad, B, 300.f);
+		UE_LOG(LogTemp, Display, TEXT("DCFACTION opening clash %s x%d vs %s x%d"), *GS->FactionMix.Main.ToString(), Main, *Raider.ToString(), Other);
 	}
 	if (Standing.Num() == 0 || Now < SectorStartTime + P.StartSeconds)
 	{
