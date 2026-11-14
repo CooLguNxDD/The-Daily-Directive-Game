@@ -13,6 +13,10 @@ struct EPIC_AI_MEGA_JAM2_API FDCVoxelChunk
 
 	uint8 V[Volume];
 	int32 Solid = 0;
+	/** ContentHash of this chunk, kept until a voxel of it changes (Set and EditBox clear it): an op rehashes only the
+	 *  chunks it touched, not the whole sector (R2 props grew the sector's chunk count). */
+	mutable uint32 HashCache = 0;
+	mutable bool bHashValid = false;
 
 	FDCVoxelChunk() { FMemory::Memzero(V, sizeof(V)); }
 	static int32 Index(int32 X, int32 Y, int32 Z) { return X | (Y << Bits) | (Z << (2 * Bits)); }
@@ -139,6 +143,7 @@ int32 FDCVoxelWorld::EditBox(const FIntVector& Min, const FIntVector& Max, bool 
 							}
 							C->Solid += (New != 0 ? 1 : 0) - (Old != 0 ? 1 : 0);
 							C->V[I] = New;
+							C->bHashValid = false;
 							++ChunkChanged;
 						}
 					}

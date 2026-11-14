@@ -21,6 +21,7 @@ void FDCVoxelWorld::Set(const FIntVector& P, uint8 Material)
 	}
 	C.Solid += (Material != 0 ? 1 : 0) - (Cell != 0 ? 1 : 0);
 	Cell = Material;
+	C.bHashValid = false;
 	Dirty.Add(Key);
 	// A border voxel changes the neighbour's faces and ambient occlusion too.
 	const int32 Last = FDCVoxelChunk::Mask;
@@ -77,8 +78,13 @@ uint32 FDCVoxelWorld::ContentHash() const
 		{
 			continue;
 		}
-		const uint32 H = FCrc::MemCrc32(Pair.Value->V, sizeof(Pair.Value->V), GetTypeHash(Pair.Key));
-		Sum += H;
+		const FDCVoxelChunk& C = *Pair.Value;
+		if (!C.bHashValid)
+		{
+			C.HashCache = FCrc::MemCrc32(C.V, sizeof(C.V), GetTypeHash(Pair.Key));
+			C.bHashValid = true;
+		}
+		Sum += C.HashCache;
 	}
 	return Sum;
 }

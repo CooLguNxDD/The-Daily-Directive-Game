@@ -751,4 +751,29 @@ bool FDCVoxelRestTest::RunTest(const FString&)
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDCVoxelHashCacheTest, "Epic_AI_Mega_Jam2.Voxel.HashCacheFollowsEdits", VoxelFlags)
+bool FDCVoxelHashCacheTest::RunTest(const FString&)
+{
+	// The per-chunk hash cache must follow every write path (Set, FillBox/EditBox, carving to air).
+	FDCVoxelWorld A;
+	A.FillBox(FIntVector(0), FIntVector(70, 40, 40), 3);
+	const uint32 H0 = A.ContentHash();
+	A.Set(FIntVector(5, 5, 5), 7);
+	const uint32 H1 = A.ContentHash();
+	TestNotEqual(TEXT("Set changes the cached hash"), H0, H1);
+	A.FillBox(FIntVector(40, 0, 0), FIntVector(50, 10, 10), 0);
+	const uint32 H2 = A.ContentHash();
+	TestNotEqual(TEXT("carving changes the cached hash"), H1, H2);
+	FDCVoxelWorld B; // the same voxels written in another order, never hashed before
+	B.Set(FIntVector(5, 5, 5), 7);
+	B.FillBox(FIntVector(0), FIntVector(70, 40, 40), 3);
+	B.Set(FIntVector(5, 5, 5), 7);
+	B.FillBox(FIntVector(40, 0, 0), FIntVector(50, 10, 10), 0);
+	TestEqual(TEXT("cached hash equals a fresh hash of the same voxels"), H2, B.ContentHash());
+	A.Set(FIntVector(5, 5, 5), 3);
+	A.Set(FIntVector(5, 5, 5), 7);
+	TestEqual(TEXT("write and undo keep the hash"), A.ContentHash(), H2);
+	return true;
+}
+
 #endif
