@@ -571,6 +571,21 @@ void ADCPlayerController::TickMenuFlow()
 		}
 		return FVector2D(B->GetTickSpaceGeometry().GetAbsolutePositionAtCoordinates(FVector2f(0.5f, 0.5f)));
 	};
+	auto RetryClick = [&]() -> bool
+	{
+		const ADCGameState* G = GetWorld()->GetGameState<ADCGameState>();
+		const TOptional<FVector2D> At = ButtonCentre();
+		if (!G || G->Phase != EDCRunPhase::Lobby || !At)
+		{
+			return true; // the run started (or the menu is gone): nothing to retry
+		}
+		UE_LOG(LogTemp, Display, TEXT("DCMENUFLOW click SOLO RUN again at %s (still in the lobby)"), *At->ToString());
+		App.SetCursorPos(*At);
+		App.ProcessMouseMoveEvent(FPointerEvent(App.GetUserIndexForMouse(), *At, *At, TSet<FKey>(), EKeys::Invalid, 0.f, FModifierKeysState()));
+		App.ProcessMouseButtonDownEvent(nullptr, FPointerEvent(App.GetUserIndexForMouse(), *At, *At, TSet<FKey>{EKeys::LeftMouseButton}, EKeys::LeftMouseButton, 0.f, FModifierKeysState()));
+		App.ProcessMouseButtonUpEvent(FPointerEvent(App.GetUserIndexForMouse(), *At, *At, TSet<FKey>(), EKeys::LeftMouseButton, 0.f, FModifierKeysState()));
+		return true;
+	};
 	using FFlowStep = TFunction<bool()>;
 	const TArray<TPair<double, FFlowStep>> Steps = { // rebuilt each tick: the steps capture this tick's locals
 		{6.0, [&]() { Shot(TEXT("01_menu.png")); return true; }},
@@ -599,10 +614,14 @@ void ADCPlayerController::TickMenuFlow()
 				return true;
 			}},
 		{8.3, [&]() { Shot(TEXT("03_after_click.png")); return true; }},
-		{14.0, [&]() { Shot(TEXT("04_run_started_street.png")); return true; }},
-		{19.0, [&]() { Shot(TEXT("05_street_5s_later.png")); return true; }},
+		// A click the OS routed to another window (the first click only activates ours) is clicked again while the
+		// menu is still up: still a real Slate move + press + release on the button.
+		{10.5, [&]() { return RetryClick(); }},
+		{12.5, [&]() { return RetryClick(); }},
+		{16.0, [&]() { Shot(TEXT("04_run_started_street.png")); return true; }},
+		{21.0, [&]() { Shot(TEXT("05_street_5s_later.png")); return true; }},
 		// With -dcdemo the pilot plays on from the street (R14: one timed run from the menu to the front page).
-		{20.0, [&]() { if (!FParse::Param(FCommandLine::Get(), TEXT("dcdemo"))) { FGenericPlatformMisc::RequestExit(false); } return true; }},
+		{22.0, [&]() { if (!FParse::Param(FCommandLine::Get(), TEXT("dcdemo"))) { FGenericPlatformMisc::RequestExit(false); } return true; }},
 	};
 	if (Steps.IsValidIndex(Step) && T >= Steps[Step].Key && Steps[Step].Value())
 	{
