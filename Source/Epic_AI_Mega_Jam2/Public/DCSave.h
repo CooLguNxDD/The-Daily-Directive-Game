@@ -74,6 +74,8 @@ namespace DCSave
 	/** LoadFile, falling back to the .prev copy the save swap keeps when the main file is missing or corrupt. */
 	EPIC_AI_MEGA_JAM2_API ELoadResult LoadWithHistory(const FString& Path, const UScriptStruct* Type, void* Out, int32 CurrentVersion, const TMap<int32, FMigration>& Steps);
 	EPIC_AI_MEGA_JAM2_API bool SaveFile(const FString& Path, const UScriptStruct* Type, const void* In);
+	/** One OS call that replaces Dest with Src (never deletes Dest first): MoveFileExW on Windows, rename() elsewhere. */
+	EPIC_AI_MEGA_JAM2_API bool ReplaceAtomic(const FString& Dest, const FString& Src);
 
 	EPIC_AI_MEGA_JAM2_API const TCHAR* ResultName(ELoadResult Result);
 }

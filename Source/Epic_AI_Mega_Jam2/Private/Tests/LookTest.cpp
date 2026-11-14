@@ -178,6 +178,8 @@ bool FDCCoStarTest::RunTest(const FString&)
 	TestEqual(TEXT("no co-star below the minimum fill"), DCPhotoRules::CoStarMultiplier(P.CoStarMinFill * 0.5f, P), 1.f);
 	const float Small = DCPhotoRules::CoStarMultiplier(P.CoStarMinFill, P);
 	const float Big = DCPhotoRules::CoStarMultiplier(P.CoStarFullFill, P);
+	const float Down = DCPhotoRules::CoStarMultiplier(P.CoStarFullFill, P, true);
+	TestTrue(TEXT("a downed co-star still pays, less than a survivor"), Down > 1.f && Down < Big);
 	TestTrue(TEXT("a bigger co-star pays more, capped"), Small > 1.f && Big > Small && FMath::IsNearlyEqual(Big, P.CoStarMaxMultiplier) && DCPhotoRules::CoStarMultiplier(1.f, P) <= P.CoStarMaxMultiplier);
 	FDCPhotoInputs In;
 	In.Visibility = 1.f;

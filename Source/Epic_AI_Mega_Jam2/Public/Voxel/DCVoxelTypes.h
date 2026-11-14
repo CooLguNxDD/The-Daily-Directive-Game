@@ -158,6 +158,51 @@ struct FDCVoxelTuning
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float AOStrength = 0.38f;
 	/** Flying voxel chunks spawned when a piece lands (cosmetic, pooled). */
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 LandingDebris = 70;
+	/** Sign lights (R25, advisor CP7): the nearest SignLights crafted signs to the local view get a pooled shadowless
+	 *  rect light in the sign's colour, facing out; its specular on the wet street is the neon reflection. Windows never
+	 *  get lights. Intensity in candela, source = the sign's size times SignSourceScale. */
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 SignLights = 10;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float SignLightCandela = 600.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float SignLightRadiusCm = 2600.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float SignLightOffsetCm = 40.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float SignSourceScale = 0.8f;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float SignLightMaxDistanceCm = 9000.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float SignLightRepickSeconds = 0.3f;
+	/** Real physics (R26): the N biggest pieces of each op are meshed as fragments (SplitFragments) that fall together
+	 *  as one piece (the topple) and break apart into Chaos rigid bodies when it hits the street: box colliders with
+	 *  their emissive voxel mesh riding on them, tumbling, colliding with the street, the towers and each other, chipping
+	 *  on hard impacts. The rubble every machine stamps is the host op's deterministic rubble; the bodies are local and
+	 *  drawn toward it, and swap to it under the landing dust when they sleep. 0 = scripted only (the fallback). */
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 PhysicsPieces = 4;
+	/** Fragments per piece at most (the block grid doubles until it fits), and live bodies in the sector at most (a
+	 *  piece that would pass the cap falls scripted). */
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 PhysicsFragments = 20;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 PhysicsMaxBodies = 60;
+	/** Starting fragment block edge in cm (rounded to the piece's voxels). */
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float PhysicsFragmentCm = 250.f;
+	/** Collider = fragment bounds times this (adjacent fragments start apart, never nested). */
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float PhysicsBoxScale = 0.85f;
+	/** A body group rests when every body sleeps or after this long (then its rubble shows). */
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float PhysicsMaxAirSeconds = 5.f;
+	/** kg per cm^3 of voxel (mass scales with the fragment's voxels). */
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float PhysicsDensity = 0.0012f;
+	/** Outward scatter (cm/s) from the piece's centre at the break, plus up kick, and random spin (deg/s). */
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float PhysicsScatterCms = 250.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float PhysicsKickUpCms = 250.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float PhysicsSpinDegS = 120.f;
+	/** Fraction of the fall speed the fragments keep at the break (the rest went into the impact). */
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float PhysicsKeepFallSpeed = 0.35f;
+	/** Horizontal pull (1/s^2) toward the rubble site for SteerSeconds, so the bodies rest over the shared rubble. */
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float PhysicsSteer = 1.5f;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float PhysicsSteerSeconds = 2.f;
+	/** A body turns solid to the city once its underside is within this height (cm) above the rubble site (fragments
+	 *  of a top that broke against its own stump drop clear of it first). */
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float PhysicsSolidAboveSiteCm = 120.f;
+	/** An impact above this speed change (cm/s) chips the piece: dust and voxel chunks fly off (once per BreakCooldown). */
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float PhysicsBreakCms = 500.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float PhysicsBreakCooldown = 0.4f;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float PhysicsLinearDamping = 0.5f;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float PhysicsAngularDamping = 1.0f;
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float VoxelMaterialGlowScale = 3.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") FDCVoxelCarveDef DefaultCarve;
 	/** Decay window: how long the rubble of a fallen piece smokes and burns (s). */

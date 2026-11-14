@@ -52,12 +52,14 @@ struct FDCPhotoTuning
 	/** Multiplier applied when a spotlight unit lights the photographer (blown-out exposure). */
 	UPROPERTY(EditAnywhere, Config, Category = "Photo") float SpotlitMultiplier = 0.25f;
 	UPROPERTY(EditAnywhere, Config, Category = "Photo") FName SpotlitLabel = TEXT("BLOWN OUT");
-	/** Co-star (R20): a living, unoccluded teammate in frame near the blast. Pays by how much of the frame height
-	 *  they fill (from CoStarMinFill to CoStarFullFill), never by how close they are to dying. */
+	/** Co-star (R20): an unoccluded teammate in frame near the blast. Pays by how much of the frame height they fill
+	 *  (from CoStarMinFill to CoStarFullFill) and whether they survive (a downed co-star keeps CoStarDownedShare of
+	 *  the bonus), never by how close they are to dying (Grok Bot take). */
 	UPROPERTY(EditAnywhere, Config, Category = "Photo") FName CoStarTag = TEXT("CO-STAR");
 	UPROPERTY(EditAnywhere, Config, Category = "Photo") float CoStarMinFill = 0.08f;
 	UPROPERTY(EditAnywhere, Config, Category = "Photo") float CoStarFullFill = 0.45f;
 	UPROPERTY(EditAnywhere, Config, Category = "Photo") float CoStarMaxMultiplier = 1.5f;
+	UPROPERTY(EditAnywhere, Config, Category = "Photo") float CoStarDownedShare = 0.4f;
 	/** The co-star must stand within this of the blast or collapse in frame (metres). */
 	UPROPERTY(EditAnywhere, Config, Category = "Photo") float CoStarBlastMeters = 40.f;
 	/** Share of the photo's score paid to the co-star as Propaganda Points. */
@@ -103,6 +105,8 @@ struct FDCPhotoInputs
 	/** Who that teammate is (for the credit and their share); empty when none. */
 	UPROPERTY() FString CoStarName;
 	UPROPERTY() int32 CoStarPlayerId = -1;
+	/** That teammate is down at the shutter (they did not survive the shot). */
+	UPROPERTY() bool bCoStarDowned = false;
 	/** Named counts for category rules: Collapses, Debris, Enemies, Blasts, Walkers... */
 	UPROPERTY() TMap<FName, float> Metrics;
 };
@@ -130,6 +134,7 @@ namespace DCPhotoRules
 
 	/** Pure: same inputs, same grade, on host and client. */
 	EPIC_AI_MEGA_JAM2_API FDCPhotoGrade GradePhoto(const FDCPhotoInputs& In, const FDCPhotoTuning& Tuning);
-	/** Co-star multiplier for a frame fill (1 below the minimum, rising linearly to the maximum at full fill). */
-	EPIC_AI_MEGA_JAM2_API float CoStarMultiplier(float Fill, const FDCPhotoTuning& Tuning);
+	/** Co-star multiplier for a frame fill (1 below the minimum, rising linearly to the maximum at full fill); a downed
+	 *  co-star keeps CoStarDownedShare of the bonus above 1. */
+	EPIC_AI_MEGA_JAM2_API float CoStarMultiplier(float Fill, const FDCPhotoTuning& Tuning, bool bDowned = false);
 }

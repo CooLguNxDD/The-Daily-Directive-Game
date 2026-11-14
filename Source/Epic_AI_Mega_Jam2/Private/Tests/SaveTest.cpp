@@ -78,7 +78,17 @@ bool FDCSaveSchemaTest::RunTest(const FString&)
 	TestEqual(TEXT("corrupt file"), static_cast<int32>(LoadFile(File, FDCSettingsSave::StaticStruct(), &AfterCorrupt, 1, None)), static_cast<int32>(ELoadResult::Corrupt));
 	TestTrue(TEXT("corrupt file kept aside"), IFileManager::Get().FileExists(*(File + TEXT(".bad"))));
 	TestEqual(TEXT("corrupt file gives defaults"), AfterCorrupt.MasterVolume, 1.f);
-	// A crash inside the swap leaves only .prev (the main file deleted before the rename): the last good save comes back.
+	// The swap is one OS replace: an existing target takes the new bytes and the temp file is gone (never a moment
+	// without a target file, unlike the engine's delete-then-move).
+	const FString Old = Dir / TEXT("swap.json");
+	FFileHelper::SaveStringToFile(TEXT("old"), *Old);
+	FFileHelper::SaveStringToFile(TEXT("new"), *(Old + TEXT(".tmp")));
+	TestTrue(TEXT("replace over an existing file"), ReplaceAtomic(Old, Old + TEXT(".tmp")));
+	FString Swapped;
+	FFileHelper::LoadFileToString(Swapped, *Old);
+	TestEqual(TEXT("target holds the new bytes"), Swapped, FString(TEXT("new")));
+	TestFalse(TEXT("temp consumed"), IFileManager::Get().FileExists(*(Old + TEXT(".tmp"))));
+	// A main file lost outside the swap (deleted by hand, disk error): the last good save comes back from .prev.
 	IFileManager::Get().Delete(*File);
 	FDCSettingsSave Recovered;
 	const ELoadResult R = LoadWithHistory(File, FDCSettingsSave::StaticStruct(), &Recovered, 1, None);

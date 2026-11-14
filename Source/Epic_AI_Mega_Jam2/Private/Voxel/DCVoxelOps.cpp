@@ -689,4 +689,56 @@ namespace DCVoxelOps
 		Out.SettleMs = Lap();
 		return Out;
 	}
+
+	TArray<TArray<int32>> SplitFragments(const TArray<FIntVector>& Cells, int32 BlockCells, int32 MaxFragments)
+	{
+		TArray<TArray<int32>> Out;
+		if (Cells.Num() == 0)
+		{
+			return Out;
+		}
+		int32 Block = FMath::Max(BlockCells, 1);
+		const int32 Cap = FMath::Max(MaxFragments, 1);
+		for (;;)
+		{
+			TMap<FIntVector, int32> Index;
+			TArray<FIntVector> Keys;
+			Out.Reset();
+			for (int32 i = 0; i < Cells.Num(); ++i)
+			{
+				const FIntVector& C = Cells[i];
+				const FIntVector K(FMath::FloorToInt(static_cast<float>(C.X) / Block), FMath::FloorToInt(static_cast<float>(C.Y) / Block), FMath::FloorToInt(static_cast<float>(C.Z) / Block));
+				int32* Found = Index.Find(K);
+				if (!Found)
+				{
+					Found = &Index.Add(K, Out.Num());
+					Keys.Add(K);
+					Out.AddDefaulted();
+				}
+				Out[*Found].Add(i);
+			}
+			if (Out.Num() <= Cap)
+			{
+				// Order by block coordinate (z, y, x) so the result never depends on the cell order of the piece.
+				TArray<int32> Order;
+				for (int32 i = 0; i < Keys.Num(); ++i)
+				{
+					Order.Add(i);
+				}
+				Order.Sort([&Keys](int32 A, int32 B)
+				{
+					const FIntVector& KA = Keys[A];
+					const FIntVector& KB = Keys[B];
+					return KA.Z != KB.Z ? KA.Z < KB.Z : (KA.Y != KB.Y ? KA.Y < KB.Y : KA.X < KB.X);
+				});
+				TArray<TArray<int32>> Sorted;
+				for (int32 i : Order)
+				{
+					Sorted.Add(MoveTemp(Out[i]));
+				}
+				return Sorted;
+			}
+			Block *= 2;
+		}
+	}
 }

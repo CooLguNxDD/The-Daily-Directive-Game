@@ -170,7 +170,7 @@ namespace
 		return Table;
 	}
 
-	void Poster(FDCVoxelWorld& W, const FFaceFrame& F, int32 Face, int32 B, int32 Floors, const FCraftIds& Ids, FRandomStream& Rng)
+	void Poster(FDCVoxelWorld& W, const FFaceFrame& F, int32 Face, int32 B, int32 Floors, const FCraftIds& Ids, FRandomStream& Rng, TArray<FDCVoxelSign>& OutSigns)
 	{
 		// A paper poster one voxel proud of the wall, two floors tall, with an ink diamond: propaganda without red.
 		const int32 Len = F.Length(Face);
@@ -193,6 +193,12 @@ namespace
 				W.Set(F.Cell(Face, -1, U, Z), bEmblem ? Ids.Ink : Ids.Poster);
 			}
 		}
+		FDCVoxelSign& Sign = OutSigns.AddDefaulted_GetRef();
+		Sign.Center = F.Cell(Face, -1, U0 + Width / 2, Z0 + Height / 2);
+		Sign.Normal = F.Cell(Face, -1, 0, 0) - F.Cell(Face, 0, 0, 0);
+		Sign.WidthVox = Width;
+		Sign.HeightVox = Height;
+		Sign.Material = Ids.Poster;
 	}
 }
 
@@ -255,6 +261,7 @@ namespace DCVoxelCraft
 		const int32 B = FMath::Max(6, Ctx.BayCm / Vcm);
 		const int32 Margin = FMath::Max(3, 60 / Vcm); // room for trim, posters and the bite's outer edge
 		Tower.Grid.Data.Reset();
+		Tower.Signs.Reset();
 		Tower.Grid.VoxelCm = Vcm;
 		const FIntVector Center = DCVoxelMath::ToCm(Lot.Location);
 		const FIntVector Foot(Lot.Spec.SizeX * B, Lot.Spec.SizeY * B, Lot.Spec.Floors * B);
@@ -353,7 +360,7 @@ namespace DCVoxelCraft
 		{
 			if (Rng.FRand() < R->PosterChance)
 			{
-				Poster(World, Full, Face, B, Lot.Spec.Floors, Ids, Rng);
+				Poster(World, Full, Face, B, Lot.Spec.Floors, Ids, Rng, Tower.Signs);
 			}
 		}
 

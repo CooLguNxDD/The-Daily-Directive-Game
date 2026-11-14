@@ -11,6 +11,10 @@
 #include "DCAssets.h"
 #include "DCAudio.h"
 #include "DCDebrisPool.h"
+#include "Components/BoxComponent.h"
+#include "Components/RectLightComponent.h"
+#include "Camera/PlayerCameraManager.h"
+#include "GameFramework/PlayerController.h"
 #include "DCPresentationClock.h"
 #include "DCEnvironment.h"
 #include "DCGameState.h"
@@ -31,8 +35,9 @@ struct ADCVoxelCity::FMeshJob
 	int32 BuildId = 0;
 	FDCVoxelMeshData Mesh;
 	UE::Tasks::FTask Task;
-	/** A falling piece's mesh (no chunk). */
+	/** A falling piece's mesh (no chunk), or one of its physics fragments. */
 	TSharedPtr<FFalling> Piece;
+	int32 Frag = INDEX_NONE;
 };
 
 struct ADCVoxelCity::FFalling
@@ -48,6 +53,24 @@ struct ADCVoxelCity::FFalling
 	FLinearColor Color;
 	bool bReady = false;
 	bool bLanded = false;
+	/** R26 physics: the piece is meshed as fragments riding on Comp (an empty root) through the scripted fall; at the
+	 *  impact each becomes a Chaos body. Its rubble shows when the bodies rest. */
+	struct FFrag
+	{
+		TObjectPtr<UProceduralMeshComponent> Comp;
+		TObjectPtr<UBoxComponent> Body;
+		/** Bounds in cm relative to the pivot, before rotation. */
+		FBox Local = FBox(ForceInit);
+		float Mass = 1.f;
+		bool bSolid = false;
+		float LastChip = -10.f;
+	};
+	TArray<FFrag> Frags;
+	int32 PendingMeshes = 0;
+	bool bBroken = false;
+	float BodyAge = 0.f;
+	uint32 Seed = 0;
+	TArray<FIntVector> RevealOnRest;
 };
 
 namespace
@@ -447,6 +470,26 @@ void ADCVoxelCity::Clear()
 	CellChunks.Reset();
 	ChunkMeshes.Reset();
 	DirtyCells.Reset();
+	for (const TSharedPtr<FFalling>& F : Falling)
+	{
+		for (FFalling::FFrag& Fr : F->Frags)
+		{
+			if (Fr.Body)
+			{
+				Fr.Body->DestroyComponent(); // R26 bodies go with the city (their meshes went with the pool)
+			}
+		}
+	}
+	Bodies.Reset();
+	BodiesReserved = 0;
+	DeadSigns.Reset();
+	for (URectLightComponent* L : SignLightPool)
+	{
+		if (L)
+		{
+			L->SetVisibility(false);
+		}
+	}
 	Falling.Reset();
 	DeferredTerrain.Reset();
 	if (Fx)
@@ -622,6 +665,7 @@ void ADCVoxelCity::CommitOp(const FDCVoxelOp& Op, FDCVoxelOpResult& Result, bool
 	HoldRadiusCm = -1.f;
 	HoldTops.Reset();
 	CommittedFallen.SetNum(FMath::Max(CommittedFallen.Num(), Sector.Towers.Num()));
+	KillCarvedSigns(Result.TouchedLots);
 	for (int32 Lot : Result.FallenLots)
 	{
 		CommittedFallen[Lot] = true;
@@ -688,8 +732,22 @@ void ADCVoxelCity::PrepareOp(const FDCVoxelOp& Op, FDCVoxelOpResult& Result, boo
 	}
 	QueueAllDirty(nullptr);
 	TArray<FIntVector> DeferList = Defer.Array();
+	// R26: the N biggest pieces of this op break into physics bodies at impact (index order breaks ties).
+	TArray<int32> BySize;
+	for (int32 i = 0; i < Result.Pieces.Num(); ++i)
+	{
+		BySize.Add(i);
+	}
+	BySize.StableSort([&Result](int32 A, int32 B) { return Result.Pieces[A].Cells.Num() > Result.Pieces[B].Cells.Num(); });
+	TSet<int32> Physical;
+	for (int32 i = 0; i < BySize.Num() && i < OpCtx.Tuning->PhysicsPieces; ++i)
+	{
+		Physical.Add(BySize[i]);
+	}
+	int32 PieceIndex = -1;
 	for (const FDCVoxelPiece& Piece : Result.Pieces)
 	{
+		++PieceIndex;
 		if (bAnimate)
 		{
 			// Where the piece's rubble lies: the landing dust and the decay smoke and fire sit there.
@@ -699,7 +757,7 @@ void ADCVoxelCity::PrepareOp(const FDCVoxelOp& Op, FDCVoxelOpResult& Result, boo
 				Sum += Sector.Terrain.ToWorld(Result.Rubble[i]);
 			}
 			const FVector Land = Piece.RubbleNum > 0 ? Sum / Piece.RubbleNum : Sector.Towers[Piece.Lot].Grid.ToWorld(Piece.Pivot);
-			StartFall(Piece, Now, DeferList, Land);
+			StartFall(Piece, Now, DeferList, Land, Physical.Contains(PieceIndex));
 			DeferList.Reset(); // the first piece to land shows the rubble
 		}
 	}
@@ -709,7 +767,7 @@ void ADCVoxelCity::PrepareOp(const FDCVoxelOp& Op, FDCVoxelOpResult& Result, boo
 	}
 }
 
-void ADCVoxelCity::StartFall(const FDCVoxelPiece& Piece, float Now, const TArray<FIntVector>& Deferred, const FVector& LandAt)
+void ADCVoxelCity::StartFall(const FDCVoxelPiece& Piece, float Now, const TArray<FIntVector>& Deferred, const FVector& LandAt, bool bPhysics)
 {
 	const FDCVoxelTuning& Tn = UDCVoxelSettings::Get().Tuning;
 	const FDCVoxelGrid& Grid = Sector.Towers[Piece.Lot].Grid;
@@ -728,28 +786,76 @@ void ADCVoxelCity::StartFall(const FDCVoxelPiece& Piece, float Now, const TArray
 	F->Comp = NewMesh(false, Grid.VoxelCm);
 	F->Comp->SetWorldLocation(F->Pivot);
 	F->Comp->SetVisibility(false);
+	TArray<TArray<int32>> Split;
+	if (bPhysics)
+	{
+		const int32 BlockCells = FMath::Max(1, FMath::RoundToInt(Tn.PhysicsFragmentCm / FMath::Max(Grid.VoxelCm, 1)));
+		Split = DCVoxelOps::SplitFragments(Piece.Cells, BlockCells, Tn.PhysicsFragments);
+		if (BodiesReserved + Split.Num() > Tn.PhysicsMaxBodies)
+		{
+			Split.Reset(); // over the body budget: this piece falls scripted
+		}
+	}
+	F->Seed = DCVoxelOps::Hash(Piece.Pivot, static_cast<uint32>(Piece.Lot) * 7919u + static_cast<uint32>(Piece.Cells.Num()));
 	Falling.Add(F);
 	for (const FIntVector& C : Deferred)
 	{
+		if (Split.Num() > 0)
+		{
+			F->RevealOnRest.Add(C); // a body's rubble shows when it comes to rest
+			continue;
+		}
 		DeferredTerrain.Add({Now + F->Duration, C});
 	}
 
-	// Mesh the piece off the game thread (cells relative to the hinge, so rotating the component tips it over).
-	TSharedPtr<FMeshJob> Job = MakeShared<FMeshJob>();
-	Job->Grid = INDEX_NONE;
-	Job->BuildId = BuiltId;
-	Job->Piece = F;
+	// Mesh the piece off the game thread (cells relative to the hinge, so rotating the component tips it over). A
+	// physics piece meshes each fragment into its own component riding on the (empty) piece root.
 	const float Vcm = Grid.VoxelCm;
-	TArray<FIntVector> PieceCells = Piece.Cells;
-	TArray<uint8> Mats = Piece.Materials;
 	const FIntVector Pivot = Piece.Pivot;
-	TArray<FColor> PieceColors = Colors;
-	FDCVoxelMeshData* Out = &Job->Mesh;
-	Job->Task = UE::Tasks::Launch(TEXT("DCVoxelPieceMesh"), [PieceCells = MoveTemp(PieceCells), Mats = MoveTemp(Mats), Pivot, PieceColors = MoveTemp(PieceColors), Vcm, Out]()
+	auto LaunchJob = [this, &F, Vcm, Pivot](TArray<FIntVector> PieceCells, TArray<uint8> Mats, int32 Frag)
 	{
-		DCVoxelMesher::MeshCells(PieceCells, Mats, Pivot, PieceColors, Vcm, *Out);
-	});
-	Jobs.Add(Job);
+		TSharedPtr<FMeshJob> Job = MakeShared<FMeshJob>();
+		Job->Grid = INDEX_NONE;
+		Job->BuildId = BuiltId;
+		Job->Piece = F;
+		Job->Frag = Frag;
+		TArray<FColor> PieceColors = Colors;
+		FDCVoxelMeshData* Out = &Job->Mesh;
+		Job->Task = UE::Tasks::Launch(TEXT("DCVoxelPieceMesh"), [PieceCells = MoveTemp(PieceCells), Mats = MoveTemp(Mats), Pivot, PieceColors = MoveTemp(PieceColors), Vcm, Out]()
+		{
+			DCVoxelMesher::MeshCells(PieceCells, Mats, Pivot, PieceColors, Vcm, *Out);
+		});
+		Jobs.Add(Job);
+	};
+	if (Split.Num() == 0)
+	{
+		F->PendingMeshes = 1;
+		LaunchJob(Piece.Cells, Piece.Materials, INDEX_NONE);
+	}
+	else
+	{
+		BodiesReserved += Split.Num();
+		F->PendingMeshes = Split.Num();
+		const FVector PivotWorld = Grid.ToWorld(Piece.Pivot);
+		for (int32 f = 0; f < Split.Num(); ++f)
+		{
+			FFalling::FFrag& Fr = F->Frags.AddDefaulted_GetRef();
+			Fr.Comp = NewMesh(false, Grid.VoxelCm);
+			Fr.Comp->AttachToComponent(F->Comp, FAttachmentTransformRules::SnapToTargetNotIncludingScale);
+			Fr.Comp->SetVisibility(false);
+			TArray<FIntVector> FragCells;
+			TArray<uint8> FragMats;
+			for (int32 i : Split[f])
+			{
+				FragCells.Add(Piece.Cells[i]);
+				FragMats.Add(Piece.Materials.IsValidIndex(i) ? Piece.Materials[i] : 1);
+				Fr.Local += Grid.ToWorld(Piece.Cells[i]) - PivotWorld;
+				Fr.Local += Grid.ToWorld(Piece.Cells[i] + FIntVector(1)) - PivotWorld;
+			}
+			Fr.Mass = FMath::Max(static_cast<float>(FragCells.Num()) * Vcm * Vcm * Vcm * Tn.PhysicsDensity, 20.f);
+			LaunchJob(MoveTemp(FragCells), MoveTemp(FragMats), f);
+		}
+	}
 	DCAudio::PlayAt(this, TEXT("Creak"), F->Pivot, 1.f);
 }
 
@@ -806,11 +912,15 @@ void ADCVoxelCity::PollJobs()
 		if (Job->Piece)
 		{
 			FFalling& F = *Job->Piece;
-			if (F.Comp && !F.bLanded)
+			UProceduralMeshComponent* Target = F.Frags.IsValidIndex(Job->Frag) ? F.Frags[Job->Frag].Comp.Get() : F.Comp.Get();
+			if (Target && F.Comp && !F.bLanded)
 			{
-				F.Comp->CreateMeshSection(0, Job->Mesh.Positions, Job->Mesh.Indices, Job->Mesh.Normals, Job->Mesh.UVs, Job->Mesh.Colors, {}, false);
-				F.Comp->SetVisibility(GetWorld()->GetTimeSeconds() - FallOffset >= F.Start); // a piece meshed ahead shows at the detonation
-				F.bReady = true;
+				Target->CreateMeshSection(0, Job->Mesh.Positions, Job->Mesh.Indices, Job->Mesh.Normals, Job->Mesh.UVs, Job->Mesh.Colors, {}, false);
+				if (--F.PendingMeshes <= 0)
+				{
+					F.Comp->SetVisibility(GetWorld()->GetTimeSeconds() - FallOffset >= F.Start, true); // a piece meshed ahead shows at the detonation
+					F.bReady = true;
+				}
 			}
 			continue;
 		}
@@ -958,15 +1068,32 @@ void ADCVoxelCity::TickFalling(float Now)
 		const float U = FMath::Clamp(Age / F.Duration, 0.f, 1.f);
 		if (F.Comp && F.bReady && Now >= F.Start && !F.Comp->IsVisible())
 		{
-			F.Comp->SetVisibility(true);
+			F.Comp->SetVisibility(true, true);
 		}
+		if (F.bBroken)
+		{
+			if (TickBodies(F, GetWorld()->GetDeltaSeconds() * UDCPresentationClock::Dilation(this)))
+			{
+				Land(F);
+				Falling.RemoveAtSwap(i);
+			}
+			continue;
+		}
+		const float Drop = FMath::Min(0.5f * UDCVoxelSettings::Get().Tuning.FallGravityCm * Age * Age, F.DropCm);
 		if (F.Comp)
 		{
 			// Drops from the first frame under (exaggerated) gravity, so the top never hangs over the bitten floors,
 			// and leans away from the blast as it goes.
-			const float Drop = FMath::Min(0.5f * UDCVoxelSettings::Get().Tuning.FallGravityCm * Age * Age, F.DropCm);
 			F.Comp->SetWorldRotation(FQuat(F.Axis, FMath::DegreesToRadians(F.MaxAngle * U * U)));
 			F.Comp->SetWorldLocation(F.Pivot - FVector(0, 0, Drop));
+		}
+		if (F.Frags.Num() > 0)
+		{
+			if (F.bReady && Now >= F.Start && (Drop >= F.DropCm || U >= 1.f))
+			{
+				BreakApart(Falling[i], Age, U); // it hits the street: the fragments come apart as bodies
+			}
+			continue;
 		}
 		if (U >= 1.f)
 		{
@@ -997,9 +1124,173 @@ void ADCVoxelCity::TickFalling(float Now)
 	}
 }
 
+void ADCVoxelCity::BreakApart(const TSharedPtr<FFalling>& Shared, float Age, float U)
+{
+	FFalling& F = *Shared;
+	const FDCVoxelTuning& Tn = UDCVoxelSettings::Get().Tuning;
+	F.bBroken = true;
+	F.BodyAge = 0.f;
+	const FTransform Xf = F.Comp->GetComponentTransform();
+	// Speed at the impact: what is left of the fall, plus the topple's swing (omega x r), plus scatter and a kick.
+	const float FallCms = FMath::Min(Tn.FallGravityCm * Age, FMath::Sqrt(2.f * Tn.FallGravityCm * FMath::Max(F.DropCm, 1.f)));
+	const float SwingRad = U < 1.f ? FMath::DegreesToRadians(F.MaxAngle * 2.f * U / FMath::Max(F.Duration, 0.05f)) : 0.f;
+	FBox All(ForceInit);
+	for (const FFalling::FFrag& Fr : F.Frags)
+	{
+		All += Fr.Local;
+	}
+	const FVector Center = Xf.TransformPosition(All.GetCenter());
+	FRandomStream Rng(static_cast<int32>(F.Seed));
+	int32 Made = 0;
+	for (FFalling::FFrag& Fr : F.Frags)
+	{
+		if (!Fr.Comp || !Fr.Local.IsValid)
+		{
+			continue;
+		}
+		const FVector At = Xf.TransformPosition(Fr.Local.GetCenter());
+		UBoxComponent* Box = NewObject<UBoxComponent>(this);
+		Box->SetWorldLocationAndRotation(At, Xf.GetRotation());
+		Box->SetBoxExtent(Fr.Local.GetExtent() * Tn.PhysicsBoxScale);
+		Box->SetCollisionProfileName(TEXT("PhysicsActor"));
+		Box->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore); // pieces never shove players around
+		Box->SetCollisionResponseToChannel(ECC_Camera, ECR_Ignore);
+		Box->SetCollisionResponseToChannel(ECC_Visibility, ECR_Ignore); // photos and rifle traces see the shared state
+		// A ghost to the city until it is down near its rubble site: a top that broke against its own stump drops clear
+		// of it (async-cooked tower collision also lags the carve). Bodies collide with each other from the start.
+		Box->SetCollisionResponseToChannel(ECC_WorldStatic, ECR_Ignore);
+		Box->SetCollisionResponseToChannel(ECC_PhysicsBody, ECR_Block);
+		Box->SetNotifyRigidBodyCollision(true);
+		Box->BodyInstance.bUseCCD = true; // fast boxes over a thin street mesh
+		Box->SetHiddenInGame(true);
+		Box->RegisterComponent();
+		Box->SetSimulatePhysics(true);
+		Box->SetLinearDamping(Tn.PhysicsLinearDamping);
+		Box->SetAngularDamping(Tn.PhysicsAngularDamping);
+		Box->SetMassOverrideInKg(NAME_None, Fr.Mass, true);
+		Box->OnComponentHit.AddDynamic(this, &ADCVoxelCity::OnBodyHit);
+		Fr.Comp->AttachToComponent(Box, FAttachmentTransformRules::KeepWorldTransform); // keeps its emissive faces
+		const FVector Swing = FVector::CrossProduct(F.Axis * SwingRad, At - Xf.GetLocation());
+		FVector Out = At - Center;
+		Out.Z *= 0.3f;
+		const FVector V = FVector(0, 0, -FallCms * Tn.PhysicsKeepFallSpeed + Tn.PhysicsKickUpCms) + Swing * Tn.PhysicsKeepFallSpeed
+			+ Out.GetSafeNormal() * Tn.PhysicsScatterCms * Rng.FRandRange(0.5f, 1.2f);
+		Box->SetPhysicsLinearVelocity(V);
+		Box->SetPhysicsAngularVelocityInDegrees(Rng.VRand() * Tn.PhysicsSpinDegS + F.Axis * FMath::RadiansToDegrees(SwingRad));
+		Fr.Body = Box;
+		Bodies.Add(Box, Shared);
+		++Made;
+	}
+	if (Fx)
+	{
+		Fx->Emit(TEXT("Landing"), F.LandCenter + FVector(0, 0, 100.f), Tn.TerrainVoxelCm * 10.f);
+	}
+	DCAudio::PlayAt(this, TEXT("Collapse"), Center, 1.f);
+	UE_LOG(LogTemp, Display, TEXT("DCPHYS break %d bodies at z=%.0f (rubble site z=%.0f) fall %.0f cm/s swing %.2f rad/s live=%d"), Made, Center.Z, F.LandCenter.Z, FallCms, SwingRad, BodiesReserved);
+}
+
+bool ADCVoxelCity::TickBodies(FFalling& F, float Dt)
+{
+	const FDCVoxelTuning& Tn = UDCVoxelSettings::Get().Tuning;
+	F.BodyAge += Dt;
+	bool bAllAsleep = true;
+	for (FFalling::FFrag& Fr : F.Frags)
+	{
+		if (!Fr.Body)
+		{
+			continue;
+		}
+		const FBox B = Fr.Body->Bounds.GetBox();
+		if (!Fr.bSolid && B.Min.Z <= F.LandCenter.Z + Tn.PhysicsSolidAboveSiteCm)
+		{
+			Fr.bSolid = true;
+			Fr.Body->SetCollisionResponseToChannel(ECC_WorldStatic, ECR_Block);
+		}
+		if (F.BodyAge < Tn.PhysicsSteerSeconds) // drawn over the shared rubble, then left to come to rest
+		{
+			const FVector At = Fr.Body->GetComponentLocation();
+			Fr.Body->AddForce(FVector(F.LandCenter.X - At.X, F.LandCenter.Y - At.Y, 0.f) * Tn.PhysicsSteer, NAME_None, true);
+		}
+		bAllAsleep &= !Fr.Body->IsAnyRigidBodyAwake();
+	}
+	return (F.BodyAge > 0.5f && bAllAsleep) || F.BodyAge >= Tn.PhysicsMaxAirSeconds;
+}
+
+void ADCVoxelCity::OnBodyHit(UPrimitiveComponent* HitComp, AActor* Other, UPrimitiveComponent* OtherComp, FVector NormalImpulse, const FHitResult& Hit)
+{
+	const TWeakPtr<FFalling>* Found = Bodies.Find(HitComp);
+	const TSharedPtr<FFalling> F = Found ? Found->Pin() : nullptr;
+	FFalling::FFrag* Fr = F ? F->Frags.FindByPredicate([HitComp](const FFalling::FFrag& X) { return X.Body == HitComp; }) : nullptr;
+	if (!Fr)
+	{
+		return;
+	}
+	const FDCVoxelTuning& Tn = UDCVoxelSettings::Get().Tuning;
+	const float DeltaV = NormalImpulse.Size() / FMath::Max(Fr->Mass, 1.f); // cm/s of speed lost in this hit
+	if (DeltaV < Tn.PhysicsBreakCms || F->BodyAge - Fr->LastChip < Tn.PhysicsBreakCooldown)
+	{
+		return;
+	}
+	Fr->LastChip = F->BodyAge;
+	// A hard impact chips the piece: dust and a burst of its own coloured voxels fly off (cosmetic, local).
+	const FVector Where = Hit.ImpactPoint;
+	if (Fx)
+	{
+		Fx->Emit(TEXT("Landing"), Where, Sector.Terrain.VoxelCm * 6.f);
+	}
+	const ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>();
+	if (ADCDebrisPool* Pool = GS && GS->GetEnvironment() ? GS->GetEnvironment()->GetDebrisPool() : nullptr)
+	{
+		FRandomStream Rng(GetTypeHash(Where));
+		for (int32 i = 0; i < Tn.LandingDebris / 3; ++i)
+		{
+			FDCDebrisSpawn D;
+			D.Transform = FTransform(FRotator(Rng.FRandRange(0, 360), Rng.FRandRange(0, 360), 0), Where + Rng.VRand() * 80.f, FVector(Rng.FRandRange(0.06f, 0.2f)));
+			D.LinearVelocity = Rng.VRand() * 500.f + FVector(0, 0, 400.f);
+			D.AngularVelocityDeg = Rng.VRand() * 400.f;
+			D.Color = F->Color * Rng.FRandRange(0.8f, 1.4f);
+			D.LifeSeconds = UDCTuning::Get().City.DebrisLifeSeconds * 0.5f;
+			Pool->Spawn(D);
+		}
+	}
+	DCAudio::PlayAt(this, TEXT("Collapse"), Where, 0.6f);
+}
+
 void ADCVoxelCity::Land(FFalling& F)
 {
 	F.bLanded = true;
+	if (F.Frags.Num() > 0)
+	{
+		// The bodies rest: the shared rubble shows under the landing dust and the fragments go.
+		float Spread = 0.f;
+		int32 Awake = 0;
+		for (FFalling::FFrag& Fr : F.Frags)
+		{
+			if (Fr.Body)
+			{
+				Spread = FMath::Max(Spread, FVector::Dist2D(Fr.Body->GetComponentLocation(), F.LandCenter));
+				Awake += Fr.Body->IsAnyRigidBodyAwake() ? 1 : 0;
+				Bodies.Remove(Fr.Body.Get());
+				Fr.Body->DestroyComponent();
+				Fr.Body = nullptr;
+			}
+			if (Fr.Comp)
+			{
+				MeshPool.Remove(Fr.Comp);
+				Fr.Comp->DestroyComponent();
+				Fr.Comp = nullptr;
+			}
+		}
+		BodiesReserved = FMath::Max(0, BodiesReserved - F.Frags.Num());
+		UE_LOG(LogTemp, Display, TEXT("DCPHYS rest %d bodies after %.1f s, %d still awake, farthest %.0f cm from the shared rubble site"), F.Frags.Num(), F.BodyAge, Awake, Spread);
+		F.Frags.Reset();
+	}
+	const float RevealNow = GetWorld()->GetTimeSeconds() - FallOffset;
+	for (const FIntVector& C : F.RevealOnRest)
+	{
+		DeferredTerrain.Add({RevealNow, C});
+	}
+	F.RevealOnRest.Reset();
 	const FVector Where = F.LandCenter + FVector(0, 0, 100.f);
 	if (Fx)
 	{
@@ -1112,11 +1403,105 @@ void ADCVoxelCity::Tick(float DeltaSeconds)
 	TickFalling(GetWorld()->GetTimeSeconds() - FallOffset);
 	const double T3 = FPlatformTime::Seconds();
 	TickCityShot();
+	TickSignLights();
 	// Hitch log (R13): which stage of the city's frame went long.
 	if ((T3 - T0) * 1000.0 > UDCVoxelSettings::Get().Tuning.HitchLogMs)
 	{
 		UE_LOG(LogTemp, Display, TEXT("DCHITCH city poll=%.1f upload=%.1f falling=%.1f ms cells=%d->%d jobs=%d"), (T1 - T0) * 1000.0, (T2 - T1) * 1000.0, (T3 - T2) * 1000.0,
 			DirtyBefore, DirtyCells.Num(), Jobs.Num());
+	}
+}
+
+void ADCVoxelCity::KillCarvedSigns(const TArray<int32>& TouchedLots)
+{
+	for (int32 Lot : TouchedLots)
+	{
+		if (!Sector.Towers.IsValidIndex(Lot))
+		{
+			continue;
+		}
+		const FDCVoxelTower& T = Sector.Towers[Lot];
+		for (int32 s = 0; s < T.Signs.Num(); ++s)
+		{
+			if (T.Grid.Data.Get(T.Signs[s].Center) != T.Signs[s].Material)
+			{
+				DeadSigns.Add(FIntPoint(Lot, s));
+			}
+		}
+	}
+}
+
+void ADCVoxelCity::TickSignLights()
+{
+	const FDCVoxelTuning& Tn = UDCVoxelSettings::Get().Tuning;
+	const float Now = GetWorld()->GetTimeSeconds();
+	if (Now < NextSignPick || Tn.SignLights <= 0)
+	{
+		return;
+	}
+	NextSignPick = Now + Tn.SignLightRepickSeconds;
+	const APlayerController* PC = GetWorld()->GetFirstPlayerController();
+	if (!PC || !PC->PlayerCameraManager || BuiltId == 0)
+	{
+		return;
+	}
+	const FVector View = PC->PlayerCameraManager->GetCameraLocation();
+	struct FPick
+	{
+		float Dist2;
+		FVector At;
+		FVector Normal;
+		FVector2D SizeCm;
+		uint8 Mat;
+	};
+	TArray<FPick> Picks;
+	const float Max2 = FMath::Square(Tn.SignLightMaxDistanceCm);
+	for (int32 Lot = 0; Lot < Sector.Towers.Num(); ++Lot)
+	{
+		const FDCVoxelTower& T = Sector.Towers[Lot];
+		for (int32 s = 0; s < T.Signs.Num(); ++s)
+		{
+			const FDCVoxelSign& Sign = T.Signs[s];
+			if (DeadSigns.Contains(FIntPoint(Lot, s)) || IsTowerFallen(Lot))
+			{
+				continue;
+			}
+			const FVector N(Sign.Normal);
+			const FVector At = T.Grid.ToWorld(Sign.Center) + FVector(T.Grid.VoxelCm * 0.5f) + N * (T.Grid.VoxelCm * 0.5f + Tn.SignLightOffsetCm);
+			const float D2 = FVector::DistSquared(At, View);
+			if (D2 <= Max2)
+			{
+				Picks.Add({D2, At, N, FVector2D(Sign.WidthVox, Sign.HeightVox) * T.Grid.VoxelCm, Sign.Material});
+			}
+		}
+	}
+	Picks.Sort([](const FPick& A, const FPick& B) { return A.Dist2 < B.Dist2; });
+	while (SignLightPool.Num() < FMath::Min(Tn.SignLights, Picks.Num()))
+	{
+		URectLightComponent* L = NewObject<URectLightComponent>(this);
+		L->SetupAttachment(Root);
+		L->SetMobility(EComponentMobility::Movable);
+		L->SetCastShadows(false);
+		L->SetIntensityUnits(ELightUnits::Candelas);
+		L->RegisterComponent();
+		SignLightPool.Add(L);
+	}
+	for (int32 i = 0; i < SignLightPool.Num(); ++i)
+	{
+		URectLightComponent* L = SignLightPool[i];
+		if (!Picks.IsValidIndex(i) || i >= Tn.SignLights)
+		{
+			L->SetVisibility(false);
+			continue;
+		}
+		const FPick& P = Picks[i];
+		L->SetWorldLocationAndRotation(P.At, P.Normal.Rotation());
+		L->SetLightColor(Colors.IsValidIndex(P.Mat) ? FLinearColor::FromSRGBColor(Colors[P.Mat]) : FLinearColor::White);
+		L->SetIntensity(Tn.SignLightCandela);
+		L->SetAttenuationRadius(Tn.SignLightRadiusCm);
+		L->SetSourceWidth(P.SizeCm.X * Tn.SignSourceScale);
+		L->SetSourceHeight(P.SizeCm.Y * Tn.SignSourceScale);
+		L->SetVisibility(true);
 	}
 }
 

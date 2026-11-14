@@ -95,4 +95,9 @@ namespace DCVoxelOps
 
 	/** Deterministic per-voxel hash (no RNG state, order independent). */
 	EPIC_AI_MEGA_JAM2_API uint32 Hash(const FIntVector& P, uint32 Salt);
+
+	/** Breaks a falling piece into fragments for the physics bodies (R26): its cells bucketed on a block grid of
+	 *  BlockCells voxels, the block doubled until there are at most MaxFragments. Returns cell indices per fragment,
+	 *  ordered by block coordinate (the same on every machine; the bodies themselves are local and cosmetic). */
+	EPIC_AI_MEGA_JAM2_API TArray<TArray<int32>> SplitFragments(const TArray<FIntVector>& Cells, int32 BlockCells, int32 MaxFragments);
 }

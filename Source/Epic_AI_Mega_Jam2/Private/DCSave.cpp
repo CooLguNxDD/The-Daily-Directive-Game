@@ -14,6 +14,13 @@
 #include "Modules/ModuleManager.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
+#if PLATFORM_WINDOWS
+#include "Windows/AllowWindowsPlatformTypes.h"
+#include <windows.h>
+#include "Windows/HideWindowsPlatformTypes.h"
+#else
+#include <stdio.h>
+#endif
 
 DEFINE_LOG_CATEGORY_STATIC(LogDCSave, Log, All);
 
@@ -91,8 +98,8 @@ namespace DCSave
 		return Result;
 	}
 
-	/** The file, else its last good copy: a crash inside the save swap (the engine's Move deletes the target before it
-	 *  renames the temp file) leaves only .prev, which is then loaded and written back as the main file (CP7). */
+	/** The file, else its last good copy (.prev): a main file that is corrupt or missing (deleted by hand, a disk
+	 *  error) loads the history copy, which is then written back as the main file. */
 	ELoadResult LoadWithHistory(const FString& Path, const UScriptStruct* Type, void* Out, int32 CurrentVersion, const TMap<int32, FMigration>& Steps)
 	{
 		const ELoadResult Main = LoadFile(Path, Type, Out, CurrentVersion, Steps);
@@ -116,6 +123,20 @@ namespace DCSave
 		return Main;
 	}
 
+	/** Replaces Dest with Src in one OS call (CP7/CP8): the target is never deleted first, so a crash leaves either
+	 *  the old file or the new one, never neither. Windows: MoveFileExW with REPLACE_EXISTING | WRITE_THROUGH (an
+	 *  atomic rename on one NTFS volume); elsewhere POSIX rename(), which is atomic. */
+	bool ReplaceAtomic(const FString& Dest, const FString& Src)
+	{
+		const FString D = FPaths::ConvertRelativePathToFull(Dest);
+		const FString S = FPaths::ConvertRelativePathToFull(Src);
+#if PLATFORM_WINDOWS
+		return ::MoveFileExW(*S, *D, MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH) != 0;
+#else
+		return ::rename(TCHAR_TO_UTF8(*S), TCHAR_TO_UTF8(*D)) == 0;
+#endif
+	}
+
 	bool SaveFile(const FString& Path, const UScriptStruct* Type, const void* In)
 	{
 		const FString Tmp = Path + TEXT(".tmp");
@@ -129,7 +150,7 @@ namespace DCSave
 		{
 			IFileManager::Get().Copy(*(Path + TEXT(".prev")), *Path);
 		}
-		const bool bMoved = IFileManager::Get().Move(*Path, *Tmp, true);
+		const bool bMoved = ReplaceAtomic(Path, Tmp);
 		UE_LOG(LogDCSave, Display, TEXT("DCSAVE save %s: %s"), *FPaths::GetCleanFilename(Path), bMoved ? TEXT("ok") : TEXT("FAILED"));
 		return bMoved;
 	}

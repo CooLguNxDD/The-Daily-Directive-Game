@@ -10,6 +10,7 @@
 #include "Voxel/DCVoxelWorld.h"
 #include "Voxel/DCVoxelModel.h"
 #include "HAL/FileManager.h"
+#include "Algo/Reverse.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 
@@ -395,3 +396,56 @@ bool FDCVoxelModelTest::RunTest(const FString&)
 }
 
 #endif
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDCVoxelFragmentTest, "Epic_AI_Mega_Jam2.Voxel.PhysicsFragments", VoxelFlags)
+bool FDCVoxelFragmentTest::RunTest(const FString&)
+{
+	// A hollow 40x40x60 shell (a tower top): every cell lands in exactly one fragment, the cap holds, and the split
+	// never depends on the order of the piece's cells.
+	TArray<FIntVector> Cells;
+	for (int32 Z = 0; Z < 60; ++Z)
+	{
+		for (int32 Y = 0; Y < 40; ++Y)
+		{
+			for (int32 X = 0; X < 40; ++X)
+			{
+				if (X == 0 || Y == 0 || X == 39 || Y == 39 || Z % 30 == 0)
+				{
+					Cells.Add(FIntVector(X, Y, Z));
+				}
+			}
+		}
+	}
+	const TArray<TArray<int32>> Frags = DCVoxelOps::SplitFragments(Cells, 10, 24);
+	TestTrue(TEXT("at most the cap"), Frags.Num() > 1 && Frags.Num() <= 24);
+	TArray<int32> Seen;
+	Seen.Init(0, Cells.Num());
+	for (const TArray<int32>& F : Frags)
+	{
+		for (int32 i : F)
+		{
+			++Seen[i];
+		}
+	}
+	bool bOnce = true;
+	for (int32 N : Seen)
+	{
+		bOnce &= N == 1;
+	}
+	TestTrue(TEXT("every cell in exactly one fragment"), bOnce);
+
+	TArray<FIntVector> Reversed = Cells;
+	Algo::Reverse(Reversed);
+	const TArray<TArray<int32>> Again = DCVoxelOps::SplitFragments(Reversed, 10, 24);
+	bool bSame = Again.Num() == Frags.Num();
+	for (int32 f = 0; bSame && f < Frags.Num(); ++f)
+	{
+		TSet<FIntVector> A, B;
+		for (int32 i : Frags[f]) { A.Add(Cells[i]); }
+		for (int32 i : Again[f]) { B.Add(Reversed[i]); }
+		bSame = A.Num() == B.Num() && A.Includes(B);
+	}
+	TestTrue(TEXT("same fragments whatever the cell order"), bSame);
+	TestEqual(TEXT("one cell, one fragment"), DCVoxelOps::SplitFragments({FIntVector(5)}, 10, 24).Num(), 1);
+	return true;
+}

@@ -247,12 +247,12 @@ namespace DCPhotoProbe
 		In.Metrics.Add(MDanger, In.DangerMeters);
 		In.Metrics.Add(MBlastMeters, NearestBlast == TNumericLimits<float>::Max() ? 1000.f : NearestBlast / 100.f);
 		In.Metrics.Add(MCentering, In.Centering);
-		// Co-star (R20): the living teammate who fills most of the frame near the framed blast, unoccluded.
+		// Co-star (R20): the teammate who pays most (frame fill, then survival) near the framed blast, unoccluded.
 		const FDCBlastRecord* Subject = OutBlastId != 0 ? GS->FindBlast(OutBlastId) : nullptr;
 		const FDCPhotoTuning& PT = UDCTuning::Get().Photo;
 		for (ADCCharacter* Mate : TActorRange<ADCCharacter>(World))
 		{
-			if (!Subject || Mate == Photographer || Mate->IsDowned() || FVector::Dist(Mate->GetActorLocation(), Subject->Location) > PT.CoStarBlastMeters * 100.f)
+			if (!Subject || Mate == Photographer || FVector::Dist(Mate->GetActorLocation(), Subject->Location) > PT.CoStarBlastMeters * 100.f)
 			{
 				continue;
 			}
@@ -271,9 +271,11 @@ namespace DCPhotoProbe
 				continue; // hidden behind something: no co-star
 			}
 			const float Fill = FMath::Abs(Head.Y - Feet.Y) * 0.5f; // fraction of the frame height
-			if (Fill > In.CoStarFill)
+			const bool bDown = Mate->IsDowned();
+			if (DCPhotoRules::CoStarMultiplier(Fill, PT, bDown) > DCPhotoRules::CoStarMultiplier(In.CoStarFill, PT, In.bCoStarDowned))
 			{
 				In.CoStarFill = Fill;
+				In.bCoStarDowned = bDown;
 				const APlayerState* MatePS = Mate->GetPlayerState();
 				In.CoStarName = MatePS ? MatePS->GetPlayerName() : FString();
 				In.CoStarPlayerId = MatePS ? MatePS->GetPlayerId() : -1;

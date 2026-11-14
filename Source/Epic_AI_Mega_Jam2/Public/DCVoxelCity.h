@@ -93,7 +93,16 @@ private:
 	void PollJobs();
 	void UploadCells();
 	void TickFalling(float Now);
-	void StartFall(const FDCVoxelPiece& Piece, float Now, const TArray<FIntVector>& DeferredTerrain, const FVector& LandAt);
+	void StartFall(const FDCVoxelPiece& Piece, float Now, const TArray<FIntVector>& DeferredTerrain, const FVector& LandAt, bool bPhysics = false);
+	/** R26: a fragmented piece hits the street: each fragment becomes a Chaos body carrying its mesh. */
+	void BreakApart(const TSharedPtr<FFalling>& F, float Age, float U);
+	/** Steers and solidifies the bodies; true when they rest (all asleep or out of air time). */
+	bool TickBodies(FFalling& F, float Dt);
+	/** Live and planned bodies (the PhysicsMaxBodies budget). */
+	int32 BodiesReserved = 0;
+	UFUNCTION() void OnBodyHit(UPrimitiveComponent* HitComp, AActor* Other, UPrimitiveComponent* OtherComp, FVector NormalImpulse, const FHitResult& Hit);
+	/** Pieces with a live body, by their collider (for hits). */
+	TMap<TObjectKey<UPrimitiveComponent>, TWeakPtr<FFalling>> Bodies;
 	void Land(FFalling& F);
 	void TickCityShot();
 	void StartNextOp();
@@ -173,6 +182,13 @@ private:
 
 	UPROPERTY() TObjectPtr<USceneComponent> Root;
 	UPROPERTY() TArray<TObjectPtr<UProceduralMeshComponent>> MeshPool;
+	/** Pooled sign lights (R25) and the signs whose voxels were carved (lot, sign index): their light is gone. */
+	UPROPERTY() TArray<TObjectPtr<class URectLightComponent>> SignLightPool;
+	TSet<FIntPoint> DeadSigns;
+	float NextSignPick = 0.f;
+	void TickSignLights();
+	/** Game thread, after a commit: signs on touched lots whose centre voxel is gone. */
+	void KillCarvedSigns(const TArray<int32>& TouchedLots);
 	UPROPERTY() TObjectPtr<UMaterialInterface> Material;
 	UPROPERTY() TObjectPtr<class ADCVoxelFx> Fx;
 };
