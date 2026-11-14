@@ -20,6 +20,7 @@
 #include "GameFramework/WorldSettings.h"
 #include "Kismet/GameplayStatics.h"
 #include "Rules/DCRunRules.h"
+#include "Rules/DCFactionRules.h"
 #include "TimerManager.h"
 
 namespace
@@ -335,6 +336,7 @@ void ADCGameMode::EnterSector(float Now)
 	HitstopEndReal = 0.0;
 	ClearCombat();
 	BuildCity(GS->SectorIndex);
+	RollFactions();
 
 	SectorStartTime = Now;
 	LastPackTime = -1e6f;
@@ -403,6 +405,7 @@ void ADCGameMode::TickSectorPhase(float Now)
 	}
 	TickWaves(Now);
 	TickPressure(Now);
+	TickFactions(Now);
 	TickPendingCollapses(Now);
 	TickScoop(Now);
 	TickRogueStrikes(Now);
@@ -462,7 +465,10 @@ void ADCGameMode::TickWaves(float Now)
 			continue;
 		}
 		const FDCEnemyDef* Def = T.FindEnemy(Wave.EnemyId);
-		if (!Def)
+		// R3: a faction's special units only come to maps that faction owns or raids.
+		const FDCFactionMix& Mix = GS->FactionMix;
+		const bool bAbsent = Def && !Def->Faction.IsNone() && FactionMode() && Def->Faction != Mix.Main && !Mix.Invaders.Contains(Def->Faction);
+		if (!Def || bAbsent)
 		{
 			WaveSpawned[W] = Wave.Count;
 			continue;
@@ -504,9 +510,12 @@ void ADCGameMode::TickPressure(float Now)
 	{
 		In.SinceCollapse = C.Time <= Now ? FMath::Min(In.SinceCollapse, Now - C.Time) : In.SinceCollapse;
 	}
+	const bool bFactions = FactionMode();
 	for (ADCEnemy* E : TActorRange<ADCEnemy>(GetWorld()))
 	{
-		In.Alive += E->IsAlive() && E->GetKind() == Def->Id ? 1 : 0;
+		// R3: every unit that fights the crew counts against the pressure, whatever its faction.
+		const bool bCounts = bFactions ? DCFactionRules::FightsCrew(T.Factions, E->GetFaction()) : E->GetKind() == Def->Id;
+		In.Alive += E->IsAlive() && bCounts ? 1 : 0;
 	}
 	TArray<ADCCharacter*> Standing;
 	for (ADCPlayerState* PS : Players())
@@ -525,6 +534,17 @@ void ADCGameMode::TickPressure(float Now)
 	}
 	// A pack lands on a street point in a ring around one standing player, then hunts.
 	const FVector Near = Standing[SectorRng.RandRange(0, Standing.Num() - 1)]->GetActorLocation();
+	if (bFactions)
+	{
+		// R3: the pack belongs to the map's main faction (big share) or an invader crossing in from the edge.
+		const FName Faction = DCFactionRules::PickDropFaction(GS->FactionMix, SectorRng.FRand());
+		const bool bInvader = Faction != GS->FactionMix.Main;
+		const int32 Landed = SpawnSquad(Faction, D.PackSize, DropPoint(Near, bInvader, Sector.Pressure), 400.f);
+		LastPackTime = Now;
+		UE_LOG(LogTemp, Display, TEXT("DCPACK sector=%d t=%.0f pack=%d (%s%s) landed=%d alive=%d target=%d lag=%.2f photo=%d/%d"), GS->SectorIndex + 1, In.SectorElapsed, D.PackSize,
+			*Faction.ToString(), bInvader ? TEXT(" invader") : TEXT(""), Landed, In.Alive, D.TargetAlive, D.Lag, In.PhotoPoints, In.QuotaPoints);
+		return;
+	}
 	TArray<FVector> Ring;
 	for (const FVector& P : CityPlan.StreetPoints)
 	{

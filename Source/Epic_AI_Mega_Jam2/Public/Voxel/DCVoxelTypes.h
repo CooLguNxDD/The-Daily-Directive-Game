@@ -284,6 +284,12 @@ struct FDCVoxelTuning
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float CrumbShrinkSeconds = 1.2f;
 	/** Crumbs keep this share of their voxel's glow (lit windows sparkle as they fall, never cream confetti). */
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float CrumbGlowScale = 0.35f;
+	/** R3 faction fire tracers: pool size, bolt length and width (cm), seconds on screen. */
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 TracerPool = 48;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float TracerLengthCm = 420.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float TracerWidthCm = 6.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float TracerSeconds = 0.07f;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float TracerGlow = 6.f;
 	/** Collider = fragment bounds times this (adjacent fragments start apart, never nested). */
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float PhysicsBoxScale = 0.85f;
 	/** Per-body rest deadline = free fall from its release height + SettleSeconds, capped by MaxAirSeconds; a group

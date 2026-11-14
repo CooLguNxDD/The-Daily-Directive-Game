@@ -1,4 +1,5 @@
 #include "DCHUD.h"
+#include "Rules/DCFactionRules.h"
 #include "DCFonts.h"
 #include "CanvasItem.h"
 #include "EngineFontServices.h"
@@ -224,6 +225,33 @@ void ADCHUD::DrawSectorCard(ADCGameState& GS)
 	Box(W * 0.2f, H * 0.36f - Lift, W * 0.6f, Sx(3.f), RuleA);
 	Text(FString::Printf(TEXT("SECTOR %d OF %d"), GS.SectorIndex + 1, FMath::Max(T.Sectors.Num(), 1)), W * 0.5f, H * 0.385f - Lift, RuleA, 1.1f, true);
 	Text(Name, W * 0.5f, H * 0.44f - Lift, TitleA, T.Look.SectorCardTitleScale, true, HeadFont);
+	// R3: whose ground this is and who is raiding it, each name in its faction's light cue.
+	const FDCFactionMix& Mix = GS.FactionMix;
+	auto CueA = [&T, A](FName Id)
+	{
+		const FDCFactionDef* F = DCFactionRules::Find(T.Factions, Id);
+		const FLinearColor C = F ? F->Cue : FLinearColor::White;
+		return FLinearColor(C.R, C.G, C.B, A);
+	};
+	auto NameOf = [&T](FName Id)
+	{
+		const FDCFactionDef* F = DCFactionRules::Find(T.Factions, Id);
+		return F ? F->DisplayName : Id.ToString().ToUpper();
+	};
+	if (!Mix.Main.IsNone())
+	{
+		Text(FString::Printf(TEXT("TERRITORY OF %s"), *NameOf(Mix.Main)), W * 0.5f, H * 0.535f - Lift, CueA(Mix.Main), 1.15f, true);
+		const int32 N = Mix.Invaders.Num();
+		if (N > 0)
+		{
+			Text(TEXT("RAIDED BY"), W * 0.5f, H * 0.572f - Lift, TitleA, 0.8f, true);
+		}
+		for (int32 i = 0; i < N; ++i)
+		{
+			const float X = W * (0.5f + (i - (N - 1) * 0.5f) * 0.16f);
+			Text(NameOf(Mix.Invaders[i]), X, H * 0.597f - Lift, CueA(Mix.Invaders[i]), 0.9f, true);
+		}
+	}
 	Box(W * 0.2f, H * 0.62f - Lift, W * 0.6f, Sx(3.f), RuleA);
 	Text(TEXT("CAMERAS READY. THE CITY IS YOUR STUDIO."), W * 0.5f, H * 0.645f - Lift, TitleA, 0.95f, true);
 }

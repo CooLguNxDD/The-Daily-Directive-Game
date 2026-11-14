@@ -1,0 +1,200 @@
+// R3 faction director, host only: rolls each map's faction mix from the run seed, drops squads for the pressure rule
+// (main faction near the crew, invaders from the far edge), sends the friendly army on its own, and lets factions
+// call their own strikes on towers (advisor a-2: through CallStrike, rate-limited, so faction destruction is graded,
+// replicated and deterministic like the crew's). Part of ADCGameMode, kept apart to keep the run director readable.
+#include "DCGameMode.h"
+
+#include "DCBuilding.h"
+#include "DCCharacter.h"
+#include "DCEnemy.h"
+#include "DCGameState.h"
+#include "DCPlayerState.h"
+#include "DCTuning.h"
+#include "DCUnits.h"
+#include "DCVoxelCity.h"
+#include "Engine/World.h"
+#include "EngineUtils.h"
+#include "Rules/DCFactionRules.h"
+
+bool ADCGameMode::FactionMode() const
+{
+	const ADCGameState* GS = GetGameState<ADCGameState>();
+	return GS && !GS->FactionMix.Main.IsNone();
+}
+
+void ADCGameMode::RollFactions()
+{
+	ADCGameState* GS = GetGameState<ADCGameState>();
+	const UDCTuning& T = UDCTuning::Get();
+	GS->FactionMix = DCFactionRules::RollMix(T.Factions, T.FactionMix, GS->RunSeed, GS->SectorIndex);
+	// Evidence runs: -dcmain=<Faction> forces the owner (its invaders stay rolled).
+	FString Forced;
+	if (FParse::Value(FCommandLine::Get(), TEXT("dcmain="), Forced) && DCFactionRules::Find(T.Factions, FName(*Forced)))
+	{
+		GS->FactionMix.Invaders.Remove(FName(*Forced));
+		GS->FactionMix.Main = FName(*Forced);
+	}
+	NextAllyTime = GetWorld()->GetTimeSeconds() + T.FactionMix.AllyGapSeconds * 0.5f;
+	NextFactionStrike = 0.f;
+	FactionStrikeReady.Reset();
+	FString Invaders;
+	for (const FName& I : GS->FactionMix.Invaders)
+	{
+		Invaders += I.ToString() + TEXT(" ");
+	}
+	UE_LOG(LogTemp, Display, TEXT("DCFACTION sector=%d main=%s (share %.2f) invaders=%s allies=%d"), GS->SectorIndex + 1, *GS->FactionMix.Main.ToString(),
+		GS->FactionMix.MainShare, *Invaders, GS->FactionMix.Allies.Num());
+}
+
+FVector ADCGameMode::DropPoint(const FVector& Near, bool bFar, const FDCPressureTuning& P)
+{
+	// Main faction and allies land in a ring around the crew; invaders cross in from beyond it.
+	TArray<FVector> Pool;
+	for (const FVector& Pt : CityPlan.StreetPoints)
+	{
+		const float Dist = FVector::Dist2D(Pt, Near);
+		const bool bIn = bFar ? Dist > P.RingMaxCm : (Dist >= P.RingMinCm && Dist <= P.RingMaxCm);
+		if (bIn)
+		{
+			Pool.Add(Pt);
+		}
+	}
+	const TArray<FVector>& From = Pool.Num() > 0 ? Pool : CityPlan.StreetPoints;
+	return From.Num() > 0 ? From[SectorRng.RandRange(0, From.Num() - 1)] : Near;
+}
+
+int32 ADCGameMode::SpawnSquad(FName Faction, int32 Count, const FVector& Centre, float Spread)
+{
+	const UDCTuning& T = UDCTuning::Get();
+	const FDCFactionDef* F = DCFactionRules::Find(T.Factions, Faction);
+	if (!F || Count <= 0)
+	{
+		return 0;
+	}
+	const ADCVoxelCity* City = ADCVoxelCity::Get(this);
+	const int32 Squad = NextSquadId++;
+	int32 Landed = 0;
+	for (int32 i = 0; i < Count; ++i)
+	{
+		const FDCEnemyDef* Def = T.FindEnemy(DCFactionRules::PickUnit(*F, SectorRng.FRand()));
+		if (!Def)
+		{
+			continue;
+		}
+		FVector Where = Centre + FVector(SectorRng.FRandRange(-Spread, Spread), SectorRng.FRandRange(-Spread, Spread), 0.f);
+		Where.Z = (City ? City->SurfaceZCm(Where) : 0.f) + Def->HoverHeight;
+		const FTransform Xf(FRotator(0, SectorRng.FRandRange(0, 360), 0), Where);
+		// Never inside a tower: a spot that would collide is nudged clear or skipped.
+		ADCEnemy* E = GetWorld()->SpawnActorDeferred<ADCEnemy>(ADCEnemy::StaticClass(), Xf, nullptr, nullptr, ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButDontSpawnIfColliding);
+		if (!E)
+		{
+			continue;
+		}
+		E->InitKind(Def->Id);
+		E->HostSetSquad(Squad, i, Count);
+		E->FinishSpawning(Xf);
+		++Landed;
+	}
+	return Landed;
+}
+
+void ADCGameMode::TickFactions(float Now)
+{
+	ADCGameState* GS = GetGameState<ADCGameState>();
+	const UDCTuning& T = UDCTuning::Get();
+	if (!FactionMode() || CityPlan.StreetPoints.Num() == 0 || !T.Sectors.IsValidIndex(GS->SectorIndex))
+	{
+		return;
+	}
+	const FDCPressureTuning& P = T.Sectors[GS->SectorIndex].Pressure;
+	TArray<ADCCharacter*> Standing;
+	for (ADCPlayerState* PS : Players())
+	{
+		ADCCharacter* C = PS->GetPawn<ADCCharacter>();
+		if (C && !C->IsDowned())
+		{
+			Standing.Add(C);
+		}
+	}
+	if (Standing.Num() == 0 || Now < SectorStartTime + P.StartSeconds)
+	{
+		return;
+	}
+	UDCUnits* Units = UDCUnits::Get(this);
+	// The friendly army: its own squads on its own clock, no orders (GOAL: acts on its own).
+	if (T.FactionMix.AllyGapSeconds > 0.f && Now >= NextAllyTime && GS->FactionMix.Allies.Num() > 0 && Units)
+	{
+		NextAllyTime = Now + T.FactionMix.AllyGapSeconds;
+		const FName Ally = GS->FactionMix.Allies[SectorRng.RandRange(0, GS->FactionMix.Allies.Num() - 1)];
+		const FDCFactionDef* F = DCFactionRules::Find(T.Factions, Ally);
+		const int32 Room = T.FactionMix.AllyMaxAlive - Units->CountAlive(Ally);
+		if (F && Room > 0)
+		{
+			const FVector Near = Standing[SectorRng.RandRange(0, Standing.Num() - 1)]->GetActorLocation();
+			const int32 N = FMath::Min(Room, SectorRng.RandRange(F->SquadMin, F->SquadMax));
+			const int32 Landed = SpawnSquad(Ally, N, DropPoint(Near, false, P), 350.f);
+			UE_LOG(LogTemp, Display, TEXT("DCFACTION ally squad %s landed=%d"), *Ally.ToString(), Landed);
+		}
+	}
+	// Faction strikes: one at a time across all factions, each faction on its own interval, never while a big
+	// collapse is still settling (the body budget belongs to the crew's shots first).
+	if (Now < NextFactionStrike || Now < SectorStartTime + T.FactionMix.StrikeStartSeconds || !Units)
+	{
+		return;
+	}
+	TArray<FName> Present;
+	Present.Add(GS->FactionMix.Main);
+	Present.Append(GS->FactionMix.Invaders);
+	Present.Append(GS->FactionMix.Allies);
+	for (const FName& Id : Present)
+	{
+		const FDCFactionDef* F = DCFactionRules::Find(T.Factions, Id);
+		const FDCStratagemDef* Strike = F && F->StrikeInterval > 0.f ? T.FindStratagem(F->StrikeStratagem) : nullptr;
+		if (!Strike || Now < FactionStrikeReady.FindRef(Id))
+		{
+			continue;
+		}
+		// The squad's centre: where this faction's live units stand.
+		FVector Sum = FVector::ZeroVector;
+		int32 N = 0;
+		for (const ADCEnemy* U : Units->All())
+		{
+			if (U && U->IsAlive() && U->GetFaction() == Id)
+			{
+				Sum += U->GetActorLocation();
+				++N;
+			}
+		}
+		if (N == 0)
+		{
+			continue;
+		}
+		const FVector Centre = Sum / N;
+		const ADCBuilding* Best = nullptr;
+		float BestD = TNumericLimits<float>::Max();
+		for (ADCBuilding* B : TActorRange<ADCBuilding>(GetWorld()))
+		{
+			const float D = B->IsCollapsed() ? BestD : FVector::DistSquared2D(B->GetActorLocation(), Centre);
+			Best = D < BestD ? B : Best;
+			BestD = FMath::Min(BestD, D);
+		}
+		if (!Best)
+		{
+			continue;
+		}
+		const FVector Target = Best->GetActorLocation();
+		CallStrike(*Strike, Target, nullptr);
+		FactionStrikeReady.Add(Id, Now + F->StrikeInterval);
+		NextFactionStrike = Now + T.FactionMix.StrikeGapSeconds;
+		for (ADCPlayerState* PS : Players())
+		{
+			if (ADCCharacter* C = PS->GetPawn<ADCCharacter>())
+			{
+				const float Metres = FVector::Dist2D(C->GetActorLocation(), Target) / 100.f;
+				C->HostToast(F->StrikeToast.Replace(TEXT("{M}"), *FString::Printf(TEXT("%.0f"), Metres)));
+			}
+		}
+		UE_LOG(LogTemp, Display, TEXT("DCFACTION strike %s (%s) on tower at %s, %d units"), *Id.ToString(), *Strike->Id.ToString(), *Target.ToCompactString(), N);
+		return;
+	}
+}

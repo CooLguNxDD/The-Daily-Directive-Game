@@ -8,6 +8,7 @@
 #include "DCTypes.h"
 #include "Rules/DCPhotoRules.h"
 #include "Rules/DCPressureRules.h"
+#include "Rules/DCFactionRules.h"
 #include "Rules/DCNewsprint.h"
 #include "Rules/DCOutfit.h"
 #include "Rules/DCPostStack.h"
@@ -416,6 +417,25 @@ struct FDCEnemyDef
 	UPROPERTY(EditAnywhere, Config, Category = "Enemy") float ModelScale = 1.f;
 	/** Model pivot (its bottom centre) relative to the actor, which flies at HoverHeight. */
 	UPROPERTY(EditAnywhere, Config, Category = "Enemy") FVector ModelOffset = FVector::ZeroVector;
+	/** R3: the faction this unit fights for (+Factions row). None = the regime's own machines (old behaviour: they
+	 *  hunt the crew only). */
+	UPROPERTY(EditAnywhere, Config, Category = "Enemy") FName Faction;
+	/** Ranged attack (cm): 0 = melee at AttackRange. A ranged unit fires a tracer every AttackInterval at a foe inside
+	 *  ShotRange it can see (host voxel sight line), Damage per hit, ShotSpread degrees of miss. */
+	UPROPERTY(EditAnywhere, Config, Category = "Enemy") float ShotRange = 0.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Enemy") float ShotSpread = 2.f;
+	/** Squad shape for ground infantry (formation registry): Crowd, Line, Skirmish. Spacing between slots (cm). */
+	UPROPERTY(EditAnywhere, Config, Category = "Enemy") FName Formation = TEXT("Crowd");
+	UPROPERTY(EditAnywhere, Config, Category = "Enemy") float FormationSpacingCm = 220.f;
+	/** Without a foe the squad heads for: Players (hunt the crew), Rubble (loot the newest collapse), Front (the
+	 *  nearest hostile unit anywhere). Goal registry in DCEnemy.cpp. */
+	UPROPERTY(EditAnywhere, Config, Category = "Enemy") FName Goal = TEXT("Players");
+	/** Gait read (rigid voxel models): body bob (cm) and sway (deg) per step at StepHz while moving. */
+	UPROPERTY(EditAnywhere, Config, Category = "Enemy") float BobCm = 0.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Enemy") float SwayDeg = 0.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Enemy") float StepHz = 2.f;
+	/** Replication rate (Hz): ground infantry is fine at 10 (advisor a-2). */
+	UPROPERTY(EditAnywhere, Config, Category = "Enemy") float NetHz = 30.f;
 };
 
 /** One wave inside a sector: Count enemies of EnemyId, one every Interval seconds from StartSeconds. */
@@ -635,6 +655,9 @@ public:
 	UPROPERTY(EditAnywhere, Config, Category = "Look") FDCLookTuning Look;
 	UPROPERTY(EditAnywhere, Config, Category = "Strike") TArray<FDCStratagemDef> Stratagems;
 	UPROPERTY(EditAnywhere, Config, Category = "Enemy") TArray<FDCEnemyDef> Enemies;
+	/** R3 factions and how each map's mix is rolled. */
+	UPROPERTY(EditAnywhere, Config, Category = "Enemy") TArray<FDCFactionDef> Factions;
+	UPROPERTY(EditAnywhere, Config, Category = "Enemy") FDCFactionMixRule FactionMix;
 	UPROPERTY(EditAnywhere, Config, Category = "Sector") TArray<FDCSectorDef> Sectors;
 	UPROPERTY(EditAnywhere, Config, Category = "Input") TArray<FDCActionDef> Actions;
 	UPROPERTY(EditAnywhere, Config, Category = "Input") TArray<FDCKeyBinding> Bindings;

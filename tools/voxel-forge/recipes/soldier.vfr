@@ -1,0 +1,20 @@
+# Soldier (R3, the friendly Army): rounded helmet with a steady blue-white lamp (its light cue), olive fatigues,
+# back pack, rifle across the chest. Friendly shapes are rounded (art bible); never signal yellow.
+name soldier
+grid 5
+size 16 14 36
+slot body Olive
+slot dark Ink
+slot lamp AllyBlue
+slot steel Steel
+box 6 3 0 9 6 14 body
+box 6 8 0 9 11 14 body
+box 4 2 0 9 6 1 dark
+box 4 8 0 9 12 1 dark
+box 5 3 14 11 11 27 body
+box 3 4 17 5 10 26 dark
+box 6 5 27 11 9 31 dark
+ellipsoid 8 7 32 3.4 3 2.2 body
+box 11 5 30 12 9 32 lamp
+beam 7 2 24 15 5 25 1.0 steel
+pivot 8 7 0

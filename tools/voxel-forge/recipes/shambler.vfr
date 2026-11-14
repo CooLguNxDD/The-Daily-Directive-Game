@@ -1,0 +1,19 @@
+# Shambler (R3, the Dead): hunched, head low and forward, arms hanging ahead, one leg short (a limp).
+# Its one light cue: two dim rot-green eyes. The Brute row wears it at a bigger scale.
+name shambler
+grid 5
+size 18 14 34
+slot body Flesh
+slot rag InkBrown
+slot eye Rot
+box 6 3 0 9 6 15 rag
+box 6 8 0 9 11 13 rag
+box 5 3 14 11 11 22 rag
+box 8 3 21 14 11 27 body
+box 12 5 24 17 9 30 body
+box 16 4 27 17 6 29 eye
+box 16 8 27 17 10 29 eye
+beam 11 2 26 17 1 16 1.2 body
+beam 11 12 26 16 13 18 1.2 body
+noise 0.15 7 rag
+pivot 8 7 0

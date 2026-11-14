@@ -4,6 +4,7 @@
 #include "GameFramework/GameStateBase.h"
 #include "DCTypes.h"
 #include "Voxel/DCVoxelTypes.h"
+#include "Rules/DCFactionRules.h"
 #include "DCGameState.generated.h"
 
 class ADCEnvironment;
@@ -46,6 +47,8 @@ public:
 	UPROPERTY(Replicated) TArray<FDCBlastRecord> Blasts;
 	UPROPERTY(Replicated) EDCRunPhase Phase = EDCRunPhase::Lobby;
 	UPROPERTY(Replicated) int32 SectorIndex = 0;
+	/** R3: this map's factions (rolled by the host from the run seed at sector start). */
+	UPROPERTY(Replicated) FDCFactionMix FactionMix;
 	UPROPERTY(Replicated) float SectorEndTime = 0.f;
 	/** Server time the sector began: with the run seed it drives the weather arc on every machine (R18). */
 	UPROPERTY(Replicated) float SectorStartTime = 0.f;

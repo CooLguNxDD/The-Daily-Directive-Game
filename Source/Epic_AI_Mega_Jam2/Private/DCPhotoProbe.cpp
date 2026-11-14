@@ -19,6 +19,8 @@ namespace
 	const FName MDebris(TEXT("Debris"));
 	const FName MEnemies(TEXT("Enemies"));
 	const FName MWalkers(TEXT("Walkers"));
+	/** R3: distinct factions with a live unit in frame (a CLASH when two or more fight in one shot). */
+	const FName MFactions(TEXT("Factions"));
 	const FName MBlasts(TEXT("Blasts"));
 	const FName MDanger(TEXT("DangerMeters"));
 	const FName MBlastMeters(TEXT("BlastMeters"));
@@ -206,6 +208,7 @@ namespace DCPhotoProbe
 		// Enemies in frame and in reach.
 		int32 Enemies = 0;
 		int32 Walkers = 0;
+		TSet<FName> Factions;
 		for (ADCEnemy* Enemy : TActorRange<ADCEnemy>(World))
 		{
 			if (!Enemy->IsAlive())
@@ -227,6 +230,7 @@ namespace DCPhotoProbe
 			}
 			++Enemies;
 			Walkers += Enemy->IsWalker() ? 1 : 0;
+			Factions.Add(Enemy->GetFaction());
 		}
 
 		// Strikes still telegraphing count as danger (standing under a beam is dramatic).
@@ -243,6 +247,7 @@ namespace DCPhotoProbe
 		In.Metrics.Add(MDebris, Debris);
 		In.Metrics.Add(MEnemies, static_cast<float>(Enemies));
 		In.Metrics.Add(MWalkers, static_cast<float>(Walkers));
+		In.Metrics.Add(MFactions, static_cast<float>(Factions.Num()));
 		In.Metrics.Add(MBlasts, static_cast<float>(BlastsInFrame));
 		In.Metrics.Add(MDanger, In.DangerMeters);
 		In.Metrics.Add(MBlastMeters, NearestBlast == TNumericLimits<float>::Max() ? 1000.f : NearestBlast / 100.f);
