@@ -334,6 +334,82 @@ bool FDCVoxelSignDropTest::RunTest(const FString&)
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDCVoxelSignBreakTest, "Epic_AI_Mega_Jam2.Voxel.SignAcrossBreakFallsWhole", VoxelFlags)
+bool FDCVoxelSignBreakTest::RunTest(const FString&)
+{
+	// Review CP22: a tower that breaks through the middle of a sign must not split it between the toppling top and
+	// the stump; the sign falls whole as its own piece.
+	const FDCVoxelOpContext Ctx = UDCVoxelSettings::Get().OpContext(UDCTuning::Get().City.BlockSizeCm);
+	FDCVoxelSector S;
+	Craft(S, VoxelPlan(DCCityRules::SectorSeed(5, 0), 0));
+	// A sign with a floor slab inside its height (breaks happen at slab-sized layers).
+	auto SlabIn = [](const FDCVoxelTower& X, const FDCVoxelSign& G)
+	{
+		int32 Typical = 0;
+		for (int32 C : X.IntactLayers)
+		{
+			Typical = FMath::Max(Typical, C);
+		}
+		for (int32 Z = G.BoxMin.Z + 1; Z < G.BoxMax.Z - 2; ++Z)
+		{
+			if (X.IntactLayers.IsValidIndex(Z) && X.IntactLayers[Z] * 4 >= Typical)
+			{
+				return Z;
+			}
+		}
+		return int32(INDEX_NONE);
+	};
+	FDCVoxelTower* T = nullptr;
+	FDCVoxelSign Sign;
+	int32 Mid = INDEX_NONE;
+	for (FDCVoxelTower& X : S.Towers)
+	{
+		for (const FDCVoxelSign& G : X.Signs)
+		{
+			if (!T && SlabIn(X, G) != INDEX_NONE)
+			{
+				T = &X;
+				Sign = G;
+				Mid = SlabIn(X, G) - 1;
+			}
+		}
+	}
+	if (!TestNotNull(TEXT("a tower with a sign across a floor slab"), T))
+	{
+		return true;
+	}
+	int32 SignCells = 0;
+	for (int32 Z = Sign.BoxMin.Z; Z < Sign.BoxMax.Z; ++Z)
+		for (int32 Y = Sign.BoxMin.Y; Y < Sign.BoxMax.Y; ++Y)
+			for (int32 X = Sign.BoxMin.X; X < Sign.BoxMax.X; ++X)
+				SignCells += T->Grid.Data.Get(FIntVector(X, Y, Z)) != 0 ? 1 : 0;
+	// Cut the whole tower through the slab and the layers round it (the sign itself left intact).
+	for (int32 Z = Mid; Z < Mid + 3; ++Z)
+		for (int32 Y = T->ScanMin.Y; Y < T->ScanMax.Y; ++Y)
+			for (int32 X = T->ScanMin.X; X < T->ScanMax.X; ++X)
+			{
+				const bool bInSign = X >= Sign.BoxMin.X && Y >= Sign.BoxMin.Y && X < Sign.BoxMax.X && Y < Sign.BoxMax.Y;
+				if (!bInSign)
+				{
+					T->Grid.Data.Set(FIntVector(X, Y, Z), 0);
+				}
+			}
+	AddInfo(FString::Printf(TEXT("sign z %d..%d, cut %d, intact %d, now %lld, scan z %d"), Sign.BoxMin.Z, Sign.BoxMax.Z, Mid,
+		T->IntactLayers.IsValidIndex(Mid) ? T->IntactLayers[Mid] : -1, CountTowerLayer(*T, Mid), T->ScanMax.Z));
+	FDCVoxelOpResult R;
+	DCVoxelOps::Structure(*T, FIntVector(1, 0, 0), Ctx, R);
+	TestTrue(TEXT("the cut tower breaks"), T->bFallen);
+	const bool bWhole = R.Pieces.ContainsByPredicate([&Sign, SignCells](const FDCVoxelPiece& P)
+	{
+		return P.Cells.Num() == SignCells && !P.Cells.ContainsByPredicate([&Sign](const FIntVector& C)
+		{
+			return C.X < Sign.BoxMin.X || C.Y < Sign.BoxMin.Y || C.Z < Sign.BoxMin.Z || C.X >= Sign.BoxMax.X || C.Y >= Sign.BoxMax.Y || C.Z >= Sign.BoxMax.Z;
+		});
+	});
+	TestTrue(FString::Printf(TEXT("the sign across the break falls whole as its own piece (%d cells)"), SignCells), bWhole);
+	return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDCVoxelDataTest, "Epic_AI_Mega_Jam2.Voxel.ShippedData", VoxelFlags)
 bool FDCVoxelDataTest::RunTest(const FString&)
 {

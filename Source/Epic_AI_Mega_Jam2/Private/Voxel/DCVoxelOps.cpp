@@ -450,7 +450,22 @@ namespace DCVoxelOps
 			Piece.Pivot = FIntVector((T.Min.X + T.Max.X) / 2, (T.Min.Y + T.Max.Y) / 2, Break);
 			Piece.Pivot[Axis] = Dir[Axis] > 0 ? T.Max[Axis] : T.Min[Axis];
 			const int32 LocalBreak = Break; // Box.Min.Z is 0
-			TakePiece(Piece, LocalBreak + 1, [](int32, int32, int32) { return true; });
+			// A sign that crosses the break stays out of the topple piece: the sign pass drops it whole (review CP22).
+			TArray<TPair<FIntVector, FIntVector>> Crossing;
+			for (const FDCVoxelSign& Sign : T.Signs)
+			{
+				if (Sign.BoxMin.Z <= LocalBreak && Sign.BoxMax.Z > LocalBreak + 1)
+				{
+					Crossing.Emplace(Sign.BoxMin - Box.Min, Sign.BoxMax - Box.Min);
+				}
+			}
+			TakePiece(Piece, LocalBreak + 1, [&Crossing](int32 X, int32 Y, int32 Z)
+			{
+				return !Crossing.ContainsByPredicate([X, Y, Z](const TPair<FIntVector, FIntVector>& B)
+				{
+					return X >= B.Key.X && Y >= B.Key.Y && Z >= B.Key.Z && X < B.Value.X && Y < B.Value.Y && Z < B.Value.Z;
+				});
+			});
 			T.bFallen = true;
 			T.BreakZ = Break;
 			if (!bWasFallen)
@@ -485,7 +500,8 @@ namespace DCVoxelOps
 					}
 				}
 			}
-			if (static_cast<int64>(Left) * 100 >= static_cast<int64>(Sign.BackCells) * Hold)
+			const bool bCrossesBreak = Break != INDEX_NONE && Sign.BoxMin.Z <= Break && Sign.BoxMax.Z > Break + 1;
+			if (!bCrossesBreak && static_cast<int64>(Left) * 100 >= static_cast<int64>(Sign.BackCells) * Hold)
 			{
 				continue;
 			}

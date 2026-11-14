@@ -188,6 +188,8 @@ private:
 	};
 	TSharedPtr<FPendingCraft> PendingCraft;
 	void FinishBuild(int32 RunSeed, int32 SectorIndex, int32 BuildId, double Start);
+	/** Waits for an in-flight craft and swaps it in (an op never applies to a half-built city). */
+	void FlushPendingCraft();
 	struct FQueuedOp
 	{
 		FDCVoxelOp Op;
