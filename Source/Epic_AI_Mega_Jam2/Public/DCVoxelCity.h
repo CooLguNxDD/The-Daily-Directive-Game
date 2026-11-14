@@ -233,6 +233,11 @@ private:
 	/** Pooled sign lights (R25) and the signs whose voxels were carved (lot, sign index): their light is gone. */
 	UPROPERTY() TArray<TObjectPtr<class URectLightComponent>> SignLightPool;
 	TSet<FIntPoint> DeadSigns;
+	/** Aftermath firelights over fresh rubble piles (pooled, FireLights at most). */
+	UPROPERTY() TArray<TObjectPtr<class UPointLightComponent>> FireLightPool;
+	TArray<float> FireLightStart;
+	void StartFireLight(const FVector& Where);
+	void TickFireLights();
 	float NextSignPick = 0.f;
 	void TickSignLights();
 	/** Game thread, after a commit: signs on touched lots whose centre voxel is gone. */

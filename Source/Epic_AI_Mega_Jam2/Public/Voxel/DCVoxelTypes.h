@@ -164,6 +164,12 @@ struct FDCVoxelTuning
 	 *  rect light in the sign's colour, facing out; its specular on the wet street is the neon reflection. Windows never
 	 *  get lights. Intensity in candela, source = the sign's size times SignSourceScale. */
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 SignLights = 10;
+	/** Aftermath firelight over each fresh rubble pile for DecaySeconds (pooled, shadowless, flickering). */
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 FireLights = 6;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float FireLightCandela = 1500.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float FireLightRadiusCm = 1800.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float FireLightHeightCm = 250.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") FLinearColor FireLightColor = FLinearColor(1.f, 0.38f, 0.08f);
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float SignLightCandela = 600.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float SignLightRadiusCm = 2600.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float SignLightOffsetCm = 40.f;
@@ -178,14 +184,14 @@ struct FDCVoxelTuning
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 PhysicsPieces = 2;
 	/** Fragments per piece at most (the block grid doubles until it fits), and live bodies in the sector at most (a
 	 *  piece that would pass the cap falls scripted). */
-	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 PhysicsFragments = 20;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 PhysicsFragments = 16;
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 PhysicsMaxBodies = 360;
 	/** Chunk block edge in cm (rounded to the piece's voxels): chunks break off as the piece falls. */
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float PhysicsFragmentCm = 400.f;
 	/** Leaves: each chunk is made of up to LeavesPerChunk leaves of LeafCm blocks; a hit over ShatterCms (speed lost)
 	 *  breaks the chunk into them, bursting apart at ShatterBurstCms. */
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float PhysicsLeafCm = 120.f;
-	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 PhysicsLeavesPerChunk = 8;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 PhysicsLeavesPerChunk = 6;
 	/** Bodies shrink away over this long when their group rests (the shared rubble shows under them). */
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float PhysicsFadeSeconds = 0.8f;
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float PhysicsShatterCms = 350.f;
