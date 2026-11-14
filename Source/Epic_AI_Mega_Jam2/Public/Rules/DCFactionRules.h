@@ -42,6 +42,11 @@ struct FDCFactionDef
 	/** Played at a unit's feet on every machine when it appears (a voxel Fx emitter id; None = nothing). The Hive
 	 *  bursts out of the street in dust. */
 	UPROPERTY(EditAnywhere, Config, Category = "Faction") FName SpawnFx;
+	/** Night read: one unit in CueLightEvery carries a small shadowless light in the cue colour (0 = none), so a squad
+	 *  shows its colour on the street without a light per unit (advisor a-2). Cosmetic, picked per machine. */
+	UPROPERTY(EditAnywhere, Config, Category = "Faction") int32 CueLightEvery = 0;
+	UPROPERTY(EditAnywhere, Config, Category = "Faction") float CueLightCandela = 120.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Faction") float CueLightRadiusCm = 500.f;
 	/** The one light cue of the faction (HUD tag, sector card rule, tracer colour). */
 	UPROPERTY(EditAnywhere, Config, Category = "Faction") FLinearColor Cue = FLinearColor::White;
 };

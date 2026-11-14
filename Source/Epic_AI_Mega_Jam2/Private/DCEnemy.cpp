@@ -604,6 +604,16 @@ void ADCEnemy::BeginPlay()
 	}
 	GaitLast = GetActorLocation();
 	const FDCFactionDef* F = DCFactionRules::Find(UDCTuning::Get().Factions, GetFaction());
+	const FDCEnemyDef* CueDef = GetDef();
+	if (F && CueDef && F->CueLightEvery > 0 && CueDef->GlowLight <= 0.f && GetUniqueID() % F->CueLightEvery == 0)
+	{
+		GlowLight->SetVisibility(true);
+		GlowLight->SetIntensityUnits(ELightUnits::Candelas);
+		GlowLight->SetIntensity(F->CueLightCandela);
+		GlowLight->SetAttenuationRadius(F->CueLightRadiusCm);
+		GlowLight->SetLightColor(F->Cue);
+		GlowLight->SetRelativeLocation(FVector(30.f, 0.f, 60.f));
+	}
 	const ADCVoxelCity* City = ADCVoxelCity::Get(this);
 	if (ADCVoxelFx* Fx = F && !F->SpawnFx.IsNone() && City ? City->GetFx() : nullptr)
 	{
