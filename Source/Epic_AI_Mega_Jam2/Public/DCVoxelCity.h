@@ -155,6 +155,9 @@ private:
 		float Start = 0.f;
 		/** A still-simulating body keeps its body reservation until the fade releases it (review CP34). */
 		bool bReserved = false;
+		/** When it joined the list (-1 = not seen yet): a flying stray postpones its fade until it nears the street,
+		 *  at most PhysicsStrayFlySeconds (CP40 major: strays faded mid-flight). */
+		float Added = -1.f;
 	};
 	TArray<FDCFading> Fading;
 	/** -dccollapsecam evidence camera (step -1 = off). */

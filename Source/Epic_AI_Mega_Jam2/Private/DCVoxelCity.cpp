@@ -1618,9 +1618,23 @@ void ADCVoxelCity::TickFalling(float Now)
 	SpawnDueShards(Now);
 	// Rested bodies shrink away over the shared rubble, then go.
 	const float Fade = FMath::Max(UDCVoxelSettings::Get().Tuning.PhysicsFadeSeconds, 0.01f);
+	const FDCVoxelTuning& FadeTn = UDCVoxelSettings::Get().Tuning;
 	for (int32 i = Fading.Num() - 1; i >= 0; --i)
 	{
-		const float A = (GetWorld()->GetTimeSeconds() - Fading[i].Start) / Fade;
+		const float WorldNow = GetWorld()->GetTimeSeconds();
+		Fading[i].Added = Fading[i].Added < 0.f ? Fading[i].Start : Fading[i].Added;
+		if (const UPrimitiveComponent* Flying = Fading[i].bReserved ? Fading[i].Body.Get() : nullptr)
+		{
+			// A stray still in the air keeps flying (no shrink) until it nears the street or runs out of time.
+			const FVector P = Flying->GetComponentLocation();
+			const bool bAir = Flying->IsAnyRigidBodyAwake() && P.Z - SurfaceZCm(P) > FadeTn.PhysicsGroundContactCm * 1.5f;
+			if (bAir && WorldNow - Fading[i].Added < FadeTn.PhysicsStrayFlySeconds)
+			{
+				Fading[i].Start = WorldNow;
+				continue;
+			}
+		}
+		const float A = (WorldNow - Fading[i].Start) / Fade;
 		UPrimitiveComponent* Mesh = Fading[i].Mesh.Get();
 		if (A >= 1.f || !Mesh)
 		{

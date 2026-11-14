@@ -265,6 +265,8 @@ struct FDCVoxelTuning
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 PhysicsLeavesPerChunk = 6;
 	/** Bodies shrink away over this long when their group rests (the shared rubble shows under them). */
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float PhysicsFadeSeconds = 0.8f;
+	/** A body still flying when its group rests keeps flying up to this long, then fades where it is (on the street). */
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float PhysicsStrayFlySeconds = 4.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float PhysicsShatterCms = 350.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float PhysicsShatterBurstCms = 250.f;
 	/** Chunks never shatter in their first seconds (neighbouring chunks touch as they break off). */
