@@ -680,6 +680,9 @@ struct FDCCardTuning
 	UPROPERTY(EditAnywhere, Config, Category = "Card") FLinearColor AccentA = FLinearColor(1.f, 0.03f, 0.22f);
 	UPROPERTY(EditAnywhere, Config, Category = "Card") FLinearColor AccentB = FLinearColor(0.03f, 0.75f, 1.f);
 	UPROPERTY(EditAnywhere, Config, Category = "Card") float ScanlineAlpha = 0.12f;
+	/** Stops added to the builder capture's exposure for the card only (noir: the character sits in the dark, lit by
+	 *  its key and rim, not washed grey). */
+	UPROPERTY(EditAnywhere, Config, Category = "Card") float ExposureOffset = -0.8f;
 	UPROPERTY(EditAnywhere, Config, Category = "Card") FString Title = TEXT("DIRECTOR'S CUT: FRONT PAGE");
 	UPROPERTY(EditAnywhere, Config, Category = "Card") FString Subtitle = TEXT("PRESS CREDENTIAL  //  WAR PHOTOGRAPHER");
 	UPROPERTY(EditAnywhere, Config, Category = "Card") FString Footer = TEXT("PASTE THE CODE IN THE BUILDER TO WEAR THIS PHOTOGRAPHER");
