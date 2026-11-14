@@ -915,6 +915,7 @@ void ADCGameMode::EnterReel(float Now)
 			FDCReelClip& Clip = GS->ReelClips.AddDefaulted_GetRef();
 			Clip.Photo = All[P]->Photos[Ranked[P][Rank]];
 			Clip.PlayerName = All[P]->GetPlayerName();
+			Clip.OutfitCode = All[P]->OutfitCode;
 			if (const TArray<FDCPoseSample>* Poses = PhotoPoses.Find(Clip.Photo.PhotoId))
 			{
 				Clip.Poses = *Poses;
