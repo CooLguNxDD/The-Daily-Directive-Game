@@ -1,26 +1,27 @@
 # Outfit body: long trench coat with an accent belt and collar (R23). V5.5: shaped, not a slab: an octagonal torso
-# that follows the mannequin, a belt, a flared skirt split at the front, and a turned-up collar. Hollow.
+# around the mannequin (wide enough to stay outside the body), a belt, a flared skirt split at the front, and a
+# turned-up collar. Hollow.
 name outfit_trench
 grid 2
 size 22 26 34
 slot coat SwatchMain
 slot belt SwatchAccent
 # Torso: chamfered octagon around the chest.
-poly 16 31 coat 3,6 6,3 16,3 19,6 19,20 16,23 6,23 3,20
-# Skirt: wider at the hem, the same octagon stepped out (a voxel flare).
-poly 0 7 coat 1,4 4,1 18,1 21,4 21,22 18,25 4,25 1,22
-poly 7 14 coat 2,5 5,2 17,2 20,5 20,21 17,24 5,24 2,21
+poly 16 31 coat 1,5 4,2 18,2 21,5 21,21 18,24 4,24 1,21
+# Skirt: wider at the hem, stepped out one voxel per band (a voxel flare).
+poly 0 7 coat 0,3 3,0 19,0 22,3 22,23 19,26 3,26 0,23
+poly 7 14 coat 1,4 4,1 18,1 21,4 21,22 18,25 4,25 1,22
 # Belt between them, one voxel proud.
-poly 14 16 belt 2,5 5,2 17,2 20,5 20,21 17,24 5,24 2,21
+poly 14 16 belt 0,4 4,0 18,0 22,4 22,22 18,26 4,26 0,22
 # Collar: a turned-up ring above the shoulders.
-poly 31 34 coat 4,7 7,4 15,4 18,7 18,19 15,22 7,22 4,19
+poly 31 34 coat 3,6 6,3 16,3 19,6 19,20 16,23 6,23 3,20
 # Hollow it: the mannequin stands inside.
-carve poly 0 14 4,7 7,4 15,4 18,7 18,19 15,22 7,22 4,19
-carve poly 14 31 5,8 8,5 14,5 17,8 17,18 14,21 8,21 5,18
-carve poly 31 34 6,9 9,6 13,6 16,9 16,17 13,20 9,20 6,17
+carve poly 0 14 3,6 6,3 16,3 19,6 19,20 16,23 6,23 3,20
+carve poly 14 31 3,7 6,4 16,4 19,7 19,19 16,22 6,22 3,19
+carve poly 31 34 5,8 8,5 14,5 17,8 17,18 14,21 8,21 5,18
 # Open front below the belt, and a V at the neck.
-carve box 16 11 0 22 15 13
-carve box 15 10 29 22 16 34
+carve box 18 11 0 22 15 13
+carve box 17 10 29 22 16 34
 # Belt buckle.
-box 19 11 14 21 15 16 belt
+box 21 11 14 22 15 16 belt
 pivot 11 13 8
