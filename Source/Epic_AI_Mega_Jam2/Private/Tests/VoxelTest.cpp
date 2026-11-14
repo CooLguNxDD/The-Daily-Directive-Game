@@ -449,4 +449,74 @@ bool FDCVoxelFragmentTest::RunTest(const FString&)
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDCVoxelRestTest, "Epic_AI_Mega_Jam2.Voxel.HostRestOp", VoxelFlags)
+bool FDCVoxelRestTest::RunTest(const FString&)
+{
+	// R26 host-owned rubble: the toppled piece's provisional rubble is replaced by its fragments settled at the poses
+	// the host sends (even poses high in the air: Settle stacks them down), the same result on every machine.
+	const FDCVoxelOpContext Ctx = UDCVoxelSettings::Get().OpContext(UDCTuning::Get().City.BlockSizeCm);
+	const FDCVoxelTuning& Tn = UDCVoxelSettings::Get().Tuning;
+	FDCVoxelSector S;
+	Craft(S, VoxelPlan(DCCityRules::SectorSeed(77, 0), 0));
+	const FDCVoxelOpResult R = DCVoxelOps::Apply(S, StrikeAt(S.Towers[0], 1, 1300), Ctx);
+	const FDCVoxelPiece* Top = R.Pieces.FindByPredicate([](const FDCVoxelPiece& P) { return P.bTopple; });
+	TestNotNull(TEXT("a toppled piece"), Top);
+	if (!Top)
+	{
+		return true;
+	}
+	FDCPendingPiece P;
+	P.Lot = Top->Lot;
+	P.Cells = Top->Cells;
+	P.Materials = Top->Materials;
+	for (int32 r = Top->RubbleStart; r < Top->RubbleStart + Top->RubbleNum; ++r)
+	{
+		P.Rubble.Add(R.Rubble[r]);
+		P.RubbleMaterials.Add(R.RubbleMaterials[r]);
+	}
+	DCVoxelOps::FragmentTree(P.Cells, S.Towers[P.Lot].Grid.VoxelCm, Tn.PhysicsFragmentCm, Tn.PhysicsFragments, Tn.PhysicsLeafCm, Tn.PhysicsLeavesPerChunk, P.FragParent, P.FragCells);
+	TestTrue(TEXT("the piece has a fragment tree"), P.FragParent.Num() > 1);
+	// Rest every chunk 25 m off the provisional site, some on their side, some 20 m up.
+	FDCVoxelOp Rest;
+	Rest.Seq = 2;
+	Rest.Kind = TEXT("Rest");
+	Rest.RestOf = 1;
+	Rest.RestPiece = 0;
+	const FIntVector Site = P.Rubble.Num() > 0 ? S.Terrain.CenterCm(P.Rubble[0]) : FIntVector::ZeroValue;
+	for (int32 f = 0; f < P.FragParent.Num(); ++f)
+	{
+		if (P.FragParent[f] != INDEX_NONE)
+		{
+			continue;
+		}
+		FDCVoxelRest& X = Rest.Rests.AddDefaulted_GetRef();
+		X.Frag = f;
+		X.PosCm = Site + FIntVector(2500 + f * 150, f * 80, (f % 3) * 1000);
+		X.AxisX = static_cast<uint8>(f % 2 == 0 ? 0 : 4);
+		X.AxisZ = static_cast<uint8>(f % 2 == 0 ? 4 : 1);
+	}
+	FDCVoxelSector Copy;
+	Craft(Copy, VoxelPlan(DCCityRules::SectorSeed(77, 0), 0));
+	DCVoxelOps::Apply(Copy, StrikeAt(Copy.Towers[0], 1, 1300), Ctx);
+	const FDCVoxelOpResult A = DCVoxelOps::ApplyRest(S, Rest, P, Ctx);
+	const FDCVoxelOpResult B = DCVoxelOps::ApplyRest(Copy, Rest, P, Ctx);
+	TestTrue(TEXT("the rested fragments became rubble"), A.Rubble.Num() > 50);
+	TestEqual(TEXT("every machine gets the same rubble"), S.Hash(), Copy.Hash());
+	int32 Moved = 0;
+	for (const FIntVector& C : A.Rubble)
+	{
+		Moved += S.Terrain.CenterCm(C).X > Site.X + 1500 ? 1 : 0;
+	}
+	TestTrue(TEXT("the rubble lies where the host's bodies rested"), Moved > A.Rubble.Num() / 2);
+	int32 Floating = 0;
+	for (const FIntVector& C : A.Rubble)
+	{
+		const bool bOnTower = S.Towers.ContainsByPredicate([&S, &C](const FDCVoxelTower& T) { return DCVoxelOps::TowerTopCells(T, S.Terrain, C.X, C.Y) == C.Z; });
+		Floating += S.Terrain.Data.IsSolid(C - FIntVector(0, 0, 1)) || bOnTower ? 0 : 1;
+	}
+	TestEqual(TEXT("poses in the air still land (nothing floats)"), Floating, 0);
+	TestEqual(TEXT("axis frames round trip"), static_cast<int32>(DCVoxelOps::AxisIndex(FVector(DCVoxelOps::AxisDir(3)))), 3);
+	return true;
+}
+
 #endif

@@ -766,4 +766,107 @@ namespace DCVoxelOps
 			Block *= 2;
 		}
 	}
+
+	void FragmentTree(const TArray<FIntVector>& Cells, int32 VoxelCm, float ChunkCm, int32 MaxChunks, float LeafCm, int32 MaxLeaves,
+		TArray<int32>& OutParent, TArray<TArray<int32>>& OutCells)
+	{
+		OutParent.Reset();
+		OutCells.Reset();
+		const int32 Vox = FMath::Max(VoxelCm, 1);
+		for (const TArray<int32>& Group : SplitFragments(Cells, FMath::Max(1, FMath::RoundToInt(ChunkCm / Vox)), MaxChunks))
+		{
+			const int32 Chunk = OutParent.Num();
+			OutParent.Add(INDEX_NONE);
+			OutCells.Add(Group);
+			TArray<FIntVector> GroupCells;
+			for (int32 i : Group)
+			{
+				GroupCells.Add(Cells[i]);
+			}
+			for (const TArray<int32>& Leaf : SplitFragments(GroupCells, FMath::Max(1, FMath::RoundToInt(LeafCm / Vox)), MaxLeaves))
+			{
+				TArray<int32>& Mapped = OutCells.AddDefaulted_GetRef();
+				OutParent.Add(Chunk);
+				for (int32 k : Leaf)
+				{
+					Mapped.Add(Group[k]);
+				}
+			}
+		}
+	}
+
+	uint8 AxisIndex(const FVector& Dir)
+	{
+		const FVector A = Dir.GetAbs();
+		if (A.X >= A.Y && A.X >= A.Z)
+		{
+			return Dir.X >= 0.f ? 0 : 1;
+		}
+		if (A.Y >= A.Z)
+		{
+			return Dir.Y >= 0.f ? 2 : 3;
+		}
+		return Dir.Z >= 0.f ? 4 : 5;
+	}
+
+	FIntVector AxisDir(uint8 Index)
+	{
+		static const FIntVector Dirs[6] = {{1, 0, 0}, {-1, 0, 0}, {0, 1, 0}, {0, -1, 0}, {0, 0, 1}, {0, 0, -1}};
+		return Dirs[Index % 6];
+	}
+
+	FDCVoxelOpResult ApplyRest(FDCVoxelSector& Sector, const FDCVoxelOp& Op, const FDCPendingPiece& P, const FDCVoxelOpContext& Ctx)
+	{
+		FDCVoxelOpResult Out;
+		if (!Sector.Towers.IsValidIndex(P.Lot))
+		{
+			return Out;
+		}
+		// 1. The provisional rubble this piece left at plan time goes (only where it still lies).
+		for (int32 i = 0; i < P.Rubble.Num(); ++i)
+		{
+			if (Sector.Terrain.Data.Get(P.Rubble[i]) == P.RubbleMaterials[i])
+			{
+				Sector.Terrain.Data.Set(P.Rubble[i], 0);
+			}
+		}
+		// 2. Each rested fragment: its cells turned to the snapped frame about the fragment's centre, moved to the
+		//    host's rest centre, then settled like any falling piece (column stacking: nothing floats).
+		const FDCVoxelGrid& G = Sector.Towers[P.Lot].Grid;
+		for (const FDCVoxelRest& R : Op.Rests)
+		{
+			if (!P.FragCells.IsValidIndex(R.Frag))
+			{
+				continue;
+			}
+			const FIntVector X = AxisDir(R.AxisX);
+			FIntVector Z = AxisDir(R.AxisZ);
+			if (FMath::Abs(X.X * Z.X + X.Y * Z.Y + X.Z * Z.Z) != 0)
+			{
+				Z = AxisDir(X.Z != 0 ? 0 : 4); // a broken frame from rounding: any perpendicular axis
+			}
+			const FIntVector Y(Z.Y * X.Z - Z.Z * X.Y, Z.Z * X.X - Z.X * X.Z, Z.X * X.Y - Z.Y * X.X); // Z x X
+			FIntVector Lo(MAX_int32), Hi(MIN_int32);
+			for (int32 i : P.FragCells[R.Frag])
+			{
+				const FIntVector C = G.CenterCm(P.Cells[i]);
+				Lo = FIntVector(FMath::Min(Lo.X, C.X), FMath::Min(Lo.Y, C.Y), FMath::Min(Lo.Z, C.Z));
+				Hi = FIntVector(FMath::Max(Hi.X, C.X), FMath::Max(Hi.Y, C.Y), FMath::Max(Hi.Z, C.Z));
+			}
+			const FIntVector Mid = (Lo + Hi) / 2;
+			FDCVoxelPiece Piece;
+			Piece.Lot = P.Lot;
+			Piece.bTopple = false;
+			for (int32 i : P.FragCells[R.Frag])
+			{
+				const FIntVector D = G.CenterCm(P.Cells[i]) - Mid;
+				const FIntVector W = R.PosCm + X * D.X + Y * D.Y + Z * D.Z;
+				Piece.Cells.Add(G.ToLocal(W));
+				Piece.Materials.Add(P.Materials[i]);
+			}
+			Piece.Pivot = Piece.Cells.Num() > 0 ? Piece.Cells[0] : FIntVector::ZeroValue;
+			Settle(Sector, Piece, Ctx, Out);
+		}
+		return Out;
+	}
 }

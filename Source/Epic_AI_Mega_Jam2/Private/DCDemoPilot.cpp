@@ -594,7 +594,7 @@ void ADCDemoPilot::TickDefend()
 	// bubble, so a swarmer biting at 1-2 m is shot instead of downing the pilot while it frames a photo.
 	// With the camera up (framing a swarm) it only breaks off for a swarmer already at arm's length (3 m).
 	// (Sector 2 runs still went down at 1 m with a 6 m bubble: 10 m gives the rifle time to drop a rushing swarmer.)
-	float Best = bDefend ? 1200.f : (Me && Me->IsCameraRaised() ? 300.f : 1000.f);
+	float Best = bDefend ? 1200.f : (Me && Me->IsCameraRaised() ? 700.f : 1000.f);
 	if (Me && !Me->IsDowned() && GS && GS->Phase == EDCRunPhase::Sector)
 	{
 		for (ADCEnemy* E : TActorRange<ADCEnemy>(GetWorld()))
