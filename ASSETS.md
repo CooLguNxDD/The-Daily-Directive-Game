@@ -21,14 +21,13 @@ art) is in the game.
 | All sound and music | synthesised at start-up | `DCAudio.cpp` renders every cue from code recipes; no audio files |
 | HUD, menus, newspaper front page | drawn at run time | Canvas HUD (`DCHUD*.cpp`) and Slate (`DCMenu.cpp`) |
 
-## Generated (R11)
+## Generated (R11, R25)
 | Asset | Path | Tool | Notes |
 |-------|------|------|-------|
-| Title menu key art | `Content/DC/Art/T_MenuKeyArt.uasset` (source `Content/DC/Art/Source/menu-keyart.png`) | `scripts/media.sh` (agy backend, 2026-11-13; codex was out of quota) | prompt in `goal/epic-ai-mega-jam2/refs/game/menu-keyart.md`; imported by `tools/content/build_content.py` |
-| Draft card art: Sun-Drop, Gravity Singularity | `Content/DC/Art/T_Card_sundrop.uasset`, `T_Card_singularity.uasset` (sources `Content/DC/Art/Source/card-*.png`) | `scripts/media.sh` (agy backend, 2026-11-13) | prompts in `goal/epic-ai-mega-jam2/refs/game/card-*.md`; imported at 256 px by `tools/content/build_content.py` |
-| Draft card art: Decoy Beacon, Strobe Flash, Fisheye Lens, Cursed Disposable, Domino Condemnation, Solar Eclipse, Rogue Strikes | `Content/DC/Art/T_Card_{decoy,strobe,fisheye,cursed,domino,eclipse,rogue}.uasset` (sources `Content/DC/Art/Source/card-*.png`) | local ComfyUI (Qwen-Image) via `.claude/skills/cat-fleet/scripts/comfy.py image`, 2026-11-13 ~20:30 | prompts in `goal/epic-ai-mega-jam2/refs/game/card-*.md`; imported at 256 px by `tools/content/build_content.py` |
-| Newsprint paper texture | `Content/DC/Art/T_PaperGrain.uasset` (source `Content/DC/Art/Source/tex-paper.png`) | local ComfyUI (Qwen-Image), `comfy.py image` | the final-cut desk and front-page sheet (`ADCHUD::PaperSheet`); prompt `refs/game/tex-paper.md` |
-| Stamp grit (worn ink mask) | `Content/DC/Art/T_StampGrit.uasset` (source `Content/DC/Art/Source/tex-stampgrit.png`, alpha = wear from the generated greyscale) | local ComfyUI (Qwen-Image), `comfy.py image` | over every score stamp (`ADCHUD::StampGrit`); prompt `refs/game/tex-stampgrit.md` |
+| Title menu key art (R25 neon noir, replaces the poster key art) | `Content/DC/Art/T_MenuKeyArt.uasset` (source `Content/DC/Art/Source/menu-keyart.png`) | local ComfyUI (Qwen-Image) via `.claude/skills/cat-fleet/scripts/comfy.py image`, 2026-11-14 ~00:30 | prompt in `goal/epic-ai-mega-jam2/refs/noir/menu-keyart.md`; imported by `tools/content/build_content.py` |
+| Draft card art, all nine upgrades (R25 neon noir, same subjects as the poster set) | `Content/DC/Art/T_Card_{sundrop,singularity,decoy,strobe,fisheye,cursed,domino,eclipse,rogue}.uasset` (sources `Content/DC/Art/Source/card-*.png`) | local ComfyUI (Qwen-Image), `comfy.py image` | prompts in `goal/epic-ai-mega-jam2/refs/noir/card-*.md`; imported at 256 px by `tools/content/build_content.py` |
+| Newsprint paper texture (no longer drawn after R25; kept for history) | `Content/DC/Art/T_PaperGrain.uasset` (source `Content/DC/Art/Source/tex-paper.png`) | local ComfyUI (Qwen-Image) | the UI sheet is now dark glass drawn in code (`ADCHUD::PaperSheet`) |
+| Stamp grit (worn mask) | `Content/DC/Art/T_StampGrit.uasset` (source `Content/DC/Art/Source/tex-stampgrit.png`, alpha = wear) | local ComfyUI (Qwen-Image) | over every score stamp (`ADCHUD::StampGrit`) |
 | Critic reference board (not in the build) | `goal/epic-ai-mega-jam2/refs/board/*.png` | `scripts/media.sh` (agy) | poster city, newspaper front, strike call-in, ink stamp, voxel city; the human picks keepers |
 
 ## Made in code or from text (no third-party source)
