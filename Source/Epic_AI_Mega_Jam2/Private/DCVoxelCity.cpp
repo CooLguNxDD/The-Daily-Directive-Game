@@ -1503,7 +1503,12 @@ void ADCVoxelCity::BreakApart(const TSharedPtr<FFalling>& Shared, float Age, flo
 	F.bBroken = true;
 	{
 		// Rest budget from the height it breaks at (advisor CP13): free-fall time to the site plus settle, capped.
-		const float H = FMath::Max(F.Comp->GetComponentLocation().Z - F.LandCenter.Z, 0.f);
+		float Top = F.Comp->GetComponentLocation().Z;
+		for (const FFalling::FFrag& Fr : F.Frags)
+		{
+			Top = Fr.Parent == INDEX_NONE && Fr.Local.IsValid ? FMath::Max(Top, F.Comp->GetComponentTransform().TransformPosition(Fr.Local.GetCenter()).Z) : Top;
+		}
+		const float H = FMath::Max(Top - F.LandCenter.Z, 0.f); // the highest chunk's fall, not the hinge
 		F.RestBudget = FMath::Min(FMath::Sqrt(2.f * H / 980.f) + Tn.PhysicsSettleSeconds, Tn.PhysicsMaxAirSeconds);
 	}
 	F.BodyAge = 0.f;
