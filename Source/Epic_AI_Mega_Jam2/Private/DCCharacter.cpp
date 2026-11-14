@@ -1034,6 +1034,7 @@ void ADCCharacter::HostApplyHurt(float Amount, const FVector& From)
 	ClientHurt(From);
 	if (Health <= 0.f)
 	{
+		UE_LOG(LogTemp, Display, TEXT("DCDOWN %s downed by %.0f from %s (%.0f cm away)"), *GetName(), Amount, *From.ToCompactString(), FVector::Dist(From, GetActorLocation()));
 		bDowned = true;
 		bLastFrameReady = true; // R21
 		DownedAt = Now();
