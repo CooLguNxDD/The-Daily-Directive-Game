@@ -93,6 +93,8 @@ private:
 	void BeginReelClip(int32 Index);
 	/** Machines whose reel has the current clip's city in (advisor CP33); the clip rolls when all players are in. */
 	TSet<TWeakObjectPtr<APlayerController>> ReelStaged;
+	/** Rolls the current reel clip once every connected player's machine is staged (after a report or a logout). */
+	void TryRollReel();
 	void SetDilation(float Value);
 	FTransform SpawnTransformFor(int32 PlayerIndex) const;
 	TArray<ADCPlayerState*> Players() const;

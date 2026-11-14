@@ -1529,6 +1529,7 @@ void ADCVoxelCity::TickFalling(float Now)
 				ReleasePiece(Mesh);
 			}
 			ReleaseBox(Fading[i].Body.Get());
+			BodiesReserved = FMath::Max(0, BodiesReserved - (Fading[i].bReserved ? 1 : 0));
 			Fading.RemoveAtSwap(i);
 			continue;
 		}
@@ -1926,6 +1927,7 @@ void ADCVoxelCity::Land(FFalling& F)
 		// The bodies rest: the shared rubble shows under the landing dust and the fragments go.
 		float Spread = 0.f;
 		int32 Awake = 0;
+		int32 StillReserved = 0;
 		TBitArray<> FadingFrag(false, F.Frags.Num());
 		for (int32 f = 0; f < F.Frags.Num(); ++f)
 		{
@@ -1941,9 +1943,10 @@ void ADCVoxelCity::Land(FFalling& F)
 				{
 					// Still moving (a stray, or past its deadline): it keeps its physics and fades as it goes, released
 					// at the fade's end. Never teleported (review CP33: a set-down sank bodies resting on a pile).
-					Fading.Add({Fr.Body, Fr.Comp, static_cast<float>(GetWorld()->GetTimeSeconds())}); // no mesh: released next tick
+					Fading.Add({Fr.Body, Fr.Comp, static_cast<float>(GetWorld()->GetTimeSeconds()), true}); // no mesh: released next tick
 					Fr.Comp = nullptr;
 					Fr.Body = nullptr;
+					++StillReserved;
 					continue;
 				}
 				Fr.Body->SetSimulatePhysics(false); // frozen where it lies, then shrinks away over PhysicsFadeSeconds
@@ -1968,7 +1971,7 @@ void ADCVoxelCity::Land(FFalling& F)
 				Fr.Comp = nullptr;
 			}
 		}
-		BodiesReserved = FMath::Max(0, BodiesReserved - F.Frags.Num());
+		BodiesReserved = FMath::Max(0, BodiesReserved - (F.Frags.Num() - StillReserved)); // moving bodies hold theirs until released
 		UE_LOG(LogTemp, Display, TEXT("DCPHYS rest %d chunks and leaves after %.1f s (%s), %d still awake, %d past deadline, %d strays, farthest %.0f cm from the shared rubble site"), F.Frags.Num(), F.BodyAge, F.StillFor > 0.f ? TEXT("still") : TEXT("timed out"), Awake, F.Late, F.Stray, Spread);
 		F.Frags.Reset();
 	}
