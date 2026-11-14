@@ -158,6 +158,18 @@ bool FDCWeatherTest::RunTest(const FString&)
 		TestTrue(FString::Printf(TEXT("%s cloud and wetness in 0..1"), *P.Id.ToString()), P.CloudCover >= 0.f && P.CloudCover <= 1.f && P.CloudShade >= 0.f && P.CloudShade <= 1.f && P.Wetness >= 0.f && P.Wetness <= 1.f);
 		// Rain wets the street; a dry profile with rain falling would read wrong (R18 surface wetness).
 		TestTrue(FString::Printf(TEXT("%s rain wets the street"), *P.Id.ToString()), P.Precipitation != FName(TEXT("Rain")) || P.Wetness >= 0.5f);
+		// The arc moves the time of day only a little: the noir night stays the board (R25).
+		TestTrue(FString::Printf(TEXT("%s day light stays dusk at most"), *P.Id.ToString()), P.DayBlend >= 0.f && P.DayBlend <= 0.3f);
+	}
+	{
+		// The day value follows the blended arc like every other field (R18 day-night seam).
+		const FDCWeatherProfile* Dusk = T.WeatherProfiles.FindByPredicate([](const FDCWeatherProfile& P) { return P.DayBlend > 0.f; });
+		const FDCWeatherProfile* Night = T.WeatherProfiles.FindByPredicate([](const FDCWeatherProfile& P) { return P.DayBlend == 0.f; });
+		if (TestTrue(TEXT("one profile lifts the day, one keeps the night"), Dusk && Night))
+		{
+			const float Mid = DCWeather::Lerp(*Night, *Dusk, 0.5f).DayBlend;
+			TestTrue(TEXT("day blends half way"), FMath::IsNearlyEqual(Mid, Dusk->DayBlend * 0.5f, 0.001f));
+		}
 	}
 	for (const FDCSeasonDef& S : T.Seasons)
 	{

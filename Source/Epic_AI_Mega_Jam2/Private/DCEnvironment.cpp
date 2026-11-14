@@ -509,8 +509,15 @@ void ADCEnvironment::Tick(float DeltaSeconds)
 		AppliedWetness = W.Wetness;
 		WetCity->SetWetness(W.Wetness);
 	}
-	// Night look blended toward the day end by DayBlend (the day-night cycle's seam; 0 = the noir board).
-	const float Day = DayBlend;
+	// Night look blended toward the day end by DayBlend plus the weather arc's DayBlend (0 = the noir board), so the
+	// time of day moves with the host's seed + clock like the rest of the weather (R18).
+	const float Day = FMath::Clamp(DayBlend + W.DayBlend, 0.f, 1.f);
+	if (FMath::Abs(Day - AppliedDay) > 0.002f)
+	{
+		AppliedDay = Day;
+		Sun->SetWorldRotation(FMath::Lerp(Look.SunRotation, Look.DaySunRotation, Day));
+		Atmosphere->SetRayleighScattering(FMath::Lerp(Look.SkyRayleighColor, Look.DaySkyRayleighColor, Day));
+	}
 	Sun->SetIntensity(FMath::Lerp(Look.SunIntensityLux, Look.DaySunLux, Day) * Light * W.SunScale);
 	Sun->SetLightColor(FMath::Lerp(Look.SunColor, Look.DaySunColor, Day) * W.SunTint);
 	SkyLight->SetIntensity(Light * W.SkyScale * FMath::Lerp(Look.SkyFill, Look.DaySkyFill, Day));

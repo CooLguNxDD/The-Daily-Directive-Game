@@ -96,5 +96,7 @@ private:
 	float PrecipitationCarry = 0.f;
 	/** 0 = night, 1 = day (Look.DayBlend, or -dcdaypose=<0..1> for evidence runs). */
 	float DayBlend = 0.f;
+	/** Day value the sun and sky were last set for (they change only when it moves). */
+	float AppliedDay = -1.f;
 	int32 PostQuality = 2;
 };

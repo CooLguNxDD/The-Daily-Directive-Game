@@ -727,7 +727,9 @@ void ADCHUD::DrawOnboarding(ADCCharacter& Me)
 		// Viewfinder up: only the next step, one small line near the bottom edge, never across the subject (critic).
 		if (Next)
 		{
-			Text(FString::Printf(TEXT("%d/5  %s"), Done + 1, *Next->Prompt), W * 0.5f, Canvas->ClipY - Sx(118.f), Ink, 0.6f, true);
+			// One line above the LMB SNAP / WINDING label (H - Bar - 110): they overlapped (self-critic CP21).
+			const float Bar = FMath::Max(0.f, (Canvas->ClipY - W * 9.f / 16.f) * 0.5f);
+			Text(FString::Printf(TEXT("%d/5  %s"), Done + 1, *Next->Prompt), W * 0.5f, Canvas->ClipY - Bar - Sx(165.f), Ink, 0.6f, true);
 		}
 		return;
 	}
