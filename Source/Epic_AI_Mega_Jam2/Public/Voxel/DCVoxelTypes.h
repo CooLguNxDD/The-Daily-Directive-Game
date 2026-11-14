@@ -205,7 +205,15 @@ struct FDCVoxelTuning
 	/** Collider = fragment bounds times this (adjacent fragments start apart, never nested). */
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float PhysicsBoxScale = 0.85f;
 	/** A body group rests when every body sleeps or after this long (then its rubble shows). */
-	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float PhysicsMaxAirSeconds = 5.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float PhysicsMaxAirSeconds = 9.f;
+	/** Rest budget = free fall from the break height + SettleSeconds (capped by MaxAirSeconds). */
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float PhysicsSettleSeconds = 5.f;
+	/** Bodies turn solid once their box clears the struck lot's footprint by this margin (cm). */
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float PhysicsLotMarginCm = 150.f;
+	/** On the street (underside within ContactCm of it) a body switches to these dampings so piles stop jittering. */
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float PhysicsGroundContactCm = 120.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float PhysicsGroundLinearDamping = 1.6f;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float PhysicsGroundAngularDamping = 3.f;
 	/** kg per cm^3 of voxel (mass scales with the fragment's voxels). */
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float PhysicsDensity = 0.0012f;
 	/** Outward scatter (cm/s) from the piece's centre at the break, plus up kick, and random spin (deg/s). */

@@ -71,6 +71,7 @@ struct ADCVoxelCity::FFalling
 		bool bSplitPending = false;
 		bool bSplit = false;
 		bool bFrozen = false;
+		bool bGrounded = false;
 		float StillFor = 0.f;
 	};
 	TArray<FFrag> Frags;
@@ -84,6 +85,9 @@ struct ADCVoxelCity::FFalling
 	int32 OpSeq = 0;
 	int32 PieceIndex = INDEX_NONE;
 	bool bRestNow = false;
+	/** Struck lot's footprint (sector cm, XY) and this group's rest budget (free fall from the break + settle). */
+	FBox2D LotBox = FBox2D(ForceInit);
+	float RestBudget = 5.f;
 };
 
 namespace
@@ -925,6 +929,10 @@ void ADCVoxelCity::StartFall(const FDCVoxelPiece& Piece, float Now, const TArray
 		NumBodies = 0;
 	}
 	F->OpSeq = OpSeq;
+	{
+		const FDCVoxelTower& T = Sector.Towers[Piece.Lot];
+		F->LotBox = FBox2D(FVector2D(T.FootMinCm().X, T.FootMinCm().Y), FVector2D(T.FootMaxCm().X, T.FootMaxCm().Y));
+	}
 	F->PieceIndex = PieceIndex;
 	F->Seed = DCVoxelOps::Hash(Piece.Pivot, static_cast<uint32>(Piece.Lot) * 7919u + static_cast<uint32>(Piece.Cells.Num()));
 	Falling.Add(F);
@@ -1493,6 +1501,11 @@ void ADCVoxelCity::BreakApart(const TSharedPtr<FFalling>& Shared, float Age, flo
 	FFalling& F = *Shared;
 	const FDCVoxelTuning& Tn = UDCVoxelSettings::Get().Tuning;
 	F.bBroken = true;
+	{
+		// Rest budget from the height it breaks at (advisor CP13): free-fall time to the site plus settle, capped.
+		const float H = FMath::Max(F.Comp->GetComponentLocation().Z - F.LandCenter.Z, 0.f);
+		F.RestBudget = FMath::Min(FMath::Sqrt(2.f * H / 980.f) + Tn.PhysicsSettleSeconds, Tn.PhysicsMaxAirSeconds);
+	}
 	F.BodyAge = 0.f;
 	const FTransform Xf = F.Comp->GetComponentTransform();
 	// Speed now: the fall (most of it lost if this is the impact), the topple's swing (omega x r), scatter and a kick.
@@ -1601,10 +1614,20 @@ bool ADCVoxelCity::TickBodies(const TSharedPtr<FFalling>& Shared, float Dt)
 			Fr.Body->SetSimulatePhysics(false);
 			continue;
 		}
-		if (!Fr.bSolid && B.Min.Z <= F.LandCenter.Z + Tn.PhysicsSolidAboveSiteCm)
+		// Solid once near its rubble site's height, or once clear of the struck lot (then it never passes through the
+		// standing towers it flies into).
+		const FBox2D Clear = F.LotBox.ExpandBy(Tn.PhysicsLotMarginCm);
+		const bool bClearOfLot = F.LotBox.bIsValid && !Clear.Intersect(FBox2D(FVector2D(B.Min), FVector2D(B.Max)));
+		if (!Fr.bSolid && (B.Min.Z <= F.LandCenter.Z + Tn.PhysicsSolidAboveSiteCm || bClearOfLot))
 		{
 			Fr.bSolid = true;
 			Fr.Body->SetCollisionResponseToChannel(ECC_WorldStatic, ECR_Block);
+		}
+		if (Fr.bSolid && !Fr.bGrounded && B.Min.Z <= BodyGroundZ(B.GetCenter(), F.LandCenter) + Tn.PhysicsGroundContactCm)
+		{
+			Fr.bGrounded = true; // on the street: settle damping (a fall stays free, a pile stops jittering)
+			Fr.Body->SetLinearDamping(Tn.PhysicsGroundLinearDamping);
+			Fr.Body->SetAngularDamping(Tn.PhysicsGroundAngularDamping);
 		}
 		const FVector Vel = Fr.Body->GetPhysicsLinearVelocity();
 		if (Tn.PhysicsSteer > 0.f && F.BodyAge < Tn.PhysicsSteerSeconds) // optional pull toward the plan-time site
@@ -1629,7 +1652,7 @@ bool ADCVoxelCity::TickBodies(const TSharedPtr<FFalling>& Shared, float Dt)
 		bAllAsleep = false;
 	}
 	F.StillFor = bAllAsleep ? F.StillFor + Dt : 0.f;
-	return (F.BodyAge > 0.5f && bAllAsleep) || F.BodyAge >= Tn.PhysicsMaxAirSeconds;
+	return (F.BodyAge > 0.5f && bAllAsleep) || F.BodyAge >= F.RestBudget;
 }
 
 void ADCVoxelCity::OnBodyHit(UPrimitiveComponent* HitComp, AActor* Other, UPrimitiveComponent* OtherComp, FVector NormalImpulse, const FHitResult& Hit)
