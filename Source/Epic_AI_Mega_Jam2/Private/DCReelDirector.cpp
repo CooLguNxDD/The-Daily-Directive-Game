@@ -83,7 +83,7 @@ ADCReelDirector::ADCReelDirector()
 	TakeCapture->SetupAttachment(Camera);
 	TakeCapture->bCaptureEveryFrame = false;
 	TakeCapture->bCaptureOnMovement = false;
-	TakeCapture->CaptureSource = ESceneCaptureSource::SCS_FinalColorLDR;
+	TakeCapture->CaptureSource = ESceneCaptureSource::SCS_FinalColorLDR; // set per shot from Print.bSceneLinear
 	Puppet = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("Puppet"));
 	Puppet->SetupAttachment(RootComponent);
 	Puppet->SetUsingAbsoluteLocation(true);
@@ -409,6 +409,7 @@ void ADCReelDirector::SnapSecondTake()
 	const FDCCameraTuning& C = UDCTuning::Get().Camera;
 	UTextureRenderTarget2D* Image = UKismetRenderingLibrary::CreateRenderTarget2D(this, C.PhotoWidth, C.PhotoHeight, RTF_RGBA16f); // float: the print meter has range (advisor CP21)
 	TakeCapture->TextureTarget = Image;
+	TakeCapture->CaptureSource = C.Print.bSceneLinear ? ESceneCaptureSource::SCS_FinalColorHDR : ESceneCaptureSource::SCS_FinalColorLDR; // advisor CP28
 	TakeCapture->FOVAngle = Camera->FieldOfView;
 	ADCCharacter::ApplyPhotoLook(GetWorld(), TakeCapture->PostProcessSettings, false);
 	TakeCapture->PostProcessBlendWeight = 1.f;
@@ -452,6 +453,7 @@ void ADCReelDirector::Tick(float DeltaSeconds)
 		bTakeRaised = false;
 		Restage(GS->ReelIndex);
 		bAwaitLive = true; // the slate lifts once the city is in and the clip clock is live
+		bReportedStaged = false;
 		SlateFramesLeft = -1;
 		SlateUntilReal = TNumericLimits<double>::Max();
 	}
@@ -483,11 +485,13 @@ void ADCReelDirector::Tick(float DeltaSeconds)
 	{
 		// The host starts the clip clock once its own city is in; every machine plays the clip from that start.
 		ADCGameState* MGS = GetWorld()->GetGameState<ADCGameState>();
-		if (MGS->HasAuthority() && !MGS->bReelClipLive)
+		if (!bReportedStaged)
 		{
-			MGS->ReelClipStart = FMath::Min(MGS->ReelClipStart, MGS->Now() + 0.3f);
-			MGS->bReelClipLive = true;
-			MGS->ForceNetUpdate();
+			bReportedStaged = true; // the host rolls once every player's machine reported (advisor CP33, review CP35)
+			if (ADCPlayerController* LocalPC = GetWorld()->GetFirstPlayerController<ADCPlayerController>())
+			{
+				LocalPC->ReportReelStaged(StagedIndex);
+			}
 		}
 		if (!MGS->bReelClipLive)
 		{

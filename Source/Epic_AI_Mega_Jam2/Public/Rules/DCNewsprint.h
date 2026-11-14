@@ -46,6 +46,10 @@ struct FDCPrintTuning
 	UPROPERTY(EditAnywhere, Config, Category = "Print") float MeterMinStops = 1.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Print") float MeterCenterWeight = 3.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Print") float MeterWhite = 4.f;
+	/** Photo source (advisor CP28): true = the capture is SCS_FinalColorHDR (post-exposure, post-grade scene-linear,
+	 *  no tone curve), developed without a decode or a clamp so highlights keep their range up to MeterWhite; false =
+	 *  SCS_FinalColorLDR, decoded from display gamma first. */
+	UPROPERTY(EditAnywhere, Config, Category = "Print") bool bSceneLinear = false;
 };
 
 namespace DCNewsprint

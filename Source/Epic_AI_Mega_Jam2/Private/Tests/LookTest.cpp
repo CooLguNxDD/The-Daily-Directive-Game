@@ -295,8 +295,9 @@ bool FDCPhotoMeterTest::RunTest(const FString&)
 {
 	// Advisor CP21: a dark night frame with a dim subject in the middle and a hot blast develops with the subject in
 	// the mid range and the blast core still distinct from the blast edge (no flat clip).
-	const FDCPrintTuning& T = UDCTuning::Get().Camera.Print;
+	FDCPrintTuning T = UDCTuning::Get().Camera.Print;
 	TestTrue(TEXT("the meter is on"), T.MeterKey > 0.f);
+	T.bSceneLinear = false; // this case is the display-encoded (LDR) source
 	const int32 W = 64, H = 36;
 	TArray<FLinearColor> Px;
 	Px.Init(FLinearColor(0.06f, 0.06f, 0.08f), W * H); // ~0.2 % linear: noir night
@@ -314,6 +315,25 @@ bool FDCPhotoMeterTest::RunTest(const FString&)
 	const FColor Edge = Out[14 * W + 30], Core = Out[14 * W + 31];
 	TestTrue(FString::Printf(TEXT("blast core and edge stay distinct (%d vs %d)"), Core.G, Edge.G), Core.G > Edge.G);
 	TestTrue(TEXT("gain bounded"), DCNewsprint::MeterGain(Px, W, H, T) <= FMath::Pow(2.f, T.MeterMaxStops) + 0.001f);
+	{
+		// Advisor CP28: the scene-linear (HDR) source keeps headroom: a 0.03 subject on a 0.004 night lands mid-range,
+		// and highlights at 4 and 16 (above 1) still print distinct instead of clipping together.
+		FDCPrintTuning L = UDCTuning::Get().Camera.Print;
+		L.bSceneLinear = true;
+		TArray<FLinearColor> Hdr;
+		Hdr.Init(FLinearColor(0.004f, 0.004f, 0.005f), W * H);
+		for (int32 Y = 12; Y < 24; ++Y)
+			for (int32 X = 24; X < 40; ++X)
+				Hdr[Y * W + X] = FLinearColor(0.03f, 0.03f, 0.032f);
+		Hdr[14 * W + 30] = FLinearColor(4.f, 4.f, 4.f);
+		Hdr[14 * W + 31] = FLinearColor(16.f, 16.f, 16.f);
+		TArray<FColor> HOut;
+		DCNewsprint::Develop(Hdr, W, H, L, HOut);
+		const FColor S = HOut[18 * W + 32];
+		const int32 SL = (S.R + S.G + S.B) / 3;
+		TestTrue(FString::Printf(TEXT("HDR subject lands mid-range (%d)"), SL), SL >= 60 && SL <= 190);
+		TestTrue(FString::Printf(TEXT("HDR 4 and 16 print distinct (%d vs %d)"), HOut[14 * W + 30].G, HOut[14 * W + 31].G), HOut[14 * W + 31].G > HOut[14 * W + 30].G);
+	}
 	return true;
 }
 

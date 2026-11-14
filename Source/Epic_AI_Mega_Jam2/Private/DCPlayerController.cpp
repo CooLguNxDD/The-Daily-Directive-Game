@@ -900,6 +900,14 @@ void ADCPlayerController::ServerStartRun_Implementation()
 	}
 }
 
+void ADCPlayerController::ServerReelStaged_Implementation(int32 ClipIndex)
+{
+	if (ADCGameMode* GM = GetWorld()->GetAuthGameMode<ADCGameMode>())
+	{
+		GM->NoteReelStaged(this, ClipIndex);
+	}
+}
+
 void ADCPlayerController::ServerRestartRun_Implementation()
 {
 	ADCGameMode* GM = GetWorld()->GetAuthGameMode<ADCGameMode>();
@@ -925,7 +933,7 @@ void ADCPlayerController::ServerSecondTake_Implementation(int32 PhotoId, FVector
 	const FDCCameraTuning& C = UDCTuning::Get().Camera;
 	// One second take per clip per player, only while that clip plays, from near the replayed scene; graded by
 	// the host on its own re-staged scene at the host's replay clock.
-	if (!GS || !PS || GS->Phase != EDCRunPhase::Reel || GS->ReelIndex != ClipIndex || GS->ReelStage > 1 || SecondTakeClips.Contains(ClipIndex) || PS->FindPhoto(PhotoId)
+	if (!GS || !PS || GS->Phase != EDCRunPhase::Reel || GS->ReelIndex != ClipIndex || GS->ReelStage > 1 || !GS->bReelClipLive || SecondTakeClips.Contains(ClipIndex) || PS->FindPhoto(PhotoId)
 		|| !GS->ReelClips.IsValidIndex(ClipIndex) || FVector::Dist(CamLoc, GS->ReelClips[ClipIndex].Photo.CameraLocation) > UDCTuning::Get().Run.SecondTakeRadiusCm + 100.f)
 	{
 		if (!PS || !PS->FindPhoto(PhotoId))
