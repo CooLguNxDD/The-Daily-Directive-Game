@@ -157,6 +157,8 @@ public:
 	void BuilderSelectSlot(int32 Slot);
 	void BuilderImport(const FString& Code);
 	void BuilderCopyCode();
+	/** R5: writes the shareable turntable ID card PNG (Saved/IdCards). */
+	void BuilderExportCard();
 	bool IsBuilderOpen() const { return bBuilderOpen; }
 	const FDCOutfit& GetBuilderOutfit() const { return BuilderOutfit; }
 	int32 GetBuilderSlot() const { return BuilderSlot; }

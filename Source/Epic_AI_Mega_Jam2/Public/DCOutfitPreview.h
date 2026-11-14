@@ -26,6 +26,9 @@ public:
 	UTextureRenderTarget2D* GetImage() const { return Image; }
 	/** 0 until the capture has had a moment to light the scene, then 1 (the first captures came out black, V5.5). */
 	float ImageAlpha() const;
+	/** R5: renders the ID card (turntable angles of this outfit + call sign + share code) to a PNG; returns its path
+	 *  (empty on failure). Synchronous: a one-off hitch on the button press. */
+	FString ExportCard(const FString& CallSign, const FString& ShareCode);
 
 private:
 	UPROPERTY(VisibleAnywhere) TObjectPtr<USceneComponent> Turn;

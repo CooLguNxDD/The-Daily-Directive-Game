@@ -638,6 +638,30 @@ struct FDCRunTuning
 	UPROPERTY(EditAnywhere, Config, Category = "Run") TMap<FName, FString> Subjects;
 };
 
+/** R5 shareable ID card: the builder's turntable (same recipe as the in-game character) at Angles yaw steps, one big
+ *  hero view and a strip of the turn, the call sign and share code, in the noir look. Written to Saved/<OutDir>/. */
+USTRUCT(BlueprintType)
+struct FDCCardTuning
+{
+	GENERATED_BODY()
+	UPROPERTY(EditAnywhere, Config, Category = "Card") int32 Width = 1200;
+	UPROPERTY(EditAnywhere, Config, Category = "Card") int32 Height = 675;
+	UPROPERTY(EditAnywhere, Config, Category = "Card") int32 Angles = 6;
+	/** Yaw of the hero view (deg; 0 = facing the lens). */
+	UPROPERTY(EditAnywhere, Config, Category = "Card") float HeroYaw = 25.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Card") FLinearColor Background = FLinearColor(0.012f, 0.014f, 0.03f);
+	UPROPERTY(EditAnywhere, Config, Category = "Card") FLinearColor Panel = FLinearColor(0.03f, 0.035f, 0.07f);
+	UPROPERTY(EditAnywhere, Config, Category = "Card") FLinearColor Ink = FLinearColor(0.92f, 0.94f, 1.f);
+	UPROPERTY(EditAnywhere, Config, Category = "Card") FLinearColor AccentA = FLinearColor(1.f, 0.03f, 0.22f);
+	UPROPERTY(EditAnywhere, Config, Category = "Card") FLinearColor AccentB = FLinearColor(0.03f, 0.75f, 1.f);
+	UPROPERTY(EditAnywhere, Config, Category = "Card") float ScanlineAlpha = 0.12f;
+	UPROPERTY(EditAnywhere, Config, Category = "Card") FString Title = TEXT("DIRECTOR'S CUT: FRONT PAGE");
+	UPROPERTY(EditAnywhere, Config, Category = "Card") FString Subtitle = TEXT("PRESS CREDENTIAL  //  WAR PHOTOGRAPHER");
+	UPROPERTY(EditAnywhere, Config, Category = "Card") FString Footer = TEXT("PASTE THE CODE IN THE BUILDER TO WEAR THIS PHOTOGRAPHER");
+	UPROPERTY(EditAnywhere, Config, Category = "Card") FString Stamp = TEXT("CLEARED FOR THE FRONT");
+	UPROPERTY(EditAnywhere, Config, Category = "Card") FString OutDir = TEXT("IdCards");
+};
+
 UCLASS(Config = Game, DefaultConfig, meta = (DisplayName = "Director's Cut Tuning"))
 class EPIC_AI_MEGA_JAM2_API UDCTuning : public UDeveloperSettings
 {
@@ -662,6 +686,7 @@ public:
 	/** R4 sector objectives (picked per sector by the run seed) and how they read in the world. */
 	UPROPERTY(EditAnywhere, Config, Category = "Objective") TArray<FDCObjectiveDef> Objectives;
 	UPROPERTY(EditAnywhere, Config, Category = "Objective") FDCObjectiveLook ObjectiveLook;
+	UPROPERTY(EditAnywhere, Config, Category = "Card") FDCCardTuning Card;
 	UPROPERTY(EditAnywhere, Config, Category = "Sector") TArray<FDCSectorDef> Sectors;
 	UPROPERTY(EditAnywhere, Config, Category = "Input") TArray<FDCActionDef> Actions;
 	UPROPERTY(EditAnywhere, Config, Category = "Input") TArray<FDCKeyBinding> Bindings;

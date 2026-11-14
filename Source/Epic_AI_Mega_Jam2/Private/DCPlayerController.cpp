@@ -388,6 +388,19 @@ void ADCPlayerController::BuilderCopyCode()
 	MenuMode = 254;
 }
 
+void ADCPlayerController::BuilderExportCard()
+{
+	// R5: the shareable ID card, rendered from the builder's own turntable (the same outfit recipe as in play).
+	if (!OutfitPreview)
+	{
+		return;
+	}
+	const ADCPlayerState* PS = GetPlayerState<ADCPlayerState>();
+	const FString Sign = PS ? PS->GetPlayerName() : FString(TEXT("CORRESPONDENT"));
+	const FString Path = OutfitPreview->ExportCard(Sign, DCOutfit::Encode(BuilderOutfit));
+	BuilderChanged(Path.IsEmpty() ? FString(TEXT("ID CARD FAILED")) : FString::Printf(TEXT("ID CARD SAVED: %s"), *Path));
+}
+
 void ADCPlayerController::BuilderChanged(const FString& Message)
 {
 	BuilderMessage = Message;
@@ -569,7 +582,9 @@ void ADCPlayerController::TickBuilderFlow()
 		{18.5, [&]() { Shot(TEXT("05_builder_code_loaded.png")); }},
 		{19.0, [this]() { BuilderImport(TEXT("DC1-NOT-A-REAL-CODE")); }},
 		{19.8, [&]() { Shot(TEXT("06_builder_bad_code_rejected.png")); }},
-		{20.5, []() { FGenericPlatformMisc::RequestExit(false); }},
+		{20.2, [this]() { BuilderExportCard(); UE_LOG(LogTemp, Display, TEXT("DCBUILDERFLOW card: %s"), *BuilderMessage); }},
+		{21.0, [&]() { Shot(TEXT("07_builder_id_card_exported.png")); }},
+		{21.5, []() { FGenericPlatformMisc::RequestExit(false); }},
 	};
 	const TArray<TPair<double, TFunction<void()>>>& Steps = bSettingsFlow ? SettingsSteps : BuilderSteps;
 	if (Steps.IsValidIndex(Step) && T >= Steps[Step].Key)
