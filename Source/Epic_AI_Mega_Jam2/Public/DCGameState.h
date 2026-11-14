@@ -52,6 +52,8 @@ public:
 	/** R3 territory: owner faction per zone (ZonesPerSide^2, row-major over the map). */
 	UPROPERTY(Replicated) TArray<FName> Zones;
 	UPROPERTY(Replicated) float ZoneHalfExtent = 0.f;
+	/** R4: per sector played, 1 = extracted, 0 = objective failed (front page subhead). */
+	UPROPERTY(Replicated) TArray<uint8> ObjectiveResults;
 	UPROPERTY(Replicated) float SectorEndTime = 0.f;
 	/** Server time the sector began: with the run seed it drives the weather arc on every machine (R18). */
 	UPROPERTY(Replicated) float SectorStartTime = 0.f;

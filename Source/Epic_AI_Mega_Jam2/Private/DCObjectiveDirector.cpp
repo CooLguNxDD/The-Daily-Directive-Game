@@ -16,6 +16,7 @@
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "Rules/DCObjectiveRules.h"
+#include "Misc/ScopeExit.h"
 
 namespace
 {
@@ -209,6 +210,7 @@ void ADCGameMode::EndObjective()
 	{
 		return;
 	}
+	ON_SCOPE_EXIT { GetGameState<ADCGameState>()->ObjectiveResults.Add(Objective->Stage == EDCObjectiveStage::Done ? 1 : 0); };
 	if (Objective->Stage == EDCObjectiveStage::Active || Objective->Stage == EDCObjectiveStage::Extract)
 	{
 		FDCObjectiveInputs In;

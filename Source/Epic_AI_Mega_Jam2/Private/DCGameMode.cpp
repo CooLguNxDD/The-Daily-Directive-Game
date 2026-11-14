@@ -1245,9 +1245,10 @@ void ADCGameMode::EnterFrontPage(float Now)
 	}
 	UE_LOG(LogTemp, Display, TEXT("DCPAGE headline=\"%s\"%s"), *GS->Headline, GS->bRunFailed ? TEXT(" CORRECTION EDITION") : TEXT(""));
 	const int32 QuotasMet = GS->QuotaResults.FilterByPredicate([](bool b) { return b; }).Num();
-	GS->Subhead = FString::Printf(TEXT("%s  |  %d PHOTOGRAPHER%s  |  %s PROPAGANDA POINTS RAISED  |  QUOTAS MET %d/%d  |  RUN SEED %d"),
+	const int32 Extracted = GS->ObjectiveResults.FilterByPredicate([](uint8 b) { return b != 0; }).Num();
+	GS->Subhead = FString::Printf(TEXT("%s  |  %d PHOTOGRAPHER%s  |  %s PROPAGANDA POINTS RAISED  |  QUOTAS MET %d/%d  |  HQ ORDERS EXTRACTED %d/%d  |  RUN SEED %d"),
 		GS->bRunFailed ? TEXT("UNIT LOST IN ACTION, REEL RECOVERED") : TEXT("ALL SECTORS LIBERATED"),
-		All.Num(), All.Num() == 1 ? TEXT("") : TEXT("S"), *FText::AsNumber(Total).ToString(), QuotasMet, GS->QuotaResults.Num(), GS->RunSeed);
+		All.Num(), All.Num() == 1 ? TEXT("") : TEXT("S"), *FText::AsNumber(Total).ToString(), QuotasMet, GS->QuotaResults.Num(), Extracted, GS->ObjectiveResults.Num(), GS->RunSeed);
 	GS->ForceNetUpdate();
 }
 
