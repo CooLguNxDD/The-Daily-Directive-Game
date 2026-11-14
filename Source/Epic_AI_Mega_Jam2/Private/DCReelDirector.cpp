@@ -259,17 +259,9 @@ void ADCReelDirector::Restage(int32 ClipIndex)
 		S->FinishSpawning(Xf);
 		Staged.Add(S);
 	}
-	// The stand-in is the clip photographer's own voxel body (review CP23, R10/R23): their replicated outfit code,
-	// the default when they left; the mannequin only drives the pose.
-	FString Code;
-	for (const APlayerState* PS : GS->PlayerArray)
-	{
-		const ADCPlayerState* DPS = Cast<ADCPlayerState>(PS);
-		if (DPS && DPS->GetPlayerName() == Clip.PlayerName)
-		{
-			Code = DPS->OutfitCode;
-		}
-	}
+	// The stand-in is the clip photographer's own voxel body (review CP23, R10/R23): the outfit code recorded with
+	// the clip; the mannequin only drives the pose.
+	const FString Code = Clip.OutfitCode; // recorded with the clip (review CP25: a call sign can be reused)
 	DCOutfitBuild::Apply(Puppet, DCOutfitBuild::FromCode(Code), PuppetParts);
 	Puppet->SetVisibility(Clip.Poses.Num() > 0, true);
 	if (PuppetParts.Num() > 0)

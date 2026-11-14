@@ -97,6 +97,8 @@ struct FDCReelClip
 	UPROPERTY() FDCPhotoRecord Photo;
 	UPROPERTY() TArray<FDCPoseSample> Poses;
 	UPROPERTY() FString PlayerName;
+	/** The photographer's outfit code when the clip was cut (the reel stand-in wears it even if they left). */
+	UPROPERTY() FString OutfitCode;
 };
 
 /** The live HQ Scoop (R8). Index into UDCTuning::Scoops; -1 = none. */

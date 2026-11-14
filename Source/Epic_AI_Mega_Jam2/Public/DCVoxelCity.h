@@ -231,6 +231,13 @@ private:
 	int32 NumGrids() const { return Sector.Towers.Num() + 2; }
 	FIntVector CellOf(int32 GridIndex, const FIntVector& Chunk) const;
 	UProceduralMeshComponent* NewMesh(bool bCollision, int32 VoxelCm);
+	/** Falling-piece meshes come from a pool keyed by voxel size (advisor CP17, R13 collapse frames): released, never
+	 *  destroyed, during play; reset fully on release (sections, attachment, transform, visibility). */
+	UProceduralMeshComponent* AcquirePiece(int32 VoxelCm);
+	void ReleasePiece(UPrimitiveComponent* Piece);
+	void PrewarmPieces(int32 PerFrame);
+	TMap<int32, TArray<TObjectPtr<UProceduralMeshComponent>>> FreePieces;
+	TMap<TObjectPtr<UProceduralMeshComponent>, int32> PieceCm;
 	UMaterialInterface* VoxelMaterial();
 	/** One instance of the voxel material per voxel size: its edge bevel sits on that grid (V4.2). */
 	UMaterialInterface* VoxelMaterialFor(int32 VoxelCm);
