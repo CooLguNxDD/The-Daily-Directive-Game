@@ -584,6 +584,7 @@ FDCVoxelOpResult ADCVoxelCity::ApplyOp(const FDCVoxelOp& Op, bool bAnimate)
 	WaitInFlight(); // the synchronous path (reel re-staging) never overlaps a queued op
 	const double Start = FPlatformTime::Seconds();
 	FDCVoxelOpResult Result = Op.Kind == TEXT("Rest") ? DCVoxelOps::ApplyRest(Sector, Op, PendingFor(Op), OpCtx) : DCVoxelOps::Apply(Sector, Op, OpCtx);
+	DCVoxelOps::DeriveCosmetics(Sector, Op, OpCtx, Result);
 	AppliedSeq = FMath::Max(AppliedSeq, Op.Seq);
 	const uint32 Hash = Sector.Hash();
 	FinishOp(Op, Result, bAnimate, static_cast<float>((FPlatformTime::Seconds() - Start) * 1000.0), Hash, false);
@@ -647,6 +648,7 @@ void ADCVoxelCity::StartNextOp()
 	{
 		const double Start = FPlatformTime::Seconds();
 		Job->Result = Job->Op.Kind == TEXT("Rest") ? DCVoxelOps::ApplyRest(*Target, Job->Op, Pend, *Ctx) : DCVoxelOps::Apply(*Target, Job->Op, *Ctx);
+		DCVoxelOps::DeriveCosmetics(*Target, Job->Op, *Ctx, Job->Result); // shards and fragment trees off the game thread
 		Job->Hash = Target->Hash();
 		Job->ApplyMs = static_cast<float>((FPlatformTime::Seconds() - Start) * 1000.0);
 	});
@@ -846,26 +848,14 @@ void ADCVoxelCity::PrepareOp(const FDCVoxelOp& Op, FDCVoxelOpResult& Result, boo
 	}
 	BySize.StableSort([&Result](int32 A, int32 B) { return Result.Pieces[A].Cells.Num() > Result.Pieces[B].Cells.Num(); });
 	TSet<int32> Physical;
-	for (int32 i = 0; i < BySize.Num() && i < OpCtx.Tuning->PhysicsPieces; ++i)
+	for (const TPair<int32, FDCPendingPiece>& P : Result.Pending)
 	{
-		Physical.Add(BySize[i]);
+		Physical.Add(P.Key);
 	}
-	// Kept for the host's Rest op (R26): the cells, the provisional rubble and the fragment tree of each physics piece.
-	for (int32 Pi : Physical)
+	// Kept for the host's Rest op (R26): derived on the worker (DeriveCosmetics).
+	for (TPair<int32, FDCPendingPiece>& P : Result.Pending)
 	{
-		const FDCVoxelPiece& Pc = Result.Pieces[Pi];
-		const FDCVoxelTuning& Tn = *OpCtx.Tuning;
-		FDCPendingPiece P;
-		P.Lot = Pc.Lot;
-		P.Cells = Pc.Cells;
-		P.Materials = Pc.Materials;
-		for (int32 r = Pc.RubbleStart; r < Pc.RubbleStart + Pc.RubbleNum && Result.Rubble.IsValidIndex(r); ++r)
-		{
-			P.Rubble.Add(Result.Rubble[r]);
-			P.RubbleMaterials.Add(Result.RubbleMaterials.IsValidIndex(r) ? Result.RubbleMaterials[r] : 0);
-		}
-		DCVoxelOps::FragmentTree(Pc.Cells, Sector.Towers[Pc.Lot].Grid.VoxelCm, Tn.PhysicsFragmentCm, Tn.PhysicsFragments, Tn.PhysicsLeafCm, Tn.PhysicsLeavesPerChunk, P.FragParent, P.FragCells);
-		PendingPieces.FindOrAdd(Op.Seq).Add(Pi, MoveTemp(P));
+		PendingPieces.FindOrAdd(Op.Seq).Add(P.Key, MoveTemp(P.Value));
 	}
 	if (bAnimate)
 	{
@@ -1014,79 +1004,32 @@ void ADCVoxelCity::QueueShards(const FDCVoxelOp& Op, const FDCVoxelOpResult& Res
 	// centre and clusters of a few voxels further out (cluster edge grows by ShardGrowCm), capped and sampled by a
 	// seeded hash; they keep their palette colour and glow (lit windows stay lit in the air). Cosmetic and local.
 	const FDCVoxelTuning& Tn = UDCVoxelSettings::Get().Tuning;
-	if (Tn.ShardMax <= 0 || Result.Shards.Num() == 0)
+	if (Result.ShardClusters.Num() == 0)
 	{
 		return;
 	}
-	struct FCluster
-	{
-		FVector Sum = FVector::ZeroVector;
-		int32 Count = 0;
-		uint8 Mat = 0;
-		int32 Block = 1;
-		float Vcm = 10.f;
-		uint32 Key = 0;
-		float Rank = 0.f;
-	};
 	const FVector Center(Op.CenterCm);
-	TMap<FIntVector4, int32> Index;
-	TArray<FCluster> Clusters;
-	for (const FDCVoxelShard& S : Result.Shards)
-	{
-		if (!Sector.Towers.IsValidIndex(S.Lot))
-		{
-			continue;
-		}
-		const FDCVoxelGrid& G = Sector.Towers[S.Lot].Grid;
-		const FVector P = G.ToWorld(S.Cell) + FVector(G.VoxelCm * 0.5f);
-		const int32 Block = FMath::Clamp(1 + FMath::FloorToInt(FVector::Dist(P, Center) / FMath::Max(Tn.ShardGrowCm, 1.f)), 1, FMath::Max(Tn.ShardBlockMax, 1));
-		const FIntVector4 K(S.Lot * 8 + Block, FMath::FloorToInt(static_cast<float>(S.Cell.X) / Block), FMath::FloorToInt(static_cast<float>(S.Cell.Y) / Block), FMath::FloorToInt(static_cast<float>(S.Cell.Z) / Block));
-		int32* Found = Index.Find(K);
-		if (!Found)
-		{
-			Found = &Index.Add(K, Clusters.Num());
-			FCluster& C = Clusters.AddDefaulted_GetRef();
-			C.Mat = S.Material;
-			C.Block = Block;
-			C.Vcm = G.VoxelCm;
-			C.Key = DCVoxelOps::Hash(FIntVector(K.Y, K.Z, K.W), static_cast<uint32>(K.X));
-		}
-		FCluster& C = Clusters[*Found];
-		C.Sum += P;
-		++C.Count;
-	}
-	// A seeded sample under the cap, weighted toward the blast centre (the column carve reaches the whole height).
-	for (FCluster& C : Clusters)
-	{
-		const float Dist = FVector::Dist(C.Sum / C.Count, Center);
-		C.Rank = Dist * (0.35f + static_cast<float>(C.Key % 1000u) / 1000.f);
-	}
-	Clusters.Sort([](const FCluster& A, const FCluster& B) { return A.Rank != B.Rank ? A.Rank < B.Rank : A.Key < B.Key; });
-	if (Clusters.Num() > Tn.ShardMax)
-	{
-		Clusters.SetNum(Tn.ShardMax);
-	}
 	FDCShardBurst& Burst = PendingShards.AddDefaulted_GetRef();
 	Burst.Start = Start;
 	const float GlowScale = Tn.VoxelMaterialGlowScale;
 	FRandomStream Rng(static_cast<int32>(DCVoxelOps::Hash(Op.CenterCm, static_cast<uint32>(Op.Seq))));
-	for (const FCluster& C : Clusters)
+	for (const FDCShardCluster& C : Result.ShardClusters)
 	{
-		const FVector P = C.Sum / C.Count;
+		const FVector P = C.Pos;
 		const FVector Out = (P - Center).GetSafeNormal();
-		const float EdgeCm = C.Vcm * FMath::Max(1.f, FMath::Pow(static_cast<float>(C.Count), 1.f / 3.f));
+		const float EdgeCm = C.VoxelCm * FMath::Max(1.f, FMath::Pow(static_cast<float>(C.Count), 1.f / 3.f));
 		FDCDebrisSpawn D;
 		D.Transform = FTransform(FRotator(Rng.FRandRange(0, 360), Rng.FRandRange(0, 360), 0), P, FVector(EdgeCm / 100.f));
 		const float Speed = Tn.ShardSpeedCms * Rng.FRandRange(0.5f, 1.1f) / FMath::Sqrt(static_cast<float>(C.Block));
 		D.LinearVelocity = (Out + Rng.VRand() * 0.35f).GetSafeNormal() * Speed + FVector(0, 0, Rng.FRandRange(0.f, Tn.ShardUpCms));
 		D.AngularVelocityDeg = Rng.VRand() * 720.f;
-		const FColor Col = Colors.IsValidIndex(C.Mat) ? Colors[C.Mat] : FColor(30, 30, 40, 0);
+		const FColor Col = Colors.IsValidIndex(C.Material) ? Colors[C.Material] : FColor(30, 30, 40, 0);
 		D.Color = FLinearColor::FromSRGBColor(FColor(Col.R, Col.G, Col.B, 255));
 		D.Glow = Col.A / 255.f * GlowScale * Tn.ShardGlowScale;
 		D.LifeSeconds = Tn.ShardLifeSeconds * Rng.FRandRange(0.7f, 1.2f);
 		Burst.Spawns.Add(D);
 	}
-	UE_LOG(LogTemp, Display, TEXT("DCPHYS shards op=%d voxels=%d clusters=%d (cap %d)"), Op.Seq, Result.Shards.Num(), Burst.Spawns.Num(), Tn.ShardMax);
+	UE_LOG(LogTemp, Display, TEXT("DCPHYS shards op=%d clusters=%d (cap %d)"), Op.Seq, Burst.Spawns.Num(), Tn.ShardMax);
 }
 
 void ADCVoxelCity::SpawnDueShards(float Now)

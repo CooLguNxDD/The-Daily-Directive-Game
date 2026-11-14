@@ -34,10 +34,38 @@ struct EPIC_AI_MEGA_JAM2_API FDCVoxelShard
 	uint8 Material = 0;
 };
 
+/** A physics piece kept after its op (R26): its cells, its provisional rubble, and its fragment tree, so a later
+ *  Rest op can replace the rubble with the fragments settled where the host's bodies came to rest. */
+struct EPIC_AI_MEGA_JAM2_API FDCPendingPiece
+{
+	int32 Lot = INDEX_NONE;
+	TArray<FIntVector> Cells;
+	TArray<uint8> Materials;
+	TArray<FIntVector> Rubble;
+	TArray<uint8> RubbleMaterials;
+	/** Fragment tree: chunk, its leaves, next chunk... Parent = INDEX_NONE for a chunk; cells index Cells. */
+	TArray<int32> FragParent;
+	TArray<TArray<int32>> FragCells;
+};
+
+/** A cluster of carved voxels that flies as one shard body (R26), derived off the game thread. */
+struct EPIC_AI_MEGA_JAM2_API FDCShardCluster
+{
+	FVector Pos = FVector::ZeroVector;
+	int32 Count = 0;
+	uint8 Material = 0;
+	int32 Block = 1;
+	float VoxelCm = 10.f;
+};
+
 struct EPIC_AI_MEGA_JAM2_API FDCVoxelOpResult
 {
 	/** Tower voxels the carve and the bite removed (shatter source, R26). */
 	TArray<FDCVoxelShard> Shards;
+	/** Cosmetic data derived on the op's worker (DeriveCosmetics): shard clusters to fly, and the physics pieces
+	 *  (piece index -> cells, provisional rubble, fragment tree) kept for the host's Rest op. Never hashed. */
+	TArray<FDCShardCluster> ShardClusters;
+	TArray<TPair<int32, FDCPendingPiece>> Pending;
 	/** Lots whose tower broke at a layer and toppled (the host turns these into collapse records). */
 	TArray<int32> FallenLots;
 	/** Lots whose grid changed (remesh). */
@@ -51,20 +79,6 @@ struct EPIC_AI_MEGA_JAM2_API FDCVoxelOpResult
 	float CarveMs = 0.f;
 	float StructureMs = 0.f;
 	float SettleMs = 0.f;
-};
-
-/** A physics piece kept after its op (R26): its cells, its provisional rubble, and its fragment tree, so a later
- *  Rest op can replace the rubble with the fragments settled where the host's bodies came to rest. */
-struct EPIC_AI_MEGA_JAM2_API FDCPendingPiece
-{
-	int32 Lot = INDEX_NONE;
-	TArray<FIntVector> Cells;
-	TArray<uint8> Materials;
-	TArray<FIntVector> Rubble;
-	TArray<uint8> RubbleMaterials;
-	/** Fragment tree: chunk, its leaves, next chunk... Parent = INDEX_NONE for a chunk; cells index Cells. */
-	TArray<int32> FragParent;
-	TArray<TArray<int32>> FragCells;
 };
 
 /** Settings the ops read, resolved once. */
@@ -134,5 +148,8 @@ namespace DCVoxelOps
 	EPIC_AI_MEGA_JAM2_API FIntVector AxisDir(uint8 Index);
 	/** Rest op (R26): removes the piece's provisional rubble and settles each rested fragment's cells, turned to its
 	 *  snapped orientation and moved to the host's rest centre, into the terrain (Settle: stacks, never floats). */
+	/** Off the game thread, after Apply: clusters and samples the shards (ShardMax, weighted to the blast centre) and
+	 *  builds the fragment trees of the PhysicsPieces biggest pieces; frees the raw shard list. */
+	EPIC_AI_MEGA_JAM2_API void DeriveCosmetics(const FDCVoxelSector& Sector, const FDCVoxelOp& Op, const FDCVoxelOpContext& Ctx, FDCVoxelOpResult& Result);
 	EPIC_AI_MEGA_JAM2_API FDCVoxelOpResult ApplyRest(FDCVoxelSector& Sector, const FDCVoxelOp& Op, const FDCPendingPiece& Piece, const FDCVoxelOpContext& Ctx);
 }
