@@ -1060,13 +1060,13 @@ void ADCCharacter::HostGradeShot(int32 PhotoId, FVector CamLoc, FRotator CamRot,
 		}
 	}
 	Record.Grade = DCPhotoRules::GradePhoto(Inputs, UDCTuning::Get().Photo);
-	FString Tags;
+	FString GradeTags;
 	for (const FName& Cat : Record.Grade.Categories)
 	{
-		Tags += Cat.ToString() + TEXT(",");
+		GradeTags += Cat.ToString() + TEXT(",");
 	}
 	UE_LOG(LogTemp, Display, TEXT("DCPHOTO graded photo=%d shot=%.2f score=%d collapses=%.0f blast=%d factions=%.0f tags=%s"), PhotoId, When, Record.Grade.Score,
-		Inputs.Metrics.FindRef(TEXT("Collapses")), Inputs.bHasBlast ? 1 : 0, Inputs.Metrics.FindRef(TEXT("Factions")), *Tags);
+		Inputs.Metrics.FindRef(TEXT("Collapses")), Inputs.bHasBlast ? 1 : 0, Inputs.Metrics.FindRef(TEXT("Factions")), *GradeTags);
 	ApplyStrobe(View);
 	if (ADCGameMode* GM = GetWorld()->GetAuthGameMode<ADCGameMode>())
 	{
