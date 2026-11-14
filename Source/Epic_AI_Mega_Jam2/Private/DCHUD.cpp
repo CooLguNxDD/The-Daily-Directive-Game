@@ -256,7 +256,10 @@ void ADCHUD::DrawSectorCard(ADCGameState& GS)
 		}
 	}
 	Box(W * 0.2f, H * 0.62f - Lift, W * 0.6f, Sx(3.f), RuleA);
-	Text(TEXT("CAMERAS READY. THE CITY IS YOUR STUDIO."), W * 0.5f, H * 0.645f - Lift, TitleA, 0.95f, true);
+	// R4: HQ's order for the sector replaces the tagline once the objective is in.
+	const ADCObjective* Order = ADCObjective::Find(this);
+	const FDCObjectiveDef* OrderDef = Order ? Order->GetDef() : nullptr;
+	Text(OrderDef ? OrderDef->Brief : FString(TEXT("CAMERAS READY. THE CITY IS YOUR STUDIO.")), W * 0.5f, H * 0.645f - Lift, OrderDef ? FLinearColor(Gold.R, Gold.G, Gold.B, A) : TitleA, 0.95f, true);
 }
 
 void ADCHUD::DrawFlashes(ADCGameState& GS, ADCCharacter& Me)
