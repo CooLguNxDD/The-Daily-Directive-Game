@@ -46,6 +46,9 @@ struct EPIC_AI_MEGA_JAM2_API FDCPendingPiece
 	/** Fragment tree: chunk, its leaves, next chunk... Parent = INDEX_NONE for a chunk; cells index Cells. */
 	TArray<int32> FragParent;
 	TArray<TArray<int32>> FragCells;
+	/** Per fragment: min and max cell (inclusive), derived on the worker so the game thread never scans cells. */
+	TArray<FIntVector> FragLo;
+	TArray<FIntVector> FragHi;
 };
 
 /** A cluster of carved voxels that flies as one shard body (R26), derived off the game thread. */

@@ -1036,6 +1036,17 @@ namespace DCVoxelOps
 			const FIntVector Focus = Sector.Towers[Pc.Lot].Grid.ToLocal(Op.CenterCm); // smaller fragments near the blast
 			FragmentTree(Pc.Cells, Sector.Towers[Pc.Lot].Grid.VoxelCm, Tn.PhysicsFragmentCm, Tn.PhysicsFragments, Tn.PhysicsLeafCm, Tn.PhysicsLeavesPerChunk, P.FragParent, P.FragCells,
 				&Focus, Tn.PhysicsFocusFalloffCm);
+			P.FragLo.Init(FIntVector(MAX_int32), P.FragCells.Num());
+			P.FragHi.Init(FIntVector(MIN_int32), P.FragCells.Num());
+			for (int32 f = 0; f < P.FragCells.Num(); ++f)
+			{
+				for (int32 i : P.FragCells[f])
+				{
+					const FIntVector& C = Pc.Cells[i];
+					P.FragLo[f] = FIntVector(FMath::Min(P.FragLo[f].X, C.X), FMath::Min(P.FragLo[f].Y, C.Y), FMath::Min(P.FragLo[f].Z, C.Z));
+					P.FragHi[f] = FIntVector(FMath::Max(P.FragHi[f].X, C.X), FMath::Max(P.FragHi[f].Y, C.Y), FMath::Max(P.FragHi[f].Z, C.Z));
+				}
+			}
 			Result.Pending.Add({BySize[k], MoveTemp(P)});
 		}
 		// Shards: clusters grow with the distance from the blast centre; a seeded sample under the cap, weighted toward
