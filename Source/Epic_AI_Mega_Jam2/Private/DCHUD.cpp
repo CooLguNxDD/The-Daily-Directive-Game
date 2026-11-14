@@ -177,7 +177,10 @@ void ADCHUD::DrawSector(ADCGameState& GS, ADCCharacter* Me)
 	}
 	DrawOnboarding(*Me);
 	DrawDowned(*Me);
-	DrawToast(*Me);
+	if (GS.Phase == EDCRunPhase::Sector || GS.Phase == EDCRunPhase::Lobby || GS.Phase == EDCRunPhase::Draft)
+	{
+		DrawToast(*Me); // the last sector's toast never rides into the reel (packaged frame 90)
+	}
 	DrawSectorCard(GS);
 }
 
