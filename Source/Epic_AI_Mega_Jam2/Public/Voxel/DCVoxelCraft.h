@@ -79,9 +79,19 @@ namespace DCVoxelCraft
 	 *  kinds (towers, low blocks, plazas, rubble zones), the landmark, the sight line from the spawn street to it, and
 	 *  props on streets, plazas and rubble. Pure: same seed and rows, same plan. */
 	EPIC_AI_MEGA_JAM2_API FDCCityPlan PlanDistrict(int32 Seed, const FDCDistrictRule& District, const FDCPcgRuleSet* LotRules, const FDCPcgRuleSet* PropRules,
-		const FDCVoxelSectorLayout& Layout, const TArray<FDCVoxelRecipe>& Recipes, float BayCm);
+		const FDCVoxelSectorLayout& Layout, const TArray<FDCVoxelRecipe>& Recipes, float BayCm, const TArray<FDCPropLayer>& PropLayers);
 
-	/** Stamps the plan's props into a prop grid (Tuning.PropVoxelCm), in quarter turns, from the loaded models. */
+	/** Every voxel-forge model a plan uses (props and building attachments): load these into the context first. */
+	EPIC_AI_MEGA_JAM2_API TArray<FName> PlanModels(const FDCCityPlan& Plan);
+
+	/** Stamps a model into a grid of TargetCm voxels with its pivot at Base, in quarter turns (a coarser model scales
+	 *  up, a finer one is sampled). bOnlyAir keeps what is already there. Returns the top z written + 1 (Base.Z when
+	 *  nothing). */
+	EPIC_AI_MEGA_JAM2_API int32 StampModel(FDCVoxelWorld& W, const FDCVoxelModel& M, int32 TargetCm, const FIntVector& Base, int32 Turns,
+		const FDCVoxelCraftContext& Ctx, bool bOnlyAir);
+
+	/** Stamps the plan's props into a prop grid (Tuning.PropVoxelCm), in quarter turns, from the loaded models, and
+	 *  strings its cables. */
 	EPIC_AI_MEGA_JAM2_API void CraftProps(FDCVoxelGrid& Out, const FDCCityPlan& Plan, const FDCVoxelCraftContext& Ctx);
 
 	/** Crafts one tower at its lot, in a new grid of Tuning.TowerVoxelCm. */

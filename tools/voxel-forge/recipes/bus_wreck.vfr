@@ -1,0 +1,21 @@
+# Wrecked city bus on its side wheels: long ink hull, a row of dark and char windows, crushed front.
+grid 10
+size 110 26 32
+slot body InkBlue
+slot glass WindowOff
+slot burnt Char
+slot wheel Rubble
+slot roof Steel
+box 2 1 3 106 25 28 body
+box 2 1 28 106 25 30 roof
+carve box 4 3 5 104 23 27
+box 6 0 15 100 1 24 glass
+box 6 25 15 100 26 24 glass
+paint box 40 0 15 62 26 24 burnt
+poly 3 28 body 106,1 108,4 108,22 106,25
+carve ellipsoid 104 6 30 8 8 8
+ellipsoid 16 1 3 4 2 3 wheel
+ellipsoid 16 25 3 4 2 3 wheel
+ellipsoid 88 1 3 4 2 3 wheel
+ellipsoid 88 25 3 4 2 3 wheel
+noise 0.06 9 body

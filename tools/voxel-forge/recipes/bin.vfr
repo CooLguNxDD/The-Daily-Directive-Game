@@ -1,0 +1,12 @@
+# Street bin: steel drum, ink lid, a trim band.
+grid 5
+size 12 12 20
+slot drum Steel
+slot lid Ink
+slot band Trim
+cyl 6 6 0 16 5 drum
+cyl 6 6 16 18 5.6 lid
+paint cyl 6 6 12 13 6 band
+paint cyl 6 6 3 4 6 band
+carve box 0 5 13 3 7 15
+noise 0.04 11 drum

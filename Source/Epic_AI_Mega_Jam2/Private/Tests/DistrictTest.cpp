@@ -18,7 +18,7 @@ namespace
 	{
 		const UDCVoxelSettings& V = UDCVoxelSettings::Get();
 		const FDCDistrictRule& D = *V.District(Sector);
-		return DCVoxelCraft::PlanDistrict(DCCityRules::SectorSeed(RunSeed, Sector), D, V.RuleSet(D.Rules), V.RuleSet(D.Props), V.SectorLayout(Sector), V.Recipes, UDCTuning::Get().City.BlockSizeCm);
+		return DCVoxelCraft::PlanDistrict(DCCityRules::SectorSeed(RunSeed, Sector), D, V.RuleSet(D.Rules), V.RuleSet(D.Props), V.SectorLayout(Sector), V.Recipes, UDCTuning::Get().City.BlockSizeCm, V.PropLayers);
 	}
 }
 
@@ -112,14 +112,140 @@ bool FDCDistrictBuilderTest::RunTest(const FString&)
 	// Props stamp into the 5 cm prop grid.
 	const FDCCityPlan P = Plan(4242, 0);
 	FDCVoxelCraftContext Ctx = V.CraftContext(UDCTuning::Get().City.BlockSizeCm);
-	for (const FDCPropPlan& Prop : P.Props)
+	for (const FName& Model : DCVoxelCraft::PlanModels(P))
 	{
-		Ctx.Models.Add(Prop.Model, DCVoxelModels::Parsed(Prop.Model));
+		Ctx.Models.Add(Model, DCVoxelModels::Parsed(Model));
 	}
 	FDCVoxelGrid Props;
 	DCVoxelCraft::CraftProps(Props, P, Ctx);
 	TestEqual(TEXT("prop grid is 5 cm (R1)"), Props.VoxelCm, V.Tuning.PropVoxelCm);
 	TestTrue(TEXT("props have voxels"), Props.Data.CountSolid() > 1000);
+	return true;
+}
+
+namespace
+{
+	/** Items per prop layer in a plan: ground props, building attachments and cables (R2). */
+	TMap<FName, int32> LayerCounts(const FDCCityPlan& P, const TArray<FDCPropLayer>& Layers)
+	{
+		TMap<FName, int32> Out;
+		for (const FDCPropPlan& Prop : P.Props)
+		{
+			++Out.FindOrAdd(Prop.Layer);
+		}
+		for (const FDCLotPlan& B : P.Buildings)
+		{
+			for (const FDCAttachPlan& A : B.Attach)
+			{
+				++Out.FindOrAdd(A.Layer);
+			}
+		}
+		const FDCPropLayer* Cable = Layers.FindByPredicate([](const FDCPropLayer& L) { return L.Placer == TEXT("Cable"); });
+		if (Cable)
+		{
+			Out.FindOrAdd(Cable->Id) += P.Cables.Num();
+		}
+		return Out;
+	}
+
+	FString PlanFingerprint(const FDCCityPlan& P)
+	{
+		FString S;
+		for (const FDCPropPlan& Prop : P.Props)
+		{
+			S += FString::Printf(TEXT("%s@%s/%d;"), *Prop.Model.ToString(), *Prop.Location.ToString(), Prop.Turns);
+		}
+		for (const FDCLotPlan& B : P.Buildings)
+		{
+			for (const FDCAttachPlan& A : B.Attach)
+			{
+				S += FString::Printf(TEXT("%s:%s/%d/%.4f/%.4f;"), *A.Model.ToString(), *A.Mount.ToString(), A.Face, A.U, A.V);
+			}
+		}
+		for (const FDCCablePlan& K : P.Cables)
+		{
+			S += FString::Printf(TEXT("cable %s-%s;"), *K.A.ToString(), *K.B.ToString());
+		}
+		return S;
+	}
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDCCityPropsTest, "Epic_AI_Mega_Jam2.District.CityProps", DistrictFlags)
+bool FDCCityPropsTest::RunTest(const FString&)
+{
+	// R2: every prop layer a district's rule set turns on places props; every model exists; the same seed gives the
+	// same plan and the same crafted voxels; roof and wall mounts land in the tower grids.
+	const UDCVoxelSettings& V = UDCVoxelSettings::Get();
+	TestTrue(TEXT("prop layers declared"), V.PropLayers.Num() >= 8);
+	TSet<FName> Models;
+	for (int32 Sector = 0; Sector < 3; ++Sector)
+	{
+		const FDCDistrictRule& D = *V.District(Sector);
+		const FDCPcgRuleSet* Rules = V.RuleSet(D.Props);
+		const FDCCityPlan P = Plan(4242, Sector);
+		TestEqual(FString::Printf(TEXT("sector %d: same seed, same props"), Sector), PlanFingerprint(P), PlanFingerprint(Plan(4242, Sector)));
+		TestNotEqual(FString::Printf(TEXT("sector %d: another seed, other props"), Sector), PlanFingerprint(P), PlanFingerprint(Plan(4243, Sector)));
+		const TMap<FName, int32> Counts = LayerCounts(P, V.PropLayers);
+		FString Line;
+		for (const FDCPropLayer& L : V.PropLayers)
+		{
+			// A layer bound to lot kinds only has spots where the plan rolled such a lot.
+			const bool bSpots = L.LotKinds.Num() == 0 || L.LotKinds.ContainsByPredicate([&P](const FName& K) { return P.LotKinds.Contains(K); });
+			const bool bOn = bSpots && Rules && Rules->Find(L.Id) && Rules->Find(FName(*(L.Id.ToString() + TEXT("Count"))));
+			const int32 N = Counts.FindRef(L.Id);
+			Line += FString::Printf(TEXT(" %s=%d"), *L.Id.ToString(), N);
+			if (bOn)
+			{
+				TestTrue(FString::Printf(TEXT("sector %d: layer %s places props"), Sector, *L.Id.ToString()), N > 0);
+			}
+		}
+		for (const FName& M : DCVoxelCraft::PlanModels(P))
+		{
+			Models.Add(M);
+			TestNotNull(*FString::Printf(TEXT("model %s exists"), *M.ToString()), DCVoxelModels::Parsed(M));
+		}
+		AddInfo(FString::Printf(TEXT("DCPROPS %s:%s cables=%d"), *D.Id.ToString(), *Line, P.Cables.Num()));
+	}
+	TestTrue(TEXT("at least 20 distinct prop models across the districts"), Models.Num() >= 20);
+
+	// Crafted twice from the same plan: the same voxels (host and client build the same hash).
+	const FDCCityPlan P = Plan(4242, 0);
+	FDCVoxelCraftContext Ctx = V.CraftContext(UDCTuning::Get().City.BlockSizeCm);
+	for (const FName& M : DCVoxelCraft::PlanModels(P))
+	{
+		Ctx.Models.Add(M, DCVoxelModels::Parsed(M));
+	}
+	const double T0 = FPlatformTime::Seconds();
+	FDCVoxelGrid PropsA, PropsB;
+	DCVoxelCraft::CraftProps(PropsA, P, Ctx);
+	const double T1 = FPlatformTime::Seconds();
+	DCVoxelCraft::CraftProps(PropsB, P, Ctx);
+	TestEqual(TEXT("props craft is deterministic"), PropsA.Data.ContentHash(), PropsB.Data.ContentHash());
+
+	// A tower with its attachments has more voxels than the same lot without, and its scan box holds them.
+	int32 WithAttach = 0;
+	double TowerMs = 0.0;
+	for (int32 b = 0; b < P.Buildings.Num(); ++b)
+	{
+		if (P.Buildings[b].Attach.Num() == 0)
+		{
+			continue;
+		}
+		FDCLotPlan Bare = P.Buildings[b];
+		Bare.Attach.Reset();
+		FDCVoxelTower A, B, C;
+		const double S0 = FPlatformTime::Seconds();
+		DCVoxelCraft::CraftTower(A, P.Buildings[b], b, Ctx);
+		TowerMs += (FPlatformTime::Seconds() - S0) * 1000.0;
+		DCVoxelCraft::CraftTower(B, Bare, b, Ctx);
+		DCVoxelCraft::CraftTower(C, P.Buildings[b], b, Ctx);
+		TestEqual(FString::Printf(TEXT("tower %d craft is deterministic"), b), A.Grid.Data.ContentHash(), C.Grid.Data.ContentHash());
+		TestTrue(FString::Printf(TEXT("tower %d: attachments add voxels"), b), A.Grid.Data.CountSolid() > B.Grid.Data.CountSolid());
+		TestTrue(FString::Printf(TEXT("tower %d: scan box holds the roof clutter"), b), A.ScanMax.Z >= B.ScanMax.Z && A.IntactLayers.Num() == A.ScanMax.Z);
+		++WithAttach;
+	}
+	TestTrue(TEXT("towers carry roof clutter or wall mounts"), WithAttach >= 4);
+	AddInfo(FString::Printf(TEXT("DCPROPS craft: props grid %.1f ms (%d solid), %d towers with attachments %.1f ms"), (T1 - T0) * 1000.0, static_cast<int32>(PropsA.Data.CountSolid()), WithAttach, TowerMs));
 	return true;
 }
 
