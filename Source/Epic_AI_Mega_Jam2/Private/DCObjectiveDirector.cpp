@@ -164,6 +164,8 @@ void ADCGameMode::TickObjective(float Now)
 		if (bDown && !Objective->TargetDown[i])
 		{
 			Objective->TargetDown[i] = 1;
+			UE_LOG(LogTemp, Display, TEXT("DCOBJECTIVE target %d down (lot %d, collapsed=%d voxel-fallen=%d)"), i, B ? B->GetLotIndex() : -1, B && B->IsCollapsed() ? 1 : 0,
+				B && TargetCity && TargetCity->IsTowerFallen(B->GetLotIndex()) ? 1 : 0);
 			ToastAll(All, FString::Printf(TEXT("TARGET DOWN  %d / %d"), ObjectiveTargets.Num() - Objective->TargetsLeft(), ObjectiveTargets.Num()));
 		}
 		In.Destroyed += bDown ? 1 : 0;
