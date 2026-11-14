@@ -142,6 +142,9 @@ struct FDCVoxelTuning
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 SignHoldPercent = 60;
 	/** Sector crafts at sector start run on a worker under the sector card (R13 load frames, advisors CP15/CP18). */
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") bool bAsyncSectorCraft = true;
+	/** The reel's restage crafts on a worker and replays the ops before the clip through the op queue while its
+	 *  slate is up, instead of one multi-second game-thread frame (R13 reel; advisor CP24, snapshots not built). */
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") bool bAsyncReelRestage = true;
 	/** Form floor in M_DCVoxel (advisor CP16, critic V20.5): shaded albedo x lerp(FormGround, FormSky) by how much a
 	 *  face turns to MoonDir, x FormFloor, added as emission, so unlit faces separate without lifting the frame
 	 *  (0 = off). */
@@ -184,6 +187,9 @@ struct FDCVoxelTuning
 	/** Game-thread milliseconds per frame for cell uploads (merge + mesh section); UploadsPerFrame stays a cap. At
 	 *  least one cell uploads per frame. A strike's commit frame uploads only that op's cells, outside this budget. */
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float UploadBudgetMs = 4.f;
+	/** Falling-piece mesh sections created per frame stop after this many ms (advisor CP26 #5: ~50 fragment sections
+	 *  in one frame cost 25-35 ms); the rest wait for the next frame, a piece shows once all its fragments are in. */
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float PieceUploadBudgetMs = 4.f;
 	/** Load phase: after a Build (sector start, a reel clip's rebuild) until every cell is up, the budget is this many
 	 *  ms, so the city stands before the clip or the first strike (a 4 ms budget left the reel's city empty). */
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float UploadLoadBudgetMs = 60.f;

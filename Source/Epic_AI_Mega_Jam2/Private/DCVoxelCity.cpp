@@ -1344,12 +1344,14 @@ void ADCVoxelCity::QueueAllDirty(TSet<FIntVector>* DeferTerrain)
 
 void ADCVoxelCity::PollJobs()
 {
+	const double Start = FPlatformTime::Seconds();
+	const double PieceBudgetS = UDCVoxelSettings::Get().Tuning.PieceUploadBudgetMs / 1000.0;
 	for (int32 i = 0; i < Jobs.Num();)
 	{
 		const TSharedPtr<FMeshJob> Job = Jobs[i];
-		if (!Job->Task.IsCompleted())
+		if (!Job->Task.IsCompleted() || (Job->Piece && FPlatformTime::Seconds() - Start > PieceBudgetS))
 		{
-			++i;
+			++i; // not done, or a piece section over this frame's budget: next frame
 			continue;
 		}
 		Jobs.RemoveAtSwap(i);
@@ -1420,9 +1422,9 @@ void ADCVoxelCity::UploadCells()
 	const FDCVoxelTuning& Tn = UDCVoxelSettings::Get().Tuning;
 	const double Start = FPlatformTime::Seconds();
 	// Load cap in cells too: the render thread pays per new section, not per game-thread ms (perf-r13m load spikes).
-	// Only under the sector card: a synchronous build (the reel) uploads at the old load pace so a clip never plays
-	// in a half-uploaded city (review CP29).
-	const bool bCardLoad = bLoading && bAsyncLoad;
+	// Only under the sector card: a reel build (negative id, synchronous or behind the reel slate) uploads at the old
+	// load pace so a clip never plays in a half-uploaded city (review CP29).
+	const bool bCardLoad = bLoading && bAsyncLoad && BuiltId >= 0;
 	const int32 Cap = bLoading ? (bCardLoad ? FMath::Max(1, Tn.UploadLoadMaxCells) : MAX_int32) : FMath::Max(1, Tn.UploadsPerFrame);
 	const float BudgetMs = bLoading ? (bCardLoad ? Tn.UploadLoadBudgetMs : Tn.UploadSyncLoadBudgetMs) : Tn.UploadBudgetMs;
 	TArray<FIntVector4> Ready;
@@ -1934,29 +1936,17 @@ void ADCVoxelCity::Land(FFalling& F)
 				Spread = FMath::Max(Spread, FVector::Dist2D(Fr.Body->GetComponentLocation(), F.LandCenter));
 				Awake += Fr.Body->IsAnyRigidBodyAwake() ? 1 : 0;
 				Bodies.Remove(Fr.Body.Get());
-				const bool bFlying = Fr.State != EFragState::Frozen && Fr.Body->IsAnyRigidBodyAwake()
-					&& FVector::Dist2D(Fr.Body->GetComponentLocation(), F.LandCenter) > UDCVoxelSettings::Get().Tuning.PhysicsSiteRadiusCm;
-				if (bFlying)
+				const bool bMoving = Fr.State != EFragState::Frozen && Fr.Body->IsAnyRigidBodyAwake();
+				if (bMoving)
 				{
-					// A stray still in flight keeps its physics and fades as it flies (released at the fade's end).
-					if (Fr.Comp)
-					{
-						Fading.Add({Fr.Body, Fr.Comp, static_cast<float>(GetWorld()->GetTimeSeconds())});
-						Fr.Comp = nullptr;
-					}
+					// Still moving (a stray, or past its deadline): it keeps its physics and fades as it goes, released
+					// at the fade's end. Never teleported (review CP33: a set-down sank bodies resting on a pile).
+					Fading.Add({Fr.Body, Fr.Comp, static_cast<float>(GetWorld()->GetTimeSeconds())}); // no mesh: released next tick
+					Fr.Comp = nullptr;
 					Fr.Body = nullptr;
 					continue;
 				}
 				Fr.Body->SetSimulatePhysics(false); // frozen where it lies, then shrinks away over PhysicsFadeSeconds
-				{
-					// Still in the air at the time cap: set it down on the street first (nothing fades mid-air).
-					const FBox Bx = Fr.Body->Bounds.GetBox();
-					const float Ground = BodyGroundZ(Bx.GetCenter(), F.LandCenter);
-					if (Bx.Min.Z > Ground + 200.f)
-					{
-						Fr.Body->SetWorldLocation(Fr.Body->GetComponentLocation() - FVector(0, 0, Bx.Min.Z - Ground), false, nullptr, ETeleportType::TeleportPhysics);
-					}
-				}
 				Fr.Body->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 				if (Fr.Comp)
 				{

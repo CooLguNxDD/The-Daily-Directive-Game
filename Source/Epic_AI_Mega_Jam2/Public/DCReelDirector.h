@@ -73,6 +73,11 @@ private:
 	TArray<FPendingCollapse> Pending;
 	/** Voxel city: the clip sector's ops that happen during the clip, at their replay server time. */
 	TArray<TPair<float, FDCVoxelOp>> PendingVoxelOps;
+	/** Async restage (Tuning.bAsyncReelRestage): the slate stays up while the city crafts and these ops (the clip
+	 *  sector's ops before its window) replay on the worker; then the clip plays. */
+	TArray<FDCVoxelOp> PreWindowOps;
+	bool bRestaging = false;
+	bool bPreWindowQueued = false;
 	int32 StagedIndex = -1;
 	float WindowStart = 0.f;
 	float ShotTime = 0.f;
