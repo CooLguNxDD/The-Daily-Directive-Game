@@ -202,6 +202,13 @@ struct FDCLookTuning
 	 *  its own target zone instead of ending on a flat disc), and its reach as a fraction of the blast radius. */
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float BeamContactLight = 40000.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float BeamContactReach = 1.4f;
+	/** Builder turntable (R23) under the noir night: a soft key from the front and a cyan rim from behind (cd), plus
+	 *  the capture's exposure bias, so the photographer reads in the menu. */
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float OutfitKeyCandela = 120.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Look") FLinearColor OutfitKeyColor = FLinearColor(1.f, 0.9f, 0.8f);
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float OutfitRimCandela = 300.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Look") FLinearColor OutfitRimColor = FLinearColor(0.024f, 0.552f, 0.687f);
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float OutfitExposureBias = 0.f;
 	/** Impact flare where the beam meets the street (blast white-orange, only on strikes): width x beam, peak glow. */
 	UPROPERTY(EditAnywhere, Config, Category = "Look") FLinearColor ImpactFlareColor = FLinearColor(1.f, 0.89f, 0.54f);
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float ImpactFlareWidthScale = 2.6f;

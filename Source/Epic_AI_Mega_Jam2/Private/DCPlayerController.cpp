@@ -544,7 +544,23 @@ void ADCPlayerController::TickBuilderFlow()
 		{10.5, [&]() { Shot(TEXT("03_builder_helmet_trench.png")); }},
 		{11.0, [this]() { BuilderCycle(2, 1); BuilderCycle(3, 1); BuilderSwatch(true, 1); }},
 		{12.5, [&]() { Shot(TEXT("04_builder_filmbelt_boxcam.png")); }},
-		{13.0, [this]() { BuilderImport(TEXT("DC1-04020-10003-00025")); }},
+		{13.0, [this]()
+		{
+			// A friend's photographer: another valid outfit (every slot cycled, other swatches), encoded and pasted back.
+			const UDCTuning& T = UDCTuning::Get();
+			FDCOutfit Friend = DCOutfit::Default(T.OutfitSlots);
+			for (int32 Slot = 0; Slot < T.OutfitSlots.Num(); ++Slot)
+			{
+				DCOutfit::Cycle(Friend, Slot, Slot + 1, T.OutfitSlots, T.OutfitParts);
+			}
+			const int32 Swatches = FMath::Max(T.OutfitSwatches.Num(), 1);
+			Friend.Main = static_cast<uint8>((BuilderOutfit.Main + 2) % Swatches);
+			Friend.Accent = static_cast<uint8>((BuilderOutfit.Accent + 3) % Swatches);
+			const FString Code = DCOutfit::Encode(Friend);
+			UE_LOG(LogTemp, Display, TEXT("DCBUILDERFLOW friend code %s"), *Code);
+			BuilderImport(Code);
+			UE_LOG(LogTemp, Display, TEXT("DCBUILDERFLOW after import: %s (%s)"), *DCOutfit::Encode(BuilderOutfit), *BuilderMessage);
+		}},
 		{14.5, [&]() { Shot(TEXT("05_builder_code_loaded.png")); }},
 		{15.0, [this]() { BuilderImport(TEXT("DC1-NOT-A-REAL-CODE")); }},
 		{15.8, [&]() { Shot(TEXT("06_builder_bad_code_rejected.png")); }},
