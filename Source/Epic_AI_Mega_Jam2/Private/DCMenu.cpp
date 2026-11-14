@@ -260,7 +260,7 @@ namespace DCMenu
 		}};
 		Modes[FMath::Min<int32>(Mode, UE_ARRAY_COUNT(Modes) - 1)]();
 		Column->AddSlot().AutoHeight().HAlign(HAlign_Center).Padding(0, 20, 0, 0)
-			[Label(TEXT("WASD move  SHIFT sprint  SPACE jump  CTRL crouch  |  1 rifle  2 strike  3 camera\nRMB raise camera  LMB shoot / call / snap  |  E revive  [ ] sensitivity"), 12, Ink)];
+			[Label(FString::Printf(TEXT("WASD move  %s sprint  %s jump  %s crouch  |  1 rifle  2 strike  3 camera\n%s raise camera  %s shoot / call / snap  |  %s revive  [ ] sensitivity"), *PC->KeyFor(TEXT("Sprint")).ToUpper(), *PC->KeyFor(TEXT("Jump")).ToUpper(), *PC->KeyFor(TEXT("Crouch")).ToUpper(), *PC->KeyFor(TEXT("Aim")).ToUpper(), *PC->KeyFor(TEXT("Fire")).ToUpper(), *PC->KeyFor(TEXT("Interact")).ToUpper()), 12, Ink)]; // the saved bindings
 
 		// Key art fills the screen (generated, R11); the menu sits on its empty left third, so the first ten seconds
 		// show the game: a beam, a toppling voxel tower, a photographer (R7).

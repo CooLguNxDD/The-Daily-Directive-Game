@@ -405,7 +405,7 @@ void ADCHUD::DrawStatus(ADCGameState& GS, ADCCharacter& Me)
 		const float Bw = Sx(360.f), Bx = W * 0.5f - Bw * 0.5f, By = Sx(96.f);
 		Box(Bx, By, Bw, Sx(14.f), Ink);
 		Box(Bx + Sx(2.f), By + Sx(2.f), (Bw - Sx(4.f)) * Q, Sx(10.f), Q >= 1.f ? Gold : Paper);
-		Text(FString::Printf(TEXT("HQ QUOTA %s / %s"), *FormatPoints(GS.SectorPhotoPoints), *FormatPoints(Sector->QuotaPoints)), W * 0.5f, By + Sx(14.f), Ink, 0.5f, true);
+		Text(FString::Printf(TEXT("%s QUOTA %s / %s"), GS.PlayerArray.Num() > 1 ? TEXT("TEAM") : TEXT("HQ"), *FormatPoints(GS.SectorPhotoPoints), *FormatPoints(Sector->QuotaPoints)), W * 0.5f, By + Sx(14.f), Ink, 0.5f, true);
 	}
 
 	// Film counter is always visible (R7).
