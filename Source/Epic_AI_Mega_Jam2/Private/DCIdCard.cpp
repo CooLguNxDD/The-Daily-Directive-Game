@@ -26,11 +26,10 @@ namespace
 		C->DrawItem(Tile);
 	}
 
-	void Write(UCanvas* C, UFont* Font, const FString& S, float X, float Y, float Scale, const FLinearColor& Color, float RotationDeg = 0.f)
+	void Write(UCanvas* C, UFont* Font, const FString& S, float X, float Y, float Scale, const FLinearColor& Color)
 	{
 		FCanvasTextItem Item(FVector2D(X, Y), FText::FromString(S), Font, Color);
 		Item.Scale = FVector2D(Scale, Scale);
-		Item.Rotation = FRotator(0.f, RotationDeg, 0.f);
 		Item.BlendMode = SE_BLEND_Translucent;
 		C->DrawItem(Item);
 	}
@@ -84,7 +83,7 @@ FString ADCOutfitPreview::ExportCard(const FString& CallSign, const FString& Sha
 		return FString();
 	}
 	UFont* Head = DCFonts::Get(TEXT("Headline"));
-	UFont* Body = DCFonts::Get(TEXT("Body"));
+	UFont* Copy = DCFonts::Get(TEXT("Body"));
 	const float W = Size.X, H = Size.Y;
 	const float S = H / 675.f; // layout drawn for 1200 x 675, scaled with the card height
 	Fill(C, 0, 0, W, H, K.Background);
@@ -97,11 +96,11 @@ FString ADCOutfitPreview::ExportCard(const FString& CallSign, const FString& Sha
 	// Credential column.
 	const float X = 520 * S;
 	Write(C, Head, K.Title, X, 44 * S, 1.25f * S, K.Ink);
-	Write(C, Body, K.Subtitle, X, 104 * S, 0.85f * S, K.AccentB);
+	Write(C, Copy, K.Subtitle, X, 104 * S, 0.85f * S, K.AccentB);
 	Fill(C, X, 140 * S, 640 * S, 2 * S, K.AccentA);
-	Write(C, Body, TEXT("CALL SIGN"), X, 160 * S, 0.7f * S, FLinearColor(K.Ink.R, K.Ink.G, K.Ink.B, 0.6f));
+	Write(C, Copy, TEXT("CALL SIGN"), X, 160 * S, 0.7f * S, FLinearColor(K.Ink.R, K.Ink.G, K.Ink.B, 0.6f));
 	Write(C, Head, CallSign.ToUpper(), X, 184 * S, 2.1f * S, K.Ink);
-	Write(C, Body, TEXT("SHARE CODE"), X, 290 * S, 0.7f * S, FLinearColor(K.Ink.R, K.Ink.G, K.Ink.B, 0.6f));
+	Write(C, Copy, TEXT("SHARE CODE"), X, 290 * S, 0.7f * S, FLinearColor(K.Ink.R, K.Ink.G, K.Ink.B, 0.6f));
 	// The code is the thing a friend uses: signal yellow (art bible: lime-yellow only for what the player can use).
 	Write(C, Head, ShareCode, X, 312 * S, 1.2f * S, UDCTuning::Get().ObjectiveLook.Color);
 	// The turn: a strip of thumbnails, each yaw step of the same photographer.
@@ -112,11 +111,14 @@ FString ADCOutfitPreview::ExportCard(const FString& CallSign, const FString& Sha
 		Fill(C, Tx - 2 * S, Ty - 2 * S, Tw + 4 * S, Th + 4 * S, K.Panel);
 		Picture(C, Views[i], Tx, Ty, Tw, Th);
 	}
-	Write(C, Body, TEXT("TURNTABLE"), X, Ty - 26 * S, 0.65f * S, K.AccentB);
-	Write(C, Body, K.Footer, X, 590 * S, 0.62f * S, FLinearColor(K.Ink.R, K.Ink.G, K.Ink.B, 0.75f));
-	Write(C, Body, FString::Printf(TEXT("ISSUED %s"), *FDateTime::Now().ToString(TEXT("%Y-%m-%d %H:%M"))), X, 615 * S, 0.62f * S, FLinearColor(K.Ink.R, K.Ink.G, K.Ink.B, 0.5f));
-	// The stamp: a tilted glowing hologram word over the portrait.
-	Write(C, Head, K.Stamp, Hx + 150 * S, Hy + Hh - 90 * S, 0.95f * S, K.AccentA, -12.f);
+	Write(C, Copy, TEXT("TURNTABLE"), X, Ty - 26 * S, 0.65f * S, K.AccentB);
+	Write(C, Copy, K.Footer, X, 590 * S, 0.62f * S, FLinearColor(K.Ink.R, K.Ink.G, K.Ink.B, 0.75f));
+	Write(C, Copy, FString::Printf(TEXT("ISSUED %s"), *FDateTime::Now().ToString(TEXT("%Y-%m-%d %H:%M"))), X, 615 * S, 0.62f * S, FLinearColor(K.Ink.R, K.Ink.G, K.Ink.B, 0.5f));
+	// The stamp: a glowing word in a frame over the portrait's foot (canvas text cannot tilt; the frame sells it).
+	const float Sx0 = Hx + 120 * S, Sy0 = Hy + Hh - 96 * S;
+	Fill(C, Sx0 - 10 * S, Sy0 - 8 * S, 310 * S, 3 * S, K.AccentA);
+	Fill(C, Sx0 - 10 * S, Sy0 + 44 * S, 310 * S, 3 * S, K.AccentA);
+	Write(C, Head, K.Stamp, Sx0, Sy0, 0.95f * S, K.AccentA);
 	// Feed scanlines over everything.
 	for (float Y = 0; Y < H; Y += 3.f * S)
 	{
