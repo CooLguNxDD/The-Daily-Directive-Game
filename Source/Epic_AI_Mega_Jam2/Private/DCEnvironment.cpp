@@ -368,7 +368,7 @@ void ADCEnvironment::BuildBackdrop(const ADCVoxelCity& City, int32 RunSeed, int3
 		BackdropLights.Add(Lights);
 	}
 	Backdrop->SetStaticMesh(DCAssets::Cube());
-	Backdrop->SetMaterial(0, DCAssets::MakeFlat(this, L.BackdropColor));
+	Backdrop->SetMaterial(0, DCAssets::MakeFlatUnlit(this, L.BackdropColor, 1.f)); // unlit: the far skyline keeps a faint silhouette (critic: faces went pure black)
 	const float Half = FMath::Abs(static_cast<float>(City.GetSector().Terrain.OriginCm.X));
 	FRandomStream Rng(HashCombine(GetTypeHash(RunSeed), GetTypeHash(SectorIndex * 7919 + 13)));
 	for (int32 i = 0; i < L.BackdropTowers; ++i)
