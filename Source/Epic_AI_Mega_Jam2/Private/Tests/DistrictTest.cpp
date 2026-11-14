@@ -242,6 +242,11 @@ bool FDCCityPropsTest::RunTest(const FString&)
 		TestEqual(FString::Printf(TEXT("tower %d craft is deterministic"), b), A.Grid.Data.ContentHash(), C.Grid.Data.ContentHash());
 		TestTrue(FString::Printf(TEXT("tower %d: attachments add voxels"), b), A.Grid.Data.CountSolid() > B.Grid.Data.CountSolid());
 		TestTrue(FString::Printf(TEXT("tower %d: scan box holds the roof clutter"), b), A.ScanMax.Z >= B.ScanMax.Z && A.IntactLayers.Num() == A.ScanMax.Z);
+		TestTrue(FString::Printf(TEXT("tower %d: attachment light spots recorded"), b), A.AttachSpots.Num() > 0 && A.AttachSpots.Num() <= P.Buildings[b].Attach.Num());
+		for (const FDCVoxelAttachSpot& Spot : A.AttachSpots)
+		{
+			TestTrue(FString::Printf(TEXT("tower %d: %s spot above the street"), b, *Spot.Model.ToString()), Spot.CenterCm.Z > 0 && Spot.Normal.Size() == 1);
+		}
 		++WithAttach;
 	}
 	TestTrue(TEXT("towers carry roof clutter or wall mounts"), WithAttach >= 4);

@@ -28,11 +28,22 @@ struct EPIC_AI_MEGA_JAM2_API FDCVoxelSign
 	int32 BackCells = 0;
 };
 
+/** Where a building attachment (R2 props) landed: its model, the centre of its box in sector cm and the way it faces
+ *  (unit axis). The city hangs a prop light in front of it when the model has a PropLights row. */
+struct EPIC_AI_MEGA_JAM2_API FDCVoxelAttachSpot
+{
+	FName Model;
+	FIntVector CenterCm = FIntVector::ZeroValue;
+	FIntVector Normal = FIntVector::ZeroValue;
+};
+
 /** A crafted tower in its own grid, with the solid count of every layer when intact (the structure pass compares). */
 struct EPIC_AI_MEGA_JAM2_API FDCVoxelTower
 {
 	/** Lit signs crafted on its facades (lights; the structure pass drops a sign whose wall is gone). */
 	TArray<FDCVoxelSign> Signs;
+	/** Roof clutter and wall mounts stamped into this tower (R2). */
+	TArray<FDCVoxelAttachSpot> AttachSpots;
 	int32 Lot = INDEX_NONE;
 	FDCVoxelGrid Grid;
 	/** Footprint box in grid-local voxels (walls only), Min inclusive, Max exclusive, z from 0. */
