@@ -419,17 +419,59 @@ void ADCHUD::DrawFrontPage(ADCGameState& GS, ADCCharacter* Me)
 	PaperSheet(0, 0, W, H);
 	const float M = Sx(28.f); // page margin: a dense broadsheet, not a poster on a wall
 	const float Bottom = H - Sx(110.f);
-	// Body copy as greeked type: ragged ink lines in a column, the texture of a printed page (no words to misread).
-	auto Greek = [this](float X, float Y, float ColW, float ColH, uint32 Seed)
+	// Body copy: real sentences from data (FrontPageCopy), word-wrapped in small body type, ragged right; the seed
+	// picks where each column starts so columns read differently. Greeked bars only when no copy shipped.
+	const TArray<FString>& Copy = UDCTuning::Get().FrontPageCopy;
+	const FString Who = GS.PlayerArray.Num() > 0 && GS.PlayerArray[0] ? GS.PlayerArray[0]->GetPlayerName().ToUpper() : FString(TEXT("OUR CORRESPONDENT"));
+	auto Greek = [this, &Copy, &Who](float X, float Y, float ColW, float ColH, uint32 Seed)
 	{
-		const float Line = Sx(13.f);
-		for (int32 i = 0; (i + 1) * Line <= ColH; ++i)
+		const float Line = Sx(15.f);
+		const float Scale = 0.42f;
+		int32 Row = 0;
+		FString Cur;
+		auto Flush = [&]()
 		{
-			const uint32 Hash = (Seed + static_cast<uint32>(i) * 2654435761u) >> 7;
-			const bool bParagraphEnd = Hash % 7 == 0;
-			const float Len = bParagraphEnd ? ColW * (0.3f + (Hash % 40) / 100.f) : ColW * (0.9f + (Hash % 10) / 100.f);
-			Box(X + (i > 0 && (Hash % 11 == 0) ? Sx(12.f) : 0.f), Y + i * Line, FMath::Min(Len, ColW), Sx(5.f), FLinearColor(Ink.R, Ink.G, Ink.B, 0.42f));
+			if ((Row + 1) * Line <= ColH && !Cur.IsEmpty())
+			{
+				Text(Cur, X, Y + Row * Line, FLinearColor(Ink.R, Ink.G, Ink.B, 0.85f), Scale, false, SmallFont);
+			}
+			++Row;
+			Cur.Reset();
+		};
+		if (Copy.IsEmpty())
+		{
+			for (int32 i = 0; (i + 1) * Line <= ColH; ++i)
+			{
+				Box(X, Y + i * Line, ColW * 0.9f, Sx(5.f), FLinearColor(Ink.R, Ink.G, Ink.B, 0.42f));
+			}
+			return;
 		}
+		for (int32 n = 0; (Row + 1) * Line <= ColH && n < 64; ++n)
+		{
+			FString Sentence = Copy[(Seed + n) % Copy.Num()].Replace(TEXT("{PLAYER}"), *Who);
+			TArray<FString> Words;
+			Sentence.ParseIntoArray(Words, TEXT(" "));
+			for (const FString& Word : Words)
+			{
+				const FString Try = Cur.IsEmpty() ? Word : Cur + TEXT(" ") + Word;
+				float Tw = 0.f, Th = 0.f;
+				TextSize(SmallFont, Try, Scale * TextBoost * UiScale, Tw, Th);
+				if (Tw > ColW && !Cur.IsEmpty())
+				{
+					Flush();
+					Cur = Word;
+				}
+				else
+				{
+					Cur = Try;
+				}
+			}
+			if (n % 3 == 2)
+			{
+				Flush(); // a paragraph break now and then
+			}
+		}
+		Flush();
 	};
 	Text(TEXT("The Daily Directive"), W * 0.5f, Sx(10.f), Ink, 2.4f, true, MastFont); // descenders clear the rule
 	// Ears either side of the masthead.

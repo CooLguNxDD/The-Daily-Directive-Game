@@ -619,17 +619,27 @@ void ADCDemoPilot::TickDefend()
 		AimAt(Nearest->GetActorLocation());
 	}
 	// A swarmer inside 4 m: backpedal while firing (a player kites the bite; standing still let packs down the pilot).
+	// Re-asserted every tick while a threat is near: script steps release Fire and Move on their own timers, which left
+	// the cached state "firing" with the trigger up (helper CP7: the sector-2 downs).
 	const bool bBack = Nearest && Best < 400.f && !Me->IsCameraRaised();
-	if (bBack != bRetreating)
+	if (bBack)
 	{
-		bRetreating = bBack;
-		(bRetreating ? Press(TEXT("Move"), FVector(0, -1, 0)) : Release(TEXT("Move")));
+		Press(TEXT("Move"), FVector(0, -1, 0));
 	}
-	if ((Nearest != nullptr) != bDefendFiring)
+	else if (bRetreating)
 	{
-		bDefendFiring = Nearest != nullptr;
-		(bDefendFiring ? Press(TEXT("Fire")) : Release(TEXT("Fire")));
+		Release(TEXT("Move"));
 	}
+	bRetreating = bBack;
+	if (Nearest)
+	{
+		Press(TEXT("Fire"));
+	}
+	else if (bDefendFiring)
+	{
+		Release(TEXT("Fire"));
+	}
+	bDefendFiring = Nearest != nullptr;
 }
 
 void ADCDemoPilot::AddRifleOnly()
