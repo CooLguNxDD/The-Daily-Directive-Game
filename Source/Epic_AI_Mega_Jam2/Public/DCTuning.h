@@ -395,6 +395,10 @@ struct FDCAssetTuning
 	UPROPERTY(EditAnywhere, Config, Category = "Assets") FName HeadSocket = TEXT("head");
 	/** Title menu key art (generated via media.sh, R11; ASSETS.md). */
 	UPROPERTY(EditAnywhere, Config, Category = "Assets") FSoftObjectPath MenuKeyArt = FSoftObjectPath(TEXT("/Game/DC/Art/T_MenuKeyArt.T_MenuKeyArt"));
+	/** Generated print textures (R11): newsprint paper fill for the desk and front page, worn-ink mask for stamps
+	 *  (alpha = wear). A missing asset falls back to flat paper and the procedural grit. */
+	UPROPERTY(EditAnywhere, Config, Category = "Assets") FSoftObjectPath PaperGrain = FSoftObjectPath(TEXT("/Game/DC/Art/T_PaperGrain.T_PaperGrain"));
+	UPROPERTY(EditAnywhere, Config, Category = "Assets") FSoftObjectPath StampGrit = FSoftObjectPath(TEXT("/Game/DC/Art/T_StampGrit.T_StampGrit"));
 };
 
 /** A draft option (R10). Pool groups it; Effect is resolved by id in the upgrade registry (DCUpgrades.cpp). */

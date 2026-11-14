@@ -462,7 +462,9 @@ void ADCHUD::DrawPhotoCard(UTexture* Image, const FDCPhotoGrade& Grade, float X,
 	if (UTexture2D* Worn = Bh > Sx(70.f) ? StampGrit() : nullptr) // small stamps skip the grit: it aliases into noise
 	{
 		// Paper-coloured speckle over the frame ink (under the type, so small stamps stay legible): pressed by hand.
-		DrawTexture(Worn, Bx, By, Bw, Bh, 0, 0, Bw / Sx(256.f), Bh / Sx(128.f), FLinearColor(Paper.R, Paper.G, Paper.B, 0.35f), BLEND_Translucent);
+		// The generated mask is one whole worn stamp (edges and speckle) laid over the plate; the procedural one tiles.
+		const bool bWhole = Worn->GetSizeX() == Worn->GetSizeY();
+		DrawTexture(Worn, Bx, By, Bw, Bh, 0, 0, bWhole ? 1.f : Bw / Sx(256.f), bWhole ? 1.f : Bh / Sx(128.f), FLinearColor(Paper.R, Paper.G, Paper.B, bWhole ? 0.8f : 0.35f), BLEND_Translucent);
 	}
 	Text(Score, Cx, By + Sx(4.f), InkStamp, 1.6f * S, true, StampFont);
 	Text(Timing, Cx, By + Sx(4.f) + Th * 1.0f, InkStamp, 0.8f * S, true, StampFont);
@@ -483,13 +485,35 @@ void ADCHUD::DrawPhotoCard(UTexture* Image, const FDCPhotoGrade& Grade, float X,
 	}
 }
 
+void ADCHUD::PaperSheet(float X, float Y, float W, float H)
+{
+	if (!bPaperTried)
+	{
+		bPaperTried = true;
+		PaperTex = Cast<UTexture2D>(UDCTuning::Get().Assets.PaperGrain.TryLoad());
+	}
+	if (!PaperTex)
+	{
+		Box(X, Y, W, H, Paper);
+		return;
+	}
+	// The texture is about paper cream already; tinted to the palette paper so the sheet stays #F2E8D0 on average.
+	const float Tile = Sx(512.f);
+	DrawTexture(PaperTex, X, Y, W, H, 0.f, 0.f, W / Tile, H / Tile, FLinearColor(1.01f, 1.0f, 0.99f, 1.f), BLEND_Opaque);
+}
+
 UTexture2D* ADCHUD::StampGrit()
 {
 	if (Grit)
 	{
 		return Grit;
 	}
-	// Speckles and a few worn streaks, alpha only (seeded: the same grit every run).
+	// The generated worn-ink mask (R11) when it shipped; else speckles and worn streaks made here (seeded).
+	if (UTexture2D* Made = Cast<UTexture2D>(UDCTuning::Get().Assets.StampGrit.TryLoad()))
+	{
+		Grit = Made;
+		return Grit;
+	}
 	constexpr int32 Gw = 256, Gh = 128;
 	TArray<FColor> Px;
 	Px.SetNumZeroed(Gw * Gh);

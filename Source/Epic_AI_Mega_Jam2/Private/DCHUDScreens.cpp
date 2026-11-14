@@ -301,7 +301,7 @@ void ADCHUD::DrawFinalCut(ADCGameState& GS, ADCCharacter* Me)
 	ADCPlayerController* PC = Cast<ADCPlayerController>(PlayerOwner);
 	const ADCPlayerState* PS = PC ? PC->GetPlayerState<ADCPlayerState>() : nullptr;
 	// The editor's desk in cream and ink (R6): picks are marked in signal yellow, nothing else is coloured.
-	Box(0, 0, W, H, Paper);
+	PaperSheet(0, 0, W, H);
 	Box(Sx(40.f), Sx(86.f), W - Sx(80.f), Sx(3.f), Ink);
 	Text(TEXT("FINAL CUT"), W * 0.5f, Sx(24.f), Ink, 1.4f, true);
 	Text(FString::Printf(TEXT("PICK %d SHOTS FOR THE FRONT PAGE. THE CRITIC RANKED THEM; OVERRULE AT WILL.   %s"), T.Run.FinalCutPicks, *Clock(GS.PhaseEndTime - GS.Now())),
@@ -416,7 +416,7 @@ void ADCHUD::DrawFrontPage(ADCGameState& GS, ADCCharacter* Me)
 		bPressPlayed = true;
 		DCAudio::Play2D(this, TEXT("Press"), 1.f); // the printing press rolls
 	}
-	Box(0, 0, W, H, Paper);
+	PaperSheet(0, 0, W, H);
 	const float M = Sx(28.f); // page margin: a dense broadsheet, not a poster on a wall
 	const float Bottom = H - Sx(110.f);
 	// Body copy as greeked type: ragged ink lines in a column, the texture of a printed page (no words to misread).

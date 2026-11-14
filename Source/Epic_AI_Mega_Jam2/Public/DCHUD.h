@@ -75,6 +75,10 @@ private:
 
 	/** Ink grit for stamps: a code-made mask of speckles and worn edges, drawn in paper over the stamp ink (R5). */
 	class UTexture2D* StampGrit();
+	/** A newsprint sheet: the generated paper texture tiled at its own scale (R11), else flat paper. */
+	void PaperSheet(float X, float Y, float W, float H);
+	UPROPERTY() TObjectPtr<class UTexture2D> PaperTex;
+	bool bPaperTried = false;
 	UPROPERTY() TObjectPtr<class UTexture2D> Grit;
 	UPROPERTY() TObjectPtr<UFont> BigFont;
 	/** Draft card art by upgrade id, loaded once at BeginPlay (never in a draw). */

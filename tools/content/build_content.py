@@ -240,6 +240,7 @@ TEXTURES = {
     "T_Card_eclipse": "card-eclipse.png",
     "T_Card_rogue": "card-rogue.png",
     "T_PaperGrain": "tex-paper.png",
+    "T_StampGrit": "tex-stampgrit.png",
 }
 
 
