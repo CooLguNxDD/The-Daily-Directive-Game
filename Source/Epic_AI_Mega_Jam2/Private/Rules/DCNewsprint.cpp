@@ -98,7 +98,8 @@ namespace DCNewsprint
 			for (int32 X = 0; X < W; X += Step)
 			{
 				const FLinearColor& C = Px[Y * W + X];
-				const float L = 0.2126f * FMath::Pow(FMath::Clamp(C.R, 0.f, 1.f), 2.2f) + 0.7152f * FMath::Pow(FMath::Clamp(C.G, 0.f, 1.f), 2.2f) + 0.0722f * FMath::Pow(FMath::Clamp(C.B, 0.f, 1.f), 2.2f);
+				auto Lin = [&T](float V) { return T.bSceneLinear ? FMath::Max(V, 0.f) : FMath::Pow(FMath::Clamp(V, 0.f, 1.f), 2.2f); };
+				const float L = 0.2126f * Lin(C.R) + 0.7152f * Lin(C.G) + 0.0722f * Lin(C.B);
 				const float Dx = (X + 0.5f) / W - 0.5f, Dy = (Y + 0.5f) / H - 0.5f;
 				const float Wt = 1.f + (T.MeterCenterWeight - 1.f) * FMath::Clamp(1.f - 4.f * (Dx * Dx + Dy * Dy), 0.f, 1.f);
 				Sum += Wt * FMath::Loge(FMath::Max(L, 1e-4f));
@@ -118,10 +119,11 @@ namespace DCNewsprint
 		for (int32 i = 0; i < In.Num(); ++i)
 		{
 			const FLinearColor& C = In[i];
-			auto Ch = [Gain, White](float V)
+			const bool bLinear = T.bSceneLinear;
+			auto Ch = [Gain, White, bLinear](float V)
 			{
-				// Decode, gain, shoulder (Reinhard with a white point: 1 at White), encode.
-				const float Lin = FMath::Pow(FMath::Clamp(V, 0.f, 1.f), 2.2f) * Gain;
+				// Decode (LDR source only), gain, shoulder (Reinhard with a white point: 1 at White), encode.
+				const float Lin = (bLinear ? FMath::Max(V, 0.f) : FMath::Pow(FMath::Clamp(V, 0.f, 1.f), 2.2f)) * Gain;
 				const float Mapped = Lin * (1.f + Lin / (White * White)) / (1.f + Lin);
 				return static_cast<uint8>(FMath::Clamp(FMath::RoundToInt(255.f * FMath::Pow(FMath::Clamp(Mapped, 0.f, 1.f), 1.f / 2.2f)), 0, 255));
 			};

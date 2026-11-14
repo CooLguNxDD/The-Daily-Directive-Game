@@ -83,7 +83,7 @@ ADCReelDirector::ADCReelDirector()
 	TakeCapture->SetupAttachment(Camera);
 	TakeCapture->bCaptureEveryFrame = false;
 	TakeCapture->bCaptureOnMovement = false;
-	TakeCapture->CaptureSource = ESceneCaptureSource::SCS_FinalColorLDR;
+	TakeCapture->CaptureSource = ESceneCaptureSource::SCS_FinalColorLDR; // set per shot from Print.bSceneLinear
 	Puppet = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("Puppet"));
 	Puppet->SetupAttachment(RootComponent);
 	Puppet->SetUsingAbsoluteLocation(true);
@@ -409,6 +409,7 @@ void ADCReelDirector::SnapSecondTake()
 	const FDCCameraTuning& C = UDCTuning::Get().Camera;
 	UTextureRenderTarget2D* Image = UKismetRenderingLibrary::CreateRenderTarget2D(this, C.PhotoWidth, C.PhotoHeight, RTF_RGBA16f); // float: the print meter has range (advisor CP21)
 	TakeCapture->TextureTarget = Image;
+	TakeCapture->CaptureSource = C.Print.bSceneLinear ? ESceneCaptureSource::SCS_FinalColorHDR : ESceneCaptureSource::SCS_FinalColorLDR; // advisor CP28
 	TakeCapture->FOVAngle = Camera->FieldOfView;
 	ADCCharacter::ApplyPhotoLook(GetWorld(), TakeCapture->PostProcessSettings, false);
 	TakeCapture->PostProcessBlendWeight = 1.f;

@@ -250,7 +250,8 @@ void ADCHUD::DrawFlashes(ADCGameState& GS, ADCCharacter& Me)
 	}
 	if (Me.IsSpotlit())
 	{
-		Box(0, 0, W, H, FLinearColor(1.f, 1.f, 0.95f, 0.35f + 0.1f * FMath::Sin(RealNow * 20.f)));
+		const FLinearColor& Veil = FlashLook.SpotlitVeil; // data (was a 0.35-0.45 white fill: the grey veil)
+		Box(0, 0, W, H, FLinearColor(Veil.R, Veil.G, Veil.B, FMath::Max(0.f, Veil.A + FlashLook.SpotlitVeilPulse * FMath::Sin(RealNow * UE_TWO_PI * FlashLook.SpotlitVeilHz))));
 		Text(TEXT("SPOTLIGHT! EXPOSURE BLOWN - SHOOT THE LIGHT"), W * 0.5f, H * 0.3f, Red, 1.1f, true);
 	}
 }

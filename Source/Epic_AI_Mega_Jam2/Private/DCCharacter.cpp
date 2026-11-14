@@ -92,7 +92,7 @@ ADCCharacter::ADCCharacter()
 	Capture->SetupAttachment(FirstCam);
 	Capture->bCaptureEveryFrame = false;
 	Capture->bCaptureOnMovement = false;
-	Capture->CaptureSource = ESceneCaptureSource::SCS_FinalColorLDR;
+	Capture->CaptureSource = ESceneCaptureSource::SCS_FinalColorLDR; // set per shot from Print.bSceneLinear
 
 	auto MakeProp = [this](const TCHAR* Name)
 	{
@@ -889,6 +889,7 @@ void ADCCharacter::TakePhoto()
 
 	UTextureRenderTarget2D* Photo = UKismetRenderingLibrary::CreateRenderTarget2D(this, C.PhotoWidth, C.PhotoHeight, RTF_RGBA16f); // float: the print meter has range (advisor CP21)
 	Capture->TextureTarget = Photo;
+	Capture->CaptureSource = C.Print.bSceneLinear ? ESceneCaptureSource::SCS_FinalColorHDR : ESceneCaptureSource::SCS_FinalColorLDR; // advisor CP28
 	Capture->FOVAngle = LensFOV();
 	ApplyPhotoLook(GetWorld(), Capture->PostProcessSettings, IsSpotlit());
 	Capture->PostProcessBlendWeight = 1.f;

@@ -323,6 +323,12 @@ struct FDCLookTuning
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float CoreFlareHeightCm = 250.f;
 	/** Closer than this the core flare scales down with distance (never under 15 %). */
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float CoreFlareNearCm = 2500.f;
+	/** Spotlit glare on screen (critic V33.1/V34.1 "grey veil"): a warm glare box at SpotlitVeil.A opacity, pulsing by
+	 *  SpotlitVeilPulse at SpotlitVeilHz. A flat fill lifts every black, so it stays faint; the print's blow-out is the
+	 *  photo-only Spotlit post layer. */
+	UPROPERTY(EditAnywhere, Config, Category = "Look") FLinearColor SpotlitVeil = FLinearColor(1.f, 0.97f, 0.85f, 0.12f);
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float SpotlitVeilPulse = 0.04f;
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float SpotlitVeilHz = 3.2f;
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float FireCubeNearFadeCm = 0.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Look") bool bFireCubesUnlit = false;
 	/** The blast's colour at the first instant (white-gold) and once it cools (orange), then the ember it fades to. */
