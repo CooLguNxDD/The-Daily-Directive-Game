@@ -1,6 +1,7 @@
 #include "DCOrbitalStrike.h"
 
 #include "Camera/PlayerCameraManager.h"
+#include "Engine/Engine.h"
 #include "Components/InstancedStaticMeshComponent.h"
 #include "Components/PointLightComponent.h"
 #include "Components/StaticMeshComponent.h"
@@ -246,7 +247,7 @@ void ADCOrbitalStrike::DetonateLocal(const FDCStratagemDef& Def)
 	const FDCLookTuning& BlastLook = UDCTuning::Get().Look;
 	const FVector Here = GetActorLocation();
 	FVector Away = FVector::ZeroVector;
-	if (const APlayerController* ViewPC = UGameplayStatics::GetPlayerController(this, 0))
+	if (const APlayerController* ViewPC = GEngine->GetFirstLocalPlayerController(GetWorld()))
 	{
 		FVector Eye;
 		FRotator EyeRot;
@@ -262,7 +263,7 @@ void ADCOrbitalStrike::DetonateLocal(const FDCStratagemDef& Def)
 	FillLight->SetLightColor(BlastLook.Fire);
 	FillLight->SetAttenuationRadius(FMath::Max(Def.BlastRadius * (BlastLook.BlastFillOffset + 1.5f), 1500.f));
 	float Proximity = 0.4f;
-	if (APlayerController* PC = UGameplayStatics::GetPlayerController(this, 0))
+	if (APlayerController* PC = GEngine->GetFirstLocalPlayerController(GetWorld()))
 	{
 		FVector ViewLoc;
 		FRotator ViewRot;
@@ -327,7 +328,7 @@ void ADCOrbitalStrike::TickBlast(float Now, const FDCStratagemDef& Def)
 		const float CoreU = FMath::Clamp(T / FMath::Max(Look.CoreFlareSeconds, 0.01f), 0.f, 1.f);
 		// Near the lens the core shrinks (a 1.8 m sphere a few metres away read as a flat white dome: critic V20.2).
 		float Near = 1.f;
-		if (const APlayerController* ViewPC = UGameplayStatics::GetPlayerController(this, 0))
+		if (const APlayerController* ViewPC = GEngine->GetFirstLocalPlayerController(GetWorld()))
 		{
 			FVector CoreEye;
 			FRotator CoreEyeRot;
