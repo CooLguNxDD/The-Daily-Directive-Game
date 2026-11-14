@@ -1082,7 +1082,7 @@ void ADCVoxelCity::QueueShards(const FDCVoxelOp& Op, const FDCVoxelOpResult& Res
 		D.AngularVelocityDeg = Rng.VRand() * 720.f;
 		const FColor Col = Colors.IsValidIndex(C.Mat) ? Colors[C.Mat] : FColor(30, 30, 40, 0);
 		D.Color = FLinearColor::FromSRGBColor(FColor(Col.R, Col.G, Col.B, 255));
-		D.Glow = Col.A / 255.f * GlowScale;
+		D.Glow = Col.A / 255.f * GlowScale * Tn.ShardGlowScale;
 		D.LifeSeconds = Tn.ShardLifeSeconds * Rng.FRandRange(0.7f, 1.2f);
 		Burst.Spawns.Add(D);
 	}
