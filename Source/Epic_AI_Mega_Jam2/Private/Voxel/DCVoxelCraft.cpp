@@ -2,6 +2,7 @@
 
 #include "Voxel/DCVoxelWorld.h"
 #include "Voxel/DCVoxelOps.h"
+#include "Voxel/DCVoxelModel.h"
 #include "Async/ParallelFor.h"
 #include "Rules/DCPcg.h"
 
@@ -281,6 +282,93 @@ namespace
 		Sign.BackMax = B0.ComponentMax(B1) + FIntVector(1, 1, 1);
 		Sign.BackCells = (S.U1 - S.U0) * (S.Z1 - S.Z0);
 	}
+	/** What a mount needs to place a building attachment (R2 props). */
+	struct FMountCtx
+	{
+		FDCVoxelWorld& World;
+		/** The frame of every floor (setbacks applied) and the roof slab's z. */
+		const TArray<FFaceFrame>& FloorFrames;
+		int32 RoofZ = 0;
+		int32 Bay = 1;
+		int32 Vcm = 10;
+		int32 Unit = 1;
+		const FDCVoxelCraftContext& Ctx;
+	};
+
+	/** Outward face (-X, +X, -Y, +Y) -> quarter turns that point a model's +x out of it. */
+	constexpr int32 MountFaceTurns[4] = {2, 0, 3, 1};
+
+	/** A model's size in tower voxels (x forward, y across, z up). */
+	FIntVector ModelVox(const FDCVoxelModel& M, int32 Vcm)
+	{
+		return FIntVector(FMath::Max(1, M.Size.X * M.GridCm / Vcm), FMath::Max(1, M.Size.Y * M.GridCm / Vcm), FMath::Max(1, M.Size.Z * M.GridCm / Vcm));
+	}
+
+	/** Mount registry (R2 props, rule 3): mount id -> how an attachment sits on its tower, and how far it reaches out of
+	 *  the footprint (the tower grid's margin grows to hold it). Stamp returns the top z written + 1 (0 = skipped). */
+	struct FMount
+	{
+		int32 (*Stamp)(const FMountCtx& C, const FDCVoxelModel& M, const FDCAttachPlan& A);
+		int32 (*Reach)(const FDCVoxelModel& M, int32 Vcm);
+	};
+	const TMap<FName, FMount>& Mounts()
+	{
+		static const TMap<FName, FMount> Table = {
+			// On the roof deck inside the parapet, never over what the roof builder put there (stair hut, mast).
+			{TEXT("Roof"), {[](const FMountCtx& C, const FDCVoxelModel& M, const FDCAttachPlan& A)
+				{
+					const FFaceFrame& F = C.FloorFrames.Last();
+					const FIntVector S = ModelVox(M, C.Vcm);
+					const bool bSide = (A.Face & 1) != 0;
+					const int32 Hx = (bSide ? S.Y : S.X) / 2 + C.Unit + 1;
+					const int32 Hy = (bSide ? S.X : S.Y) / 2 + C.Unit + 1;
+					const int32 X0 = F.Min.X + Hx, X1 = F.Max.X - Hx;
+					const int32 Y0 = F.Min.Y + Hy, Y1 = F.Max.Y - Hy;
+					if (X1 < X0 || Y1 < Y0)
+					{
+						return 0; // the deck is too small for it
+					}
+					const FIntVector Base(X0 + FMath::RoundToInt32(A.U * (X1 - X0)), Y0 + FMath::RoundToInt32(A.V * (Y1 - Y0)), C.RoofZ + 1);
+					return DCVoxelCraft::StampModel(C.World, M, C.Vcm, Base, A.Face, C.Ctx, true);
+				},
+				[](const FDCVoxelModel&, int32) { return 0; }}},
+			// At the deck edge of face Face, inside the parapet, facing out over the street (rooftop billboards).
+			{TEXT("RoofEdge"), {[](const FMountCtx& C, const FDCVoxelModel& M, const FDCAttachPlan& A)
+				{
+					const FFaceFrame& F = C.FloorFrames.Last();
+					const FIntVector S = ModelVox(M, C.Vcm);
+					const int32 Face = ((A.Face % 4) + 4) % 4;
+					const int32 Len = F.Length(Face);
+					const int32 Half = S.Y / 2 + 1;
+					const int32 Depth = C.Unit + 1 + S.X / 2;
+					if (Len < 2 * Half + 2 || F.Length(Face ^ 2) < 2 * Depth + 2)
+					{
+						return 0;
+					}
+					const int32 U = FMath::Clamp(FMath::RoundToInt32(A.U * Len), Half, Len - Half);
+					return DCVoxelCraft::StampModel(C.World, M, C.Vcm, F.Cell(Face, Depth, U, C.RoofZ + 1), MountFaceTurns[Face], C.Ctx, true);
+				},
+				[](const FDCVoxelModel&, int32) { return 0; }}},
+			// On a facade at V floors up, back against the wall (model x = 0 one voxel proud), along the face at U.
+			{TEXT("Wall"), {[](const FMountCtx& C, const FDCVoxelModel& M, const FDCAttachPlan& A)
+				{
+					const int32 Floors = C.FloorFrames.Num();
+					const int32 Z = FMath::Clamp(FMath::RoundToInt32(A.V * C.Bay), 1, Floors * C.Bay - 1);
+					const FFaceFrame& F = C.FloorFrames[FMath::Clamp(Z / C.Bay, 0, Floors - 1)];
+					const int32 Face = ((A.Face % 4) + 4) % 4;
+					const int32 Len = F.Length(Face);
+					const int32 Half = ModelVox(M, C.Vcm).Y / 2 + 1;
+					if (Len < 2 * Half + 2)
+					{
+						return 0;
+					}
+					const int32 U = FMath::Clamp(FMath::RoundToInt32(A.U * Len), Half, Len - Half);
+					return DCVoxelCraft::StampModel(C.World, M, C.Vcm, F.Cell(Face, -1, U, Z), MountFaceTurns[Face], C.Ctx, true);
+				},
+				[](const FDCVoxelModel& M, int32 Vcm) { return ModelVox(M, Vcm).X + 1; }}},
+		};
+		return Table;
+	}
 }
 
 namespace DCVoxelCraft
@@ -340,7 +428,13 @@ namespace DCVoxelCraft
 		}
 		const int32 Vcm = FMath::Max(1, Ctx.Tuning->TowerVoxelCm);
 		const int32 B = FMath::Max(6, Ctx.BayCm / Vcm);
-		const int32 Margin = FMath::Max3(3, 60 / Vcm, R->SignDepthVox + 2); // room for trim, signs and the bite's outer edge
+		int32 Margin = FMath::Max3(3, 60 / Vcm, R->SignDepthVox + 2); // room for trim, signs and the bite's outer edge
+		for (const FDCAttachPlan& A : Lot.Attach) // and for wall mounts standing out of the facade (R2 props)
+		{
+			const FDCVoxelModel* const* M = Ctx.Models.Find(A.Model);
+			const FMount* Mount = Mounts().Find(A.Mount);
+			Margin = (M && *M && Mount) ? FMath::Max(Margin, Mount->Reach(**M, Vcm) + 2) : Margin;
+		}
 		Tower.Grid.Data.Reset();
 		Tower.Signs.Reset();
 		Tower.Grid.VoxelCm = Vcm;
@@ -374,6 +468,7 @@ namespace DCVoxelCraft
 		const int32 Lintel = R->LintelCm > 0 ? FMath::Max(1, R->LintelCm / Vcm) : 0;
 
 		FFaceFrame Frame{Tower.Min, Tower.Max};
+		TArray<FFaceFrame> FloorFrames;
 		int32 Top = 0;
 		for (int32 Floor = 0; Floor < Lot.Spec.Floors; ++Floor)
 		{
@@ -385,6 +480,7 @@ namespace DCVoxelCraft
 				F = Frame; // never step in past two bays
 			}
 			Frame = F;
+			FloorFrames.Add(F);
 			const int32 Z0 = Floor * B;
 			// Floor slab (structure), then the walls of this floor.
 			World.FillBox(FIntVector(F.Min.X, F.Min.Y, Z0), FIntVector(F.Max.X, F.Max.Y, Z0 + 1), Ids.Slab);
@@ -450,7 +546,22 @@ namespace DCVoxelCraft
 		World.FillBox(FIntVector(Frame.Min.X, Frame.Min.Y, Top), FIntVector(Frame.Max.X, Frame.Max.Y, Top + 1), Ids.Slab);
 		RingLayer(World, Frame, Top, 0, Ids.Wall);
 		const FRoofFn* Roof = Roofs().Find(R->Roof);
-		const int32 RoofTop = (Roof ? *Roof : Roofs()[TEXT("Flat")])(World, Frame, Top, Ids, Rng);
+		int32 RoofTop = (Roof ? *Roof : Roofs()[TEXT("Flat")])(World, Frame, Top, Ids, Rng);
+
+		// Roof clutter and wall mounts (R2 props) in the tower's own grid: they fall and shatter with it.
+		if (FloorFrames.Num() > 0)
+		{
+			const FMountCtx MountCtx{World, FloorFrames, Top, B, Vcm, Ids.Unit, Ctx};
+			for (const FDCAttachPlan& A : Lot.Attach)
+			{
+				const FDCVoxelModel* const* M = Ctx.Models.Find(A.Model);
+				const FMount* Mount = Mounts().Find(A.Mount);
+				if (M && *M && Mount)
+				{
+					RoofTop = FMath::Max(RoofTop, Mount->Stamp(MountCtx, **M, A));
+				}
+			}
+		}
 
 		const FFaceFrame Full{Tower.Min, Tower.Max};
 		for (int32 Face = 0; Face < 4; ++Face)

@@ -149,7 +149,7 @@ FDCCityPlan ADCVoxelCity::PlanSector(int32 RunSeed, int32 SectorIndex)
 		// The city builder (R16) when the sector has a district row; recipes on the block grid otherwise.
 		if (const FDCDistrictRule* D = V.District(SectorIndex))
 		{
-			return DCVoxelCraft::PlanDistrict(Seed, *D, V.RuleSet(D->Rules), V.RuleSet(D->Props), V.SectorLayout(SectorIndex), V.Recipes, T.City.BlockSizeCm);
+			return DCVoxelCraft::PlanDistrict(Seed, *D, V.RuleSet(D->Rules), V.RuleSet(D->Props), V.SectorLayout(SectorIndex), V.Recipes, T.City.BlockSizeCm, V.PropLayers);
 		}
 		FDCCityPlan Plan = DCCityRules::PlanCity(Seed, T.City, T.Look.BuildingColors.Num());
 		DCVoxelCraft::ApplyRecipes(Plan, V.SectorLayout(SectorIndex), V.Recipes, FMath::FloorToInt(T.City.LotSizeCm / T.City.BlockSizeCm));
@@ -647,12 +647,9 @@ void ADCVoxelCity::Build(int32 RunSeed, int32 SectorIndex, int32 BuildId, bool b
 		}
 	}
 	FDCVoxelCraftContext Craft = V.CraftContext(T.City.BlockSizeCm);
-	for (const FDCPropPlan& Prop : Plan.Props)
+	for (const FName& Model : DCVoxelCraft::PlanModels(Plan)) // props and building attachments (R2)
 	{
-		if (!Craft.Models.Contains(Prop.Model))
-		{
-			Craft.Models.Add(Prop.Model, DCVoxelModels::Parsed(Prop.Model)); // file reads stay on the game thread
-		}
+		Craft.Models.Add(Model, DCVoxelModels::Parsed(Model)); // file reads stay on the game thread
 	}
 	const FDCSeasonDef* Season = SeasonFor(RunSeed, SectorIndex);
 	const float SnowCover = Season ? Season->SnowCover : -1.f;
