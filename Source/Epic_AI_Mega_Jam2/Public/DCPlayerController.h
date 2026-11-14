@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Rules/DCOutfit.h"
 #include "GameFramework/PlayerController.h"
 #include "DCPhotoProbe.h"
 #include "DCTypes.h"
@@ -55,9 +56,18 @@ public:
 	/** -dcmenuflow=<dir>: frames the title menu, moves the real cursor onto SOLO RUN, clicks it with Slate mouse events
 	 *  (the same path as a player), and frames the travel and the first street, then quits (menu evidence). */
 	void TickMenuFlow();
+	void TickBuilderFlow();
 	/** Front page (R24): this player's own printed picks and the page itself go into the saved photo album, once. */
 	void TickAlbum();
 	bool bAlbumSaved = false;
+	bool bOutfitSent = false;
+	bool bBuilderOpen = false;
+	FDCOutfit BuilderOutfit;
+	int32 BuilderSlot = 0;
+	FString BuilderMessage;
+	UPROPERTY() TObjectPtr<class ADCOutfitPreview> OutfitPreview;
+	/** Stores the builder's outfit in its save slot and rebuilds the preview and the menu. */
+	void BuilderChanged(const FString& Message);
 	TArray<float> PerfFrameMs;
 	double PerfWindowStart = 0.0;
 	int32 PerfMaxFalling = 0;
@@ -116,6 +126,26 @@ private:
 	void Reassemble(int32 PhotoId, int32 Index, int32 Count, const TArray<uint8>& Bytes, bool bOnHost);
 
 	UFUNCTION(Server, Reliable) void ServerStartRun();
+	/** R23: the client's outfit share code; the host decodes it (untrusted text) and stores the canonical code. */
+	UFUNCTION(Server, Reliable) void ServerSetOutfit(const FString& Code);
+public:
+	/** Sends the active saved outfit (or the default) to the host. */
+	void SendOutfit();
+
+	// Photographer builder (R23), a title-menu screen with a live turntable; saves through the save manager (R24).
+	void OpenBuilder();
+	void CloseBuilder();
+	void BuilderCycle(int32 SlotIndex, int32 Step);
+	void BuilderSwatch(bool bMain, int32 Step);
+	void BuilderSelectSlot(int32 Slot);
+	void BuilderImport(const FString& Code);
+	void BuilderCopyCode();
+	bool IsBuilderOpen() const { return bBuilderOpen; }
+	const FDCOutfit& GetBuilderOutfit() const { return BuilderOutfit; }
+	int32 GetBuilderSlot() const { return BuilderSlot; }
+	const FString& GetBuilderMessage() const { return BuilderMessage; }
+	class UTextureRenderTarget2D* GetBuilderImage() const;
+private:
 	UFUNCTION(Server, Reliable) void ServerRestartRun();
 	UFUNCTION(Server, Reliable) void ServerPickUpgrade(FName Id);
 	UFUNCTION(Server, Reliable) void ServerSubmitFinalCut(const TArray<int32>& PhotoIds);

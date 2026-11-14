@@ -1,0 +1,13 @@
+# Outfit body: photographer's vest over the torso, accent pockets (R23). Hollow, worn around spine_03.
+name outfit_vest
+grid 2
+size 20 24 26
+slot cloth SwatchMain
+slot pocket SwatchAccent
+shell 0 0 0 20 24 26 2 cloth
+carve box 2 2 0 18 22 26
+carve box 6 0 22 14 24 26
+box 18 3 6 20 9 12 pocket
+box 18 15 6 20 21 12 pocket
+box 18 4 14 20 8 18 pocket
+pivot 10 12 0

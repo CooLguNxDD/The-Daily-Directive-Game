@@ -1,0 +1,10 @@
+# Outfit head: flat newsboy cap, main swatch crown, accent brim (R23).
+name outfit_cap
+grid 2
+size 16 14 7
+slot crown SwatchMain
+slot brim SwatchAccent
+ellipsoid 7 7 2 7 6 3 crown
+carve box 0 0 0 16 14 2
+box 11 3 2 16 11 3 brim
+pivot 7 7 0

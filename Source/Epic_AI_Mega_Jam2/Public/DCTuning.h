@@ -9,6 +9,7 @@
 #include "Rules/DCPhotoRules.h"
 #include "Rules/DCPressureRules.h"
 #include "Rules/DCNewsprint.h"
+#include "Rules/DCOutfit.h"
 #include "Rules/DCPostStack.h"
 #include "Rules/DCRunRules.h"
 #include "Rules/DCWeather.h"
@@ -463,6 +464,9 @@ struct FDCRunTuning
 	/** Photo album (R24): entries kept on disk (the oldest drop first), and how many front-page picks each run adds. */
 	UPROPERTY(EditAnywhere, Config, Category = "Run") int32 AlbumMaxEntries = 60;
 	UPROPERTY(EditAnywhere, Config, Category = "Run") int32 AlbumPicksPerRun = 3;
+	/** Photographer builder (R23): save slots, and where the turntable stands (high above the city, alone in shot). */
+	UPROPERTY(EditAnywhere, Config, Category = "Run") int32 CharacterSlots = 3;
+	UPROPERTY(EditAnywhere, Config, Category = "Run") FVector PreviewLocation = FVector(0.f, 0.f, 30000.f);
 	UPROPERTY(EditAnywhere, Config, Category = "Run") float ScoopFirstSeconds = 35.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Run") float ScoopGapSeconds = 20.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Run") int32 PodFilm = 4;
@@ -502,6 +506,10 @@ public:
 	UPROPERTY(EditAnywhere, Config, Category = "Input") TArray<FDCKeyBinding> Bindings;
 	UPROPERTY(EditAnywhere, Config, Category = "Run") FDCRunTuning Run;
 	UPROPERTY(EditAnywhere, Config, Category = "Run") TArray<FDCUpgradeDef> Upgrades;
+	/** Photographer builder (R23): the slots in recipe order, the parts per slot, and the palette swatches. */
+	UPROPERTY(EditAnywhere, Config, Category = "Outfit") TArray<FName> OutfitSlots;
+	UPROPERTY(EditAnywhere, Config, Category = "Outfit") TArray<FDCOutfitPart> OutfitParts;
+	UPROPERTY(EditAnywhere, Config, Category = "Outfit") TArray<FDCOutfitSwatch> OutfitSwatches;
 	UPROPERTY(EditAnywhere, Config, Category = "Run") TArray<FDCScoopDef> Scoops;
 	/** Full edition front page (R22): satirical headline rows per photo category. */
 	UPROPERTY(EditAnywhere, Config, Category = "Run") TArray<FDCHeadlineRow> HeadlineRows;

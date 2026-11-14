@@ -1,4 +1,5 @@
 #include "DCCharacter.h"
+#include "DCOutfitBuild.h"
 
 #include "DCVoxelCity.h"
 
@@ -898,6 +899,30 @@ void ADCCharacter::ServerSubmitPhoto_Implementation(int32 PhotoId, FVector_NetQu
 		FMath::Clamp(ShotTime, T - ShotClockToleranceSeconds, T), bLast, GetWorld()->GetRealTimeSeconds() + C.GradeWaitForOpSeconds);
 }
 
+void ADCCharacter::TickOutfit()
+{
+	const ADCPlayerState* PS = GetPlayerState<ADCPlayerState>();
+	if (!PS || PS->OutfitCode.IsEmpty() || PS->OutfitCode == AppliedOutfit)
+	{
+		return;
+	}
+	AppliedOutfit = PS->OutfitCode;
+	// The outfit's camera replaces the default chest camera (same rule: shown while the camera is not in hand).
+	UProceduralMeshComponent* Cam = DCOutfitBuild::Apply(GetMesh(), DCOutfitBuild::FromCode(AppliedOutfit), OutfitMeshes);
+	if (ChestCam && Cam)
+	{
+		ChestCam->DestroyComponent();
+	}
+	if (Cam)
+	{
+		ChestCam = Cam;
+	}
+	if (ChestCam)
+	{
+		ChestCam->SetVisibility(Slot != EDCSlot::Camera);
+	}
+}
+
 void ADCCharacter::SetBase(FMovementBaseInterfaceData* MovementBaseInterfaceData, const FName BoneName, bool bNotifyActor)
 {
 	const UActorComponent* Base = MovementBaseInterfaceData ? Cast<UActorComponent>(MovementBaseInterfaceData->GetMovementBaseObject()) : nullptr;
@@ -1299,6 +1324,8 @@ void ADCCharacter::UpdateView(float DeltaSeconds)
 	const FRotator Jitter(FMath::PerlinNoise1D(T * 23.f) * 4.f * Shake, FMath::PerlinNoise1D(T * 19.f + 7.f) * 4.f * Shake, FMath::PerlinNoise1D(T * 17.f + 3.f) * 3.f * Shake);
 	ThirdCam->SetRelativeRotation(Jitter);
 	FirstCam->SetRelativeRotation(Jitter * 0.6f);
+
+	TickOutfit();
 
 	// Landing spring and sprint FOV kick (Saltline feel, R9), from the move tuning.
 	const FDCMoveTuning& M = UDCTuning::Get().Move;

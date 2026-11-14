@@ -170,6 +170,10 @@ private:
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UStaticMeshComponent> PhotoCamMesh;
 	/** The forge-made press camera on the chest (voxel model), hidden while the camera is in hand. */
 	UPROPERTY() TObjectPtr<class UProceduralMeshComponent> ChestCam;
+	/** R23: the worn outfit parts, rebuilt when the player state's share code changes. */
+	UPROPERTY() TArray<TObjectPtr<class UProceduralMeshComponent>> OutfitMeshes;
+	FString AppliedOutfit;
+	void TickOutfit();
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UStaticMeshComponent> BeaconMesh;
 	UPROPERTY(VisibleAnywhere) TObjectPtr<class UInstancedStaticMeshComponent> StrikeMarker;
 	float StrikeMarkerRadius = -1.f;

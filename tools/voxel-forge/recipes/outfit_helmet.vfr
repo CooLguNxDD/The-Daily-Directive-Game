@@ -1,0 +1,12 @@
+# Outfit head: steel war-correspondent helmet with an accent band and a PRESS card in paper (R23).
+name outfit_helmet
+grid 2
+size 16 16 9
+slot shell SwatchMain
+slot band SwatchAccent
+slot card Paper
+ellipsoid 8 8 2 8 8 6 shell
+carve box 0 0 0 16 16 2
+box 1 1 2 15 15 3 band
+box 14 6 4 16 10 7 card
+pivot 8 8 0

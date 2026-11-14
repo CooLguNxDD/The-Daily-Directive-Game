@@ -1,0 +1,14 @@
+# Outfit camera: a boxy reportage camera with a big flash gun (signal yellow: a thing the player uses) (R23).
+name outfit_boxcam
+grid 2
+size 14 12 18
+slot body Ink
+slot lens Steel
+slot flash Signal
+slot trim SwatchAccent
+box 2 1 1 10 11 10 body
+box 2 1 10 10 11 11 trim
+beam 10 6 5 14 6 5 2 lens
+beam 6 9 11 6 9 15 1 lens
+box 3 6 15 10 12 18 flash
+pivot 6 6 0

@@ -37,6 +37,7 @@ void ADCPlayerState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLi
 	DOREPLIFETIME(ADCPlayerState, bFinalCutDone);
 	DOREPLIFETIME(ADCPlayerState, VotedFor);
 	DOREPLIFETIME(ADCPlayerState, CallSign);
+	DOREPLIFETIME(ADCPlayerState, OutfitCode);
 }
 
 void ADCPlayerState::BeginPlay()

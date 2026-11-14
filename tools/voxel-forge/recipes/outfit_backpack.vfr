@@ -1,0 +1,11 @@
+# Outfit gear: field backpack with an accent flap and a rolled bedroll in paper (R23).
+name outfit_backpack
+grid 2
+size 10 16 18
+slot pack SwatchMain
+slot flap SwatchAccent
+slot roll Paper
+box 0 1 0 8 15 14 pack
+box 0 1 10 9 15 14 flap
+beam 3 0 16 3 16 16 2 roll
+pivot 9 8 6

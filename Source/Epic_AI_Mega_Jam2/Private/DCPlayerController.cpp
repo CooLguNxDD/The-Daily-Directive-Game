@@ -1,4 +1,8 @@
 #include "DCPlayerController.h"
+#include "HAL/PlatformApplicationMisc.h"
+#include "DCOutfitBuild.h"
+#include "DCOutfitPreview.h"
+#include "Rules/DCOutfit.h"
 #include "DCSave.h"
 #include "RenderTimer.h"
 #include "Framework/Application/SlateApplication.h"
@@ -133,6 +137,135 @@ void ADCPlayerController::SetSensitivity(float Value)
 	}
 }
 
+void ADCPlayerController::SendOutfit()
+{
+	const UDCTuning& T = UDCTuning::Get();
+	FString Code = DCOutfit::Encode(DCOutfit::Default(T.OutfitSlots));
+	if (const UDCSaveSubsystem* Save = UDCSaveSubsystem::Get(this))
+	{
+		if (Save->Characters.Slots.IsValidIndex(Save->Characters.ActiveSlot))
+		{
+			Code = Save->Characters.Slots[Save->Characters.ActiveSlot];
+		}
+	}
+	ServerSetOutfit(Code);
+}
+
+void ADCPlayerController::ServerSetOutfit_Implementation(const FString& Code)
+{
+	const UDCTuning& T = UDCTuning::Get();
+	FDCOutfit Outfit;
+	FString Error;
+	if (!DCOutfit::Decode(Code, T.OutfitSlots, T.OutfitParts, T.OutfitSwatches.Num(), Outfit, Error))
+	{
+		UE_LOG(LogTemp, Display, TEXT("DCOUTFIT rejected '%s': %s (default kept)"), *Code.Left(40), *Error);
+		Outfit = DCOutfit::Default(T.OutfitSlots);
+	}
+	if (ADCPlayerState* PS = GetPlayerState<ADCPlayerState>())
+	{
+		PS->SetOutfitCode(DCOutfit::Encode(Outfit));
+		UE_LOG(LogTemp, Display, TEXT("DCOUTFIT %s wears %s"), *PS->GetPlayerName(), *PS->OutfitCode);
+	}
+}
+
+void ADCPlayerController::OpenBuilder()
+{
+	UDCSaveSubsystem* Save = UDCSaveSubsystem::Get(this);
+	BuilderSlot = Save ? FMath::Clamp(Save->Characters.ActiveSlot, 0, UDCTuning::Get().Run.CharacterSlots - 1) : 0;
+	BuilderSelectSlot(BuilderSlot);
+	if (!OutfitPreview)
+	{
+		FActorSpawnParameters Params;
+		Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+		OutfitPreview = GetWorld()->SpawnActor<ADCOutfitPreview>(ADCOutfitPreview::StaticClass(), FTransform(UDCTuning::Get().Run.PreviewLocation), Params);
+	}
+	bBuilderOpen = true;
+	BuilderChanged(TEXT(""));
+}
+
+void ADCPlayerController::CloseBuilder()
+{
+	bBuilderOpen = false;
+	if (OutfitPreview)
+	{
+		OutfitPreview->Destroy();
+		OutfitPreview = nullptr;
+	}
+	MenuMode = 254; // rebuild the main menu
+}
+
+UTextureRenderTarget2D* ADCPlayerController::GetBuilderImage() const
+{
+	return OutfitPreview ? OutfitPreview->GetImage() : nullptr;
+}
+
+void ADCPlayerController::BuilderSelectSlot(int32 Slot)
+{
+	const UDCTuning& T = UDCTuning::Get();
+	BuilderSlot = FMath::Clamp(Slot, 0, FMath::Max(T.Run.CharacterSlots, 1) - 1);
+	UDCSaveSubsystem* Save = UDCSaveSubsystem::Get(this);
+	const FString Code = Save && Save->Characters.Slots.IsValidIndex(BuilderSlot) ? Save->Characters.Slots[BuilderSlot] : FString();
+	BuilderOutfit = Code.IsEmpty() ? DCOutfit::Default(T.OutfitSlots) : DCOutfitBuild::FromCode(Code);
+	if (bBuilderOpen)
+	{
+		BuilderChanged(FString::Printf(TEXT("SLOT %d"), BuilderSlot + 1));
+	}
+}
+
+void ADCPlayerController::BuilderCycle(int32 SlotIndex, int32 Step)
+{
+	const UDCTuning& T = UDCTuning::Get();
+	DCOutfit::Cycle(BuilderOutfit, SlotIndex, Step, T.OutfitSlots, T.OutfitParts);
+	BuilderChanged(TEXT(""));
+}
+
+void ADCPlayerController::BuilderSwatch(bool bMain, int32 Step)
+{
+	const int32 Count = FMath::Max(UDCTuning::Get().OutfitSwatches.Num(), 1);
+	uint8& Which = bMain ? BuilderOutfit.Main : BuilderOutfit.Accent;
+	Which = static_cast<uint8>(((Which + Step) % Count + Count) % Count);
+	BuilderChanged(TEXT(""));
+}
+
+void ADCPlayerController::BuilderImport(const FString& Code)
+{
+	const UDCTuning& T = UDCTuning::Get();
+	FDCOutfit Loaded;
+	FString Error;
+	if (!DCOutfit::Decode(Code, T.OutfitSlots, T.OutfitParts, T.OutfitSwatches.Num(), Loaded, Error))
+	{
+		BuilderMessage = FString::Printf(TEXT("CODE NOT LOADED: %s"), *Error.ToUpper());
+		MenuMode = 254;
+		return;
+	}
+	BuilderOutfit = Loaded;
+	BuilderChanged(TEXT("FRIEND'S CODE LOADED"));
+}
+
+void ADCPlayerController::BuilderCopyCode()
+{
+	FPlatformApplicationMisc::ClipboardCopy(*DCOutfit::Encode(BuilderOutfit));
+	BuilderMessage = TEXT("CODE COPIED");
+	MenuMode = 254;
+}
+
+void ADCPlayerController::BuilderChanged(const FString& Message)
+{
+	BuilderMessage = Message;
+	if (UDCSaveSubsystem* Save = UDCSaveSubsystem::Get(this))
+	{
+		Save->Characters.Slots.SetNum(FMath::Max(Save->Characters.Slots.Num(), BuilderSlot + 1));
+		Save->Characters.Slots[BuilderSlot] = DCOutfit::Encode(BuilderOutfit);
+		Save->Characters.ActiveSlot = BuilderSlot;
+		Save->SaveCharacters();
+	}
+	if (OutfitPreview)
+	{
+		OutfitPreview->Show(BuilderOutfit);
+	}
+	MenuMode = 254; // the menu rebuilds with the new names and code
+}
+
 void ADCPlayerController::TickAlbum()
 {
 	const ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>();
@@ -229,6 +362,39 @@ void ADCPlayerController::TickPerf()
 	PerfWindowStart = Now;
 }
 
+void ADCPlayerController::TickBuilderFlow()
+{
+	// -dcbuilderflow=<dir>: open the photographer builder, step parts and swatches, load a share code; a frame each.
+	static FString Dir;
+	static const bool bFlow = FParse::Value(FCommandLine::Get(), TEXT("dcbuilderflow="), Dir);
+	if (!bFlow)
+	{
+		return;
+	}
+	static int32 Step = 0;
+	const double T = FPlatformTime::Seconds() - GStartTime;
+	auto Shot = [](const FString& Name) { FScreenshotRequest::RequestScreenshot(Dir / Name, true, false); };
+	const TArray<TPair<double, TFunction<void()>>> Steps = {
+		{5.0, [this]() { OpenBuilder(); }},
+		{7.0, [&]() { Shot(TEXT("01_builder_default.png")); }},
+		{8.5, [&]() { Shot(TEXT("02_builder_turned.png")); }},
+		{9.0, [this]() { BuilderCycle(0, 1); BuilderCycle(1, 1); BuilderSwatch(true, 2); BuilderSwatch(false, 4); }},
+		{10.5, [&]() { Shot(TEXT("03_builder_helmet_trench.png")); }},
+		{11.0, [this]() { BuilderCycle(2, 1); BuilderCycle(3, 1); BuilderSwatch(true, 1); }},
+		{12.5, [&]() { Shot(TEXT("04_builder_filmbelt_boxcam.png")); }},
+		{13.0, [this]() { BuilderImport(TEXT("DC1-04020-10003-00025")); }},
+		{14.5, [&]() { Shot(TEXT("05_builder_code_loaded.png")); }},
+		{15.0, [this]() { BuilderImport(TEXT("DC1-NOT-A-REAL-CODE")); }},
+		{15.8, [&]() { Shot(TEXT("06_builder_bad_code_rejected.png")); }},
+		{16.5, []() { FGenericPlatformMisc::RequestExit(false); }},
+	};
+	if (Steps.IsValidIndex(Step) && T >= Steps[Step].Key)
+	{
+		Steps[Step].Value();
+		++Step;
+	}
+}
+
 void ADCPlayerController::TickMenuFlow()
 {
 	static FString Dir;
@@ -296,7 +462,13 @@ void ADCPlayerController::PlayerTick(float DeltaTime)
 	{
 		TickPerf();
 		TickMenuFlow();
+		TickBuilderFlow();
 		TickAlbum();
+		if (!bOutfitSent && GetPlayerState<ADCPlayerState>())
+		{
+			bOutfitSent = true;
+			SendOutfit(); // R23: the saved photographer, validated and replicated by the host
+		}
 		UpdateMenu();
 		UpdateCursor();
 		UpdateReel();
@@ -387,7 +559,7 @@ void ADCPlayerController::UpdateMenu()
 {
 	const ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>();
 	const bool bWant = GS && GS->Phase == EDCRunPhase::Lobby && !FParse::Param(FCommandLine::Get(), TEXT("dcdemo"));
-	const uint8 Mode = bWant ? MenuModeFor(*this) : 255;
+	const uint8 Mode = bWant ? (bBuilderOpen && MenuModeFor(*this) == 0 ? 3 : MenuModeFor(*this)) : 255;
 	// The title menu listens for LAN hosts and rebuilds when the list changes.
 	UDCLanBeacon* Beacon = GetGameInstance()->GetSubsystem<UDCLanBeacon>();
 	TArray<FDCLanHost> Hosts = Mode == 0 && Beacon ? Beacon->GetHosts() : TArray<FDCLanHost>();

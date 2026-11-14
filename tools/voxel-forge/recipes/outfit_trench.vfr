@@ -1,0 +1,13 @@
+# Outfit body: long trench coat with an accent belt and collar (R23).
+name outfit_trench
+grid 2
+size 22 26 34
+slot coat SwatchMain
+slot belt SwatchAccent
+shell 0 0 0 22 26 34 2 coat
+carve box 2 2 0 20 24 34
+carve box 7 0 31 15 26 34
+box 0 0 14 22 26 16 belt
+carve box 2 2 14 20 24 16
+box 19 7 28 22 19 32 belt
+pivot 11 13 8
