@@ -164,6 +164,12 @@ struct FDCVoxelTuning
 	 *  rect light in the sign's colour, facing out; its specular on the wet street is the neon reflection. Windows never
 	 *  get lights. Intensity in candela, source = the sign's size times SignSourceScale. */
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 SignLights = 10;
+	/** Aftermath firelight over each fresh rubble pile for DecaySeconds (pooled, shadowless, flickering). */
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 FireLights = 6;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float FireLightCandela = 1500.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float FireLightRadiusCm = 1800.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float FireLightHeightCm = 250.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") FLinearColor FireLightColor = FLinearColor(1.f, 0.38f, 0.08f);
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float SignLightCandela = 600.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float SignLightRadiusCm = 2600.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float SignLightOffsetCm = 40.f;

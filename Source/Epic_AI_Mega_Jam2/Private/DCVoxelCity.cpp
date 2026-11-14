@@ -13,6 +13,7 @@
 #include "DCDebrisPool.h"
 #include "Components/BoxComponent.h"
 #include "Components/RectLightComponent.h"
+#include "Components/PointLightComponent.h"
 #include "Camera/PlayerCameraManager.h"
 #include "GameFramework/PlayerController.h"
 #include "DCPresentationClock.h"
@@ -511,6 +512,10 @@ void ADCVoxelCity::Clear()
 	}
 	Fading.Reset();
 	DeadSigns.Reset();
+	for (int32 i = 0; i < FireLightPool.Num(); ++i)
+	{
+		FireLightStart[i] = -1e9f; // out (TickFireLights hides it)
+	}
 	for (URectLightComponent* L : SignLightPool)
 	{
 		if (L)
@@ -1696,6 +1701,7 @@ void ADCVoxelCity::Land(FFalling& F)
 		Fx->Emit(TEXT("Landing"), Where, Radius);
 		Fx->Burn(TEXT("Rubble"), Where, Radius, UDCVoxelSettings::Get().Tuning.DecaySeconds);
 	}
+	StartFireLight(Where);
 	if (F.Comp)
 	{
 		MeshPool.Remove(F.Comp);
@@ -1802,12 +1808,81 @@ void ADCVoxelCity::Tick(float DeltaSeconds)
 	const double T3 = FPlatformTime::Seconds();
 	TickCityShot();
 	TickSignLights();
+	TickFireLights();
 	TickCollapseCam();
 	// Hitch log (R13): which stage of the city's frame went long.
 	if ((T3 - T0) * 1000.0 > UDCVoxelSettings::Get().Tuning.HitchLogMs)
 	{
 		UE_LOG(LogTemp, Display, TEXT("DCHITCH city poll=%.1f upload=%.1f falling=%.1f ms cells=%d->%d jobs=%d"), (T1 - T0) * 1000.0, (T2 - T1) * 1000.0, (T3 - T2) * 1000.0,
 			DirtyBefore, DirtyCells.Num(), Jobs.Num());
+	}
+}
+
+void ADCVoxelCity::StartFireLight(const FVector& Where)
+{
+	// Aftermath by firelight (advisor CP9/CP11): a pooled, shadowless, flickering warm light over each new rubble pile
+	// for the decay window, so settled rubble reads in the dark. The oldest light is reused past FireLights.
+	const FDCVoxelTuning& Tn = UDCVoxelSettings::Get().Tuning;
+	if (Tn.FireLights <= 0)
+	{
+		return;
+	}
+	int32 Slot = INDEX_NONE;
+	float Oldest = TNumericLimits<float>::Max();
+	for (int32 i = 0; i < FireLightPool.Num(); ++i)
+	{
+		const float Started = FireLightStart.IsValidIndex(i) ? FireLightStart[i] : -1e9f;
+		if (Started < Oldest)
+		{
+			Oldest = Started;
+			Slot = i;
+		}
+	}
+	if (FireLightPool.Num() < Tn.FireLights)
+	{
+		UPointLightComponent* L = NewObject<UPointLightComponent>(this);
+		L->SetupAttachment(Root);
+		L->SetMobility(EComponentMobility::Movable);
+		L->SetCastShadows(false);
+		L->SetIntensityUnits(ELightUnits::Candelas);
+		L->RegisterComponent();
+		FireLightPool.Add(L);
+		FireLightStart.Add(0.f);
+		Slot = FireLightPool.Num() - 1;
+	}
+	if (!FireLightPool.IsValidIndex(Slot))
+	{
+		return;
+	}
+	UPointLightComponent* L = FireLightPool[Slot];
+	L->SetWorldLocation(Where + FVector(0, 0, Tn.FireLightHeightCm));
+	L->SetLightColor(Tn.FireLightColor);
+	L->SetAttenuationRadius(Tn.FireLightRadiusCm);
+	L->SetVisibility(true);
+	FireLightStart[Slot] = GetWorld()->GetTimeSeconds();
+}
+
+void ADCVoxelCity::TickFireLights()
+{
+	const FDCVoxelTuning& Tn = UDCVoxelSettings::Get().Tuning;
+	const float Now = GetWorld()->GetTimeSeconds();
+	for (int32 i = 0; i < FireLightPool.Num(); ++i)
+	{
+		UPointLightComponent* L = FireLightPool[i];
+		const float Age = Now - FireLightStart[i];
+		const float Life = FMath::Max(Tn.DecaySeconds, 0.1f);
+		if (!L || Age >= Life)
+		{
+			if (L && L->IsVisible())
+			{
+				L->SetVisibility(false);
+			}
+			continue;
+		}
+		// Flicker from two incommensurate sines (no RNG state), fading out over the decay window.
+		const float Flicker = 0.75f + 0.15f * FMath::Sin(Now * 13.f + i * 1.7f) + 0.1f * FMath::Sin(Now * 31.f + i * 0.9f);
+		const float Fade = 1.f - Age / Life;
+		L->SetIntensity(Tn.FireLightCandela * Flicker * Fade);
 	}
 }
 
