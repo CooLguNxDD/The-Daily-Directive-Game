@@ -91,11 +91,11 @@ void ADCDemoPilot::TickMedic()
 void ADCDemoPilot::BeginPlay()
 {
 	Super::BeginPlay();
-	if (!FParse::Value(FCommandLine::Get(), TEXT("dcshots="), ShotDir))
+	// Frames only when asked (-dcshots=<dir>): a 1080p screenshot costs ~250 ms and would pollute perf runs (R13).
+	if (FParse::Value(FCommandLine::Get(), TEXT("dcshots="), ShotDir))
 	{
-		ShotDir = FPaths::ProjectSavedDir() / TEXT("DemoShots");
+		IFileManager::Get().MakeDirectory(*ShotDir, true);
 	}
-	IFileManager::Get().MakeDirectory(*ShotDir, true);
 	bQuit = FParse::Param(FCommandLine::Get(), TEXT("dcdemoquit"));
 	bMedic = IsMedicRequested() && !IsRequested();
 	if (bMedic)
@@ -160,6 +160,11 @@ void ADCDemoPilot::AimAt(const FVector& LookTarget)
 
 void ADCDemoPilot::Shot(const FString& Name)
 {
+	if (ShotDir.IsEmpty())
+	{
+		UE_LOG(LogDCDemo, Display, TEXT("DEMO step %s (no frame: -dcshots not set)"), *Name);
+		return;
+	}
 	const FString File = ShotDir / FString::Printf(TEXT("%02d_%s.png"), ShotIndex++, *Name);
 	FScreenshotRequest::RequestScreenshot(File, true, false);
 	UE_LOG(LogDCDemo, Display, TEXT("DEMO shot %s"), *File);
@@ -316,7 +321,10 @@ void ADCDemoPilot::AddCycle(const FString& C)
 		const ADCOrbitalStrike* S = LatestStrike();
 		const ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>();
 		if (Tower.IsValid()) { AimAt(Tower->GetCenter()); }
-		return !S || !GS || GS->Now() >= S->GetDetonateTime() + PeakOffsetSeconds;
+		// -dcpeakoffset= moves the shutter (0.25 lands it while the strike's voxel op is often still on the worker).
+		float Offset = PeakOffsetSeconds;
+		FParse::Value(FCommandLine::Get(), TEXT("dcpeakoffset="), Offset);
+		return !S || !GS || GS->Now() >= S->GetDetonateTime() + Offset;
 	}, 8.f);
 	Add(0.f, [this, C] { Tap(TEXT("Fire")); Shot(C + TEXT("_peak")); return true; });
 	Add(0.35f, [this, C] { Shot(C + TEXT("_stamp")); return true; });
@@ -582,8 +590,12 @@ void ADCDemoPilot::TickDefend()
 	const ADCCharacter* Me = Cast<ADCCharacter>(GetWorld()->GetFirstPlayerController() ? GetWorld()->GetFirstPlayerController()->GetPawn() : nullptr);
 	const ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>();
 	ADCEnemy* Nearest = nullptr;
-	float Best = 2500.f;
-	if (bDefend && Me && !Me->IsDowned() && GS && GS->Phase == EDCRunPhase::Sector)
+	// Defending: anything within 12 m (holding fire at 25 m emptied the rifle by sector 2). Mid-script: a 6 m guard
+	// bubble, so a swarmer biting at 1-2 m is shot instead of downing the pilot while it frames a photo.
+	// With the camera up (framing a swarm) it only breaks off for a swarmer already at arm's length (3 m).
+	// (Sector 2 runs still went down at 1 m with a 6 m bubble: 10 m gives the rifle time to drop a rushing swarmer.)
+	float Best = bDefend ? 1200.f : (Me && Me->IsCameraRaised() ? 300.f : 1000.f);
+	if (Me && !Me->IsDowned() && GS && GS->Phase == EDCRunPhase::Sector)
 	{
 		for (ADCEnemy* E : TActorRange<ADCEnemy>(GetWorld()))
 		{
@@ -591,6 +603,12 @@ void ADCDemoPilot::TickDefend()
 			Nearest = D < Best ? E : Nearest;
 			Best = FMath::Min(Best, D);
 		}
+	}
+	// An empty magazine reloads at once; a half-empty one reloads while nothing is close (a player would).
+	if (Me && !Me->IsDowned() && Me->GetSlot() == EDCSlot::Rifle && !Me->IsReloading() && Me->GetReserve() > 0
+		&& (Me->GetAmmo() == 0 || (!Nearest && Me->GetAmmo() < 12)))
+	{
+		Tap(TEXT("Reload"));
 	}
 	if (Nearest)
 	{
@@ -600,11 +618,28 @@ void ADCDemoPilot::TickDefend()
 		}
 		AimAt(Nearest->GetActorLocation());
 	}
-	if ((Nearest != nullptr) != bDefendFiring)
+	// A swarmer inside 4 m: backpedal while firing (a player kites the bite; standing still let packs down the pilot).
+	// Re-asserted every tick while a threat is near: script steps release Fire and Move on their own timers, which left
+	// the cached state "firing" with the trigger up (helper CP7: the sector-2 downs).
+	const bool bBack = Nearest && Best < 400.f && !Me->IsCameraRaised();
+	if (bBack)
 	{
-		bDefendFiring = Nearest != nullptr;
-		(bDefendFiring ? Press(TEXT("Fire")) : Release(TEXT("Fire")));
+		Press(TEXT("Move"), FVector(0, -1, 0));
 	}
+	else if (bRetreating)
+	{
+		Release(TEXT("Move"));
+	}
+	bRetreating = bBack;
+	if (Nearest)
+	{
+		Press(TEXT("Fire"));
+	}
+	else if (bDefendFiring)
+	{
+		Release(TEXT("Fire"));
+	}
+	bDefendFiring = Nearest != nullptr;
 }
 
 void ADCDemoPilot::AddRifleOnly()
@@ -798,6 +833,7 @@ void ADCDemoPilot::BuildScript()
 	}
 
 	// Reel: the clip playing, the freeze, the photo.
+	ReelStep = Script.Num();
 	AddWaitPhase(EDCRunPhase::Reel, 400.f);
 	Add(1.2f, [this] { Shot(TEXT("reel_play")); return true; });
 	// Second take (R16): raise the camera during the replay, dolly sideways (WASD), frame the moment, snap.
@@ -928,6 +964,15 @@ void ADCDemoPilot::Tick(float DeltaSeconds)
 	if (StepStartReal < 0.0)
 	{
 		StepStartReal = Real;
+	}
+	if (const ADCGameState* RunGS = GetWorld()->GetGameState<ADCGameState>(); RunGS && RunGS->bRunFailed && ReelStep != INDEX_NONE && Next < ReelStep)
+	{
+		// A wipe ends the sectors: skip to the reel instead of scripting sectors that will never start (CP4 review).
+		UE_LOG(LogDCDemo, Display, TEXT("DEMO run wiped at step %d: on to the reel (step %d)"), Next, ReelStep);
+		Next = ReelStep;
+		StepStartReal = -1.0;
+		StepReadyReal = Real;
+		return;
 	}
 	FStep& Step = Script[Next];
 	const bool bDone = Step.Do();

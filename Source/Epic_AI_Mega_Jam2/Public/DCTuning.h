@@ -9,6 +9,7 @@
 #include "Rules/DCPhotoRules.h"
 #include "Rules/DCPressureRules.h"
 #include "Rules/DCNewsprint.h"
+#include "Rules/DCOutfit.h"
 #include "Rules/DCPostStack.h"
 #include "Rules/DCRunRules.h"
 #include "Rules/DCWeather.h"
@@ -34,6 +35,17 @@ struct FDCMoveTuning
 	UPROPERTY(EditAnywhere, Config, Category = "Move") float ArmLength = 260.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Move") FVector ShoulderOffset = FVector(0.f, 65.f, 65.f);
 	UPROPERTY(EditAnywhere, Config, Category = "Move") float MaxHealth = 100.f;
+	/** Landing dip as a spring (Saltline, R9): accel = -x * Stiffness - v * Damping; dip capped at LandDipMaxCm. */
+	UPROPERTY(EditAnywhere, Config, Category = "Move") float LandDipStiffness = 150.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Move") float LandDipDamping = 17.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Move") float LandDipMaxCm = 20.f;
+	/** Landing speed (cm/s) that gives the full dip. */
+	UPROPERTY(EditAnywhere, Config, Category = "Move") float LandDipFullSpeed = 1200.f;
+	/** Field of view added while sprinting (third person). */
+	UPROPERTY(EditAnywhere, Config, Category = "Move") float SprintFOVKick = 6.f;
+	/** Downed third-person camera: boom pivot height above the actor (cm) and arm length, clear of the rubble. */
+	UPROPERTY(EditAnywhere, Config, Category = "Move") float DownedBoomHeightCm = 260.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Move") float DownedArmLength = 520.f;
 };
 
 USTRUCT(BlueprintType)
@@ -96,6 +108,9 @@ struct FDCCameraTuning
 	UPROPERTY(EditAnywhere, Config, Category = "Camera") int32 PhotoWidth = 640;
 	UPROPERTY(EditAnywhere, Config, Category = "Camera") int32 PhotoHeight = 360;
 	UPROPERTY(EditAnywhere, Config, Category = "Camera") float StampHoldSeconds = 2.6f;
+	/** Host: a shot taken while a voxel op is on the worker waits up to this long (real time) for the op to land, so
+	 *  the strike's collapse records exist when it is graded (C3.1). */
+	UPROPERTY(EditAnywhere, Config, Category = "Camera") float GradeWaitForOpSeconds = 2.f;
 	/** How far the floating tag scan looks (cm). */
 	UPROPERTY(EditAnywhere, Config, Category = "Camera") float TagRangeCm = 9000.f;
 	/** Swarmers within this radius rush a photographer who raises the camera (R11). */
@@ -176,8 +191,83 @@ struct FDCLookTuning
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float FireballGlow = 20.f;
 	/** The hottest BloomPeak of any stratagem: the Flash post layer weight is a stratagem peak over this (0..1). */
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float MaxBloomPeak = 55.f;
+	/** Sun light-shaft bloom scale (0 = off). */
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float LightShaftBloom = 0.15f;
+	/** Strike beam glow at full charge (unlit material): well above 1 the tonemapper bleaches propaganda red to pink. */
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float BeamGlowPeak = 1.3f;
+	/** Beam diameter (cm) when the call lands and at full charge. */
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float BeamWidthStartCm = 240.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float BeamWidthEndCm = 30.f;
+	/** Contact light where the charging beam meets the street (cd at full charge, beam colour; V6.3: the beam lights
+	 *  its own target zone instead of ending on a flat disc), and its reach as a fraction of the blast radius. */
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float BeamContactLight = 40000.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float BeamContactReach = 1.4f;
+	/** Impact flare where the beam meets the street (blast white-orange, only on strikes): width x beam, peak glow. */
+	UPROPERTY(EditAnywhere, Config, Category = "Look") FLinearColor ImpactFlareColor = FLinearColor(1.f, 0.89f, 0.54f);
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float ImpactFlareWidthScale = 2.6f;
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float ImpactFlareGlow = 2.2f;
+	/** The danger ring: a thin band of this many segments, this wide (cm), at this unlit glow (1 = the palette red). */
+	UPROPERTY(EditAnywhere, Config, Category = "Look") int32 DangerRingSegments = 64;
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float DangerRingWidthCm = 60.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float DangerRingGlow = 1.f;
+	/** Detonation flash of the beam: lerped toward this colour (warm orange keeps red from turning salmon), and its glow. */
+	UPROPERTY(EditAnywhere, Config, Category = "Look") FLinearColor BeamFlashColor = FLinearColor(1.f, 0.42f, 0.02f, 1.f);
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float BeamFlashGlow = 3.f;
+	/** Poster sky (cream to the zenith, not slate): the sky atmosphere's Rayleigh colour (warm, near-flat across
+	 *  wavelengths), its scale and height (a taller layer keeps the zenith bright), and a warm Mie haze. */
+	UPROPERTY(EditAnywhere, Config, Category = "Look") FLinearColor SkyRayleighColor = FLinearColor(1.f, 0.86f, 0.62f);
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float SkyRayleighScale = 0.0331f;
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float SkyRayleighHeightKm = 24.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float SkyMieScale = 0.012f;
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float SkyMieHeightKm = 3.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Look") FLinearColor SkyMieAlbedo = FLinearColor(1.f, 0.92f, 0.78f);
+	/** Sky luminance factor; divided by the weather's sun scale (floored at SkyMinSunScale) so overcast never greys it. */
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float SkyLuminance = 1.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float SkyMinSunScale = 0.4f;
+	/** Sky light (ambient fill) multiplier: shaded facades and rubble read as ink-dark tone, not crushed black. */
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float SkyFill = 1.f;
+	/** Sector title card: held this long after the city is up, lifts away over FadeSeconds, never past MaxSeconds. */
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float SectorCardHoldSeconds = 0.6f;
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float SectorCardFadeSeconds = 0.5f;
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float SectorCardMaxSeconds = 6.f;
+	/** Backdrop skyline past the sector edge: towers in a ring starting GapCm out, DepthCm deep; footprint and height
+	 *  ranges in cm; the colour is an ink tone (the height fog hazes the far ones toward the sky). */
+	UPROPERTY(EditAnywhere, Config, Category = "Look") int32 BackdropTowers = 90;
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float BackdropGapCm = 2500.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float BackdropDepthCm = 9000.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Look") FVector2D BackdropWidthCm = FVector2D(1200.f, 3200.f);
+	UPROPERTY(EditAnywhere, Config, Category = "Look") FVector2D BackdropHeightCm = FVector2D(2500.f, 9000.f);
+	UPROPERTY(EditAnywhere, Config, Category = "Look") FLinearColor BackdropColor = FLinearColor(0.035f, 0.032f, 0.03f);
+	/** Skyline lights (R25): bands per tower (min..max), band height (cm), and the tones: each tone is a colour, an
+	 *  unlit glow and a weight (warm windows mostly, neon bands rarely). Empty = no lights. */
+	UPROPERTY(EditAnywhere, Config, Category = "Look") FIntPoint BackdropBands = FIntPoint(2, 7);
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float BackdropBandCm = 70.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Look") TArray<FLinearColor> BackdropBandColors;
+	UPROPERTY(EditAnywhere, Config, Category = "Look") TArray<float> BackdropBandWeights;
+	/** Cloud layer (R18): stepped voxel cloud banks in a ring past the skyline (the zenith stays paper cream), each a
+	 *  few flat slabs. The weather's CloudCover shows that share of them (each bank grows in, never pops), CloudShade
+	 *  blends light to storm tone; banks orbit the sector at a speed from the wind. Unlit: the sun never greys them. */
+	UPROPERTY(EditAnywhere, Config, Category = "Look") int32 CloudBanks = 34;
+	UPROPERTY(EditAnywhere, Config, Category = "Look") FIntPoint CloudSlabs = FIntPoint(3, 6);
+	UPROPERTY(EditAnywhere, Config, Category = "Look") FVector2D CloudRingCm = FVector2D(22000.f, 52000.f);
+	UPROPERTY(EditAnywhere, Config, Category = "Look") FVector2D CloudHeightCm = FVector2D(9000.f, 17000.f);
+	UPROPERTY(EditAnywhere, Config, Category = "Look") FVector2D CloudSlabCm = FVector2D(2600.f, 7000.f);
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float CloudSlabThickCm = 700.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Look") FLinearColor CloudLight = FLinearColor(0.93f, 0.86f, 0.72f);
+	UPROPERTY(EditAnywhere, Config, Category = "Look") FLinearColor CloudDark = FLinearColor(0.42f, 0.39f, 0.36f);
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float CloudGlow = 1.f;
+	/** Orbit speed in degrees per second per 100 cm/s of wind. */
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float CloudOrbitDegPerWind = 0.08f;
+	/** Ink outline (its strength is the post stack's Outline): line width in pixels, the relative depth step and the
+	 *  normal change that count as an edge, and the distance (cm) where lines fade out (far towers stay soft). */
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float OutlineThicknessPx = 1.5f;
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float OutlineDepthThreshold = 0.03f;
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float OutlineNormalThreshold = 0.3f;
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float OutlineFadeCm = 25000.f;
 	/** Cubes in the voxel blast core (R4). */
-	UPROPERTY(EditAnywhere, Config, Category = "Look") int32 FireballCubes = 34;
+	UPROPERTY(EditAnywhere, Config, Category = "Look") int32 FireballCubes = 90;
+	/** Fireball cube edge as a fraction of the stratagem's FireballScale (m): small chunks read as voxels (V5.3). */
+	UPROPERTY(EditAnywhere, Config, Category = "Look") FVector2D FireballCubeSize = FVector2D(0.05f, 0.14f);
 	/** Peak intensity of the blast's point light (it lights the street and the debris). */
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float BlastLightIntensity = 1.5e7f;
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float ShockGlow = 18.f;
@@ -278,6 +368,17 @@ struct FDCAssetTuning
 {
 	GENERATED_BODY()
 	UPROPERTY(EditAnywhere, Config, Category = "Assets") FSoftObjectPath FlatMaterial = FSoftObjectPath(TEXT("/Game/DC/Materials/M_DCFlat.M_DCFlat"));
+	/** Post material: ink edges from depth and normal discontinuities (R19 Outline layer field drives its strength). */
+	/** Print type by role (R7, OFL faces from Content/DC/Fonts/Source, imported by tools/content/build_content.py). */
+	UPROPERTY(EditAnywhere, Config, Category = "Assets") TMap<FName, FSoftObjectPath> FontFaces = {
+		{TEXT("Masthead"), FSoftObjectPath(TEXT("/Game/DC/Fonts/FF_UnifrakturMaguntia.FF_UnifrakturMaguntia"))},
+		{TEXT("Headline"), FSoftObjectPath(TEXT("/Game/DC/Fonts/FF_Anton.FF_Anton"))},
+		{TEXT("Body"), FSoftObjectPath(TEXT("/Game/DC/Fonts/FF_Oswald.FF_Oswald"))},
+		{TEXT("Stamp"), FSoftObjectPath(TEXT("/Game/DC/Fonts/FF_BlackOpsOne.FF_BlackOpsOne"))}};
+	/** Point size the HUD's scale 1.0 means; 0 = the engine large font's size (every layout was tuned on it). */
+	UPROPERTY(EditAnywhere, Config, Category = "Assets") int32 FontBaseSize = 0;
+	UPROPERTY(EditAnywhere, Config, Category = "Assets") FSoftObjectPath FlatUnlitMaterial = FSoftObjectPath(TEXT("/Game/DC/Materials/M_DCFlatUnlit.M_DCFlatUnlit"));
+	UPROPERTY(EditAnywhere, Config, Category = "Assets") FSoftObjectPath InkOutlineMaterial = FSoftObjectPath(TEXT("/Game/DC/Materials/M_DCInkOutline.M_DCInkOutline"));
 	UPROPERTY(EditAnywhere, Config, Category = "Assets") FSoftObjectPath FallbackMaterial = FSoftObjectPath(TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial"));
 	UPROPERTY(EditAnywhere, Config, Category = "Assets") FSoftObjectPath Cube = FSoftObjectPath(TEXT("/Engine/BasicShapes/Cube.Cube"));
 	UPROPERTY(EditAnywhere, Config, Category = "Assets") FSoftObjectPath Sphere = FSoftObjectPath(TEXT("/Engine/BasicShapes/Sphere.Sphere"));
@@ -297,6 +398,16 @@ struct FDCAssetTuning
 	};
 	UPROPERTY(EditAnywhere, Config, Category = "Assets") FName DrawSlot = TEXT("DefaultSlot");
 	UPROPERTY(EditAnywhere, Config, Category = "Assets") FName HandSocket = TEXT("hand_r");
+	/** The press camera worn on the chest whenever it is not in hand (R10: every player reads as a photographer). */
+	UPROPERTY(EditAnywhere, Config, Category = "Assets") FName ChestCamModel = TEXT("presscam");
+	UPROPERTY(EditAnywhere, Config, Category = "Assets") FName ChestCamSocket = TEXT("spine_05");
+	UPROPERTY(EditAnywhere, Config, Category = "Assets") FVector ChestCamLocation = FVector(0.f, 18.f, 0.f);
+	UPROPERTY(EditAnywhere, Config, Category = "Assets") FRotator ChestCamRotation = FRotator(0.f, 90.f, -90.f);
+	UPROPERTY(EditAnywhere, Config, Category = "Assets") float ChestCamScale = 1.f;
+	/** The rifle as a voxel-forge model on the rifle prop (R10): x forward, placed relative to the hand/holster prop. */
+	UPROPERTY(EditAnywhere, Config, Category = "Assets") FName RifleModel = TEXT("rifle");
+	UPROPERTY(EditAnywhere, Config, Category = "Assets") FVector RifleModelLocation = FVector(0.f, 0.f, 0.f);
+	UPROPERTY(EditAnywhere, Config, Category = "Assets") FRotator RifleModelRotation = FRotator(0.f, 0.f, 0.f);
 	/** Holster (R1): with another slot out, the rifle rides on the back at this bone and offset instead of vanishing. */
 	UPROPERTY(EditAnywhere, Config, Category = "Assets") FName HolsterSocket = TEXT("spine_03");
 	UPROPERTY(EditAnywhere, Config, Category = "Assets") FVector HolsterLocation = FVector(18.f, -22.f, 0.f);
@@ -304,6 +415,10 @@ struct FDCAssetTuning
 	UPROPERTY(EditAnywhere, Config, Category = "Assets") FName HeadSocket = TEXT("head");
 	/** Title menu key art (generated via media.sh, R11; ASSETS.md). */
 	UPROPERTY(EditAnywhere, Config, Category = "Assets") FSoftObjectPath MenuKeyArt = FSoftObjectPath(TEXT("/Game/DC/Art/T_MenuKeyArt.T_MenuKeyArt"));
+	/** Generated print textures (R11): newsprint paper fill for the desk and front page, worn-ink mask for stamps
+	 *  (alpha = wear). A missing asset falls back to flat paper and the procedural grit. */
+	UPROPERTY(EditAnywhere, Config, Category = "Assets") FSoftObjectPath PaperGrain = FSoftObjectPath(TEXT("/Game/DC/Art/T_PaperGrain.T_PaperGrain"));
+	UPROPERTY(EditAnywhere, Config, Category = "Assets") FSoftObjectPath StampGrit = FSoftObjectPath(TEXT("/Game/DC/Art/T_StampGrit.T_StampGrit"));
 };
 
 /** A draft option (R10). Pool groups it; Effect is resolved by id in the upgrade registry (DCUpgrades.cpp). */
@@ -319,6 +434,8 @@ struct FDCUpgradeDef
 	UPROPERTY(EditAnywhere, Config, Category = "Run") FName Effect;
 	/** Stratagem id an UnlockStratagem effect grants. */
 	UPROPERTY(EditAnywhere, Config, Category = "Run") FName Unlock;
+	/** Card art on the draft (R11, generated; ASSETS.md); none = a text-only card. */
+	UPROPERTY(EditAnywhere, Config, Category = "Run") FSoftObjectPath Icon;
 	UPROPERTY(EditAnywhere, Config, Category = "Run") float Param = 0.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Run") float Param2 = 0.f;
 
@@ -388,6 +505,16 @@ struct FDCRunTuning
 	UPROPERTY(EditAnywhere, Config, Category = "Run") int32 FinalCutChoices = 8;
 	UPROPERTY(EditAnywhere, Config, Category = "Run") float VoteSeconds = 30.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Run") int32 VoteBonus = 600;
+	/** Photo album (R24): entries kept on disk (the oldest drop first), and how many front-page picks each run adds. */
+	UPROPERTY(EditAnywhere, Config, Category = "Run") int32 AlbumMaxEntries = 60;
+	UPROPERTY(EditAnywhere, Config, Category = "Run") int32 AlbumPicksPerRun = 3;
+	/** Photographer builder (R23): save slots, and where the turntable stands (high above the city, alone in shot). */
+	UPROPERTY(EditAnywhere, Config, Category = "Run") int32 CharacterSlots = 3;
+	/** Music level before the player's master volume. */
+	UPROPERTY(EditAnywhere, Config, Category = "Run") float MusicVolume = 0.35f;
+	/** Actions a player may rebind in SETTINGS (axes like Move and Look keep their keys). */
+	UPROPERTY(EditAnywhere, Config, Category = "Run") TArray<FName> RebindableActions = {TEXT("Jump"), TEXT("Sprint"), TEXT("Crouch"), TEXT("Fire"), TEXT("Aim"), TEXT("Reload"), TEXT("Cycle"), TEXT("Interact")};
+	UPROPERTY(EditAnywhere, Config, Category = "Run") FVector PreviewLocation = FVector(0.f, 0.f, 30000.f);
 	UPROPERTY(EditAnywhere, Config, Category = "Run") float ScoopFirstSeconds = 35.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Run") float ScoopGapSeconds = 20.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Run") int32 PodFilm = 4;
@@ -427,9 +554,16 @@ public:
 	UPROPERTY(EditAnywhere, Config, Category = "Input") TArray<FDCKeyBinding> Bindings;
 	UPROPERTY(EditAnywhere, Config, Category = "Run") FDCRunTuning Run;
 	UPROPERTY(EditAnywhere, Config, Category = "Run") TArray<FDCUpgradeDef> Upgrades;
+	/** Photographer builder (R23): the slots in recipe order, the parts per slot, and the palette swatches. */
+	UPROPERTY(EditAnywhere, Config, Category = "Outfit") TArray<FName> OutfitSlots;
+	UPROPERTY(EditAnywhere, Config, Category = "Outfit") TArray<FDCOutfitPart> OutfitParts;
+	UPROPERTY(EditAnywhere, Config, Category = "Outfit") TArray<FDCOutfitSwatch> OutfitSwatches;
 	UPROPERTY(EditAnywhere, Config, Category = "Run") TArray<FDCScoopDef> Scoops;
 	/** Full edition front page (R22): satirical headline rows per photo category. */
 	UPROPERTY(EditAnywhere, Config, Category = "Run") TArray<FDCHeadlineRow> HeadlineRows;
+	/** Front page body copy (critic CP6: real type, not grey bars): sentences set in small body type, picked per column
+	 *  from the run seed. {PLAYER} and {SECTOR} fill like the headlines. */
+	UPROPERTY(EditAnywhere, Config, Category = "Run") TArray<FString> FrontPageCopy;
 	/** Post-process layer stack (R19): every layer of the scene and the photo look; code only sets weights by id. */
 	UPROPERTY(EditAnywhere, Config, Category = "Post") TArray<FDCPostLayer> PostLayers;
 	UPROPERTY(EditAnywhere, Config, Category = "Post") TArray<FDCPostPreset> PostPresets;

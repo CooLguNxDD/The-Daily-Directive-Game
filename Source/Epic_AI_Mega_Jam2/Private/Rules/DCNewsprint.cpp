@@ -159,6 +159,10 @@ namespace DCNewsprint
 					const FLinearColor Dot = FMath::Lerp(PaperC, InkC, Inside);
 					Out = FMath::Lerp(Out, Dot, FMath::Clamp(T.HalftoneMix, 0.f, 1.f));
 				}
+				if (T.ScanlineEvery > 0 && Y % T.ScanlineEvery == 0)
+				{
+					Out *= 1.f - FMath::Clamp(T.ScanlineDark, 0.f, 1.f); // feed scanlines
+				}
 				const float N = (static_cast<float>(PixelHash(X, Y, Seed) & 0xFFFF) / 65535.f - 0.5f) * 2.f * T.Grain;
 				Px = FColor(Clamp255(Out.R + N), Clamp255(Out.G + N), Clamp255(Out.B + N), 255);
 			}

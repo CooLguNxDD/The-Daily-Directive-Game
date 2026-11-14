@@ -68,4 +68,9 @@ public:
 
 private:
 	UPROPERTY(Replicated) FString CallSign;
+public:
+	/** The photographer's outfit share code (R23), validated by the host; every machine builds the same voxels. */
+	UPROPERTY(Replicated) FString OutfitCode;
+	void SetOutfitCode(const FString& Code) { OutfitCode = Code; ForceNetUpdate(); }
+private:
 };

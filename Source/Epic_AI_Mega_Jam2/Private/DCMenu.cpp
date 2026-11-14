@@ -1,4 +1,8 @@
 #include "DCMenu.h"
+#include "Widgets/Layout/SUniformGridPanel.h"
+#include "Engine/TextureRenderTarget2D.h"
+#include "Rules/DCOutfit.h"
+#include "DCFonts.h"
 #include "DCPalette.h"
 
 #include "DCAudio.h"
@@ -11,6 +15,7 @@
 #include "SocketSubsystem.h"
 #include "Styling/CoreStyle.h"
 #include "Brushes/SlateColorBrush.h"
+#include "Brushes/SlateRoundedBoxBrush.h"
 #include "Widgets/Input/SButton.h"
 #include "Widgets/Input/SEditableTextBox.h"
 #include "Widgets/Layout/SBorder.h"
@@ -27,9 +32,10 @@ using namespace DCPalette;
 namespace DCMenuStyle
 {
 
-	FSlateFontInfo Font(int32 Size, const char* Weight = "Bold")
+	// Print type (R7): big sizes set in the headline face, the rest in the body face.
+	FSlateFontInfo Font(int32 Size, const char* /*Weight*/ = "Bold")
 	{
-		return FCoreStyle::GetDefaultFontStyle(Weight, Size);
+		return DCFonts::Slate(Size >= 40 ? TEXT("Headline") : TEXT("Body"), Size);
 	}
 
 	TSharedRef<SWidget> Label(const FString& Text, int32 Size, const FLinearColor& Color)
@@ -44,8 +50,9 @@ namespace DCMenuStyle
 		{
 			FButtonStyle S = FCoreStyle::Get().GetWidgetStyle<FButtonStyle>("Button");
 			S.SetNormal(FSlateColorBrush(FLinearColor::White));
-			S.SetHovered(FSlateColorBrush(FLinearColor(0.85f, 0.85f, 0.85f)));
-			S.SetPressed(FSlateColorBrush(FLinearColor(0.7f, 0.7f, 0.7f)));
+			// Hover and press read at a glance (critic CP6): a thick ink rule around the plate, pressed darker.
+			S.SetHovered(FSlateRoundedBoxBrush(FLinearColor::White, 0.f, FLinearColor(0.086f, 0.086f, 0.1f), 5.f));
+			S.SetPressed(FSlateRoundedBoxBrush(FLinearColor(0.72f, 0.72f, 0.72f), 0.f, FLinearColor(0.086f, 0.086f, 0.1f), 7.f));
 			S.SetNormalPadding(FMargin(0));
 			S.SetPressedPadding(FMargin(0));
 			return S;
@@ -53,19 +60,27 @@ namespace DCMenuStyle
 		return Style;
 	}
 
-	TSharedRef<SWidget> Button(const FString& Text, TFunction<void()> OnClick, const FLinearColor& Fill = Gold)
+	TWeakPtr<SWidget> GSoloButton;
+
+	TSharedRef<SWidget> Button(const FString& Text, TFunction<void()> OnClick, const FLinearColor& Fill = Gold, TWeakPtr<SWidget>* OutButton = nullptr)
 	{
-		return SNew(SBox).WidthOverride(420.f).HeightOverride(64.f).Padding(FMargin(0, 6))
+		TSharedPtr<SButton> Made;
+		TSharedRef<SWidget> Box = SNew(SBox).WidthOverride(420.f).HeightOverride(64.f).Padding(FMargin(0, 6))
 			[
-				SNew(SButton)
+				SAssignNew(Made, SButton)
 				.ButtonStyle(&FlatButton())
 				.ButtonColorAndOpacity(Fill)
 				.HAlign(HAlign_Center).VAlign(VAlign_Center)
 				.OnClicked_Lambda([OnClick]() { OnClick(); return FReply::Handled(); })
 				[
-					SNew(STextBlock).Text(FText::FromString(Text)).Font(Font(22)).ColorAndOpacity(Fill.Equals(Ink) ? Paper : Ink)
+					SNew(STextBlock).Text(FText::FromString(Text)).Font(Font(22)).ColorAndOpacity(TextOn(Fill))
 				]
 			];
+		if (OutButton)
+		{
+			*OutButton = Made;
+		}
+		return Box;
 	}
 
 	FString LocalAddress()
@@ -112,8 +127,10 @@ namespace DCMenu
 		[&]()
 		{
 			TSharedRef<SEditableTextBox> Address = SNew(SEditableTextBox).Text(FText::FromString(TEXT("127.0.0.1"))).Font(Font(20, "Regular")).Justification(ETextJustify::Center);
-			Column->AddSlot().AutoHeight().HAlign(HAlign_Center)[Button(TEXT("SOLO RUN"), Click(&ADCPlayerController::MenuSolo))];
+			Column->AddSlot().AutoHeight().HAlign(HAlign_Center)[Button(TEXT("SOLO RUN"), Click(&ADCPlayerController::MenuSolo), Gold, &GSoloButton)];
 			Column->AddSlot().AutoHeight().HAlign(HAlign_Center)[Button(TEXT("HOST CO-OP (1-4)"), Click(&ADCPlayerController::MenuHost))];
+			Column->AddSlot().AutoHeight().HAlign(HAlign_Center)[Button(TEXT("YOUR PHOTOGRAPHER"), Click(&ADCPlayerController::OpenBuilder))];
+			Column->AddSlot().AutoHeight().HAlign(HAlign_Center)[Button(TEXT("SETTINGS"), Click(&ADCPlayerController::OpenSettings))];
 			Column->AddSlot().AutoHeight().HAlign(HAlign_Center).Padding(0, 14, 0, 0)[Label(TEXT("JOIN A FRIEND: HOST IP"), 14, Ink)];
 			Column->AddSlot().AutoHeight().HAlign(HAlign_Center)[SNew(SBox).WidthOverride(420.f).HeightOverride(44.f)[Address]];
 			Column->AddSlot().AutoHeight().HAlign(HAlign_Center)[Button(TEXT("JOIN"), [Weak, Address]()
@@ -154,10 +171,96 @@ namespace DCMenu
 		{
 			Column->AddSlot().AutoHeight().HAlign(HAlign_Center)[Label(TEXT("CONNECTED. WAITING FOR THE HOST TO START THE RUN..."), 22, Ink)];
 			Column->AddSlot().AutoHeight().HAlign(HAlign_Center)[Button(TEXT("QUIT"), Click(&ADCPlayerController::MenuQuit), Ink)];
+		},
+		[&]()
+		{
+			// Photographer builder (R23): one row per slot, two swatch rows, save slots, share code in and out.
+			const UDCTuning& T = UDCTuning::Get();
+			const FDCOutfit& O = PC->GetBuilderOutfit();
+			auto Row = [&](const FString& Name, TFunction<void(int32)> Step)
+			{
+				return SNew(SHorizontalBox)
+					+ SHorizontalBox::Slot().AutoWidth()[SNew(SBox).WidthOverride(70.f).HeightOverride(52.f)[Button(TEXT("<"), [Step]() { Step(-1); }, Gold)]]
+					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[SNew(SBox).WidthOverride(380.f)[Label(Name, 20, Ink)]]
+					+ SHorizontalBox::Slot().AutoWidth()[SNew(SBox).WidthOverride(70.f).HeightOverride(52.f)[Button(TEXT(">"), [Step]() { Step(1); }, Gold)]];
+			};
+			auto Act = [Weak](TFunction<void(ADCPlayerController&)> Fn)
+			{
+				return [Weak, Fn]()
+				{
+					if (ADCPlayerController* P = Weak.Get())
+					{
+						DCAudio::Play2D(P, TEXT("UIClick"));
+						Fn(*P);
+					}
+				};
+			};
+			Column->AddSlot().AutoHeight().HAlign(HAlign_Center).Padding(0, 0, 0, 10)[Label(TEXT("YOUR PHOTOGRAPHER"), 30, Ink)];
+			for (int32 s = 0; s < T.OutfitSlots.Num() && s < O.Parts.Num(); ++s)
+			{
+				const TArray<const FDCOutfitPart*> Parts = DCOutfit::PartsOf(T.OutfitSlots[s], T.OutfitParts);
+				const FString Name = Parts.IsValidIndex(O.Parts[s]) ? Parts[O.Parts[s]]->DisplayName.ToString() : FString();
+				Column->AddSlot().AutoHeight().HAlign(HAlign_Center)
+					[Row(FString::Printf(TEXT("%s: %s"), *T.OutfitSlots[s].ToString().ToUpper(), *Name.ToUpper()), [Act, s](int32 Step) { Act([s, Step](ADCPlayerController& P) { P.BuilderCycle(s, Step); })(); })];
+			}
+			auto SwatchName = [&T](uint8 I) { return T.OutfitSwatches.IsValidIndex(I) ? T.OutfitSwatches[I].Id.ToString().ToUpper() : FString(); };
+			Column->AddSlot().AutoHeight().HAlign(HAlign_Center)[Row(TEXT("MAIN: ") + SwatchName(O.Main), [Act](int32 Step) { Act([Step](ADCPlayerController& P) { P.BuilderSwatch(true, Step); })(); })];
+			Column->AddSlot().AutoHeight().HAlign(HAlign_Center)[Row(TEXT("ACCENT: ") + SwatchName(O.Accent), [Act](int32 Step) { Act([Step](ADCPlayerController& P) { P.BuilderSwatch(false, Step); })(); })];
+			TSharedRef<SHorizontalBox> Slots = SNew(SHorizontalBox);
+			for (int32 i = 0; i < T.Run.CharacterSlots; ++i)
+			{
+				Slots->AddSlot().AutoWidth().Padding(4, 0)[SNew(SBox).WidthOverride(130.f)[Button(FString::Printf(TEXT("SLOT %d"), i + 1),
+					Act([i](ADCPlayerController& P) { P.BuilderSelectSlot(i); }), i == PC->GetBuilderSlot() ? Ink : Gold)]];
+			}
+			Column->AddSlot().AutoHeight().HAlign(HAlign_Center).Padding(0, 8, 0, 0)[Slots];
+			const FString Code = DCOutfit::Encode(O);
+			TSharedRef<SEditableTextBox> CodeBox = SNew(SEditableTextBox).Text(FText::FromString(Code)).Font(Font(20, "Regular")).Justification(ETextJustify::Center);
+			Column->AddSlot().AutoHeight().HAlign(HAlign_Center).Padding(0, 10, 0, 0)[Label(TEXT("SHARE CODE (PASTE A FRIEND'S HERE)"), 14, Ink)];
+			Column->AddSlot().AutoHeight().HAlign(HAlign_Center)[SNew(SBox).WidthOverride(420.f).HeightOverride(44.f)[CodeBox]];
+			Column->AddSlot().AutoHeight().HAlign(HAlign_Center)
+				[SNew(SHorizontalBox)
+					+ SHorizontalBox::Slot().AutoWidth().Padding(4, 0)[SNew(SBox).WidthOverride(206.f)[Button(TEXT("COPY CODE"), Act([](ADCPlayerController& P) { P.BuilderCopyCode(); }))]]
+					+ SHorizontalBox::Slot().AutoWidth().Padding(4, 0)[SNew(SBox).WidthOverride(206.f)[Button(TEXT("LOAD CODE"), Act([CodeBox](ADCPlayerController& P) { P.BuilderImport(CodeBox->GetText().ToString()); }))]]];
+			if (!PC->GetBuilderMessage().IsEmpty())
+			{
+				Column->AddSlot().AutoHeight().HAlign(HAlign_Center).Padding(0, 6)[Label(PC->GetBuilderMessage(), 14, Ink)];
+			}
+			Column->AddSlot().AutoHeight().HAlign(HAlign_Center).Padding(0, 10, 0, 0)[Button(TEXT("SAVE AND BACK"), Click(&ADCPlayerController::CloseBuilder), Ink)];
+		},
+		[&]()
+		{
+			// Settings (R24): every change is saved at once (Saved/DCSave/settings.json).
+			Column->AddSlot().AutoHeight().HAlign(HAlign_Center).Padding(0, 0, 0, 10)[Label(TEXT("SETTINGS"), 30, Ink)];
+			for (const TPair<FName, const TCHAR*>& R : {TPair<FName, const TCHAR*>(TEXT("Volume"), TEXT("VOLUME")), TPair<FName, const TCHAR*>(TEXT("Mouse"), TEXT("MOUSE")),
+				TPair<FName, const TCHAR*>(TEXT("Quality"), TEXT("QUALITY")), TPair<FName, const TCHAR*>(TEXT("Window"), TEXT("WINDOW"))})
+			{
+				const FName Id = R.Key;
+				auto Stepper = [Weak, Id](int32 D) { return [Weak, Id, D]() { if (ADCPlayerController* P = Weak.Get()) { P->SettingsStep(Id, D); } }; };
+				Column->AddSlot().AutoHeight().HAlign(HAlign_Center)
+					[SNew(SHorizontalBox)
+						+ SHorizontalBox::Slot().AutoWidth()[SNew(SBox).WidthOverride(70.f).HeightOverride(52.f)[Button(TEXT("<"), Stepper(-1))]]
+						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[SNew(SBox).WidthOverride(300.f)[Label(FString::Printf(TEXT("%s: %s"), R.Value, *PC->SettingsValue(Id)), 20, Ink)]]
+						+ SHorizontalBox::Slot().AutoWidth()[SNew(SBox).WidthOverride(70.f).HeightOverride(52.f)[Button(TEXT(">"), Stepper(1))]]];
+			}
+			// Keys: click a row, then press the new key (Esc cancels).
+			Column->AddSlot().AutoHeight().HAlign(HAlign_Center).Padding(0, 10, 0, 4)[Label(TEXT("KEYS (CLICK, THEN PRESS A KEY)"), 14, Ink)];
+			TSharedRef<SUniformGridPanel> Keys = SNew(SUniformGridPanel).SlotPadding(FMargin(3.f));
+			int32 Cell = 0;
+			for (const FName& Action : UDCTuning::Get().Run.RebindableActions)
+			{
+				const bool bWaiting = PC->GetAwaitingKey() == Action;
+				const FString Text = FString::Printf(TEXT("%s: %s"), *Action.ToString().ToUpper(), bWaiting ? TEXT("PRESS A KEY") : *PC->KeyFor(Action));
+				Keys->AddSlot(Cell % 2, Cell / 2)[SNew(SBox).WidthOverride(320.f).HeightOverride(62.f)
+					[Button(Text, [Weak, Action]() { if (ADCPlayerController* P = Weak.Get()) { P->BeginRebind(Action); } }, bWaiting ? Ink : Gold)]];
+				++Cell;
+			}
+			Column->AddSlot().AutoHeight().HAlign(HAlign_Center)[Keys];
+			Column->AddSlot().AutoHeight().HAlign(HAlign_Center).Padding(0, 4, 0, 0)[SNew(SBox).WidthOverride(260.f)[Button(TEXT("RESET KEYS"), Click(&ADCPlayerController::ResetKeys))]];
+			Column->AddSlot().AutoHeight().HAlign(HAlign_Center).Padding(0, 10, 0, 0)[Button(TEXT("BACK"), Click(&ADCPlayerController::CloseSettings), Ink)];
 		}};
 		Modes[FMath::Min<int32>(Mode, UE_ARRAY_COUNT(Modes) - 1)]();
 		Column->AddSlot().AutoHeight().HAlign(HAlign_Center).Padding(0, 20, 0, 0)
-			[Label(TEXT("WASD move  SHIFT sprint  SPACE jump  CTRL crouch  |  1 rifle  2 strike  3 camera\nRMB raise camera  LMB shoot / call / snap  |  E revive  [ ] sensitivity"), 12, Ink)];
+			[Label(FString::Printf(TEXT("WASD move  %s sprint  %s jump  %s crouch  |  1 rifle  2 strike  3 camera\n%s raise camera  %s shoot / call / snap  |  %s revive  [ ] sensitivity"), *PC->KeyFor(TEXT("Sprint")).ToUpper(), *PC->KeyFor(TEXT("Jump")).ToUpper(), *PC->KeyFor(TEXT("Crouch")).ToUpper(), *PC->KeyFor(TEXT("Aim")).ToUpper(), *PC->KeyFor(TEXT("Fire")).ToUpper(), *PC->KeyFor(TEXT("Interact")).ToUpper()), 12, Ink)]; // the saved bindings
 
 		// Key art fills the screen (generated, R11); the menu sits on its empty left third, so the first ten seconds
 		// show the game: a beam, a toppling voxel tower, a photographer (R7).
@@ -179,6 +282,21 @@ namespace DCMenu
 		{
 			Root->AddSlot().HAlign(HAlign_Fill).VAlign(VAlign_Fill)[SNew(SScaleBox).Stretch(EStretch::ScaleToFill)[SNew(SImage).Image(&KeyArt)]];
 		}
+		// The builder's turntable fills the right side on paper (it replaces the key art there).
+		static FSlateBrush PreviewBrush;
+		if (Mode == 3 && PC->GetBuilderImage())
+		{
+			PreviewBrush.SetResourceObject(PC->GetBuilderImage());
+			PreviewBrush.ImageSize = FVector2D(512.f, 640.f);
+			PreviewBrush.DrawAs = ESlateBrushDrawType::Image;
+			Root->AddSlot().HAlign(HAlign_Fill).VAlign(VAlign_Fill)[SNew(SBorder).BorderImage(FCoreStyle::Get().GetBrush("WhiteBrush")).BorderBackgroundColor(Paper)];
+			Root->AddSlot().HAlign(HAlign_Right).VAlign(VAlign_Center).Padding(FMargin(0, 0, 160, 0))
+				[SNew(SBox).WidthOverride(640.f).HeightOverride(800.f)[SNew(SImage).Image(&PreviewBrush).ColorAndOpacity(TAttribute<FSlateColor>::CreateLambda([WeakPC = TWeakObjectPtr<ADCPlayerController>(PC)]()
+					{
+						// Paper shows through until the turntable has lit frames (no black box on open).
+						return FSlateColor(FLinearColor(1.f, 1.f, 1.f, WeakPC.IsValid() ? WeakPC->GetBuilderImageAlpha() : 0.f));
+					}))]];
+		}
 		Root->AddSlot().HAlign(HAlign_Left).VAlign(VAlign_Center).Padding(FMargin(60, 0, 0, 0))
 			[
 				SNew(SBorder)
@@ -189,4 +307,9 @@ namespace DCMenu
 			];
 		return Root;
 	}
+}
+
+TWeakPtr<SWidget> DCMenu::SoloButton()
+{
+	return GSoloButton;
 }

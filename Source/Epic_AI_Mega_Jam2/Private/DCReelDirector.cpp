@@ -295,7 +295,16 @@ void ADCReelDirector::TickCamera(float ClipTime, float Progress)
 	const FVector Body = FVector(Pose.Location) + FVector(0, 0, 60.f);
 	// Behind-the-scenes orbit: from behind the shoulder, sweeping round to the side as the moment arrives.
 	const float Yaw = Pose.Yaw + 180.f - 35.f + OrbitSweepDeg * Progress;
-	const FVector Eye = Body + FRotator(0.f, Yaw, 0.f).Vector() * OrbitDistanceCm + FVector(0, 0, OrbitHeightCm);
+	FVector Eye = Body + FRotator(0.f, Yaw, 0.f).Vector() * OrbitDistanceCm + FVector(0, 0, OrbitHeightCm);
+	if (const ADCVoxelCity* City = ADCVoxelCity::Get(this))
+	{
+		// Never film from under the street or inside a tower (a buried eye saw only the fog and the ring from below).
+		Eye.Z = FMath::Max(Eye.Z, City->SurfaceZCm(Eye) + 150.f);
+		for (int32 Step = 0; Step < 12 && City->IsSolidAt(Eye); ++Step)
+		{
+			Eye = FMath::Lerp(Eye, Body + FVector(0, 0, 250.f), 0.25f);
+		}
+	}
 	const FVector Look = FMath::Lerp(Body, Subject, 0.35f);
 	Camera->SetWorldLocationAndRotation(Eye, (Look - Eye).Rotation());
 	Camera->SetFieldOfView(70.f);

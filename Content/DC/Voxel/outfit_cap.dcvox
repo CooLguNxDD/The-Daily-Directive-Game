@@ -1,0 +1,10 @@
+dcvox 1
+name outfit_cap
+grid_cm 5
+size 7 6 3
+pivot 3 3 0
+slots SwatchMain SwatchAccent
+solid 44
+rle
+9*0 2*1 3*2 1*0 3*1 3*2 1*0 3*1 3*2 2*0 2*1 3*2 16*0 2*1 3*2 1*0 3*1 3*2 1*0 3*1 3*2 2*0 2*1 3*2
+49*0

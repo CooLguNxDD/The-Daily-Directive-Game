@@ -1,4 +1,17 @@
 #include "DCPlayerController.h"
+#include "DCCharacter.h"
+#include "DCEnvironment.h"
+#include "GameFramework/GameUserSettings.h"
+#include "HAL/PlatformApplicationMisc.h"
+#include "DCOutfitBuild.h"
+#include "DCOutfitPreview.h"
+#include "Rules/DCOutfit.h"
+#include "DCSave.h"
+#include "RenderTimer.h"
+#include "Framework/Application/SlateApplication.h"
+#include "Misc/App.h"
+#include "RHI.h"
+#include "DCVoxelCity.h"
 
 #include "DCAudio.h"
 #include "DCGameMode.h"
@@ -13,6 +26,8 @@
 #include "DCDemoPilot.h"
 #include "DCTuning.h"
 #include "Engine/GameViewportClient.h"
+#include "GameFramework/CharacterMovementComponent.h"
+#include "Widgets/SWindow.h"
 #include "Engine/LocalPlayer.h"
 #include "Engine/Texture2D.h"
 #include "Engine/TextureRenderTarget2D.h"
@@ -71,6 +86,16 @@ void ADCPlayerController::BeginPlay()
 {
 	Super::BeginPlay();
 	Sensitivity = UDCTuning::Get().Move.MouseSensitivity;
+	if (const UDCSaveSubsystem* Save = UDCSaveSubsystem::Get(this))
+	{
+		Sensitivity = FMath::Clamp(Save->Settings.MouseSensitivity, 0.05f, 5.f); // saved settings (R24)
+		// Saved window mode, unless a run asked for a window on the command line (evidence and perf runs).
+		if (Save->Settings.bFullscreen && IsLocalController() && GEngine && GEngine->GetGameUserSettings() && !FParse::Param(FCommandLine::Get(), TEXT("windowed")))
+		{
+			GEngine->GetGameUserSettings()->SetFullscreenMode(EWindowMode::WindowedFullscreen);
+			GEngine->GetGameUserSettings()->ApplySettings(false);
+		}
+	}
 	if (!IsLocalController())
 	{
 		return;
@@ -86,7 +111,7 @@ void ADCPlayerController::BeginPlay()
 	}
 	if (UDCAudioSubsystem* Audio = GetGameInstance()->GetSubsystem<UDCAudioSubsystem>())
 	{
-		Audio->StartMusic(this, TEXT("Music"), 0.35f);
+		Audio->StartMusic(this, TEXT("Music"), UDCTuning::Get().Run.MusicVolume); // times the saved master volume
 	}
 }
 
@@ -116,6 +141,306 @@ void ADCPlayerController::SetupInputComponent()
 void ADCPlayerController::SetSensitivity(float Value)
 {
 	Sensitivity = FMath::Clamp(Value, 0.05f, 5.f);
+	if (UDCSaveSubsystem* Save = UDCSaveSubsystem::Get(this))
+	{
+		Save->Settings.MouseSensitivity = Sensitivity;
+		Save->SaveSettings();
+	}
+}
+
+void ADCPlayerController::SendOutfit()
+{
+	const UDCTuning& T = UDCTuning::Get();
+	FString Code = DCOutfit::Encode(DCOutfit::Default(T.OutfitSlots));
+	if (const UDCSaveSubsystem* Save = UDCSaveSubsystem::Get(this))
+	{
+		if (Save->Characters.Slots.IsValidIndex(Save->Characters.ActiveSlot))
+		{
+			Code = Save->Characters.Slots[Save->Characters.ActiveSlot];
+		}
+	}
+	ServerSetOutfit(Code);
+}
+
+void ADCPlayerController::ServerSetOutfit_Implementation(const FString& Code)
+{
+	const UDCTuning& T = UDCTuning::Get();
+	FDCOutfit Outfit;
+	FString Error;
+	if (!DCOutfit::Decode(Code, T.OutfitSlots, T.OutfitParts, T.OutfitSwatches.Num(), Outfit, Error))
+	{
+		UE_LOG(LogTemp, Display, TEXT("DCOUTFIT rejected '%s': %s (default kept)"), *Code.Left(40), *Error);
+		Outfit = DCOutfit::Default(T.OutfitSlots);
+	}
+	if (ADCPlayerState* PS = GetPlayerState<ADCPlayerState>())
+	{
+		PS->SetOutfitCode(DCOutfit::Encode(Outfit));
+		UE_LOG(LogTemp, Display, TEXT("DCOUTFIT %s wears %s"), *PS->GetPlayerName(), *PS->OutfitCode);
+	}
+}
+
+void ADCPlayerController::SettingsStep(FName Row, int32 Step)
+{
+	UDCSaveSubsystem* Save = UDCSaveSubsystem::Get(this);
+	if (!Save)
+	{
+		return;
+	}
+	FDCSettingsSave& S = Save->Settings;
+	using FStep = TFunction<void(ADCPlayerController&, FDCSettingsSave&, int32)>;
+	static const TMap<FName, FStep> Steps = {
+		{TEXT("Volume"), [](ADCPlayerController&, FDCSettingsSave& S, int32 D) { S.MasterVolume = FMath::Clamp(FMath::RoundToFloat((S.MasterVolume + D * 0.1f) * 10.f) / 10.f, 0.f, 1.f); }},
+		{TEXT("Mouse"), [](ADCPlayerController& P, FDCSettingsSave&, int32 D) { P.SetSensitivity(P.GetSensitivity() * (D > 0 ? 1.15f : 1.f / 1.15f)); }},
+		{TEXT("Quality"), [](ADCPlayerController&, FDCSettingsSave& S, int32 D) { S.Quality = FMath::Clamp(S.Quality + D, 0, 2); }},
+		{TEXT("Window"), [](ADCPlayerController&, FDCSettingsSave& S, int32) { S.bFullscreen = !S.bFullscreen; }},
+	};
+	if (const FStep* Fn = Steps.Find(Row))
+	{
+		(*Fn)(*this, S, Step);
+	}
+	Save->SaveSettings();
+	if (Row == TEXT("Volume"))
+	{
+		if (UDCAudioSubsystem* Audio = GetGameInstance()->GetSubsystem<UDCAudioSubsystem>())
+		{
+			Audio->ApplyMasterVolume(this); // the music follows at once
+		}
+	}
+	if (Row == TEXT("Quality"))
+	{
+		if (ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>(); GS && GS->GetEnvironment())
+		{
+			GS->GetEnvironment()->ApplyPreset();
+		}
+	}
+	if (Row == TEXT("Window") && GEngine && GEngine->GetGameUserSettings())
+	{
+		GEngine->GetGameUserSettings()->SetFullscreenMode(S.bFullscreen ? EWindowMode::WindowedFullscreen : EWindowMode::Windowed);
+		GEngine->GetGameUserSettings()->ApplySettings(false);
+	}
+	DCAudio::Play2D(this, TEXT("UIClick"));
+	MenuMode = 254;
+}
+
+FString ADCPlayerController::KeyFor(FName Action) const
+{
+	const UDCSaveSubsystem* Save = UDCSaveSubsystem::Get(this);
+	if (const FString* Saved = Save ? Save->Settings.KeyBindings.Find(Action.ToString()) : nullptr)
+	{
+		return FKey(**Saved).GetDisplayName().ToString().ToUpper();
+	}
+	const FDCKeyBinding* Row = UDCTuning::Get().Bindings.FindByPredicate([Action](const FDCKeyBinding& B) { return B.Action == Action; });
+	return Row ? Row->Key.GetDisplayName().ToString().ToUpper() : FString(TEXT("-"));
+}
+
+bool ADCPlayerController::InputKey(const FInputKeyEventArgs& Params)
+{
+	if (!AwaitingKey.IsNone() && Params.Event == IE_Pressed && !Params.Key.IsAnalog())
+	{
+		UDCSaveSubsystem* Save = UDCSaveSubsystem::Get(this);
+		if (Save && Params.Key != EKeys::Escape)
+		{
+			Save->Settings.KeyBindings.Add(AwaitingKey.ToString(), Params.Key.GetFName().ToString());
+			Save->SaveSettings();
+			RebuildInput();
+			UE_LOG(LogTemp, Display, TEXT("DCKEYS %s -> %s (saved)"), *AwaitingKey.ToString(), *Params.Key.GetFName().ToString());
+		}
+		AwaitingKey = NAME_None;
+		MenuMode = 254;
+		return true;
+	}
+	return Super::InputKey(Params);
+}
+
+void ADCPlayerController::ResetKeys()
+{
+	if (UDCSaveSubsystem* Save = UDCSaveSubsystem::Get(this))
+	{
+		Save->Settings.KeyBindings.Reset();
+		Save->SaveSettings();
+	}
+	AwaitingKey = NAME_None;
+	RebuildInput();
+	MenuMode = 254;
+}
+
+void ADCPlayerController::RebuildInput()
+{
+	UEnhancedInputLocalPlayerSubsystem* Sub = IsLocalController() ? ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(GetLocalPlayer()) : nullptr;
+	if (Sub && InputSet)
+	{
+		Sub->RemoveMappingContext(InputSet->GetContext());
+	}
+	InputSet = nullptr; // rebuilt from the data rows plus the saved rebinds
+	if (Sub)
+	{
+		Sub->AddMappingContext(GetInputSet()->GetContext(), 0);
+	}
+	// The pawn's bound actions are found by name in the set: rebind them to the new objects.
+	if (ADCCharacter* Me = Cast<ADCCharacter>(GetPawn()))
+	{
+		Me->RebindInput();
+	}
+}
+
+FString ADCPlayerController::SettingsValue(FName Row) const
+{
+	const UDCSaveSubsystem* Save = UDCSaveSubsystem::Get(this);
+	if (!Save)
+	{
+		return FString();
+	}
+	const FDCSettingsSave& S = Save->Settings;
+	static const TCHAR* QualityNames[] = {TEXT("LOW"), TEXT("MEDIUM"), TEXT("HIGH")};
+	const TMap<FName, FString> Values = {
+		{TEXT("Volume"), FString::Printf(TEXT("%d%%"), FMath::RoundToInt32(S.MasterVolume * 100.f))},
+		{TEXT("Mouse"), FString::Printf(TEXT("%.2f"), GetSensitivity())},
+		{TEXT("Quality"), QualityNames[FMath::Clamp(S.Quality, 0, 2)]},
+		{TEXT("Window"), S.bFullscreen ? FString(TEXT("FULLSCREEN")) : FString(TEXT("WINDOWED"))},
+	};
+	const FString* V = Values.Find(Row);
+	return V ? *V : FString();
+}
+
+void ADCPlayerController::OpenBuilder()
+{
+	UDCSaveSubsystem* Save = UDCSaveSubsystem::Get(this);
+	BuilderSlot = Save ? FMath::Clamp(Save->Characters.ActiveSlot, 0, UDCTuning::Get().Run.CharacterSlots - 1) : 0;
+	BuilderSelectSlot(BuilderSlot);
+	if (!OutfitPreview)
+	{
+		FActorSpawnParameters Params;
+		Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+		OutfitPreview = GetWorld()->SpawnActor<ADCOutfitPreview>(ADCOutfitPreview::StaticClass(), FTransform(UDCTuning::Get().Run.PreviewLocation), Params);
+	}
+	bBuilderOpen = true;
+	BuilderChanged(TEXT(""));
+}
+
+void ADCPlayerController::CloseBuilder()
+{
+	bBuilderOpen = false;
+	if (OutfitPreview)
+	{
+		OutfitPreview->Destroy();
+		OutfitPreview = nullptr;
+	}
+	MenuMode = 254; // rebuild the main menu
+}
+
+UTextureRenderTarget2D* ADCPlayerController::GetBuilderImage() const
+{
+	return OutfitPreview ? OutfitPreview->GetImage() : nullptr;
+}
+
+float ADCPlayerController::GetBuilderImageAlpha() const
+{
+	return OutfitPreview ? OutfitPreview->ImageAlpha() : 0.f;
+}
+
+void ADCPlayerController::BuilderSelectSlot(int32 Slot)
+{
+	const UDCTuning& T = UDCTuning::Get();
+	BuilderSlot = FMath::Clamp(Slot, 0, FMath::Max(T.Run.CharacterSlots, 1) - 1);
+	UDCSaveSubsystem* Save = UDCSaveSubsystem::Get(this);
+	const FString Code = Save && Save->Characters.Slots.IsValidIndex(BuilderSlot) ? Save->Characters.Slots[BuilderSlot] : FString();
+	BuilderOutfit = Code.IsEmpty() ? DCOutfit::Default(T.OutfitSlots) : DCOutfitBuild::FromCode(Code);
+	if (bBuilderOpen)
+	{
+		BuilderChanged(FString::Printf(TEXT("SLOT %d"), BuilderSlot + 1));
+	}
+}
+
+void ADCPlayerController::BuilderCycle(int32 SlotIndex, int32 Step)
+{
+	const UDCTuning& T = UDCTuning::Get();
+	DCOutfit::Cycle(BuilderOutfit, SlotIndex, Step, T.OutfitSlots, T.OutfitParts);
+	BuilderChanged(TEXT(""));
+}
+
+void ADCPlayerController::BuilderSwatch(bool bMain, int32 Step)
+{
+	const int32 Count = FMath::Max(UDCTuning::Get().OutfitSwatches.Num(), 1);
+	uint8& Which = bMain ? BuilderOutfit.Main : BuilderOutfit.Accent;
+	Which = static_cast<uint8>(((Which + Step) % Count + Count) % Count);
+	BuilderChanged(TEXT(""));
+}
+
+void ADCPlayerController::BuilderImport(const FString& Code)
+{
+	const UDCTuning& T = UDCTuning::Get();
+	FDCOutfit Loaded;
+	FString Error;
+	if (!DCOutfit::Decode(Code, T.OutfitSlots, T.OutfitParts, T.OutfitSwatches.Num(), Loaded, Error))
+	{
+		BuilderMessage = FString::Printf(TEXT("CODE NOT LOADED: %s"), *Error.ToUpper());
+		MenuMode = 254;
+		return;
+	}
+	BuilderOutfit = Loaded;
+	BuilderChanged(TEXT("FRIEND'S CODE LOADED"));
+}
+
+void ADCPlayerController::BuilderCopyCode()
+{
+	FPlatformApplicationMisc::ClipboardCopy(*DCOutfit::Encode(BuilderOutfit));
+	BuilderMessage = TEXT("CODE COPIED");
+	MenuMode = 254;
+}
+
+void ADCPlayerController::BuilderChanged(const FString& Message)
+{
+	BuilderMessage = Message;
+	if (UDCSaveSubsystem* Save = UDCSaveSubsystem::Get(this))
+	{
+		Save->Characters.Slots.SetNum(FMath::Max(Save->Characters.Slots.Num(), BuilderSlot + 1));
+		Save->Characters.Slots[BuilderSlot] = DCOutfit::Encode(BuilderOutfit);
+		Save->Characters.ActiveSlot = BuilderSlot;
+		Save->SaveCharacters();
+	}
+	if (OutfitPreview)
+	{
+		OutfitPreview->Show(BuilderOutfit);
+	}
+	MenuMode = 254; // the menu rebuilds with the new names and code
+}
+
+void ADCPlayerController::TickAlbum()
+{
+	const ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>();
+	if (!GS || GS->Phase != EDCRunPhase::FrontPage)
+	{
+		bAlbumSaved = false;
+		return;
+	}
+	UDCSaveSubsystem* Save = UDCSaveSubsystem::Get(this);
+	if (bAlbumSaved || !Save || GS->PagePicks.Num() == 0)
+	{
+		return;
+	}
+	bAlbumSaved = true;
+	const APlayerState* Me = GetPlayerState<APlayerState>();
+	TArray<const FDCPagePick*> Picks;
+	for (const FDCPagePick& P : GS->PagePicks)
+	{
+		Picks.Add(&P);
+	}
+	Picks.StableSort([](const FDCPagePick& A, const FDCPagePick& B) { return A.PageScore > B.PageScore; });
+	int32 Added = 0;
+	for (const FDCPagePick* P : Picks)
+	{
+		const FDCLocalPhoto* Mine = Me && P->Photo.OwnerPlayerId == Me->GetPlayerId() ? Album.FindByPredicate([P](const FDCLocalPhoto& L) { return L.PhotoId == P->Photo.PhotoId; }) : nullptr;
+		if (Mine && Mine->Pixels.Num() > 0 && Added < UDCTuning::Get().Run.AlbumPicksPerRun)
+		{
+			Save->AddToAlbum(TEXT("photo"), Mine->Pixels, Mine->Width, Mine->Height, P->PageScore, P->Headline.IsEmpty() ? GS->Headline : P->Headline, P->PlayerName);
+			++Added;
+		}
+	}
+	// The page itself, once it has drawn: a screenshot into the album folder.
+	const FString PageFile = Save->AddFrontPageToAlbum(GS->Headline, Me ? Me->GetPlayerName() : FString());
+	FTimerHandle Later;
+	GetWorldTimerManager().SetTimer(Later, FTimerDelegate::CreateWeakLambda(this, [PageFile] { FScreenshotRequest::RequestScreenshot(PageFile, true, false); }), 1.5f, false);
+	UE_LOG(LogTemp, Display, TEXT("DCALBUM front page: %d own picks saved, page shot %s"), Added, *PageFile);
 }
 
 void ADCPlayerController::Confirm() { DCAudio::Play2D(this, TEXT("UIConfirm"), 0.9f); }
@@ -129,11 +454,218 @@ void ADCPlayerController::Tick(float DeltaSeconds)
 	PumpSends();
 }
 
+void ADCPlayerController::TickPerf()
+{
+	static const bool bPerf = FParse::Param(FCommandLine::Get(), TEXT("dcperf"));
+	if (!bPerf)
+	{
+		return;
+	}
+	const float FrameMs = static_cast<float>(FApp::GetDeltaTime() * 1000.0);
+	PerfFrameMs.Add(FrameMs);
+	if (FrameMs > 50.f)
+	{
+		// Which thread stalled: game, render, GPU (previous frame's timings, the closest the engine keeps).
+		UE_LOG(LogTemp, Display, TEXT("DCSPIKE frame_ms=%.1f game_ms=%.1f render_ms=%.1f gpu_ms=%.1f"), FrameMs, FPlatformTime::ToMilliseconds(GGameThreadTime),
+			FPlatformTime::ToMilliseconds(GRenderThreadTime), FPlatformTime::ToMilliseconds(RHIGetGPUFrameCycles()));
+	}
+	if (const ADCVoxelCity* City = ADCVoxelCity::Get(this))
+	{
+		PerfMaxFalling = FMath::Max(PerfMaxFalling, City->GetFallingCount());
+	}
+	const double Now = FPlatformTime::Seconds();
+	if (PerfWindowStart <= 0.0)
+	{
+		PerfWindowStart = Now;
+		return;
+	}
+	if (Now - PerfWindowStart < 1.0 || PerfFrameMs.Num() == 0)
+	{
+		return;
+	}
+	TArray<float> Sorted = PerfFrameMs;
+	Sorted.Sort();
+	float Sum = 0.f;
+	for (const float Ms : Sorted)
+	{
+		Sum += Ms;
+	}
+	const ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>();
+	const float GpuMs = FPlatformTime::ToMilliseconds(RHIGetGPUFrameCycles());
+	const FIntPoint View = GEngine && GEngine->GameViewport ? GEngine->GameViewport->Viewport->GetSizeXY() : FIntPoint::ZeroValue;
+	UE_LOG(LogTemp, Display, TEXT("DCPERF frames=%d avg_ms=%.2f p95_ms=%.2f max_ms=%.2f gpu_ms=%.2f players=%d falling_max=%d phase=%d view=%dx%d"),
+		Sorted.Num(), Sum / Sorted.Num(), Sorted[FMath::Min(Sorted.Num() - 1, FMath::FloorToInt32(Sorted.Num() * 0.95f))], Sorted.Last(), GpuMs,
+		GS ? GS->PlayerArray.Num() : 0, PerfMaxFalling, GS ? static_cast<int32>(GS->Phase) : -1, View.X, View.Y);
+	PerfFrameMs.Reset();
+	PerfMaxFalling = 0;
+	PerfWindowStart = Now;
+}
+
+void ADCPlayerController::TickBuilderFlow()
+{
+	// -dcbuilderflow=<dir>: open the photographer builder, step parts and swatches, load a share code; a frame each.
+	static FString Dir;
+	static const bool bFlow = FParse::Value(FCommandLine::Get(), TEXT("dcbuilderflow="), Dir);
+	static FString SettingsDir;
+	static const bool bSettingsFlow = FParse::Value(FCommandLine::Get(), TEXT("dcsettingsflow="), SettingsDir);
+	if (!bFlow && !bSettingsFlow)
+	{
+		return;
+	}
+	static int32 Step = 0;
+	const double T = FPlatformTime::Seconds() - GStartTime;
+	auto Shot = [](const FString& Name) { FScreenshotRequest::RequestScreenshot((bSettingsFlow ? SettingsDir : Dir) / Name, true, false); };
+	// -dcsettingsflow=<dir>: open settings, turn the volume down and the quality to medium, frame, back.
+	const TArray<TPair<double, TFunction<void()>>> SettingsSteps = {
+		{5.0, [this]() { OpenSettings(); }},
+		{6.5, [&]() { Shot(TEXT("01_settings_open.png")); }},
+		{7.0, [this]() { SettingsStep(TEXT("Volume"), -1); SettingsStep(TEXT("Volume"), -1); SettingsStep(TEXT("Quality"), -1); SettingsStep(TEXT("Mouse"), 1); }},
+		{8.5, [&]() { Shot(TEXT("02_settings_changed_and_saved.png")); }},
+		{9.0, [this]() { BeginRebind(TEXT("Jump")); }},
+		{9.8, [&]() { Shot(TEXT("03_rebind_waiting_for_key.png")); }},
+		{10.2, [this]() { InputKey(FInputKeyEventArgs(GetWorld()->GetGameViewport() ? GetWorld()->GetGameViewport()->Viewport : nullptr, FInputDeviceId::CreateFromInternalId(0), EKeys::J, IE_Pressed, FPlatformTime::Cycles64())); }},
+		{11.0, [&]() { Shot(TEXT("04_jump_rebound_to_J.png")); }},
+		{11.5, [this]() { CloseSettings(); }},
+		{12.5, [&]() { Shot(TEXT("05_back_to_menu.png")); }},
+		// The saved binding in play (critic CP6): start a run and press the rebound key; the photographer jumps.
+		{13.0, [this]() { MenuSolo(); }},
+		{22.0, [&, this]() { Shot(TEXT("06_street_before_J.png")); UE_LOG(LogTemp, Display, TEXT("DCSETTINGSFLOW before J: pawn z=%.0f"), GetPawn() ? GetPawn()->GetActorLocation().Z : -1.f); }},
+		{22.3, [this]() { InputKey(FInputKeyEventArgs(GetWorld()->GetGameViewport() ? GetWorld()->GetGameViewport()->Viewport : nullptr, FInputDeviceId::CreateFromInternalId(0), EKeys::J, IE_Pressed, FPlatformTime::Cycles64())); }},
+		{22.55, [&, this]() { Shot(TEXT("07_J_pressed_photographer_in_the_air.png")); UE_LOG(LogTemp, Display, TEXT("DCSETTINGSFLOW 0.25 s after J: pawn z=%.0f falling=%d"), GetPawn() ? GetPawn()->GetActorLocation().Z : -1.f, GetCharacter() && GetCharacter()->GetCharacterMovement() ? (GetCharacter()->GetCharacterMovement()->IsFalling() ? 1 : 0) : -1); }},
+		{22.7, [this]() { InputKey(FInputKeyEventArgs(GetWorld()->GetGameViewport() ? GetWorld()->GetGameViewport()->Viewport : nullptr, FInputDeviceId::CreateFromInternalId(0), EKeys::J, IE_Released, FPlatformTime::Cycles64())); }},
+		{23.5, [this]() { UE_LOG(LogTemp, Display, TEXT("DCSETTINGSFLOW J press done, pawn z=%.0f"), GetPawn() ? GetPawn()->GetActorLocation().Z : -1.f); }},
+		{24.0, []() { FGenericPlatformMisc::RequestExit(false); }},
+	};
+	const TArray<TPair<double, TFunction<void()>>> BuilderSteps = {
+		{5.0, [this]() { OpenBuilder(); }},
+		{7.0, [&]() { Shot(TEXT("01_builder_default.png")); }},
+		{8.5, [&]() { Shot(TEXT("02_builder_turned.png")); }},
+		{9.0, [this]() { BuilderCycle(0, 1); BuilderCycle(1, 1); BuilderSwatch(true, 2); BuilderSwatch(false, 4); }},
+		{10.5, [&]() { Shot(TEXT("03_builder_helmet_trench.png")); }},
+		{11.0, [this]() { BuilderCycle(2, 1); BuilderCycle(3, 1); BuilderSwatch(true, 1); }},
+		{12.5, [&]() { Shot(TEXT("04_builder_filmbelt_boxcam.png")); }},
+		{13.0, [this]() { BuilderImport(TEXT("DC1-04020-10003-00025")); }},
+		{14.5, [&]() { Shot(TEXT("05_builder_code_loaded.png")); }},
+		{15.0, [this]() { BuilderImport(TEXT("DC1-NOT-A-REAL-CODE")); }},
+		{15.8, [&]() { Shot(TEXT("06_builder_bad_code_rejected.png")); }},
+		{16.5, []() { FGenericPlatformMisc::RequestExit(false); }},
+	};
+	const TArray<TPair<double, TFunction<void()>>>& Steps = bSettingsFlow ? SettingsSteps : BuilderSteps;
+	if (Steps.IsValidIndex(Step) && T >= Steps[Step].Key)
+	{
+		Steps[Step].Value();
+		++Step;
+	}
+}
+
+void ADCPlayerController::TickMenuFlow()
+{
+	static FString Dir;
+	static const bool bFlow = FParse::Value(FCommandLine::Get(), TEXT("dcmenuflow="), Dir);
+	if (!bFlow || !FSlateApplication::IsInitialized())
+	{
+		return;
+	}
+	// Steps run once each, in order, on real seconds since start (the travel replaces this controller; state is static).
+	static int32 Step = 0;
+	const double T = FPlatformTime::Seconds() - GStartTime;
+	FSlateApplication& App = FSlateApplication::Get();
+	auto Shot = [](const FString& Name) { FScreenshotRequest::RequestScreenshot(Dir / Name, true, false); };
+	auto ButtonCentre = []() -> TOptional<FVector2D>
+	{
+		const TSharedPtr<SWidget> B = DCMenu::SoloButton().Pin();
+		if (!B.IsValid())
+		{
+			return {};
+		}
+		return FVector2D(B->GetTickSpaceGeometry().GetAbsolutePositionAtCoordinates(FVector2f(0.5f, 0.5f)));
+	};
+	auto RetryClick = [&]() -> bool
+	{
+		const ADCGameState* G = GetWorld()->GetGameState<ADCGameState>();
+		const TOptional<FVector2D> At = ButtonCentre();
+		if (!G || G->Phase != EDCRunPhase::Lobby || !At)
+		{
+			return true; // the run started (or the menu is gone): nothing to retry
+		}
+		UE_LOG(LogTemp, Display, TEXT("DCMENUFLOW click SOLO RUN again at %s (still in the lobby)"), *At->ToString());
+		if (GEngine && GEngine->GameViewport && GEngine->GameViewport->GetWindow().IsValid())
+		{
+			GEngine->GameViewport->GetWindow()->BringToFront(true); // the OS gave the first click to another window
+		}
+		App.SetCursorPos(*At);
+		App.ProcessMouseMoveEvent(FPointerEvent(App.GetUserIndexForMouse(), *At, *At, TSet<FKey>(), EKeys::Invalid, 0.f, FModifierKeysState()));
+		App.ProcessMouseButtonDownEvent(nullptr, FPointerEvent(App.GetUserIndexForMouse(), *At, *At, TSet<FKey>{EKeys::LeftMouseButton}, EKeys::LeftMouseButton, 0.f, FModifierKeysState()));
+		App.ProcessMouseButtonUpEvent(FPointerEvent(App.GetUserIndexForMouse(), *At, *At, TSet<FKey>(), EKeys::LeftMouseButton, 0.f, FModifierKeysState()));
+		return true;
+	};
+	using FFlowStep = TFunction<bool()>;
+	const TArray<TPair<double, FFlowStep>> Steps = { // rebuilt each tick: the steps capture this tick's locals
+		{6.0, [&]() { Shot(TEXT("01_menu.png")); return true; }},
+		{7.0, [&]()
+			{
+				const TOptional<FVector2D> At = ButtonCentre();
+				if (!At)
+				{
+					return false;
+				}
+				App.SetCursorPos(*At);
+				App.ProcessMouseMoveEvent(FPointerEvent(App.GetUserIndexForMouse(), *At, *At, TSet<FKey>(), EKeys::Invalid, 0.f, FModifierKeysState()));
+				return true;
+			}},
+		{7.6, [&]() { Shot(TEXT("02_menu_cursor_on_solo_run.png")); return true; }},
+		{8.2, [&]()
+			{
+				const TOptional<FVector2D> At = ButtonCentre();
+				if (!At)
+				{
+					return false;
+				}
+				UE_LOG(LogTemp, Display, TEXT("DCMENUFLOW click SOLO RUN at %s"), *At->ToString());
+				App.ProcessMouseButtonDownEvent(nullptr, FPointerEvent(App.GetUserIndexForMouse(), *At, *At, TSet<FKey>{EKeys::LeftMouseButton}, EKeys::LeftMouseButton, 0.f, FModifierKeysState()));
+				App.ProcessMouseButtonUpEvent(FPointerEvent(App.GetUserIndexForMouse(), *At, *At, TSet<FKey>(), EKeys::LeftMouseButton, 0.f, FModifierKeysState()));
+				return true;
+			}},
+		{8.3, [&]() { Shot(TEXT("03_after_click.png")); return true; }},
+		// A click the OS routed to another window (the first click only activates ours) is clicked again while the
+		// menu is still up: still a real Slate move + press + release on the button.
+		{10.5, [&]() { return RetryClick(); }},
+		{12.5, [&]() { return RetryClick(); }},
+		{14.5, [this]() // still in the lobby after three real clicks: start the run anyway and say so in the log
+			{
+				const ADCGameState* G = GetWorld()->GetGameState<ADCGameState>();
+				if (G && G->Phase == EDCRunPhase::Lobby)
+				{
+					UE_LOG(LogTemp, Warning, TEXT("DCMENUFLOW fallback: three clicks lost to window focus, starting the run directly"));
+					MenuSolo();
+				}
+				return true;
+			}},
+		{16.0, [&]() { Shot(TEXT("04_run_started_street.png")); return true; }},
+		{21.0, [&]() { Shot(TEXT("05_street_5s_later.png")); return true; }},
+		// With -dcdemo the pilot plays on from the street (R14: one timed run from the menu to the front page).
+		{22.0, [&]() { if (!FParse::Param(FCommandLine::Get(), TEXT("dcdemo"))) { FGenericPlatformMisc::RequestExit(false); } return true; }},
+	};
+	if (Steps.IsValidIndex(Step) && T >= Steps[Step].Key && Steps[Step].Value())
+	{
+		++Step;
+	}
+}
+
 void ADCPlayerController::PlayerTick(float DeltaTime)
 {
 	Super::PlayerTick(DeltaTime);
 	if (IsLocalController())
 	{
+		TickPerf();
+		TickMenuFlow();
+		TickBuilderFlow();
+		TickAlbum();
+		if (!bOutfitSent && GetPlayerState<ADCPlayerState>())
+		{
+			bOutfitSent = true;
+			SendOutfit(); // R23: the saved photographer, validated and replicated by the host
+		}
 		UpdateMenu();
 		UpdateCursor();
 		UpdateReel();
@@ -223,8 +755,9 @@ void ADCPlayerController::UpdateReel()
 void ADCPlayerController::UpdateMenu()
 {
 	const ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>();
-	const bool bWant = GS && GS->Phase == EDCRunPhase::Lobby && !FParse::Param(FCommandLine::Get(), TEXT("dcdemo"));
-	const uint8 Mode = bWant ? MenuModeFor(*this) : 255;
+	const bool bWant = GS && GS->Phase == EDCRunPhase::Lobby && (!FParse::Param(FCommandLine::Get(), TEXT("dcdemo")) || FCString::Strifind(FCommandLine::Get(), TEXT("dcmenuflow=")));
+	const uint8 Base = MenuModeFor(*this);
+	const uint8 Mode = !bWant ? 255 : (Base == 0 && bBuilderOpen ? 3 : (Base == 0 && bSettingsOpen ? 4 : Base));
 	// The title menu listens for LAN hosts and rebuilds when the list changes.
 	UDCLanBeacon* Beacon = GetGameInstance()->GetSubsystem<UDCLanBeacon>();
 	TArray<FDCLanHost> Hosts = Mode == 0 && Beacon ? Beacon->GetHosts() : TArray<FDCLanHost>();
@@ -288,7 +821,7 @@ void ADCPlayerController::UpdateMenu()
 void ADCPlayerController::UpdateCursor()
 {
 	const ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>();
-	const bool bCursor = GS && WantsCursor(GS->Phase) && !FParse::Param(FCommandLine::Get(), TEXT("dcdemo"));
+	const bool bCursor = GS && WantsCursor(GS->Phase) && (!FParse::Param(FCommandLine::Get(), TEXT("dcdemo")) || (GS->Phase == EDCRunPhase::Lobby && FCString::Strifind(FCommandLine::Get(), TEXT("dcmenuflow="))));
 	if (bCursor == bShowMouseCursor)
 	{
 		return;

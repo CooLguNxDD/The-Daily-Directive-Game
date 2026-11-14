@@ -23,6 +23,11 @@ struct FDCWeatherProfile
 	/** Precipitation puffs per second around the camera, and which puff kind (Rain, Snow, Ash; None = dry). */
 	UPROPERTY(EditAnywhere, Config, Category = "Weather") FName Precipitation;
 	UPROPERTY(EditAnywhere, Config, Category = "Weather") float PrecipitationRate = 0.f;
+	/** Cloud layer: share of the cloud band shown (0 none, 1 every cloud) and its shade (0 paper light, 1 storm). */
+	UPROPERTY(EditAnywhere, Config, Category = "Weather") float CloudCover = 0.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Weather") float CloudShade = 0.f;
+	/** Surface wetness 0..1: up-facing voxels darken and gloss (rain); the blend dries them as the arc moves on. */
+	UPROPERTY(EditAnywhere, Config, Category = "Weather") float Wetness = 0.f;
 	// The weather post layer (R19): added to the stack with weight 1.
 	UPROPERTY(EditAnywhere, Config, Category = "Weather") float Exposure = 0.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Weather") float Saturation = 1.f;

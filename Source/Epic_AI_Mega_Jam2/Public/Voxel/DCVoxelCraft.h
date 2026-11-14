@@ -8,9 +8,24 @@
 #include "Voxel/DCVoxelTypes.h"
 #include "Rules/DCPcg.h"
 
+/** A lit sign on a facade (R25 neon): its centre voxel one voxel proud of the wall (grid-local), the outward normal,
+ *  its size in voxels and its palette material. The city hangs a pooled shadowless rect light on the nearest ones. */
+struct EPIC_AI_MEGA_JAM2_API FDCVoxelSign
+{
+	FIntVector Center = FIntVector::ZeroValue;
+	/** A lit (non-emblem) voxel of the sign: carved away = the sign's light dies (the centre is the dark emblem). */
+	FIntVector Probe = FIntVector::ZeroValue;
+	FIntVector Normal = FIntVector::ZeroValue;
+	int32 WidthVox = 0;
+	int32 HeightVox = 0;
+	uint8 Material = 0;
+};
+
 /** A crafted tower in its own grid, with the solid count of every layer when intact (the structure pass compares). */
 struct EPIC_AI_MEGA_JAM2_API FDCVoxelTower
 {
+	/** Lit signs crafted on its facades (cosmetic lights only; never read by the ops). */
+	TArray<FDCVoxelSign> Signs;
 	int32 Lot = INDEX_NONE;
 	FDCVoxelGrid Grid;
 	/** Footprint box in grid-local voxels (walls only), Min inclusive, Max exclusive, z from 0. */

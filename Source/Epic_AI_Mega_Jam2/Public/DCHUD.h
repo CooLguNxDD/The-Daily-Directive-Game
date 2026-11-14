@@ -27,6 +27,8 @@ public:
 
 	// Shared drawing helpers.
 	void Text(const FString& S, float X, float Y, const FLinearColor& C, float Scale = 1.f, bool bCentre = false, UFont* Font = nullptr);
+	/** Size of S drawn by Text at PixelScale (= Scale * TextBoost * UiScale). */
+	void TextSize(UFont* Font, const FString& S, float PixelScale, float& OutW, float& OutH) const;
 	void Box(float X, float Y, float W, float H, const FLinearColor& C);
 	void Frame(float X, float Y, float W, float H, float T, const FLinearColor& C);
 	float Sx(float X) const { return X * UiScale; }
@@ -73,7 +75,21 @@ private:
 
 	/** Ink grit for stamps: a code-made mask of speckles and worn edges, drawn in paper over the stamp ink (R5). */
 	class UTexture2D* StampGrit();
+	/** Sector title card (CP6): paper and ink over the street while the sector's voxel city is still loading, then it
+	 *  slides away; the craft hitch and the empty street never show. */
+	void DrawSectorCard(ADCGameState& GS);
+	int32 CardSector = INDEX_NONE;
+	double CardLoadedReal = -1.0;
+	/** A newsprint sheet: the generated paper texture tiled at its own scale (R11), else flat paper. */
+	void PaperSheet(float X, float Y, float W, float H);
+	UPROPERTY() TObjectPtr<class UTexture2D> PaperTex;
+	bool bPaperTried = false;
 	UPROPERTY() TObjectPtr<class UTexture2D> Grit;
 	UPROPERTY() TObjectPtr<UFont> BigFont;
+	/** Draft card art by upgrade id, loaded once at BeginPlay (never in a draw). */
+	UPROPERTY() TMap<FName, TObjectPtr<class UTexture2D>> CardIcons;
+	UPROPERTY() TObjectPtr<UFont> HeadFont;
+	UPROPERTY() TObjectPtr<UFont> MastFont;
+	UPROPERTY() TObjectPtr<UFont> StampFont;
 	UPROPERTY() TObjectPtr<UFont> SmallFont;
 };

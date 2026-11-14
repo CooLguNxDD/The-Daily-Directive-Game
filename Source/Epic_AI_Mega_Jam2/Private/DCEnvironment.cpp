@@ -1,4 +1,5 @@
 #include "DCEnvironment.h"
+#include "DCSave.h"
 
 #include "DCVoxelCity.h"
 #include "DCVoxelFx.h"
@@ -20,6 +21,7 @@
 #include "Components/InstancedStaticMeshComponent.h"
 #include "DCTuning.h"
 #include "Engine/World.h"
+#include "Materials/MaterialInstanceDynamic.h"
 
 ADCEnvironment::ADCEnvironment()
 {
@@ -55,6 +57,14 @@ ADCEnvironment::ADCEnvironment()
 	Ground->SetMobility(EComponentMobility::Movable); // placed at run time (top face at z = 0); Static refused the move
 	Ground->SetCollisionProfileName(TEXT("BlockAll"));
 
+	Backdrop = CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("Backdrop"));
+	Backdrop->SetupAttachment(Root);
+	Backdrop->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	Backdrop->SetCastShadow(false);
+	Clouds = CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("Clouds"));
+	Clouds->SetupAttachment(Root);
+	Clouds->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	Clouds->SetCastShadow(false);
 	for (TObjectPtr<UInstancedStaticMeshComponent>* Ism : {&Sidewalks, &Dashes})
 	{
 		*Ism = CreateDefaultSubobject<UInstancedStaticMeshComponent>(Ism == &Sidewalks ? TEXT("Sidewalks") : TEXT("Dashes"));
@@ -106,10 +116,23 @@ void ADCEnvironment::BeginPlay()
 
 	Sun->SetWorldRotation(Look.SunRotation);
 	Sun->SetIntensity(Look.SunIntensityLux);
+	// Light shafts through the towers (Saltline: shafts sell scale), the cheap screen-space kind.
+	Sun->bEnableLightShaftBloom = true;
+	Sun->BloomScale = Look.LightShaftBloom;
+	Sun->BloomThreshold = 0.35f;
+	Sun->SetLightShaftOverrideDirection(FVector::ZeroVector);
 	Sun->SetLightColor(Look.SunColor);
 
 	Fog->SetFogDensity(Look.FogDensity);
 	Fog->SetFogInscatteringColor(Look.FogColor);
+
+	// Poster sky: warm, flat Rayleigh in a tall layer so the zenith stays cream (CP3 vision: it went charcoal).
+	Atmosphere->SetRayleighScattering(Look.SkyRayleighColor);
+	Atmosphere->SetRayleighScatteringScale(Look.SkyRayleighScale);
+	Atmosphere->SetRayleighExponentialDistribution(Look.SkyRayleighHeightKm);
+	Atmosphere->SetMieScatteringScale(Look.SkyMieScale);
+	Atmosphere->SetMieExponentialDistribution(Look.SkyMieHeightKm);
+	Atmosphere->SetMieScattering(Look.SkyMieAlbedo);
 
 	// Ground slab: top face at z = 0, scaled from the 100 cm engine cube.
 	Ground->SetStaticMesh(DCAssets::Cube());
@@ -136,7 +159,19 @@ void ADCEnvironment::BeginPlay()
 	S.bOverride_AutoExposureApplyPhysicalCameraExposure = true;
 	S.AutoExposureApplyPhysicalCameraExposure = false;
 	ApplyPreset();
-	ApplyPost(ComposeLook(false, false), S);
+	if (UMaterialInterface* Ink = Cast<UMaterialInterface>(UDCTuning::Get().Assets.InkOutlineMaterial.TryLoad()))
+	{
+		const FDCLookTuning& L = UDCTuning::Get().Look;
+		OutlineMID = UMaterialInstanceDynamic::Create(Ink, this);
+		OutlineMID->SetScalarParameterValue(TEXT("Thickness"), L.OutlineThicknessPx);
+		OutlineMID->SetScalarParameterValue(TEXT("DepthThreshold"), L.OutlineDepthThreshold);
+		OutlineMID->SetScalarParameterValue(TEXT("NormalThreshold"), L.OutlineNormalThreshold);
+		OutlineMID->SetScalarParameterValue(TEXT("FadeDistance"), L.OutlineFadeCm);
+		OutlineMID->SetVectorParameterValue(TEXT("InkColor"), L.Enemy); // ink: the darkest tone of the look
+	}
+	const FDCPostResult Composed = ComposeLook(false, false);
+	ApplyPost(Composed, S);
+	ApplyOutline(Composed.Outline);
 
 	FActorSpawnParameters Params;
 	Params.Owner = this;
@@ -147,6 +182,14 @@ void ADCEnvironment::ApplyPreset()
 {
 	const UDCTuning& T = UDCTuning::Get();
 	FString Wanted = T.PostPreset.ToString();
+	if (const UDCSaveSubsystem* Save = UDCSaveSubsystem::Get(this))
+	{
+		// The player's saved quality (R24) picks the preset with that quality level.
+		if (const FDCPostPreset* Saved = T.PostPresets.FindByPredicate([Save](const FDCPostPreset& P) { return P.Quality == Save->Settings.Quality; }))
+		{
+			Wanted = Saved->Id.ToString();
+		}
+	}
 	FParse::Value(FCommandLine::Get(), TEXT("dcpost="), Wanted);
 	const FDCPostPreset* Preset = T.PostPresets.FindByPredicate([&Wanted](const FDCPostPreset& P) { return P.Id.ToString() == Wanted; });
 	if (!Preset)
@@ -193,10 +236,13 @@ FDCPostResult ADCEnvironment::ComposeLook(bool bPhoto, bool bSpotlit) const
 	// spike and a stop-down while the flash is on screen: the target stays readable at the peak (R5).
 	const FDCCameraTuning& C = T.Camera;
 	TMap<FName, float> W = PostWeights;
-	W.Add(TEXT("Viewfinder"), 0.f);
-	W.Add(TEXT("Damage"), 0.f);
-	W.Add(TEXT("LastFrame"), 0.f); // the dying look is the player's screen, not the print
-	W.Add(TEXT("FlashKick"), 0.f);
+	for (const FDCPostLayer& Row : Stack)
+	{
+		if (Row.bScreenOnly)
+		{
+			W.Add(Row.Id, 0.f); // marked on the layer row: the print never carries the player's screen layers
+		}
+	}
 	W.Add(TEXT("Flash"), FlashPeak * FlashAlpha / FMath::Max(T.Look.MaxBloomPeak, 1.f) * C.PhotoBloomFraction);
 	W.Add(TEXT("Photo"), 1.f);
 	W.Add(TEXT("PhotoFlash"), FlashAlpha * C.PhotoFlashStopDown);
@@ -237,7 +283,7 @@ void ADCEnvironment::UpdatePostWeights()
 	const ADCCharacter* Me = PC ? Cast<ADCCharacter>(PC->GetPawn()) : nullptr;
 	SetPostWeight(TEXT("Viewfinder"), Me && Me->IsCameraRaised() && Me->GetSlot() == EDCSlot::Camera ? 1.f : 0.f);
 	const float SinceHurt = Me ? GetWorld()->GetRealTimeSeconds() - Me->Feedback().HurtTime : 100.f;
-	SetPostWeight(TEXT("Damage"), FMath::Clamp(1.f - SinceHurt / 0.6f, 0.f, 1.f));
+	SetPostWeight(TEXT("Damage"), Me && Me->IsDowned() ? 0.f : FMath::Clamp(1.f - SinceHurt / 0.6f, 0.f, 1.f)); // downed: the LastFrame look only
 	SetPostWeight(TEXT("LastFrame"), Me && Me->HasLastFrame() ? 1.f : 0.f); // the dying player's own view only
 }
 
@@ -291,9 +337,146 @@ void ADCEnvironment::UpdateWeather(float DeltaSeconds)
 	}
 }
 
+void ADCEnvironment::BuildBackdrop(const ADCVoxelCity& City, int32 RunSeed, int32 SectorIndex)
+{
+	// Seeded per sector, the same on every machine (cosmetic only, no collision).
+	const FDCLookTuning& L = UDCTuning::Get().Look;
+	Backdrop->ClearInstances();
+	for (UInstancedStaticMeshComponent* Lights : BackdropLights)
+	{
+		Lights->DestroyComponent();
+	}
+	BackdropLights.Reset();
+	float TotalWeight = 0.f;
+	for (int32 i = 0; i < L.BackdropBandColors.Num(); ++i)
+	{
+		const float Wt = L.BackdropBandWeights.IsValidIndex(i) ? L.BackdropBandWeights[i] : 1.f;
+		TotalWeight += Wt;
+		UInstancedStaticMeshComponent* Lights = NewObject<UInstancedStaticMeshComponent>(this);
+		Lights->SetupAttachment(GetRootComponent());
+		Lights->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		Lights->SetCastShadow(false);
+		Lights->RegisterComponent();
+		Lights->SetStaticMesh(DCAssets::Cube());
+		const FLinearColor& Tone = L.BackdropBandColors[i];
+		Lights->SetMaterial(0, DCAssets::MakeFlatUnlit(this, FLinearColor(Tone.R, Tone.G, Tone.B), Tone.A)); // alpha = glow
+		BackdropLights.Add(Lights);
+	}
+	Backdrop->SetStaticMesh(DCAssets::Cube());
+	Backdrop->SetMaterial(0, DCAssets::MakeFlat(this, L.BackdropColor));
+	const float Half = FMath::Abs(static_cast<float>(City.GetSector().Terrain.OriginCm.X));
+	FRandomStream Rng(HashCombine(GetTypeHash(RunSeed), GetTypeHash(SectorIndex * 7919 + 13)));
+	for (int32 i = 0; i < L.BackdropTowers; ++i)
+	{
+		const float A = 2.f * PI * (i + Rng.FRand() * 0.6f) / FMath::Max(L.BackdropTowers, 1);
+		const float R = Half + L.BackdropGapCm + Rng.FRand() * L.BackdropDepthCm;
+		const FVector2D Dir(FMath::Cos(A), FMath::Sin(A));
+		// The sector is a square: push each tower out to clear its corners.
+		const float Square = Half / FMath::Max(FMath::Abs(Dir.X), FMath::Abs(Dir.Y));
+		const FVector2D At = Dir * (R - Half + Square);
+		const float W = Rng.FRandRange(L.BackdropWidthCm.X, L.BackdropWidthCm.Y);
+		const float D = Rng.FRandRange(L.BackdropWidthCm.X, L.BackdropWidthCm.Y);
+		const float H = Rng.FRandRange(L.BackdropHeightCm.X, L.BackdropHeightCm.Y);
+		const FRotator Yaw(0.f, Rng.FRandRange(0.f, 90.f), 0.f);
+		Backdrop->AddInstance(FTransform(Yaw, FVector(At.X, At.Y, H * 0.5f), FVector(W / 100.f, D / 100.f, H / 100.f)));
+		// Lit floor bands wrap the tower just outside its faces: a tone per band, picked by weight (seeded).
+		const int32 Bands = L.BackdropBandColors.IsEmpty() ? 0 : Rng.RandRange(L.BackdropBands.X, FMath::Max(L.BackdropBands.X, L.BackdropBands.Y));
+		for (int32 b = 0; b < Bands && !BackdropLights.IsEmpty(); ++b)
+		{
+			float Pick = Rng.FRand() * TotalWeight;
+			int32 Tone = 0;
+			while (Tone < BackdropLights.Num() - 1 && Pick > (L.BackdropBandWeights.IsValidIndex(Tone) ? L.BackdropBandWeights[Tone] : 1.f))
+			{
+				Pick -= L.BackdropBandWeights.IsValidIndex(Tone) ? L.BackdropBandWeights[Tone] : 1.f;
+				++Tone;
+			}
+			const float Z = Rng.FRandRange(0.15f, 0.92f) * H;
+			BackdropLights[Tone]->AddInstance(FTransform(Yaw, FVector(At.X, At.Y, Z), FVector(W * 1.01f / 100.f, D * 1.01f / 100.f, L.BackdropBandCm / 100.f)));
+		}
+	}
+}
+
+void ADCEnvironment::BuildClouds(int32 RunSeed, int32 SectorIndex)
+{
+	// Seeded per sector like the skyline: the same banks on every machine (cosmetic, no collision).
+	const FDCLookTuning& L = UDCTuning::Get().Look;
+	Clouds->ClearInstances();
+	Clouds->SetStaticMesh(DCAssets::Cube());
+	if (!CloudMID)
+	{
+		CloudMID = DCAssets::MakeFlatUnlit(this, L.CloudLight, L.CloudGlow);
+	}
+	Clouds->SetMaterial(0, CloudMID);
+	CloudBanks.Reset();
+	CloudSlabs.Reset();
+	FRandomStream Rng(HashCombine(GetTypeHash(RunSeed), GetTypeHash(SectorIndex * 6151 + 29)));
+	for (int32 b = 0; b < L.CloudBanks; ++b)
+	{
+		FCloudBank Bank;
+		Bank.Angle = 360.f * (b + Rng.FRand() * 0.7f) / FMath::Max(L.CloudBanks, 1);
+		Bank.Radius = Rng.FRandRange(L.CloudRingCm.X, L.CloudRingCm.Y);
+		Bank.Height = Rng.FRandRange(L.CloudHeightCm.X, L.CloudHeightCm.Y);
+		Bank.Threshold = Rng.FRand(); // shown once CloudCover passes it: more cover, more banks, same order everywhere
+		CloudBanks.Add(Bank);
+		// A bank is a stepped stack: a long base slab, shorter ones on top, offset along the ring (poster cut-paper).
+		const int32 Slabs = Rng.RandRange(L.CloudSlabs.X, FMath::Max(L.CloudSlabs.X, L.CloudSlabs.Y));
+		float Length = Rng.FRandRange(L.CloudSlabCm.X, L.CloudSlabCm.Y) * 1.6f;
+		for (int32 s = 0; s < Slabs; ++s)
+		{
+			FCloudSlab Slab;
+			Slab.Bank = b;
+			const float Z = (s / 2) * L.CloudSlabThickCm;
+			Slab.Offset = FVector(Rng.FRandRange(-0.25f, 0.25f) * Length, Rng.FRandRange(-0.3f, 0.3f) * Length, Z);
+			Slab.Scale = FVector(Rng.FRandRange(0.35f, 0.6f) * Length, Length, L.CloudSlabThickCm) / 100.f;
+			CloudSlabs.Add(Slab);
+			Clouds->AddInstance(FTransform::Identity);
+			Length *= Rng.FRandRange(0.55f, 0.85f);
+		}
+	}
+	CloudXforms.SetNum(CloudSlabs.Num());
+}
+
+void ADCEnvironment::UpdateClouds(float DeltaSeconds)
+{
+	if (CloudSlabs.IsEmpty())
+	{
+		return;
+	}
+	const FDCLookTuning& L = UDCTuning::Get().Look;
+	const FDCWeatherProfile& W = Weather.Blend;
+	CloudOrbitDeg = FMath::Fmod(CloudOrbitDeg + W.Wind.Size2D() / 100.f * L.CloudOrbitDegPerWind * DeltaSeconds, 360.f);
+	if (CloudMID)
+	{
+		CloudMID->SetVectorParameterValue(TEXT("Color"), FMath::Lerp(L.CloudLight, L.CloudDark, FMath::Clamp(W.CloudShade, 0.f, 1.f)));
+	}
+	for (int32 i = 0; i < CloudSlabs.Num(); ++i)
+	{
+		const FCloudSlab& S = CloudSlabs[i];
+		const FCloudBank& B = CloudBanks[S.Bank];
+		// Each bank grows in over a 0.15 cover band past its threshold, so cover changes never pop banks in.
+		const float Grow = FMath::Clamp((W.CloudCover - B.Threshold) / 0.15f, 0.f, 1.f);
+		const float A = FMath::DegreesToRadians(B.Angle + CloudOrbitDeg);
+		const FVector Center(FMath::Cos(A) * B.Radius, FMath::Sin(A) * B.Radius, B.Height);
+		const FRotator Yaw(0.f, FMath::RadiansToDegrees(A), 0.f); // the long side runs along the ring
+		const FVector Scale = Grow > 0.f ? S.Scale * FVector(Grow, Grow, FMath::Max(Grow, 0.2f)) : FVector(0.001f);
+		CloudXforms[i] = FTransform(Yaw, Center + Yaw.RotateVector(S.Offset), Scale);
+	}
+	Clouds->BatchUpdateInstancesTransforms(0, CloudXforms, false, true);
+}
+
 void ADCEnvironment::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
+	if (const ADCGameState* BGS = GetWorld()->GetGameState<ADCGameState>())
+	{
+		const ADCVoxelCity* City = ADCVoxelCity::IsEnabled() ? ADCVoxelCity::Get(this) : nullptr;
+		if (City && City->GetBuiltSector() != INDEX_NONE && City->GetBuildId() != BackdropBuild)
+		{
+			BackdropBuild = City->GetBuildId();
+			BuildBackdrop(*City, BGS->RunSeed, City->GetBuiltSector());
+			BuildClouds(BGS->RunSeed, City->GetBuiltSector());
+		}
+	}
 	const FDCLookTuning& Look = UDCTuning::Get().Look;
 	const double Elapsed = GetWorld()->GetRealTimeSeconds() - FlashStartReal;
 	const float T = FMath::Clamp(static_cast<float>(Elapsed) / FMath::Max(Look.FlashDecaySeconds, 0.01f), 0.f, 1.f);
@@ -313,12 +496,41 @@ void ADCEnvironment::Tick(float DeltaSeconds)
 		}
 	}
 	UpdateWeather(DeltaSeconds);
+	UpdateClouds(DeltaSeconds);
 	const FDCWeatherProfile& W = Weather.Blend;
+	ADCVoxelCity* WetCity = ADCVoxelCity::IsEnabled() ? ADCVoxelCity::Get(this) : nullptr;
+	if (WetCity && FMath::Abs(W.Wetness - AppliedWetness) > 0.01f)
+	{
+		AppliedWetness = W.Wetness;
+		WetCity->SetWetness(W.Wetness);
+	}
 	Sun->SetIntensity(Look.SunIntensityLux * Light * W.SunScale);
 	Sun->SetLightColor(Look.SunColor * W.SunTint);
-	SkyLight->SetIntensity(Light * W.SkyScale);
+	SkyLight->SetIntensity(Light * W.SkyScale * Look.SkyFill);
+	// The poster sky holds cream to the zenith under any weather: dimming the sun would grey the sky with it, so the
+	// sky luminance makes up for the weather's sun scale (V4.3). Mutators (eclipse) still darken it through Light.
+	const float SkyKeep = Look.SkyLuminance * Light / FMath::Max(W.SunScale, Look.SkyMinSunScale);
+	Atmosphere->SetSkyLuminanceFactor(FLinearColor(SkyKeep, SkyKeep, SkyKeep));
 	Fog->SetFogDensity(W.FogDensity);
 	Fog->SetFogInscatteringColor(MutatorFog.A > 0.f ? MutatorFog : W.FogColor);
 	UpdatePostWeights();
-	ApplyPost(ComposeLook(false, false), Post->Settings);
+	const FDCPostResult Composed = ComposeLook(false, false);
+	ApplyPost(Composed, Post->Settings);
+	ApplyOutline(Composed.Outline);
+}
+
+void ADCEnvironment::ApplyOutline(float Strength)
+{
+	if (!OutlineMID)
+	{
+		return;
+	}
+	OutlineMID->SetScalarParameterValue(TEXT("Strength"), Strength);
+	TArray<FWeightedBlendable>& Blendables = Post->Settings.WeightedBlendables.Array;
+	FWeightedBlendable* Mine = Blendables.FindByPredicate([this](const FWeightedBlendable& B) { return B.Object == OutlineMID; });
+	if (!Mine)
+	{
+		Mine = &Blendables.Add_GetRef(FWeightedBlendable(0.f, OutlineMID));
+	}
+	Mine->Weight = Strength > 0.f ? 1.f : 0.f;
 }

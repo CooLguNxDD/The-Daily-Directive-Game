@@ -62,6 +62,8 @@ private:
 
 	TArray<FStep> Script;
 	int32 Next = 0;
+	/** First step of the reel section: a wiped run jumps there (the sector script would wait on phases that never come). */
+	int32 ReelStep = INDEX_NONE;
 	double StepReadyReal = -1.0;
 	double StepStartReal = -1.0;
 	FString ShotDir;
@@ -77,6 +79,8 @@ private:
 	bool bSpotlitFramed = false;
 	TSet<TObjectKey<class ADCSupplyPod>> FramedPods;
 	bool bDefendFiring = false;
+	/** Backpedalling away from a swarmer at arm's length (only this pilot's own Move press is released). */
+	bool bRetreating = false;
 	void TickDefend();
 	void TickMedic();
 	bool bMedic = false;

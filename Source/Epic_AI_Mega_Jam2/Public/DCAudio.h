@@ -22,6 +22,8 @@ public:
 	/** Starts (or keeps) the looping music bed. */
 	void StartMusic(const UObject* WorldContext, FName Cue, float Volume);
 	void SetMusicVolume(float Volume);
+	/** Re-applies the saved master volume to the playing music (settings change, R24). */
+	void ApplyMasterVolume(const UObject* WorldContext);
 
 	bool HasCue(FName Cue) const { return Bank.Contains(Cue); }
 	int32 NumCues() const { return Bank.Num(); }
@@ -39,6 +41,8 @@ private:
 	TMap<FName, TSharedPtr<TArray<uint8>>> Bank;
 	UPROPERTY() TObjectPtr<USoundAttenuation> Attenuation;
 	UPROPERTY() TObjectPtr<UAudioComponent> Music;
+	/** The music level a caller asked for, before the master volume. */
+	float MusicBase = 1.f;
 	FName MusicCue;
 	void LogCue(const UObject* WorldContext, FName Cue, const FVector* Location) const;
 	double RecordStart = -1.0;
@@ -49,6 +53,8 @@ namespace DCAudio
 {
 	EPIC_AI_MEGA_JAM2_API void PlayAt(const UObject* WorldContext, FName Cue, const FVector& Location, float Volume = 1.f, float Pitch = 1.f);
 	EPIC_AI_MEGA_JAM2_API void Play2D(const UObject* WorldContext, FName Cue, float Volume = 1.f, float Pitch = 1.f);
+	/** The saved master volume (R24), 0..1. */
+	EPIC_AI_MEGA_JAM2_API float Master(const UObject* WorldContext);
 
 	/** Pure synthesis, used by the subsystem and the tests: the registered cue names. */
 	EPIC_AI_MEGA_JAM2_API TArray<FName> CueNames();

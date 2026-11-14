@@ -1,4 +1,5 @@
 #include "DCCharacter.h"
+#include "DCOutfitBuild.h"
 
 #include "DCVoxelCity.h"
 
@@ -18,11 +19,19 @@
 #include "DCOrbitalStrike.h"
 #include "DCPlayerController.h"
 #include "DCPlayerState.h"
+#include "DCPresentationClock.h"
 #include "DCReelDirector.h"
 #include "DCTuning.h"
+#include "Interfaces/MovementBaseInterface.h"
+#include "Voxel/DCVoxelSettings.h"
+#include "Voxel/DCVoxelModel.h"
+#include "ProceduralMeshComponent.h"
+#include "Components/InstancedStaticMeshComponent.h"
 #include "Engine/TextureRenderTarget2D.h"
 #include "EnhancedInputComponent.h"
 #include "Engine/World.h"
+#include "Camera/PlayerCameraManager.h"
+#include "GameFramework/WorldSettings.h"
 #include "EngineUtils.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/SpringArmComponent.h"
@@ -95,7 +104,7 @@ ADCCharacter::ADCCharacter()
 	PhotoCamMesh = MakeProp(TEXT("PhotoCam"));
 	BeaconMesh = MakeProp(TEXT("Beacon"));
 
-	StrikeMarker = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("StrikeMarker"));
+	StrikeMarker = CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("StrikeMarker"));
 	StrikeMarker->SetupAttachment(RootComponent);
 	StrikeMarker->SetUsingAbsoluteLocation(true);
 	StrikeMarker->SetUsingAbsoluteRotation(true);
@@ -133,6 +142,9 @@ void ADCCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLife
 void ADCCharacter::BeginPlay()
 {
 	Super::BeginPlay();
+	// The photographer is never in their own photo: a downed Last Frame lens sits inside the body and outfit (the
+	// packaged r14-solo2 run printed a solid black Last Frame on the front page). Teammates stay in frame (co-star).
+	Capture->HiddenActors.AddUnique(this);
 	const UDCTuning& T = UDCTuning::Get();
 
 	if (USkeletalMesh* Mannequin = Cast<USkeletalMesh>(T.Assets.PlayerMesh.TryLoad()))
@@ -172,15 +184,39 @@ void ADCCharacter::BeginPlay()
 	RifleMesh->SetMaterial(0, DCAssets::MakeFlat(this, FLinearColor(0.08f, 0.08f, 0.07f)));
 	RifleMesh->SetRelativeLocation(FVector(-10.f, 30.f, 0.f));
 	RifleMesh->SetRelativeRotation(FRotator(0.f, 90.f, 0.f));
+	if (const FDCVoxelMeshData* Gun = DCVoxelModels::Mesh(T.Assets.RifleModel))
+	{
+		// The forge rifle replaces the cube; it rides on the rifle prop, so hand and holster placement still apply.
+		RifleMesh->SetStaticMesh(nullptr);
+		UProceduralMeshComponent* RifleVox = NewObject<UProceduralMeshComponent>(this, TEXT("RifleVox"));
+		RifleVox->SetupAttachment(RifleMesh);
+		RifleVox->SetUsingAbsoluteScale(true); // the prop squashes its cube by scale; the model keeps its own proportions
+		RifleVox->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		RifleVox->RegisterComponent();
+		RifleVox->CreateMeshSection(0, Gun->Positions, Gun->Indices, Gun->Normals, Gun->UVs, Gun->Colors, {}, false);
+		RifleVox->SetMaterial(0, Cast<UMaterialInterface>(UDCVoxelSettings::Get().VoxelMaterial.TryLoad()));
+		RifleVox->SetRelativeLocationAndRotation(T.Assets.RifleModelLocation, T.Assets.RifleModelRotation);
+	}
 	PhotoCamMesh->AttachToComponent(GetMesh(), FAttachmentTransformRules::SnapToTargetNotIncludingScale, Hand);
 	PhotoCamMesh->SetStaticMesh(DCAssets::Cube());
-	PhotoCamMesh->SetMaterial(0, DCAssets::MakeFlat(this, FLinearColor(0.9f, 0.85f, 0.75f)));
+	PhotoCamMesh->SetMaterial(0, DCAssets::MakeFlat(this, FLinearColor(0.024f, 0.552f, 0.687f), 0.6f));
+	if (const FDCVoxelMeshData* Cam = DCVoxelModels::Mesh(T.Assets.ChestCamModel))
+	{
+		ChestCam = NewObject<UProceduralMeshComponent>(this, TEXT("ChestCam"));
+		ChestCam->SetupAttachment(GetMesh(), T.Assets.ChestCamSocket);
+		ChestCam->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		ChestCam->RegisterComponent();
+		ChestCam->CreateMeshSection(0, Cam->Positions, Cam->Indices, Cam->Normals, Cam->UVs, Cam->Colors, {}, false);
+		ChestCam->SetMaterial(0, Cast<UMaterialInterface>(UDCVoxelSettings::Get().VoxelMaterial.TryLoad()));
+		ChestCam->SetRelativeLocationAndRotation(T.Assets.ChestCamLocation, T.Assets.ChestCamRotation);
+		ChestCam->SetRelativeScale3D(FVector(T.Assets.ChestCamScale));
+		ChestCam->SetVisibility(Slot != EDCSlot::Camera);
+	}
 	BeaconMesh->AttachToComponent(GetMesh(), FAttachmentTransformRules::SnapToTargetNotIncludingScale, Hand);
 	BeaconMesh->SetStaticMesh(DCAssets::Cylinder());
 	BeaconMesh->SetMaterial(0, DCAssets::MakeFlat(this, Look.Accent, 12.f));
 
-	StrikeMarker->SetStaticMesh(DCAssets::Cylinder());
-	StrikeMarker->SetMaterial(0, DCAssets::MakeFlat(this, Look.Accent, 6.f));
+	StrikeMarker->SetMaterial(0, DCAssets::MakeFlatUnlit(this, Look.Accent, Look.DangerRingGlow)); // unlit: stays palette red, not lit to salmon
 	Tracer->SetStaticMesh(DCAssets::Cube());
 	Tracer->SetMaterial(0, DCAssets::MakeFlat(this, FLinearColor(1.f, 0.8f, 0.4f), 60.f));
 
@@ -525,6 +561,10 @@ void ADCCharacter::OnRep_Slot()
 	RifleMesh->SetRelativeLocation(Slot == EDCSlot::Rifle ? FVector(-10.f, 30.f, 0.f) : A.HolsterLocation);
 	RifleMesh->SetVisibility(true);
 	PhotoCamMesh->SetVisibility(Slot == EDCSlot::Camera);
+	if (ChestCam)
+	{
+		ChestCam->SetVisibility(Slot != EDCSlot::Camera); // the camera is either in hand or on the chest, never gone
+	}
 	BeaconMesh->SetVisibility(Slot == EDCSlot::Stratagem);
 	if (Slot != EDCSlot::Stratagem)
 	{
@@ -657,6 +697,22 @@ void ADCCharacter::ServerFire_Implementation(FVector_NetQuantize Start, FVector_
 	FCollisionQueryParams Params(SCENE_QUERY_STAT(DCRifle), false, this);
 	const FVector End = Start + FVector(Dir).GetSafeNormal() * R.RangeCm;
 	const bool bHit = GetWorld()->LineTraceSingleByChannel(Hit, Start, End, ECC_Visibility, Params);
+	// Demo telemetry (-dcrifletrace): what the rifle hits, every 2 s (the sector-2 downs: is the pilot hitting?).
+	static const bool bTrace = FParse::Param(FCommandLine::Get(), TEXT("dcrifletrace"));
+	if (bTrace)
+	{
+		static int32 Shots = 0, EnemyHits = 0;
+		static FString LastOther;
+		static double NextLog = 0.0;
+		++Shots;
+		EnemyHits += bHit && Cast<ADCEnemy>(Hit.GetActor()) ? 1 : 0;
+		LastOther = bHit && !Cast<ADCEnemy>(Hit.GetActor()) ? FString::Printf(TEXT("%s@%.0fcm"), Hit.GetActor() ? *Hit.GetActor()->GetClass()->GetName() : TEXT("?"), Hit.Distance) : LastOther;
+		if (GetWorld()->GetRealTimeSeconds() >= NextLog)
+		{
+			NextLog = GetWorld()->GetRealTimeSeconds() + 2.0;
+			UE_LOG(LogTemp, Display, TEXT("DCRIFLE shots=%d enemyhits=%d lastother=%s health=%.0f ammo=%d"), Shots, EnemyHits, *LastOther, Health, HostAmmo);
+		}
+	}
 	if (bHit)
 	{
 		if (ADCEnemy* Enemy = Cast<ADCEnemy>(Hit.GetActor()))
@@ -732,9 +788,13 @@ void ADCCharacter::UpdateStrikeAim()
 	StrikeMarker->SetVisibility(bStrikeAimValid && Def);
 	if (bStrikeAimValid && Def)
 	{
-		const float D = Def->BlastRadius * 2.f / 100.f;
+		// A thin ring at the blast radius (a filled disc hid the street it marks), rebuilt only when the radius changes.
+		if (Def->BlastRadius != StrikeMarkerRadius)
+		{
+			StrikeMarkerRadius = Def->BlastRadius;
+			DCAssets::BuildRing(StrikeMarker, StrikeMarkerRadius);
+		}
 		StrikeMarker->SetWorldLocation(StrikeAimPoint + FVector(0, 0, 8.f));
-		StrikeMarker->SetWorldScale3D(FVector(D, D, 0.03f));
 	}
 }
 
@@ -823,6 +883,16 @@ void ADCCharacter::TakePhoto()
 		FRotator Aim = GetControlRotation();
 		Aim.Pitch = FMath::Clamp(FRotator::NormalizeAxis(Aim.Pitch), -4.f, 35.f);
 		Capture->SetWorldLocationAndRotation(GetActorLocation() + FVector(0, 0, 35.f) + Aim.Vector() * 60.f, Aim);
+		// The swarmer biting a downed player sits on the lens: anything that close is hidden for this one shot (CP6:
+		// a Last Frame printed solid black from inside an ink swarmer).
+		for (ADCEnemy* E : TActorRange<ADCEnemy>(GetWorld()))
+		{
+			if (FVector::Dist(E->GetActorLocation(), Capture->GetComponentLocation()) < UDCTuning::Get().Photo.LastFrameClearCm)
+			{
+				Capture->HiddenActors.AddUnique(E);
+				LensHidden.Add(E);
+			}
+		}
 	}
 	if (const ADCVoxelCity* City = ADCVoxelCity::Get(this))
 	{
@@ -837,6 +907,11 @@ void ADCCharacter::TakePhoto()
 	}
 	Capture->CaptureScene();
 	Capture->SetWorldLocationAndRotation(Lens, LensRot);
+	for (const TWeakObjectPtr<AActor>& Hidden : LensHidden)
+	{
+		Capture->HiddenActors.Remove(Hidden.Get());
+	}
+	LensHidden.Reset();
 
 	// Instant preview grade from the same rules; the host's grade replaces it when it arrives.
 	const FDCShotView View = GetShotView();
@@ -870,11 +945,73 @@ void ADCCharacter::ServerSubmitPhoto_Implementation(int32 PhotoId, FVector_NetQu
 		return;
 	}
 	HostNextShutterTime = T + C.WindOnSeconds * 0.8f;
+	HostGradeShot(PhotoId, CamLoc, CamRot, FMath::Clamp(FOV, C.ViewfinderFOVTight, C.ViewfinderFOVWide + PS->ExtraFOV),
+		FMath::Clamp(ShotTime, T - ShotClockToleranceSeconds, T), bLast, GetWorld()->GetRealTimeSeconds() + C.GradeWaitForOpSeconds);
+}
+
+void ADCCharacter::TickOutfit()
+{
+	const ADCPlayerState* PS = GetPlayerState<ADCPlayerState>();
+	if (!PS || PS->OutfitCode.IsEmpty() || PS->OutfitCode == AppliedOutfit)
+	{
+		return;
+	}
+	AppliedOutfit = PS->OutfitCode;
+	// The outfit's camera replaces the default chest camera (same rule: shown while the camera is not in hand).
+	UProceduralMeshComponent* Cam = DCOutfitBuild::Apply(GetMesh(), DCOutfitBuild::FromCode(AppliedOutfit), OutfitMeshes);
+	// The default chest camera goes once an outfit camera exists; an earlier outfit camera was already destroyed by Apply.
+	if (Cam && IsValid(ChestCam) && !ChestCam->IsBeingDestroyed() && ChestCam != Cam)
+	{
+		ChestCam->DestroyComponent();
+	}
+	if (Cam)
+	{
+		ChestCam = Cam;
+	}
+	if (ChestCam)
+	{
+		ChestCam->SetVisibility(Slot != EDCSlot::Camera);
+	}
+}
+
+void ADCCharacter::SetBase(FMovementBaseInterfaceData* MovementBaseInterfaceData, const FName BoneName, bool bNotifyActor)
+{
+	const UActorComponent* Base = MovementBaseInterfaceData ? Cast<UActorComponent>(MovementBaseInterfaceData->GetMovementBaseObject()) : nullptr;
+	// No movement base a remote machine cannot resolve: voxel meshes (rebuilt per machine) and any actor spawned at run
+	// time without replication (the environment's Ground slab: co-op clients flooded unresolved-GUID warnings, CP6).
+	const AActor* BaseOwner = Base ? Base->GetOwner() : nullptr;
+	if (BaseOwner && (Cast<ADCVoxelCity>(BaseOwner) || (!BaseOwner->GetIsReplicated() && !BaseOwner->IsNetStartupActor())))
+	{
+		Super::SetBase(static_cast<FMovementBaseInterfaceData*>(nullptr), NAME_None, bNotifyActor);
+		return;
+	}
+	Super::SetBase(MovementBaseInterfaceData, BoneName, bNotifyActor);
+}
+
+void ADCCharacter::HostGradeShot(int32 PhotoId, FVector CamLoc, FRotator CamRot, float FOV, float When, bool bLast, double GiveUpAt)
+{
+	// A strike's collapse records are written when its voxel op leaves the worker, a few frames after the blast. A
+	// shutter in that gap waits for them (graded at its own shot time; the records carry the blast time), so PEAK
+	// CINEMA and DEMOLITION see the towers the strike felled.
+	const ADCVoxelCity* City = ADCVoxelCity::Get(this);
+	if (City && City->HasPendingOpsAt(When) && GetWorld()->GetRealTimeSeconds() < GiveUpAt)
+	{
+		UE_LOG(LogTemp, Display, TEXT("DCPHOTO wait-op photo=%d shot=%.2f"), PhotoId, When);
+		GetWorldTimerManager().SetTimerForNextTick(FTimerDelegate::CreateWeakLambda(this, [=, this]
+		{
+			HostGradeShot(PhotoId, CamLoc, CamRot, FOV, When, bLast, GiveUpAt);
+		}));
+		return;
+	}
+	ADCPlayerState* PS = GetPlayerState<ADCPlayerState>();
+	if (!PS)
+	{
+		return;
+	}
 	FDCShotView View;
 	View.Location = CamLoc;
 	View.Rotation = CamRot;
-	View.FOV = FMath::Clamp(FOV, C.ViewfinderFOVTight, C.ViewfinderFOVWide + PS->ExtraFOV);
-	const float When = FMath::Clamp(ShotTime, T - ShotClockToleranceSeconds, T);
+	View.FOV = FOV;
 
 	FDCPhotoRecord Record;
 	Record.PhotoId = PhotoId;
@@ -901,6 +1038,7 @@ void ADCCharacter::ServerSubmitPhoto_Implementation(int32 PhotoId, FVector_NetQu
 		}
 	}
 	Record.Grade = DCPhotoRules::GradePhoto(Inputs, UDCTuning::Get().Photo);
+	UE_LOG(LogTemp, Display, TEXT("DCPHOTO graded photo=%d shot=%.2f score=%d collapses=%.0f blast=%d"), PhotoId, When, Record.Grade.Score, Inputs.Metrics.FindRef(TEXT("Collapses")), Inputs.bHasBlast ? 1 : 0);
 	ApplyStrobe(View);
 	if (ADCGameMode* GM = GetWorld()->GetAuthGameMode<ADCGameMode>())
 	{
@@ -950,6 +1088,7 @@ void ADCCharacter::HostApplyHurt(float Amount, const FVector& From)
 	ClientHurt(From);
 	if (Health <= 0.f)
 	{
+		UE_LOG(LogTemp, Display, TEXT("DCDOWN %s downed by %.0f from %s (%.0f cm away)"), *GetName(), Amount, *From.ToCompactString(), FVector::Dist(From, GetActorLocation()));
 		bDowned = true;
 		bLastFrameReady = true; // R21
 		DownedAt = Now();
@@ -974,6 +1113,17 @@ void ADCCharacter::ClientHurt_Implementation(FVector_NetQuantize From)
 
 void ADCCharacter::ClientToast_Implementation(const FString& Text) { Toast(Text); }
 void ADCCharacter::ClientCue_Implementation(FName Cue) { DCAudio::Play2D(this, Cue, 0.9f); }
+
+void ADCCharacter::ClientLastFrameSlowMo_Implementation(float Dilation, float Seconds)
+{
+	// Presentation only (advisor CP6): this machine's cosmetic clock slows; no world or actor time dilation in co-op,
+	// so host and client behave the same and the simulation never drifts.
+	if (UDCPresentationClock* Clock = GetWorld() ? GetWorld()->GetSubsystem<UDCPresentationClock>() : nullptr)
+	{
+		Clock->Begin(Dilation, Seconds);
+	}
+}
+
 
 void ADCCharacter::ClientSyncAmmo_Implementation(int32 NewAmmo, int32 NewReserve)
 {
@@ -1162,6 +1312,9 @@ void ADCCharacter::Landed(const FHitResult& Hit)
 	if (IsLocallyControlled())
 	{
 		AddTrauma(FMath::Clamp(Impact / 3000.f, 0.f, 0.3f));
+		// The camera sinks into the landing and springs back (Saltline landing spring).
+		const FDCMoveTuning& M = UDCTuning::Get().Move;
+		LandDipVel -= M.LandDipMaxCm * M.LandDipDamping * FMath::Clamp(Impact / FMath::Max(M.LandDipFullSpeed, 1.f), 0.f, 1.f);
 	}
 }
 
@@ -1222,6 +1375,10 @@ void ADCCharacter::UpdateView(float DeltaSeconds)
 		GetMesh()->SetOwnerNoSee(bFirst);
 		RifleMesh->SetOwnerNoSee(bFirst);
 		PhotoCamMesh->SetOwnerNoSee(bFirst);
+		if (ChestCam)
+		{
+			ChestCam->SetOwnerNoSee(bFirst);
+		}
 		BeaconMesh->SetOwnerNoSee(bFirst);
 	}
 	FirstCam->SetFieldOfView(FMath::FInterpTo(FirstCam->FieldOfView, LensFOV(), DeltaSeconds, 14.f));
@@ -1233,11 +1390,27 @@ void ADCCharacter::UpdateView(float DeltaSeconds)
 	const FRotator Jitter(FMath::PerlinNoise1D(T * 23.f) * 4.f * Shake, FMath::PerlinNoise1D(T * 19.f + 7.f) * 4.f * Shake, FMath::PerlinNoise1D(T * 17.f + 3.f) * 3.f * Shake);
 	ThirdCam->SetRelativeRotation(Jitter);
 	FirstCam->SetRelativeRotation(Jitter * 0.6f);
+
+
+	// Landing spring and sprint FOV kick (Saltline feel, R9), from the move tuning.
+	const FDCMoveTuning& M = UDCTuning::Get().Move;
+	const float Accel = -LandDip * M.LandDipStiffness - LandDipVel * M.LandDipDamping;
+	LandDipVel += Accel * DeltaSeconds;
+	LandDip = FMath::Clamp(LandDip + LandDipVel * DeltaSeconds, -M.LandDipMaxCm, M.LandDipMaxCm);
+	Boom->SocketOffset = M.ShoulderOffset + FVector(0.f, 0.f, LandDip);
+	// Downed: the boom lifts above the rubble and pulls back, so the player sees themselves and the street (a boom at
+	// knee height in a rubble pile went black).
+	const float BoomZ = FMath::FInterpTo(Boom->GetRelativeLocation().Z, bDowned ? M.DownedBoomHeightCm : 40.f, DeltaSeconds, 4.f);
+	Boom->SetRelativeLocation(FVector(0.f, 0.f, BoomZ));
+	Boom->TargetArmLength = FMath::FInterpTo(Boom->TargetArmLength, bDowned ? M.DownedArmLength : M.ArmLength, DeltaSeconds, 4.f);
+	const bool bSprintKick = bSprinting && !bCameraRaised && GetVelocity().Size2D() > M.WalkSpeed;
+	ThirdCam->SetFieldOfView(FMath::FInterpTo(ThirdCam->FieldOfView, M.ThirdPersonFOV + (bSprintKick ? M.SprintFOVKick : 0.f), DeltaSeconds, 6.f));
 }
 
 void ADCCharacter::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
+	TickOutfit(); // every machine builds every pawn's replicated outfit (remote pawns too, CP7)
 	UpdateHeldItems(DeltaSeconds);
 	UpdateFootsteps(DeltaSeconds);
 	if (HasAuthority())

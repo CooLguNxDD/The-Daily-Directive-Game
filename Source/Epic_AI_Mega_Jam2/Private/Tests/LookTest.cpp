@@ -98,7 +98,17 @@ bool FDCNewsprintTest::RunTest(const FString&)
 			Max = FMath::Max(Max, L);
 		}
 	}
-	TestTrue(TEXT("halftone shows dots"), Max - Min > 40);
+	// The print's texture is data: halftone dots (newsprint) or feed scanlines (R25 news feed). Check the one in use.
+	if (P.HalftoneMix > 0.f && P.DotCell > 0)
+	{
+		TestTrue(TEXT("halftone shows dots"), Max - Min > 40);
+	}
+	if (P.ScanlineEvery > 0)
+	{
+		auto RowMean = [&](int32 Y) { int64 Acc = 0; for (int32 X = 14; X < W - 14; ++X) { Acc += Printed[Y * W + X].G; } return static_cast<float>(Acc) / (W - 28); };
+		const int32 ScanY = ((H - 14) / P.ScanlineEvery) * P.ScanlineEvery;
+		TestTrue(TEXT("feed scanlines darken every Nth row"), RowMean(ScanY) < RowMean(ScanY + 1) * (1.f - P.ScanlineDark * 0.5f));
+	}
 	TestTrue(TEXT("the dim tower beside the white blast is lifted (R5)"), Sum / FMath::Max(1, W - 28) > 60);
 	AddInfo(FString::Printf(TEXT("DCPRINT tower row mean %lld (source 34), min %d max %d, gamma %.2f"), Sum / FMath::Max(1, W - 28), Min, Max, DCNewsprint::MidGamma(Px, P, Gain, Offset)));
 	return true;
@@ -117,6 +127,9 @@ bool FDCWeatherTest::RunTest(const FString&)
 		TestTrue(FString::Printf(TEXT("%s fog stays light"), *P.Id.ToString()), P.FogDensity <= 0.03f);
 		TestTrue(FString::Printf(TEXT("%s exposure mild"), *P.Id.ToString()), FMath::Abs(P.Exposure) <= 0.6f);
 		TestTrue(FString::Printf(TEXT("%s precipitation kind exists"), *P.Id.ToString()), P.Precipitation.IsNone() || V.FxKinds.ContainsByPredicate([&P](const FDCFxKind& K) { return K.Id == P.Precipitation; }));
+		TestTrue(FString::Printf(TEXT("%s cloud and wetness in 0..1"), *P.Id.ToString()), P.CloudCover >= 0.f && P.CloudCover <= 1.f && P.CloudShade >= 0.f && P.CloudShade <= 1.f && P.Wetness >= 0.f && P.Wetness <= 1.f);
+		// Rain wets the street; a dry profile with rain falling would read wrong (R18 surface wetness).
+		TestTrue(FString::Printf(TEXT("%s rain wets the street"), *P.Id.ToString()), P.Precipitation != FName(TEXT("Rain")) || P.Wetness >= 0.5f);
 	}
 	for (const FDCSeasonDef& S : T.Seasons)
 	{
@@ -165,6 +178,8 @@ bool FDCCoStarTest::RunTest(const FString&)
 	TestEqual(TEXT("no co-star below the minimum fill"), DCPhotoRules::CoStarMultiplier(P.CoStarMinFill * 0.5f, P), 1.f);
 	const float Small = DCPhotoRules::CoStarMultiplier(P.CoStarMinFill, P);
 	const float Big = DCPhotoRules::CoStarMultiplier(P.CoStarFullFill, P);
+	const float Down = DCPhotoRules::CoStarMultiplier(P.CoStarFullFill, P, true);
+	TestTrue(TEXT("a downed co-star still pays, less than a survivor"), Down > 1.f && Down < Big);
 	TestTrue(TEXT("a bigger co-star pays more, capped"), Small > 1.f && Big > Small && FMath::IsNearlyEqual(Big, P.CoStarMaxMultiplier) && DCPhotoRules::CoStarMultiplier(1.f, P) <= P.CoStarMaxMultiplier);
 	FDCPhotoInputs In;
 	In.Visibility = 1.f;
@@ -196,6 +211,27 @@ bool FDCLastFrameTest::RunTest(const FString&)
 	TestEqual(TEXT("capped at the best living shot"), DCPhotoRules::GradePhoto(In, P).Score, Living.Score - 10);
 	In.LastFrameCap = 0;
 	TestTrue(TEXT("no living shot yet: no gain over the raw points"), DCPhotoRules::GradePhoto(In, P).Score <= DCPhotoRules::GradePhoto(In, P).RawPoints);
+	return true;
+}
+
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDCScreenOnlyLayersTest, "Epic_AI_Mega_Jam2.Look.ScreenOnlyLayers", LookFlags)
+bool FDCScreenOnlyLayersTest::RunTest(const FString&)
+{
+	// The player's screen layers never reach a print (a dying vignette once blackened Last Frame photos): the rows
+	// carry the flag, and the photo composition reads it, not a hand-kept name list.
+	const TArray<FDCPostLayer>& Layers = UDCTuning::Get().PostLayers;
+	for (const TCHAR* Id : {TEXT("Viewfinder"), TEXT("Damage"), TEXT("LastFrame"), TEXT("FlashKick")})
+	{
+		const FDCPostLayer* Row = Layers.FindByPredicate([Id](const FDCPostLayer& L) { return L.Id == FName(Id); });
+		TestTrue(FString::Printf(TEXT("%s row ships"), Id), Row != nullptr);
+		TestTrue(FString::Printf(TEXT("%s is screen-only"), Id), Row && Row->bScreenOnly);
+	}
+	for (const TCHAR* Id : {TEXT("Base"), TEXT("Photo"), TEXT("Weather")})
+	{
+		const FDCPostLayer* Row = Layers.FindByPredicate([Id](const FDCPostLayer& L) { return L.Id == FName(Id); });
+		TestTrue(FString::Printf(TEXT("%s reaches the print"), Id), Row && !Row->bScreenOnly);
+	}
 	return true;
 }
 

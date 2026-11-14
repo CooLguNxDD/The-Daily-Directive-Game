@@ -33,6 +33,9 @@ struct FDCPrintTuning
 	/** Paper border, then a thin ink rule inside it (pixels). */
 	UPROPERTY(EditAnywhere, Config, Category = "Print") int32 BorderPx = 10;
 	UPROPERTY(EditAnywhere, Config, Category = "Print") int32 RulePx = 2;
+	/** News-feed treatment (R25): every Nth row darkened by ScanlineDark (0 = no scanlines). */
+	UPROPERTY(EditAnywhere, Config, Category = "Print") int32 ScanlineEvery = 0;
+	UPROPERTY(EditAnywhere, Config, Category = "Print") float ScanlineDark = 0.f;
 };
 
 namespace DCNewsprint

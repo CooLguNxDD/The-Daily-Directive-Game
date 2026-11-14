@@ -8,6 +8,7 @@
 #include "DCBuilding.h"
 #include "DCVoxelCity.h"
 #include "Voxel/DCVoxelGrid.h"
+#include "Voxel/DCVoxelSettings.h"
 #include "DCCharacter.h"
 #include "DCEnemy.h"
 #include "DCEnvironment.h"
@@ -47,8 +48,13 @@ ADCOrbitalStrike::ADCOrbitalStrike()
 
 	RootComponent = CreateDefaultSubobject<USceneComponent>(TEXT("Root"));
 	Beam = MakeFx(this, TEXT("Beam"), RootComponent);
-	Ring = MakeFx(this, TEXT("Ring"), RootComponent);
+	Ring = CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("Ring"));
+	Ring->SetupAttachment(RootComponent);
+	Ring->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	Ring->SetCastShadow(false);
+	Ring->SetMobility(EComponentMobility::Movable);
 	Beacon = MakeFx(this, TEXT("Beacon"), RootComponent);
+	ImpactFlare = MakeFx(this, TEXT("ImpactFlare"), RootComponent);
 	Fireball = MakeFx(this, TEXT("Fireball"), RootComponent);
 	FireCubes = CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("FireCubes"));
 	FireCubes->SetupAttachment(RootComponent);
@@ -103,16 +109,20 @@ void ADCOrbitalStrike::BeginPlay()
 	const float Radius = Def ? Def->BlastRadius : 1000.f;
 
 	Beam->SetStaticMesh(DCAssets::Cylinder());
-	BeamMat = DCAssets::MakeFlat(this, BeamColor, 4.f);
+	BeamMat = DCAssets::MakeFlatUnlit(this, BeamColor, 1.f);
 	Beam->SetMaterial(0, BeamMat);
 	Beam->SetRelativeLocation(FVector(0, 0, BeamHeightCm * 0.5f));
 
-	Ring->SetStaticMesh(DCAssets::Cylinder());
-	// The danger zone in propaganda red (art bible), dim enough to stay red instead of blooming pink.
-	Ring->SetMaterial(0, DCAssets::MakeFlat(this, UDCTuning::Get().Look.Accent, 0.35f));
+	// The danger zone: a thin unlit band of propaganda red on the ground (a filled lit disc washed to salmon).
+	const FDCLookTuning& Look = UDCTuning::Get().Look;
+	DCAssets::BuildRing(Ring, Radius);
+	Ring->SetMaterial(0, DCAssets::MakeFlatUnlit(this, Look.Accent, Look.DangerRingGlow));
 	Ring->SetRelativeLocation(FVector(0, 0, 3.f));
-	Ring->SetRelativeScale3D(FVector(Radius * 2.f / 100.f, Radius * 2.f / 100.f, 0.02f));
 
+	ImpactFlare->SetStaticMesh(DCAssets::Cylinder());
+	FlareMat = DCAssets::MakeFlatUnlit(this, UDCTuning::Get().Look.ImpactFlareColor, 1.f);
+	ImpactFlare->SetMaterial(0, FlareMat);
+	ImpactFlare->SetRelativeLocation(FVector(0, 0, 6.f));
 	Beacon->SetStaticMesh(DCAssets::Cone());
 	Beacon->SetMaterial(0, DCAssets::MakeFlat(this, BeamColor, 30.f));
 	Beacon->SetRelativeLocation(FVector(0, 0, 60.f));
@@ -132,7 +142,8 @@ void ADCOrbitalStrike::BeginPlay()
 	for (int32 i = 0; i < NumCubes; ++i)
 	{
 		const FVector Dir = CubeRng.VRand() * FVector(1.f, 1.f, 0.7f);
-		CubeSeeds.Add(FVector4f(FVector3f(Dir * CubeRng.FRandRange(0.25f, 1.f)), CubeRng.FRandRange(0.12f, 0.3f)));
+		const FVector2D CubeSize = UDCTuning::Get().Look.FireballCubeSize;
+		CubeSeeds.Add(FVector4f(FVector3f(Dir * CubeRng.FRandRange(0.25f, 1.f)), CubeRng.FRandRange(CubeSize.X, CubeSize.Y)));
 		Hidden.Add(FTransform(FQuat::Identity, FVector::ZeroVector, FVector::ZeroVector));
 	}
 	FireCubes->ClearInstances();
@@ -161,6 +172,10 @@ void ADCOrbitalStrike::Tick(float DeltaSeconds)
 	if (Now < DetonateTime)
 	{
 		TickTelegraph(Now, *Def);
+		if (HasAuthority() && !bRestage && !bOpQueued && Now >= DetonateTime - UDCVoxelSettings::Get().Tuning.PlanLeadSeconds)
+		{
+			QueueVoxelOp(*Def);
+		}
 		if (HasAuthority() && !bRestage)
 		{
 			const float U = 1.f - (DetonateTime - Now) / FMath::Max(Def->TelegraphSeconds, 0.01f);
@@ -187,12 +202,23 @@ void ADCOrbitalStrike::TickTelegraph(float Now, const FDCStratagemDef& Def)
 {
 	const float Start = DetonateTime - Def.TelegraphSeconds;
 	const float U = FMath::Clamp((Now - Start) / FMath::Max(Def.TelegraphSeconds, 0.01f), 0.f, 1.f);
-	// The laser converges: wide and faint to a thin, white-hot line.
-	const float Width = FMath::Lerp(7.f, 0.35f, FMath::Pow(U, 0.7f));
+	// The beam narrows from a broad sighting column to a thin lance as it charges (art bible: thin red beams).
+	const FDCLookTuning& BeamLook = UDCTuning::Get().Look;
+	const float Width = FMath::Lerp(BeamLook.BeamWidthStartCm, BeamLook.BeamWidthEndCm, FMath::Pow(U, 0.7f)) / 100.f;
 	const float Pulse = 0.5f + 0.5f * FMath::Sin(Now * FMath::Lerp(6.f, 40.f, U));
 	Beam->SetRelativeScale3D(FVector(Width, Width, BeamHeightCm / 100.f));
-	DCAssets::SetFlat(BeamMat, Def.BeamColor, FMath::Lerp(1.f, 12.f, U * U) * (0.7f + 0.3f * Pulse)); // red, not blown to magenta
+	DCAssets::SetFlat(BeamMat, Def.BeamColor, FMath::Lerp(1.f, UDCTuning::Get().Look.BeamGlowPeak, U * U) * (0.7f + 0.3f * Pulse)); // red, not blown to pink
 	Beacon->SetVisibility(Pulse > 0.3f || U > 0.8f);
+	// The flare where the beam lands: wider than the beam, hotter as it charges, pulsing with it.
+	const FDCLookTuning& FlareLook = UDCTuning::Get().Look;
+	const float FlareD = Width * FlareLook.ImpactFlareWidthScale * (0.85f + 0.3f * Pulse);
+	ImpactFlare->SetRelativeScale3D(FVector(FlareD, FlareD, 0.02f));
+	DCAssets::SetFlat(FlareMat, FlareLook.ImpactFlareColor, FMath::Lerp(0.6f, FlareLook.ImpactFlareGlow, U) * (0.6f + 0.4f * Pulse));
+	// The beam lights the street and facades around its target (red contact light, rising with the charge).
+	Light->SetRelativeLocation(FVector(0, 0, 150.f));
+	Light->SetLightColor(Def.BeamColor);
+	Light->SetAttenuationRadius(FMath::Max(Def.BlastRadius * FlareLook.BeamContactReach, 600.f));
+	Light->SetIntensity(FlareLook.BeamContactLight * U * U * (0.7f + 0.3f * Pulse));
 
 	if (!bChargePlayed && U > 0.f && Def.TelegraphSeconds - (Now - Start) <= 3.2f)
 	{
@@ -208,6 +234,10 @@ void ADCOrbitalStrike::TickTelegraph(float Now, const FDCStratagemDef& Def)
 
 void ADCOrbitalStrike::DetonateLocal(const FDCStratagemDef& Def)
 {
+	// The blast light takes over from the beam's contact light: fire colour, high over the core, long reach.
+	Light->SetRelativeLocation(FVector(0, 0, 600.f));
+	Light->SetLightColor(UDCTuning::Get().Look.Fire);
+	Light->SetAttenuationRadius(9000.f);
 	const FVector Here = GetActorLocation();
 	float Proximity = 0.4f;
 	if (APlayerController* PC = UGameplayStatics::GetPlayerController(this, 0))
@@ -234,6 +264,7 @@ void ADCOrbitalStrike::DetonateLocal(const FDCStratagemDef& Def)
 	Shock->SetVisibility(false); // the filled shock disc read as a white bar edge-on (critic); the voxel core carries the peak
 	Ring->SetVisibility(false);
 	Beacon->SetVisibility(false);
+	ImpactFlare->SetVisibility(false);
 }
 
 void ADCOrbitalStrike::TickBlast(float Now, const FDCStratagemDef& Def)
@@ -269,7 +300,8 @@ void ADCOrbitalStrike::TickBlast(float Now, const FDCStratagemDef& Def)
 
 	const float BeamFade = FMath::Clamp(1.f - T / 0.35f, 0.f, 1.f);
 	Beam->SetRelativeScale3D(FVector(3.f * BeamFade + 0.01f, 3.f * BeamFade + 0.01f, BeamHeightCm / 100.f));
-	DCAssets::SetFlat(BeamMat, FMath::Lerp(Def.BeamColor, FLinearColor(1.f, 0.95f, 0.76f), 0.5f), 20.f * BeamFade); // a short white-orange flash, then gone
+	const FDCLookTuning& Look = UDCTuning::Get().Look;
+	DCAssets::SetFlat(BeamMat, FMath::Lerp(Def.BeamColor, Look.BeamFlashColor, 0.5f), Look.BeamFlashGlow * BeamFade); // a short orange flash, then gone
 	Beam->SetVisibility(BeamFade > 0.f);
 	Light->SetIntensity(UDCTuning::Get().Look.BlastLightIntensity * Fade * Fade);
 }
@@ -298,48 +330,62 @@ void ADCOrbitalStrike::TickBehaviour(const FDCStratagemDef& Def, float U, float 
 	}
 }
 
+void ADCOrbitalStrike::QueueVoxelOp(const FDCStratagemDef& Def)
+{
+	bOpQueued = true;
+	ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>();
+	ADCVoxelCity* City = GS && ADCVoxelCity::IsEnabled() ? GS->GetVoxelCity() : nullptr;
+	if (!City)
+	{
+		return;
+	}
+	// Voxel city (R3): the strike is one op every machine applies; the structure pass decides which towers fall, and
+	// those become the usual collapse records (scoring, domino, reel). Two-phase (C3.1): appended PlanLeadSeconds
+	// before detonation, planned on the worker, committed by every city at the detonation time, so the crater, the
+	// falls and the host's collapse records land in the detonation frame.
+	const FVector Here = GetActorLocation();
+	FDCVoxelOp Op;
+	Op.Kind = TEXT("Strike");
+	Op.Stratagem = Def.Id;
+	Op.CenterCm = DCVoxelMath::ToCm(FVector(Here.X, Here.Y, 0.f));
+	Op.BlastRadiusCm = FMath::RoundToInt32(Def.BlastRadius);
+	const int32 Seq = GS->AddVoxelOp(Op, FMath::Max(DetonateTime, GS->Now())).Seq;
+	TWeakObjectPtr<ADCGameState> WeakGS(GS);
+	const FVector Epicenter = Here;
+	const float OpTime = GS->VoxelOps.Last().Time;
+	City->ApplyOpAsync(GS->VoxelOps.Last(), true, [WeakGS, Seq, Epicenter, OpTime](const FDCVoxelOpResult& Result, uint32 Hash)
+	{
+		ADCGameState* State = WeakGS.Get();
+		if (!State)
+		{
+			return;
+		}
+		if (FDCVoxelOp* Rec = State->VoxelOps.FindByPredicate([Seq](const FDCVoxelOp& O) { return O.Seq == Seq; }))
+		{
+			Rec->ResultHash = Hash;
+		}
+		ADCGameMode* GM = State->GetWorld()->GetAuthGameMode<ADCGameMode>();
+		for (ADCBuilding* Building : TActorRange<ADCBuilding>(State->GetWorld()))
+		{
+			if (GM && Result.FallenLots.Contains(Building->GetLotIndex()))
+			{
+				GM->ScheduleCollapse(Building, Epicenter, TEXT("Strike"), 0.f, OpTime); // at the blast, not when the worker finished
+			}
+		}
+	});
+}
+
 void ADCOrbitalStrike::DetonateHost(const FDCStratagemDef& Def)
 {
 	UWorld* World = GetWorld();
 	ADCGameState* GS = World->GetGameState<ADCGameState>();
 	const FVector Here = GetActorLocation();
 	GS->AddBlast(Here, Def.BlastRadius, Def.Id);
-
-	if (ADCVoxelCity* City = ADCVoxelCity::IsEnabled() ? GS->GetVoxelCity() : nullptr)
+	if (!bOpQueued)
 	{
-		// Voxel city (R3): the strike is one op every machine applies; the structure pass decides which towers fall,
-		// and those become the usual collapse records (scoring, domino, reel).
-		FDCVoxelOp Op;
-		Op.Kind = TEXT("Strike");
-		Op.Stratagem = Def.Id;
-		Op.CenterCm = DCVoxelMath::ToCm(FVector(Here.X, Here.Y, 0.f));
-		Op.BlastRadiusCm = FMath::RoundToInt32(Def.BlastRadius);
-		const int32 Seq = GS->AddVoxelOp(Op).Seq;
-		// The op runs on a worker; the collapse records follow when it lands (a frame or a few later).
-		TWeakObjectPtr<ADCGameState> WeakGS(GS);
-		const FVector Epicenter = Here;
-		const float OpTime = GS->VoxelOps.Last().Time;
-		City->ApplyOpAsync(GS->VoxelOps.Last(), true, [WeakGS, Seq, Epicenter, OpTime](const FDCVoxelOpResult& Result, uint32 Hash)
-		{
-			ADCGameState* State = WeakGS.Get();
-			if (!State)
-			{
-				return;
-			}
-			if (FDCVoxelOp* Rec = State->VoxelOps.FindByPredicate([Seq](const FDCVoxelOp& O) { return O.Seq == Seq; }))
-			{
-				Rec->ResultHash = Hash;
-			}
-			ADCGameMode* GM = State->GetWorld()->GetAuthGameMode<ADCGameMode>();
-			for (ADCBuilding* Building : TActorRange<ADCBuilding>(State->GetWorld()))
-			{
-				if (GM && Result.FallenLots.Contains(Building->GetLotIndex()))
-				{
-					GM->ScheduleCollapse(Building, Epicenter, TEXT("Strike"), 0.f, OpTime); // at the blast, not when the worker finished
-				}
-			}
-		});
+		QueueVoxelOp(Def); // a telegraph shorter than the plan lead: plan now, commit as soon as it is ready
 	}
+
 	for (ADCBuilding* Building : TActorRange<ADCBuilding>(World))
 	{
 		if (ADCVoxelCity::IsEnabled())

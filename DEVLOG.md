@@ -63,6 +63,24 @@ is kept from the run records (Glass Box modifier): what was decided, why, and wh
 - The gate's full tier now launches the packaged exe (-dcsmoke: start a run, drop a laser on a tower, check the
   collapse) instead of only packaging it.
 
+## 2026-11-13/14: Director's Cut polish (voxel engine, neon noir, real physics)
+- A small C++ voxel engine: chunked grids with the voxel size as data per object (10 cm towers, 50 cm ground and
+  rubble, 5 cm props and characters), greedy meshing on worker threads into procedural mesh cells uploaded under a
+  millisecond budget, one palette table in ini.
+- The city is crafted from data: building recipes, district rules, a seeded PCG rule table (weights, ranges,
+  adjacency, symmetry, palette slots) and a city builder that also runs as a commandlet writing plan and aerial images.
+- Strikes are host ops replayed on every machine: carve, bite, structure pass (the weakest layer breaks and the top
+  topples away from the blast), rubble settled into the terrain grid; op hashes match on host and client. Ops are
+  planned 1.2 s ahead and committed in the detonation frame.
+- voxel-forge (repo skill + generator) turns short text recipes into the rifle, press camera, outfits and props.
+- Weather is a pure forecast from seed, sector and server clock; post layers stack by priority and weight; photos get
+  a CPU print treatment on the readback (blendables do not run in one-shot captures).
+- Co-star, Last Frame and the Full edition front page; a voxel character builder with share codes; versioned saves.
+- Art direction moved to restrained neon noir on 2026-11-13 ~23:30: night sky, slate voxels, warm dim windows, rare
+  magenta and cyan signs whose pooled rect lights pool on the wet street, dark-glass UI.
+- Real voxel physics: the biggest pieces of each strike fall as one and break into Chaos box bodies at the impact,
+  then swap to the host op's rubble when they rest.
+
 ## Problems met
 - The engine is shared with an editor that has Live Coding on: UnrealBuildTool refuses to build. Fixed with
   `-NoHotReloadFromIDE`, and the packaging step now builds the game target itself.

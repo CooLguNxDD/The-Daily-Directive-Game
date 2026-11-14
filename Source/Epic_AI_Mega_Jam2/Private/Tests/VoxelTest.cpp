@@ -10,6 +10,7 @@
 #include "Voxel/DCVoxelWorld.h"
 #include "Voxel/DCVoxelModel.h"
 #include "HAL/FileManager.h"
+#include "Algo/Reverse.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 
@@ -153,16 +154,28 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDCVoxelNoFloatTest, "Epic_AI_Mega_Jam2.Voxel.R
 bool FDCVoxelNoFloatTest::RunTest(const FString&)
 {
 	// Strike every tower in turn (rubble lands on neighbours' roofs, then those neighbours fall): afterwards every
-	// rubble cell rests on something - the cell below, or a tower still standing under it.
+	// rubble cell rests on something - the cell below, or a tower voxel right under it (its real column top, never the
+	// uncarved roof prism: a carved roof leaves no rubble sheet hanging).
 	const FDCVoxelOpContext Ctx = UDCVoxelSettings::Get().OpContext(UDCTuning::Get().City.BlockSizeCm);
 	FDCVoxelSector S;
 	Craft(S, VoxelPlan(DCCityRules::SectorSeed(31337, 2), 2));
+	TArray<FIntVector> Craters;
 	for (int32 i = 0; i < S.Towers.Num(); ++i)
 	{
-		DCVoxelOps::Apply(S, StrikeAt(S.Towers[i], i + 1, 1300), Ctx);
+		const FDCVoxelOp Op = StrikeAt(S.Towers[i], i + 1, 1300);
+		Craters.Add(Op.CenterCm);
+		DCVoxelOps::Apply(S, Op, Ctx);
 	}
 	const FDCVoxelGrid& G = S.Terrain;
 	const int32 Ground = UDCVoxelSettings::Get().Tuning.GroundLayers;
+	// No crater opens onto the void: the bedrock layers under every blast centre stay solid.
+	const int32 Bedrock = UDCVoxelSettings::Get().Tuning.BedrockLayers;
+	TestTrue(TEXT("bedrock is below the street"), Bedrock >= 1 && Bedrock < Ground);
+	for (const FIntVector& C : Craters)
+	{
+		const FIntVector L = G.ToLocal(C);
+		TestTrue(FString::Printf(TEXT("bedrock under the crater at %s"), *C.ToString()), G.Data.IsSolid(FIntVector(L.X, L.Y, 0)));
+	}
 	int32 Floating = 0;
 	int32 Checked = 0;
 	G.Data.ForEachChunk([&](const FIntVector& Key, const FDCVoxelChunk& C)
@@ -183,10 +196,9 @@ bool FDCVoxelNoFloatTest::RunTest(const FString&)
 			{
 				continue;
 			}
-			const FIntVector Cm = G.CenterCm(P);
-			const bool bOnTower = S.Towers.ContainsByPredicate([&Cm](const FDCVoxelTower& T)
+			const bool bOnTower = S.Towers.ContainsByPredicate([&G, &P](const FDCVoxelTower& T)
 			{
-				return Cm.X >= T.FootMinCm().X && Cm.X < T.FootMaxCm().X && Cm.Y >= T.FootMinCm().Y && Cm.Y < T.FootMaxCm().Y && Cm.Z >= T.TopCm() - 100;
+				return DCVoxelOps::TowerTopCells(T, G, P.X, P.Y) == P.Z;
 			});
 			Floating += bOnTower ? 0 : 1;
 		}
@@ -194,6 +206,40 @@ bool FDCVoxelNoFloatTest::RunTest(const FString&)
 	AddInfo(FString::Printf(TEXT("DCVOXEL rubble cells %d, floating %d"), Checked, Floating));
 	TestTrue(TEXT("rubble exists"), Checked > 100);
 	TestEqual(TEXT("no rubble floats"), Floating, 0);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDCVoxelSightTest, "Epic_AI_Mega_Jam2.Voxel.PhotoSight", VoxelFlags)
+bool FDCVoxelSightTest::RunTest(const FString&)
+{
+	// Photo sight marches the voxels: a blast's own struck tower never hides it from the street, another standing tower
+	// between the lens and the subject does (CP4 review: physics traces lost PEAK to the struck shell).
+	FDCVoxelSector S;
+	Craft(S, VoxelPlan(DCCityRules::SectorSeed(31337, 1), 1));
+	TestTrue(TEXT("two towers"), S.Towers.Num() >= 2);
+	auto Center = [](const FDCVoxelTower& T)
+	{
+		const FIntVector A = T.FootMinCm(), B = T.FootMaxCm();
+		return FVector((A.X + B.X) * 0.5f, (A.Y + B.Y) * 0.5f, T.Grid.OriginCm.Z + T.Max.Z * T.Grid.VoxelCm * 0.4f);
+	};
+	auto HalfSize = [](const FDCVoxelTower& T) { return FVector(T.FootMaxCm() - T.FootMinCm()).Size2D() * 0.5f; };
+	int32 Other = 1;
+	for (int32 i = 2; i < S.Towers.Num(); ++i)
+	{
+		Other = FVector::Dist2D(Center(S.Towers[i]), Center(S.Towers[0])) < FVector::Dist2D(Center(S.Towers[Other]), Center(S.Towers[0])) ? i : Other;
+	}
+	const FVector A = Center(S.Towers[0]);
+	const FVector B = Center(S.Towers[Other]);
+	const FVector Away = FVector(A - B).GetSafeNormal2D();
+	const FVector Street = A + Away * (HalfSize(S.Towers[0]) + 300.f);
+	const FVector Behind = B - Away * (HalfSize(S.Towers[Other]) + 300.f);
+	auto Blocked = [&S](const FVector& From, const FVector& To, const TArray<int32>& Ignore)
+	{
+		return DCVoxelOps::SightBlocked(S, From, To, Ignore, 25.f, 60.f, 250.f);
+	};
+	TestTrue(TEXT("the struck tower's own wall does not hide its blast"), !Blocked(Street, A, {0}));
+	TestTrue(TEXT("the same wall hides it when the tower is not the subject"), Blocked(Street, A, {}));
+	TestTrue(TEXT("another standing tower between lens and subject hides it"), Blocked(Behind, A, {0}));
 	return true;
 }
 
@@ -346,6 +392,60 @@ bool FDCVoxelModelTest::RunTest(const FString&)
 	TestFalse(TEXT("short volume rejected"), FDCVoxelModel::Parse(Doc({TEXT("dcvox 1"), TEXT("size 2 2 2"), TEXT("slots Ink"), TEXT("rle"), TEXT("3*1")}), Bad, Error));
 	TestFalse(TEXT("unknown slot rejected"), FDCVoxelModel::Parse(Doc({TEXT("dcvox 1"), TEXT("size 1 1 1"), TEXT("slots Ink"), TEXT("rle"), TEXT("1*5")}), Bad, Error));
 	TestTrue(TEXT("tiny model parses"), FDCVoxelModel::Parse(Doc({TEXT("dcvox 1"), TEXT("size 1 1 2"), TEXT("slots Ink"), TEXT("rle"), TEXT("1*0 1*1")}), Bad, Error) && Bad.Cells[1] == 1);
+	return true;
+}
+
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDCVoxelFragmentTest, "Epic_AI_Mega_Jam2.Voxel.PhysicsFragments", VoxelFlags)
+bool FDCVoxelFragmentTest::RunTest(const FString&)
+{
+	// A hollow 40x40x60 shell (a tower top): every cell lands in exactly one fragment, the cap holds, and the split
+	// never depends on the order of the piece's cells.
+	TArray<FIntVector> Cells;
+	for (int32 Z = 0; Z < 60; ++Z)
+	{
+		for (int32 Y = 0; Y < 40; ++Y)
+		{
+			for (int32 X = 0; X < 40; ++X)
+			{
+				if (X == 0 || Y == 0 || X == 39 || Y == 39 || Z % 30 == 0)
+				{
+					Cells.Add(FIntVector(X, Y, Z));
+				}
+			}
+		}
+	}
+	const TArray<TArray<int32>> Frags = DCVoxelOps::SplitFragments(Cells, 10, 24);
+	TestTrue(TEXT("at most the cap"), Frags.Num() > 1 && Frags.Num() <= 24);
+	TArray<int32> Seen;
+	Seen.Init(0, Cells.Num());
+	for (const TArray<int32>& F : Frags)
+	{
+		for (int32 i : F)
+		{
+			++Seen[i];
+		}
+	}
+	bool bOnce = true;
+	for (int32 N : Seen)
+	{
+		bOnce &= N == 1;
+	}
+	TestTrue(TEXT("every cell in exactly one fragment"), bOnce);
+
+	TArray<FIntVector> Reversed = Cells;
+	Algo::Reverse(Reversed);
+	const TArray<TArray<int32>> Again = DCVoxelOps::SplitFragments(Reversed, 10, 24);
+	bool bSame = Again.Num() == Frags.Num();
+	for (int32 f = 0; bSame && f < Frags.Num(); ++f)
+	{
+		TSet<FIntVector> A, B;
+		for (int32 i : Frags[f]) { A.Add(Cells[i]); }
+		for (int32 i : Again[f]) { B.Add(Reversed[i]); }
+		bSame = A.Num() == B.Num() && A.Includes(B);
+	}
+	TestTrue(TEXT("same fragments whatever the cell order"), bSame);
+	TestEqual(TEXT("one cell, one fragment"), DCVoxelOps::SplitFragments({FIntVector(5)}, 10, 24).Num(), 1);
 	return true;
 }
 

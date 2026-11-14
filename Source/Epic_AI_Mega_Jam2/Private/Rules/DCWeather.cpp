@@ -40,6 +40,9 @@ namespace DCWeather
 		R.FogDensity = FMath::Lerp(A.FogDensity, B.FogDensity, T);
 		R.FogColor = FMath::Lerp(A.FogColor, B.FogColor, T);
 		R.Wind = FMath::Lerp(A.Wind, B.Wind, T);
+		R.CloudCover = FMath::Lerp(A.CloudCover, B.CloudCover, T);
+		R.CloudShade = FMath::Lerp(A.CloudShade, B.CloudShade, T);
+		R.Wetness = FMath::Lerp(A.Wetness, B.Wetness, T);
 		// Precipitation fades out then in, never pops: the rate dips through the switch.
 		const float RateA = A.PrecipitationRate * FMath::Clamp(1.f - 2.f * T, 0.f, 1.f);
 		const float RateB = B.PrecipitationRate * FMath::Clamp(2.f * T - 1.f, 0.f, 1.f);

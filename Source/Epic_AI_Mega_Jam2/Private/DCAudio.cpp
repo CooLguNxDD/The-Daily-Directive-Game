@@ -1,4 +1,5 @@
 #include "DCAudio.h"
+#include "DCSave.h"
 
 #include "AudioMixerBlueprintLibrary.h"
 #include "Camera/PlayerCameraManager.h"
@@ -197,11 +198,18 @@ namespace DCAudio
 		return GI ? GI->GetSubsystem<UDCAudioSubsystem>() : nullptr;
 	}
 
+	/** The saved master volume (R24), applied to every cue. */
+	float Master(const UObject* WorldContext)
+	{
+		const UDCSaveSubsystem* Save = UDCSaveSubsystem::Get(WorldContext);
+		return Save ? FMath::Clamp(Save->Settings.MasterVolume, 0.f, 1.f) : 1.f;
+	}
+
 	void PlayAt(const UObject* WorldContext, FName Cue, const FVector& Location, float Volume, float Pitch)
 	{
 		if (UDCAudioSubsystem* Audio = Get(WorldContext))
 		{
-			Audio->PlayAt(WorldContext, Cue, Location, Volume, Pitch);
+			Audio->PlayAt(WorldContext, Cue, Location, Volume * Master(WorldContext), Pitch);
 		}
 	}
 
@@ -209,7 +217,7 @@ namespace DCAudio
 	{
 		if (UDCAudioSubsystem* Audio = Get(WorldContext))
 		{
-			Audio->Play2D(WorldContext, Cue, Volume, Pitch);
+			Audio->Play2D(WorldContext, Cue, Volume * Master(WorldContext), Pitch);
 		}
 	}
 }
@@ -306,6 +314,8 @@ void UDCAudioSubsystem::Play2D(const UObject* WorldContext, FName Cue, float Vol
 
 void UDCAudioSubsystem::StartMusic(const UObject* WorldContext, FName Cue, float Volume)
 {
+	MusicBase = Volume;
+	Volume *= DCAudio::Master(WorldContext);
 	if (Music && Music->IsPlaying() && MusicCue == Cue)
 	{
 		Music->SetVolumeMultiplier(Volume);
@@ -341,8 +351,17 @@ void UDCAudioSubsystem::StartMusic(const UObject* WorldContext, FName Cue, float
 
 void UDCAudioSubsystem::SetMusicVolume(float Volume)
 {
+	MusicBase = Volume;
 	if (Music)
 	{
-		Music->SetVolumeMultiplier(Volume);
+		Music->SetVolumeMultiplier(Volume * DCAudio::Master(Music));
+	}
+}
+
+void UDCAudioSubsystem::ApplyMasterVolume(const UObject* WorldContext)
+{
+	if (Music)
+	{
+		Music->SetVolumeMultiplier(MusicBase * DCAudio::Master(WorldContext));
 	}
 }

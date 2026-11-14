@@ -31,6 +31,8 @@ struct FDCPostLayer
 	 *  readable peak however hot the blast (min-op, applied after every layer). */
 	UPROPERTY(EditAnywhere, Config, Category = "Post") float BloomCap = 0.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Post") float ExposureCap = 0.f;
+	/** The player's screen only (viewfinder, damage, dying look, flash kick): never in a photo or reel capture. */
+	UPROPERTY(EditAnywhere, Config, Category = "Post") bool bScreenOnly = false;
 };
 
 /** A scalability preset: the quality level layers check, plus engine settings applied once. */

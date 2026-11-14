@@ -55,6 +55,11 @@ private:
 
 	UPROPERTY() TArray<TObjectPtr<UInstancedStaticMeshComponent>> Meshes;
 	TArray<TArray<FPuff>> Puffs;
+	/** The fx timeline: world delta scaled by the presentation clock (puff birth, life and burns use it). */
+	float FxTime = 0.f;
+	/** Instances written last frame per kind: a frame only touches live puffs plus the ones that just died, so the
+	 *  cost follows the live count, never the pool size (a 1,900-instance pool rewritten each frame cost ~90 ms). */
+	TArray<int32> Shown;
 	TArray<FBurn> Burns;
 	FRandomStream Rng;
 	FVector Wind = FVector::ZeroVector;

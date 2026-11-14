@@ -41,6 +41,16 @@ public:
 
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 	virtual void BeginPlay() override;
+	/** Binds the input actions again (after a key rebind rebuilt the mapping, R24). */
+	void RebindInput()
+	{
+		DestroyPlayerInputComponent();
+		PawnClientRestart();
+	}
+	/** Voxel city meshes are built locally on every machine and are not net-addressable: never a movement base (the
+	 *  city never moves), so co-op movement replication carries no unresolvable component (CP4 review). */
+	virtual void SetBase(FMovementBaseInterfaceData* MovementBaseInterfaceData, const FName BoneName = NAME_None, bool bNotifyActor = true) override;
+	using ACharacter::SetBase;
 	virtual void Tick(float DeltaSeconds) override;
 	virtual void SetupPlayerInputComponent(UInputComponent* PlayerInputComponent) override;
 	virtual void Landed(const FHitResult& Hit) override;
@@ -51,6 +61,9 @@ public:
 	bool IsCameraRaised() const { return bCameraRaised; }
 	bool IsDowned() const { return bDowned; }
 	bool HasLastFrame() const { return bDowned && bLastFrameReady; }
+	/** Last Frame in co-op (R21): slow motion on the dying player's own machine only, as presentation
+	 *  (UDCPresentationClock: fx and animation slow, simulation stays real time). Same on a listen host and a client. */
+	UFUNCTION(Client, Reliable) void ClientLastFrameSlowMo(float Dilation, float Seconds);
 	bool IsDrawing() const;
 	bool IsReloading() const;
 	bool IsSpotlit() const;
@@ -143,6 +156,9 @@ private:
 	UFUNCTION(Server, Reliable) void ServerReload();
 	UFUNCTION(Server, Reliable) void ServerCallStrike(FName StratagemId, FVector_NetQuantize Target);
 	UFUNCTION(Server, Reliable) void ServerSubmitPhoto(int32 PhotoId, FVector_NetQuantize10 CamLoc, FRotator CamRot, float FOV, float ShotTime);
+	/** Host grade of an accepted shot at its own shot time; waits a frame at a time while a voxel op is still on the
+	 *  worker (until GiveUpAt, real time), so a shutter right after a strike sees the towers it felled (C3.1). */
+	void HostGradeShot(int32 PhotoId, FVector CamLoc, FRotator CamRot, float FOV, float When, bool bLast, double GiveUpAt);
 	UFUNCTION(Server, Reliable) void ServerSetReviving(bool bHolding);
 	UFUNCTION(Client, Reliable) void ClientHitConfirm(bool bKill);
 	UFUNCTION(Client, Reliable) void ClientHurt(FVector_NetQuantize From);
@@ -161,8 +177,15 @@ private:
 	UPROPERTY(VisibleAnywhere) TObjectPtr<USceneCaptureComponent2D> Capture;
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UStaticMeshComponent> RifleMesh;
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UStaticMeshComponent> PhotoCamMesh;
+	/** The forge-made press camera on the chest (voxel model), hidden while the camera is in hand. */
+	UPROPERTY() TObjectPtr<class UProceduralMeshComponent> ChestCam;
+	/** R23: the worn outfit parts, rebuilt when the player state's share code changes. */
+	UPROPERTY() TArray<TObjectPtr<class UProceduralMeshComponent>> OutfitMeshes;
+	FString AppliedOutfit;
+	void TickOutfit();
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UStaticMeshComponent> BeaconMesh;
-	UPROPERTY(VisibleAnywhere) TObjectPtr<UStaticMeshComponent> StrikeMarker;
+	UPROPERTY(VisibleAnywhere) TObjectPtr<class UInstancedStaticMeshComponent> StrikeMarker;
+	float StrikeMarkerRadius = -1.f;
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UStaticMeshComponent> Tracer;
 
 	UPROPERTY(ReplicatedUsing = OnRep_Slot) EDCSlot Slot = EDCSlot::Rifle;
@@ -174,6 +197,11 @@ private:
 	UPROPERTY(ReplicatedUsing = OnRep_Downed) bool bDowned = false;
 	/** Last Frame (R21): a downed player keeps one shutter, spent or lost on revive. */
 	UPROPERTY(Replicated) bool bLastFrameReady = false;
+	/** Enemies hidden from one Last Frame capture (at the lens), shown again right after it. */
+	TArray<TWeakObjectPtr<AActor>> LensHidden;
+	/** Landing spring (local camera feel): offset in cm and its velocity. */
+	float LandDip = 0.f;
+	float LandDipVel = 0.f;
 	UPROPERTY(Replicated) float SpotlitUntil = -10.f;
 	UPROPERTY(Replicated) float ReviveProgress = 0.f;
 	UPROPERTY(Replicated) int32 SelfRevivesLeft = 1;

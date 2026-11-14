@@ -170,7 +170,7 @@ namespace
 		return Table;
 	}
 
-	void Poster(FDCVoxelWorld& W, const FFaceFrame& F, int32 Face, int32 B, int32 Floors, const FCraftIds& Ids, FRandomStream& Rng)
+	void Poster(FDCVoxelWorld& W, const FFaceFrame& F, int32 Face, int32 B, int32 Floors, const FCraftIds& Ids, FRandomStream& Rng, TArray<FDCVoxelSign>& OutSigns)
 	{
 		// A paper poster one voxel proud of the wall, two floors tall, with an ink diamond: propaganda without red.
 		const int32 Len = F.Length(Face);
@@ -193,6 +193,13 @@ namespace
 				W.Set(F.Cell(Face, -1, U, Z), bEmblem ? Ids.Ink : Ids.Poster);
 			}
 		}
+		FDCVoxelSign& Sign = OutSigns.AddDefaulted_GetRef();
+		Sign.Center = F.Cell(Face, -1, U0 + Width / 2, Z0 + Height / 2);
+		Sign.Probe = F.Cell(Face, -1, U0 + 1, Z0 + Height / 2); // left edge, outside the emblem diamond
+		Sign.Normal = F.Cell(Face, -1, 0, 0) - F.Cell(Face, 0, 0, 0);
+		Sign.WidthVox = Width;
+		Sign.HeightVox = Height;
+		Sign.Material = Ids.Poster;
 	}
 }
 
@@ -255,6 +262,7 @@ namespace DCVoxelCraft
 		const int32 B = FMath::Max(6, Ctx.BayCm / Vcm);
 		const int32 Margin = FMath::Max(3, 60 / Vcm); // room for trim, posters and the bite's outer edge
 		Tower.Grid.Data.Reset();
+		Tower.Signs.Reset();
 		Tower.Grid.VoxelCm = Vcm;
 		const FIntVector Center = DCVoxelMath::ToCm(Lot.Location);
 		const FIntVector Foot(Lot.Spec.SizeX * B, Lot.Spec.SizeY * B, Lot.Spec.Floors * B);
@@ -279,6 +287,8 @@ namespace DCVoxelCraft
 		const FString Upper = R->Facade.IsEmpty() ? FString(TEXT("W")) : R->Facade;
 		const FString Ground = R->Base.IsEmpty() ? Upper : R->Base;
 		const FBayFn Solid = Bays()[TEXT('P')];
+		const int32 Rib = R->PilasterCm > 0 ? FMath::Max(1, R->PilasterCm / Vcm) : 0;
+		const int32 Lintel = R->LintelCm > 0 ? FMath::Max(1, R->LintelCm / Vcm) : 0;
 
 		FFaceFrame Frame{Tower.Min, Tower.Max};
 		int32 Top = 0;
@@ -318,6 +328,16 @@ namespace DCVoxelCraft
 						{
 							World.Set(F.Cell(Face, -1, U, Z0 + H), Ids.Trim);
 						}
+						// Lintel: a proud cap over each opening (relief, V5.3).
+						if (!bCorner && Lintel > 0 && H >= Sill + Win && H < Sill + Win + Lintel && Bay(U % B, Sill, B, Sill, Win) == EOpening::Window)
+						{
+							World.Set(F.Cell(Face, -1, U, Z0 + H), Ids.Wall);
+						}
+						// Pier ribs at each bay start and the corners stand one voxel proud, floor to floor.
+						if (Rib > 0 && (bCorner || U % B < Rib))
+						{
+							World.Set(F.Cell(Face, -1, U, Z0 + H), Ids.Wall);
+						}
 					}
 				}
 			}
@@ -341,7 +361,7 @@ namespace DCVoxelCraft
 		{
 			if (Rng.FRand() < R->PosterChance)
 			{
-				Poster(World, Full, Face, B, Lot.Spec.Floors, Ids, Rng);
+				Poster(World, Full, Face, B, Lot.Spec.Floors, Ids, Rng, Tower.Signs);
 			}
 		}
 

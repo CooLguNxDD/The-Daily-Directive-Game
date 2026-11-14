@@ -1,4 +1,9 @@
 #include "DCHUD.h"
+#include "DCFonts.h"
+#include "CanvasItem.h"
+#include "EngineFontServices.h"
+#include "Engine/Font.h"
+#include "Fonts/FontMeasure.h"
 
 #include "Engine/Texture2D.h"
 #include "DCPalette.h"
@@ -10,6 +15,7 @@
 #include "DCPlayerController.h"
 #include "DCPlayerState.h"
 #include "DCTuning.h"
+#include "DCVoxelCity.h"
 #include "Engine/Canvas.h"
 #include "Engine/Engine.h"
 #include "Engine/Font.h"
@@ -33,27 +39,72 @@ namespace
 void ADCHUD::BeginPlay()
 {
 	Super::BeginPlay();
-	BigFont = GEngine->GetLargeFont();
+	BigFont = DCFonts::Get(TEXT("Body"));
+	HeadFont = DCFonts::Get(TEXT("Headline"));
+	MastFont = DCFonts::Get(TEXT("Masthead"));
+	StampFont = DCFonts::Get(TEXT("Stamp"));
+	for (const FDCUpgradeDef& U : UDCTuning::Get().Upgrades)
+	{
+		if (UTexture2D* Tex = U.Icon.IsNull() ? nullptr : Cast<UTexture2D>(U.Icon.TryLoad()))
+		{
+			CardIcons.Add(U.Id, Tex);
+		}
+	}
 	SmallFont = GEngine->GetMediumFont();
+}
+
+namespace
+{
+	// The font at the drawn size: glyphs are rasterised at it rather than stretched from the base size (crisp type).
+	FSlateFontInfo SizedFont(const UFont* F, float PixelScale)
+	{
+		FSlateFontInfo Info = F->GetLegacySlateFontInfo();
+		Info.Size = FMath::Max(1.f, Info.Size * PixelScale);
+		return Info;
+	}
+}
+
+void ADCHUD::TextSize(UFont* Font, const FString& S, float PixelScale, float& OutW, float& OutH) const
+{
+	UFont* F = Font ? Font : BigFont.Get();
+	const TSharedPtr<FSlateFontMeasure> Measure = FEngineFontServices::IsInitialized() ? FEngineFontServices::Get().GetFontMeasure() : nullptr;
+	if (!Measure.IsValid() || F->FontCacheType != EFontCacheType::Runtime)
+	{
+		Canvas->TextSize(F, S, OutW, OutH, PixelScale, PixelScale);
+		return;
+	}
+	const FVector2D Size = Measure->Measure(S, SizedFont(F, PixelScale));
+	OutW = Size.X;
+	OutH = Size.Y;
 }
 
 void ADCHUD::Text(const FString& S, float X, float Y, const FLinearColor& C, float Scale, bool bCentre, UFont* Font)
 {
 	UFont* F = Font ? Font : BigFont.Get();
-	Scale *= TextBoost;
+	const float PixelScale = Scale * TextBoost * UiScale;
 	float W = 0.f, H = 0.f;
 	if (bCentre)
 	{
-		Canvas->TextSize(F, S, W, H, Scale * UiScale, Scale * UiScale);
+		TextSize(F, S, PixelScale, W, H);
 	}
+	const bool bRuntime = F->FontCacheType == EFontCacheType::Runtime;
+	auto Draw = [&](float Px, float Py, const FLinearColor& Color)
+	{
+		if (!bRuntime)
+		{
+			Canvas->SetDrawColor(Color.ToFColor(true));
+			Canvas->DrawText(F, S, Px, Py, PixelScale, PixelScale);
+			return;
+		}
+		FCanvasTextItem Item(FVector2D(Px, Py), FText::FromString(S), SizedFont(F, PixelScale), Color);
+		Canvas->DrawItem(Item);
+	};
 	// Drop shadow keeps light text readable over a bloom flash; dark ink on paper needs none.
 	if (C.GetLuminance() > 0.35f)
 	{
-		Canvas->SetDrawColor(FColor(0, 0, 0, static_cast<uint8>(C.A * 200)));
-		Canvas->DrawText(F, S, X - W * 0.5f + 2.f, Y + 2.f, Scale * UiScale, Scale * UiScale);
+		Draw(X - W * 0.5f + 2.f, Y + 2.f, FLinearColor(0.f, 0.f, 0.f, C.A * 0.78f));
 	}
-	Canvas->SetDrawColor(C.ToFColor(true));
-	Canvas->DrawText(F, S, X - W * 0.5f, Y, Scale * UiScale, Scale * UiScale);
+	Draw(X - W * 0.5f, Y, C);
 }
 
 void ADCHUD::Box(float X, float Y, float W, float H, const FLinearColor& C)
@@ -127,6 +178,42 @@ void ADCHUD::DrawSector(ADCGameState& GS, ADCCharacter* Me)
 	DrawOnboarding(*Me);
 	DrawDowned(*Me);
 	DrawToast(*Me);
+	DrawSectorCard(GS);
+}
+
+void ADCHUD::DrawSectorCard(ADCGameState& GS)
+{
+	const UDCTuning& T = UDCTuning::Get();
+	if (CardSector != GS.SectorIndex)
+	{
+		CardSector = GS.SectorIndex;
+		CardLoadedReal = -1.0;
+	}
+	const ADCVoxelCity* City = ADCVoxelCity::IsEnabled() ? ADCVoxelCity::Get(this) : nullptr;
+	const bool bLoaded = !City || (City->IsLoaded() && City->GetBuiltSector() == GS.SectorIndex);
+	if (bLoaded && CardLoadedReal < 0.0)
+	{
+		CardLoadedReal = RealNow;
+	}
+	// Hold while loading and a beat after, then lift away over SectorCardFadeSeconds.
+	const float Since = CardLoadedReal < 0.0 ? 0.f : static_cast<float>(RealNow - CardLoadedReal);
+	const float A = 1.f - FMath::Clamp((Since - T.Look.SectorCardHoldSeconds) / FMath::Max(T.Look.SectorCardFadeSeconds, 0.01f), 0.f, 1.f);
+	if (A <= 0.f || GS.Now() - GS.SectorStartTime > T.Look.SectorCardMaxSeconds)
+	{
+		return;
+	}
+	const float W = Canvas->ClipX, H = Canvas->ClipY;
+	const FDCSectorDef* Sector = T.Sectors.IsValidIndex(GS.SectorIndex) ? &T.Sectors[GS.SectorIndex] : nullptr;
+	const FString Name = Sector ? Sector->Name.ToString().ToUpper() : FString::Printf(TEXT("SECTOR %d"), GS.SectorIndex + 1);
+	const float Lift = (1.f - A) * H * 0.15f;
+	PaperSheet(0, -Lift, W, H);
+	Box(0, -Lift, W, H, FLinearColor(Paper.R, Paper.G, Paper.B, 1.f - A)); // fade toward the scene through paper, never black
+	const FLinearColor InkA(Ink.R, Ink.G, Ink.B, A);
+	Box(W * 0.2f, H * 0.36f - Lift, W * 0.6f, Sx(4.f), InkA);
+	Text(FString::Printf(TEXT("SECTOR %d OF %d"), GS.SectorIndex + 1, FMath::Max(T.Sectors.Num(), 1)), W * 0.5f, H * 0.39f - Lift, InkA, 0.9f, true);
+	Text(Name, W * 0.5f, H * 0.45f - Lift, InkA, 2.6f, true, HeadFont);
+	Box(W * 0.2f, H * 0.62f - Lift, W * 0.6f, Sx(4.f), InkA);
+	Text(TEXT("CAMERAS READY. THE CITY IS YOUR STUDIO."), W * 0.5f, H * 0.65f - Lift, InkA, 0.7f, true);
 }
 
 void ADCHUD::DrawFlashes(ADCGameState& GS, ADCCharacter& Me)
@@ -188,7 +275,10 @@ void ADCHUD::DrawStrikeInfo(ADCCharacter& Me)
 	}
 	const float X = Canvas->ClipX * 0.5f + Sx(40.f);
 	float Y = Canvas->ClipY * 0.5f - Sx(60.f);
-	Text(TEXT("ORBITAL CALL-IN"), X, Y, Gold, 0.8f);
+	// A paper plate with ink type (it sat as thin white text on the bright street); the live pick on a yellow bar.
+	Box(X - Sx(14.f), Y - Sx(10.f), Sx(470.f), Sx(30.f) + PS->OwnedStratagems.Num() * Sx(26.f) + Sx(44.f), Paper);
+	Box(X - Sx(14.f), Y - Sx(10.f), Sx(5.f), Sx(30.f) + PS->OwnedStratagems.Num() * Sx(26.f) + Sx(44.f), Ink);
+	Text(TEXT("ORBITAL CALL-IN"), X, Y, Ink, 0.8f, false, HeadFont);
 	Y += Sx(30.f);
 	for (const FName& Id : PS->OwnedStratagems)
 	{
@@ -202,10 +292,14 @@ void ADCHUD::DrawStrikeInfo(ADCCharacter& Me)
 		const bool bAfford = PS->Points >= Def->Cost;
 		FString Line = FString::Printf(TEXT("%s %s  %s"), bSel ? TEXT(">") : TEXT(" "), *Def->DisplayName.ToString().ToUpper(), Def->Cost > 0 ? *FString::Printf(TEXT("%d PP"), Def->Cost) : TEXT("FREE"));
 		Line += Ready > 0.f ? FString::Printf(TEXT("  [%.0fs]"), Ready) : TEXT("");
-		Text(Line, X, Y, bSel ? (bAfford && Ready <= 0.f ? FLinearColor::White : Red) : FLinearColor(1, 1, 1, 0.5f), 0.65f);
+		if (bSel)
+		{
+			Box(X - Sx(6.f), Y - Sx(1.f), Sx(450.f), Sx(25.f), bAfford && Ready <= 0.f ? Gold : FLinearColor(Red.R, Red.G, Red.B, 0.25f));
+		}
+		Text(Line, X, Y, bSel ? (bAfford && Ready <= 0.f ? Night : Ink) : FLinearColor(Ink.R, Ink.G, Ink.B, 0.6f), 0.65f);
 		Y += Sx(26.f);
 	}
-	Text(TEXT("LMB CALL   Q / WHEEL SWITCH"), X, Y + Sx(6.f), FLinearColor(1, 1, 1, 0.6f), 0.55f);
+	Text(TEXT("LMB CALL   Q / WHEEL SWITCH"), X, Y + Sx(6.f), FLinearColor(Ink.R, Ink.G, Ink.B, 0.7f), 0.55f);
 }
 
 void ADCHUD::DrawViewfinder(ADCCharacter& Me)
@@ -251,12 +345,12 @@ void ADCHUD::DrawViewfinder(ADCCharacter& Me)
 		const float Pulse = 0.75f + 0.25f * FMath::Sin(RealNow * (6.f + 10.f * Tag.Heat));
 		const FString Label = Upper(Tag.Tag);
 		float Tw = 0.f, Th = 0.f;
-		Canvas->TextSize(BigFont, Label, Tw, Th, 0.7f * TextBoost * UiScale, 0.7f * TextBoost * UiScale);
+		TextSize(BigFont, Label, 0.7f * TextBoost * UiScale, Tw, Th);
 		// Target tags are things the player can use: signal yellow with ink type (red stays for danger, R6).
 		// Never under the timer and quota bar at the top.
 		const float Ty = FMath::Max(S.Y, Sx(120.f) + Th + 4.f);
 		Box(S.X - Tw * 0.5f - 6.f, Ty - Th - 4.f, Tw + 12.f, Th + 4.f, FLinearColor(Gold.R, Gold.G, Gold.B, 0.9f * Pulse));
-		Text(Label, S.X, Ty - Th - 3.f, Ink, 0.7f, true);
+		Text(Label, S.X, Ty - Th - 3.f, Night, 0.7f, true);
 		DrawLine(S.X, Ty, S.X, Ty + Sx(18.f), Gold, 2.f);
 	}
 
@@ -287,40 +381,47 @@ void ADCHUD::DrawStatus(ADCGameState& GS, ADCCharacter& Me)
 	const ADCPlayerState* PS = Me.GetPlayerState<ADCPlayerState>();
 	const UDCTuning& T = UDCTuning::Get();
 
+	// Paper plates with ink type and a thin ink rule (art bible: cream and ink; Saltline HUD language): readable over
+	// a bright sky and a blast alike.
+	const FLinearColor Plate(Paper.R, Paper.G, Paper.B, 0.86f); // dark glass (R25): light type stays readable over the city
 	// Propaganda Points, the currency the shots buy firepower with.
-	Box(Sx(24.f), Sx(24.f), Sx(330.f), Sx(74.f), Shade);
-	Text(TEXT("PROPAGANDA POINTS"), Sx(36.f), Sx(28.f), Gold, 0.55f);
-	Text(FormatPoints(PS ? PS->Points : 0), Sx(36.f), Sx(48.f), FLinearColor::White, 1.4f);
+	Box(Sx(24.f), Sx(24.f), Sx(330.f), Sx(74.f), Plate);
+	Box(Sx(24.f), Sx(24.f), Sx(5.f), Sx(74.f), Ink);
+	Text(TEXT("PROPAGANDA POINTS"), Sx(40.f), Sx(28.f), Ink, 0.55f);
+	Text(FormatPoints(PS ? PS->Points : 0), Sx(40.f), Sx(48.f), Ink, 1.4f);
 
 	// Sector and timer.
 	const float Left = FMath::Max(0.f, GS.SectorEndTime - GS.Now());
 	const FDCSectorDef* Sector = T.Sectors.IsValidIndex(GS.SectorIndex) ? &T.Sectors[GS.SectorIndex] : nullptr;
 	const FString Name = Sector ? Sector->Name.ToString().ToUpper() : FString::Printf(TEXT("SECTOR %d"), GS.SectorIndex + 1);
-	Text(FString::Printf(TEXT("SECTOR %d/%d  %s"), GS.SectorIndex + 1, FMath::Max(T.Sectors.Num(), 1), *Name), W * 0.5f, Sx(20.f), FLinearColor::White, 0.7f, true);
-	Text(FString::Printf(TEXT("%d:%02d"), FMath::FloorToInt(Left) / 60, FMath::FloorToInt(Left) % 60), W * 0.5f, Sx(46.f), Left < 30.f ? Red : FLinearColor::White, 1.3f, true);
+	Box(W * 0.5f - Sx(200.f), Sx(14.f), Sx(400.f), Sx(118.f), Plate);
+	Text(FString::Printf(TEXT("SECTOR %d/%d  %s"), GS.SectorIndex + 1, FMath::Max(T.Sectors.Num(), 1), *Name), W * 0.5f, Sx(20.f), Ink, 0.7f, true);
+	Text(FString::Printf(TEXT("%d:%02d"), FMath::FloorToInt(Left) / 60, FMath::FloorToInt(Left) % 60), W * 0.5f, Sx(46.f), Left < 30.f ? Red : Ink, 1.3f, true);
 
 	// HQ quota (R6): the crew's photo score against this sector's target.
 	if (Sector && Sector->QuotaPoints > 0)
 	{
 		const float Q = FMath::Clamp(static_cast<float>(GS.SectorPhotoPoints) / Sector->QuotaPoints, 0.f, 1.f);
 		const float Bw = Sx(360.f), Bx = W * 0.5f - Bw * 0.5f, By = Sx(96.f);
-		Box(Bx, By, Bw, Sx(14.f), Shade);
+		Box(Bx, By, Bw, Sx(14.f), Ink);
 		Box(Bx + Sx(2.f), By + Sx(2.f), (Bw - Sx(4.f)) * Q, Sx(10.f), Q >= 1.f ? Gold : Paper);
-		Text(FString::Printf(TEXT("HQ QUOTA %s / %s"), *FormatPoints(GS.SectorPhotoPoints), *FormatPoints(Sector->QuotaPoints)), W * 0.5f, By + Sx(14.f), Q >= 1.f ? Gold : FLinearColor::White, 0.5f, true);
+		Text(FString::Printf(TEXT("%s QUOTA %s / %s"), GS.PlayerArray.Num() > 1 ? TEXT("TEAM") : TEXT("HQ"), *FormatPoints(GS.SectorPhotoPoints), *FormatPoints(Sector->QuotaPoints)), W * 0.5f, By + Sx(14.f), Ink, 0.5f, true);
 	}
 
 	// Film counter is always visible (R7).
 	const int32 Shots = PS ? PS->ShotsLeft : 0;
 	const int32 Film = PS ? PS->FilmPerSector : 0;
-	Box(W - Sx(250.f), Sx(24.f), Sx(226.f), Sx(74.f), Shade);
-	Text(TEXT("FILM"), W - Sx(238.f), Sx(28.f), Gold, 0.55f);
-	Text(FString::Printf(TEXT("%d / %d"), Shots, Film), W - Sx(238.f), Sx(48.f), Shots > 3 ? FLinearColor::White : Red, 1.4f);
+	Box(W - Sx(250.f), Sx(24.f), Sx(226.f), Sx(74.f), Plate);
+	Box(W - Sx(250.f), Sx(24.f), Sx(5.f), Sx(74.f), Ink);
+	Text(TEXT("FILM"), W - Sx(234.f), Sx(28.f), Ink, 0.55f);
+	Text(FString::Printf(TEXT("%d / %d"), Shots, Film), W - Sx(234.f), Sx(48.f), Shots > 3 ? Ink : Red, 1.4f);
 
 	// Health.
 	const float Hp = Me.GetHealth() / FMath::Max(T.Move.MaxHealth, 1.f);
-	Box(Sx(24.f), H - Sx(60.f), Sx(300.f), Sx(22.f), Shade);
-	Box(Sx(27.f), H - Sx(57.f), Sx(294.f) * Hp, Sx(16.f), Hp > 0.3f ? FLinearColor(0.9f, 0.88f, 0.8f) : Red);
-	Text(TEXT("HEALTH"), Sx(24.f), H - Sx(88.f), FLinearColor::White, 0.55f);
+	Box(Sx(24.f), H - Sx(92.f), Sx(300.f), Sx(54.f), Plate);
+	Box(Sx(30.f), H - Sx(60.f), Sx(288.f), Sx(16.f), FLinearColor(Ink.R, Ink.G, Ink.B, 0.25f));
+	Box(Sx(30.f), H - Sx(60.f), Sx(288.f) * Hp, Sx(16.f), Hp > 0.3f ? Ink : Red);
+	Text(TEXT("HEALTH"), Sx(30.f), H - Sx(88.f), Ink, 0.55f);
 
 	// Slot bar: 1 rifle, 2 strike, 3 camera.
 	static const TCHAR* Names[] = {TEXT("1 RIFLE"), TEXT("2 STRIKE"), TEXT("3 CAMERA")};
@@ -328,8 +429,8 @@ void ADCHUD::DrawStatus(ADCGameState& GS, ADCCharacter& Me)
 	{
 		const bool bActive = static_cast<int32>(Me.GetSlot()) == i;
 		const float X = W * 0.5f - Sx(255.f) + i * Sx(170.f);
-		Box(X, H - Sx(70.f), Sx(160.f), Sx(44.f), bActive ? FLinearColor(Gold.R, Gold.G, Gold.B, 0.95f) : Shade);
-		Text(Names[i], X + Sx(80.f), H - Sx(62.f), bActive ? Ink : FLinearColor(1, 1, 1, 0.6f), 0.75f, true);
+		Box(X, H - Sx(70.f), Sx(160.f), Sx(44.f), bActive ? FLinearColor(Gold.R, Gold.G, Gold.B, 0.95f) : Plate);
+		Text(Names[i], X + Sx(80.f), H - Sx(62.f), bActive ? Night : FLinearColor(Ink.R, Ink.G, Ink.B, 0.6f), 0.75f, true);
 	}
 	if (Me.IsDrawing())
 	{
@@ -340,9 +441,11 @@ void ADCHUD::DrawStatus(ADCGameState& GS, ADCCharacter& Me)
 	if (Me.GetSlot() == EDCSlot::Rifle)
 	{
 		const int32 Ammo = Me.GetAmmo();
-		const FLinearColor AC = Ammo > T.Rifle.LowAmmoWarning ? FLinearColor::White : Red;
+		const FLinearColor AC = Ammo > T.Rifle.LowAmmoWarning ? Ink : Red;
+		Box(W - Sx(214.f), H - Sx(104.f), Sx(190.f), Sx(80.f), Paper);
+		Box(W - Sx(214.f), H - Sx(104.f), Sx(5.f), Sx(80.f), Ink);
 		Text(FString::Printf(TEXT("%d"), Ammo), W - Sx(200.f), H - Sx(100.f), AC, 2.f);
-		Text(FString::Printf(TEXT("/ %d"), Me.GetReserve()), W - Sx(110.f), H - Sx(70.f), FLinearColor::White, 0.8f);
+		Text(FString::Printf(TEXT("/ %d"), Me.GetReserve()), W - Sx(110.f), H - Sx(70.f), Ink, 0.8f);
 		if (Me.IsReloading())
 		{
 			Text(TEXT("RELOADING"), W * 0.5f, H * 0.5f + Sx(40.f), FLinearColor::White, 0.7f, true);
@@ -379,9 +482,9 @@ void ADCHUD::DrawPhotoCard(UTexture* Image, const FDCPhotoGrade& Grade, float X,
 	// %g keeps 0.75x exact (a fixed one-decimal format showed a 0.75x blow-out as 0.8x).
 	const FString Timing = FString::Printf(TEXT("%s  %gx"), *Upper(Grade.TimingLabel), FMath::RoundToFloat(Grade.Multiplier * 100.f) / 100.f);
 	float Tw = 0.f, Th = 0.f;
-	Canvas->TextSize(BigFont, Score, Tw, Th, 1.6f * S * TextBoost * UiScale, 1.6f * S * TextBoost * UiScale);
+	TextSize(StampFont, Score, 1.6f * S * TextBoost * UiScale, Tw, Th);
 	float TimingW = 0.f, TimingH = 0.f;
-	Canvas->TextSize(BigFont, Timing, TimingW, TimingH, 0.8f * S * TextBoost * UiScale, 0.8f * S * TextBoost * UiScale);
+	TextSize(StampFont, Timing, 0.8f * S * TextBoost * UiScale, TimingW, TimingH);
 	const float Bw = FMath::Max(Tw, TimingW) + Sx(30.f), Bh = Th * 1.9f + Sx(14.f); // fits both lines (review CP2)
 	const float Bx = Cx - Bw * 0.5f, By = Cy - Sx(10.f);
 	// Tilt: a per-photo angle from the score, so the same photo always lands the same way.
@@ -389,17 +492,24 @@ void ADCHUD::DrawPhotoCard(UTexture* Image, const FDCPhotoGrade& Grade, float X,
 	const FVector Pivot(Cx, By + Bh * 0.5f, 0.f);
 	Canvas->Canvas->PushRelativeTransform(FTranslationMatrix(-Pivot) * FRotationMatrix(FRotator(0.f, Tilt, 0.f)) * FTranslationMatrix(Pivot));
 	// A signal-yellow plate with ink type and an ink double rule: legible on any print, even on small cards.
-	const FLinearColor InkStamp(Ink.R, Ink.G, Ink.B, 0.95f);
+	const FLinearColor InkStamp(Night.R, Night.G, Night.B, 0.95f); // night type on the lime stamp
+	// Holographic stamp (R25): a lime plate with a soft glow halo (a few widening translucent rules).
+	for (int32 k = 3; k >= 1; --k)
+	{
+		Frame(Bx - k * Sx(5.f), By - k * Sx(5.f), Bw + 2.f * k * Sx(5.f), Bh + 2.f * k * Sx(5.f), Sx(5.f), FLinearColor(Gold.R, Gold.G, Gold.B, 0.10f * (4 - k)));
+	}
 	Box(Bx, By, Bw, Bh, FLinearColor(Gold.R, Gold.G, Gold.B, 0.95f));
 	Frame(Bx, By, Bw, Bh, Sx(4.f), InkStamp);
 	Frame(Bx + Sx(7.f), By + Sx(7.f), Bw - Sx(14.f), Bh - Sx(14.f), Sx(1.5f), InkStamp);
 	if (UTexture2D* Worn = Bh > Sx(70.f) ? StampGrit() : nullptr) // small stamps skip the grit: it aliases into noise
 	{
 		// Paper-coloured speckle over the frame ink (under the type, so small stamps stay legible): pressed by hand.
-		DrawTexture(Worn, Bx, By, Bw, Bh, 0, 0, Bw / Sx(256.f), Bh / Sx(128.f), FLinearColor(Paper.R, Paper.G, Paper.B, 0.35f), BLEND_Translucent);
+		// The generated mask is one whole worn stamp (edges and speckle) laid over the plate; the procedural one tiles.
+		const bool bWhole = Worn->GetSizeX() == Worn->GetSizeY();
+		DrawTexture(Worn, Bx, By, Bw, Bh, 0, 0, bWhole ? 1.f : Bw / Sx(256.f), bWhole ? 1.f : Bh / Sx(128.f), FLinearColor(Paper.R, Paper.G, Paper.B, bWhole ? 0.8f : 0.35f), BLEND_Translucent);
 	}
-	Text(Score, Cx, By + Sx(4.f), InkStamp, 1.6f * S, true);
-	Text(Timing, Cx, By + Sx(4.f) + Th * 1.0f, InkStamp, 0.8f * S, true);
+	Text(Score, Cx, By + Sx(4.f), InkStamp, 1.6f * S, true, StampFont);
+	Text(Timing, Cx, By + Sx(4.f) + Th * 1.0f, InkStamp, 0.8f * S, true, StampFont);
 	Canvas->Canvas->PopTransform();
 	float Ty = Y + Sx(16.f);
 	// Category words as ink type on signal-yellow tags, inset inside the print's border (a blown-out spotlit shot keeps
@@ -409,12 +519,29 @@ void ADCHUD::DrawPhotoCard(UTexture* Image, const FDCPhotoGrade& Grade, float X,
 	{
 		const FString Word = Upper(Category);
 		float Cw = 0.f, Ch = 0.f;
-		Canvas->TextSize(BigFont, Word, Cw, Ch, 0.8f * TagScale * TextBoost * UiScale, 0.8f * TagScale * TextBoost * UiScale);
+		TextSize(BigFont, Word, 0.8f * TagScale * TextBoost * UiScale, Cw, Ch);
 		const bool bWarn = Grade.bSpotlit && Category == Grade.Categories[0];
 		Box(X + Sx(14.f), Ty, Cw + Sx(12.f), Ch + Sx(2.f), bWarn ? Red : Gold);
-		Text(Word, X + Sx(20.f), Ty, bWarn ? Paper : Ink, 0.8f * TagScale);
+		Text(Word, X + Sx(20.f), Ty, Night, 0.8f * TagScale);
 		Ty += Ch + Sx(6.f);
 	}
+}
+
+void ADCHUD::PaperSheet(float X, float Y, float W, float H)
+{
+	if (!bPaperTried)
+	{
+		bPaperTried = true;
+		PaperTex = Cast<UTexture2D>(UDCTuning::Get().Assets.PaperGrain.TryLoad());
+	}
+	// R25: a dark glass sheet (no paper left): night ground, faint scanlines, thin cyan rules at the top and bottom.
+	Box(X, Y, W, H, Paper);
+	for (float Ly = Y; Ly < Y + H; Ly += Sx(4.f))
+	{
+		Box(X, Ly, W, 1.f, FLinearColor(Ink.R, Ink.G, Ink.B, 0.025f));
+	}
+	Box(X, Y + Sx(4.f), W, Sx(2.f), FLinearColor(Cyan.R, Cyan.G, Cyan.B, 0.8f));
+	Box(X, Y + H - Sx(6.f), W, Sx(2.f), FLinearColor(Cyan.R, Cyan.G, Cyan.B, 0.8f));
 }
 
 UTexture2D* ADCHUD::StampGrit()
@@ -423,7 +550,12 @@ UTexture2D* ADCHUD::StampGrit()
 	{
 		return Grit;
 	}
-	// Speckles and a few worn streaks, alpha only (seeded: the same grit every run).
+	// The generated worn-ink mask (R11) when it shipped; else speckles and worn streaks made here (seeded).
+	if (UTexture2D* Made = Cast<UTexture2D>(UDCTuning::Get().Assets.StampGrit.TryLoad()))
+	{
+		Grit = Made;
+		return Grit;
+	}
 	constexpr int32 Gw = 256, Gh = 128;
 	TArray<FColor> Px;
 	Px.SetNumZeroed(Gw * Gh);
@@ -483,6 +615,10 @@ void ADCHUD::DrawStamp(ADCPlayerController& PC)
 
 void ADCHUD::DrawHurt(ADCCharacter& Me)
 {
+	if (Me.IsDowned())
+	{
+		return; // downed: the red edge frame says it; hits on the ground must not wash the Last Frame view red
+	}
 	const float Age = static_cast<float>(RealNow - Me.Feedback().HurtTime);
 	if (Age > 0.8f)
 	{
@@ -523,11 +659,14 @@ void ADCHUD::DrawOnboarding(ADCCharacter& Me)
 	struct FStep
 	{
 		bool bDone;
-		const TCHAR* Prompt;
+		FString Prompt;
 	};
+	// Hints name the player's saved bindings (a rebound key shows here, not the default).
+	const ADCPlayerController* KeysPC = Cast<ADCPlayerController>(PlayerOwner);
+	auto Key = [KeysPC](const TCHAR* Action, const TCHAR* Default) { return KeysPC ? KeysPC->KeyFor(Action).ToUpper() : FString(Default); };
 	const FStep Steps[] = {
-		{bDidMove, TEXT("WASD MOVE   SHIFT SPRINT   SPACE JUMP   CTRL CROUCH")},
-		{bDidShoot, TEXT("1 RIFLE   LMB SHOOT   R RELOAD")},
+		{bDidMove, FString::Printf(TEXT("WASD MOVE   %s SPRINT   %s JUMP   %s CROUCH"), *Key(TEXT("Sprint"), TEXT("SHIFT")), *Key(TEXT("Jump"), TEXT("SPACE")), *Key(TEXT("Crouch"), TEXT("CTRL")))},
+		{bDidShoot, FString::Printf(TEXT("1 RIFLE   LMB SHOOT   %s RELOAD"), *Key(TEXT("Reload"), TEXT("R")))},
 		{bDidStrike, TEXT("2 STRIKE   AIM AT A TOWER   LMB CALL THE ORBITAL LASER")},
 		{bDidRaise, TEXT("3 CAMERA   HOLD RMB TO RAISE THE VIEWFINDER")},
 		{bDidSnap, TEXT("LMB SNAP THE BLAST - BEST 0.2-0.8s AFTER THE FLASH")},
@@ -548,10 +687,12 @@ void ADCHUD::DrawOnboarding(ADCCharacter& Me)
 		}
 	}
 	const float W = Canvas->ClipX;
-	const float Y = Canvas->ClipY - Sx(250.f); // low centre: the top band holds the timer, quota and HQ Scoop banner
-	Box(W * 0.5f - Sx(430.f), Y - Sx(6.f), Sx(860.f), Sx(78.f), Shade);
-	Text(TEXT("ORDERS: SHOOT THE DESTRUCTION. PHOTOS PAY FOR BIGGER BOMBS."), W * 0.5f, Y, Gold, 0.65f, true);
-	Text(Next ? FString::Printf(TEXT("%d/5  %s"), Done + 1, Next->Prompt) : FString(TEXT("YOU ARE A WAR PHOTOGRAPHER NOW. GET CLOSER.")), W * 0.5f, Y + Sx(32.f), FLinearColor::White, 0.75f, true);
+	// Low centre, above the viewfinder prompts (they overlapped LMB SNAP): a paper plate with ink type.
+	const float Y = Canvas->ClipY - Sx(330.f);
+	Box(W * 0.5f - Sx(430.f), Y - Sx(6.f), Sx(860.f), Sx(78.f), Paper);
+	Box(W * 0.5f - Sx(430.f), Y - Sx(6.f), Sx(5.f), Sx(78.f), Ink);
+	Text(TEXT("ORDERS: SHOOT THE DESTRUCTION. PHOTOS PAY FOR BIGGER BOMBS."), W * 0.5f, Y, Ink, 0.65f, true);
+	Text(Next ? FString::Printf(TEXT("%d/5  %s"), Done + 1, *Next->Prompt) : FString(TEXT("YOU ARE A WAR PHOTOGRAPHER NOW. GET CLOSER.")), W * 0.5f, Y + Sx(32.f), Ink, 0.75f, true);
 }
 
 void ADCHUD::DrawDowned(ADCCharacter& Me)
@@ -561,18 +702,28 @@ void ADCHUD::DrawDowned(ADCCharacter& Me)
 		return;
 	}
 	const float W = Canvas->ClipX, H = Canvas->ClipY;
-	Box(0, 0, W, H, FLinearColor(0.3f, 0.f, 0.f, 0.12f)); // a light wash: the HUD and the last frame stay readable
-	Text(TEXT("DOWNED"), W * 0.5f, H * 0.4f, Red, 2.f, true);
+	// No wash over the view (the Last Frame is shot through it): a red frame at the edges, and the DOWNED plate sits in
+	// the upper third, clear of the reticle and below the scoop banner.
+	const float Edge = Sx(10.f);
+	Box(0, 0, W, Edge, Red);
+	Box(0, H - Edge, W, Edge, Red);
+	Box(0, 0, Edge, H, Red);
+	Box(W - Edge, 0, Edge, H, Red);
+	const float Y = Sx(272.f); // below the scoop banner (150-230) with a clear gap
+	Box(W * 0.5f - Sx(360.f), Y - Sx(8.f), Sx(720.f), Sx(132.f), Paper);
+	Box(W * 0.5f - Sx(360.f), Y - Sx(8.f), Sx(720.f), Sx(5.f), Red);
+	Text(TEXT("DOWNED"), W * 0.5f, Y, Red, 1.6f, true);
 	const float Left = Me.SelfReviveSecondsLeft();
 	Text(Left > 0.f ? FString::Printf(TEXT("HOLD E TO PATCH YOURSELF UP  -  %.0fs"), Left) : FString(TEXT("HOLD ON - A COMRADE CAN REVIVE YOU (THEY HOLD E BESIDE YOU)")),
-		W * 0.5f, H * 0.4f + Sx(70.f), FLinearColor::White, 0.7f, true);
-	Box(W * 0.5f - Sx(200.f), H * 0.4f + Sx(110.f), Sx(400.f) * Me.GetReviveProgress(), Sx(12.f), FLinearColor::White);
+		W * 0.5f, Y + Sx(60.f), Ink, 0.62f, true);
+	Box(W * 0.5f - Sx(200.f), Y + Sx(100.f), Sx(400.f), Sx(12.f), FLinearColor(Ink.R, Ink.G, Ink.B, 0.25f));
+	Box(W * 0.5f - Sx(200.f), Y + Sx(100.f), Sx(400.f) * Me.GetReviveProgress(), Sx(12.f), Ink);
 	if (Me.HasLastFrame())
 	{
 		// R21: one last shutter from where they fell.
 		const float Pulse = 0.75f + 0.25f * FMath::Sin(RealNow * 6.f);
 		Box(W * 0.5f - Sx(230.f), H * 0.62f, Sx(460.f), Sx(56.f), FLinearColor(Gold.R, Gold.G, Gold.B, 0.95f * Pulse));
-		Text(TEXT("LAST FRAME  -  LMB"), W * 0.5f, H * 0.62f + Sx(8.f), Ink, 1.f, true);
+		Text(TEXT("LAST FRAME  -  LMB"), W * 0.5f, H * 0.62f + Sx(8.f), Night, 1.f, true);
 	}
 }
 

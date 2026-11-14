@@ -68,7 +68,14 @@ struct EPIC_AI_MEGA_JAM2_API FDCVoxelSector
 namespace DCVoxelOps
 {
 	/** Removes every solid voxel of a grid within RadiusCm of CenterCm (voxel centres, integer). Returns how many. */
-	EPIC_AI_MEGA_JAM2_API int32 CarveSphere(FDCVoxelGrid& Grid, const FIntVector& CenterCm, int32 RadiusCm);
+	/** The highest solid tower voxel under terrain column (X, Y), as a terrain cell index (0 = none): rubble rests on
+	 *  what is left of a tower, not on its uncarved roof prism. */
+	/** Photo sight through the sector: true when voxels block From -> To (towers in IgnoreLots never do; a standing
+	 *  shell blocks through its hollow inside). Marches StepCm; the first SkipNearCm and last SkipFarCm never block. */
+	EPIC_AI_MEGA_JAM2_API bool SightBlocked(const struct FDCVoxelSector& Sector, const FVector& From, const FVector& To, const TArray<int32>& IgnoreLots, float StepCm, float SkipNearCm, float SkipFarCm);
+	EPIC_AI_MEGA_JAM2_API int32 TowerTopCells(const struct FDCVoxelTower& T, const FDCVoxelGrid& G, int32 X, int32 Y);
+	/** MinZ: local layers below it are never carved (the terrain's bedrock). */
+	EPIC_AI_MEGA_JAM2_API int32 CarveSphere(FDCVoxelGrid& Grid, const FIntVector& CenterCm, int32 RadiusCm, int32 MinZ = 0);
 	/** Removes a vertical cylinder from the ground up to the grid's top. */
 	EPIC_AI_MEGA_JAM2_API int32 CarveColumn(FDCVoxelGrid& Grid, const FIntVector& CenterCm, int32 RadiusCm, int32 TopZ);
 	/** Bites the base of a tower on the side facing FromCm: BiteFloors tall, BitePercent of the footprint deep, ragged. */
@@ -88,4 +95,9 @@ namespace DCVoxelOps
 
 	/** Deterministic per-voxel hash (no RNG state, order independent). */
 	EPIC_AI_MEGA_JAM2_API uint32 Hash(const FIntVector& P, uint32 Salt);
+
+	/** Breaks a falling piece into fragments for the physics bodies (R26): its cells bucketed on a block grid of
+	 *  BlockCells voxels, the block doubled until there are at most MaxFragments. Returns cell indices per fragment,
+	 *  ordered by block coordinate (the same on every machine; the bodies themselves are local and cosmetic). */
+	EPIC_AI_MEGA_JAM2_API TArray<TArray<int32>> SplitFragments(const TArray<FIntVector>& Cells, int32 BlockCells, int32 MaxFragments);
 }

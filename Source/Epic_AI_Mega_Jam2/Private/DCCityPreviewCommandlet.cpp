@@ -3,6 +3,8 @@
 #include "DCVoxelCity.h"
 #include "IImageWrapper.h"
 #include "IImageWrapperModule.h"
+#include "HAL/FileManager.h"
+#include "HAL/PlatformProcess.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 #include "Modules/ModuleManager.h"
@@ -120,6 +122,41 @@ int32 UDCCityPreviewCommandlet::Main(const FString& Params)
 		Failed += bOk ? 0 : 1;
 		UE_LOG(LogTemp, Display, TEXT("DCPREVIEW sector=%d buildings=%d plazas=%d rubble=%d props=%d landmark=%d -> %s %s"), S, Plan.Buildings.Num(), Plan.Plazas.Num(),
 			Plan.RubbleZones.Num(), Plan.Props.Num(), Plan.Landmark, *Path, bOk ? TEXT("ok") : TEXT("FAILED"));
+	}
+	// -render: the rendered sector too (R16). A commandlet has no renderer, so the tool starts the game for each sector
+	// with -dccityshot (it builds that sector's voxel city, writes aerial frames into Out and quits) and waits for it.
+	if (FParse::Param(*Params, TEXT("render")))
+	{
+		const FString Exe = FPaths::ConvertRelativePathToFull(FString(FPlatformProcess::BaseDir()) / TEXT("UnrealEditor.exe"));
+		const FString Project = FPaths::ConvertRelativePathToFull(FPaths::GetProjectFilePath());
+		const FString OutFull = FPaths::ConvertRelativePathToFull(Out);
+		for (int32 S = 0; S < Sectors; ++S)
+		{
+			const FString Args = FString::Printf(TEXT("\"%s\" -game -windowed -resx=1600 -resy=900 -dcdemo -dcseed=%d -dcstartsector=%d -dccityshot=\"%s\" -unattended -nosplash -nosound"),
+				*Project, Seed, S, *OutFull);
+			FProcHandle Proc = FPlatformProcess::CreateProc(*Exe, *Args, true, false, false, nullptr, 0, nullptr, nullptr);
+			if (!Proc.IsValid())
+			{
+				UE_LOG(LogTemp, Error, TEXT("DCPREVIEW render sector=%d could not start %s"), S, *Exe);
+				++Failed;
+				continue;
+			}
+			const double GiveUp = FPlatformTime::Seconds() + 300.0;
+			while (FPlatformProcess::IsProcRunning(Proc) && FPlatformTime::Seconds() < GiveUp)
+			{
+				FPlatformProcess::Sleep(0.5f);
+			}
+			if (FPlatformProcess::IsProcRunning(Proc))
+			{
+				FPlatformProcess::TerminateProc(Proc, true);
+				UE_LOG(LogTemp, Warning, TEXT("DCPREVIEW render sector=%d timed out after 300 s"), S);
+			}
+			FPlatformProcess::CloseProc(Proc);
+			TArray<FString> Shots;
+			IFileManager::Get().FindFiles(Shots, *(OutFull / FString::Printf(TEXT("cityshot_sector%d_*.png"), S)), true, false);
+			UE_LOG(LogTemp, Display, TEXT("DCPREVIEW render sector=%d frames=%d -> %s"), S, Shots.Num(), *OutFull);
+			Failed += Shots.Num() > 0 ? 0 : 1;
+		}
 	}
 	return Failed == 0 ? 0 : 1;
 }

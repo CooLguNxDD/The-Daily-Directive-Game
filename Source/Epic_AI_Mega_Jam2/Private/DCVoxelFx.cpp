@@ -1,8 +1,11 @@
 #include "DCVoxelFx.h"
+#include "DCPresentationClock.h"
 
 #include "Components/InstancedStaticMeshComponent.h"
 #include "DCAssets.h"
 #include "Engine/World.h"
+#include "Camera/PlayerCameraManager.h"
+#include "GameFramework/PlayerController.h"
 #include "Voxel/DCVoxelSettings.h"
 
 ADCVoxelFx::ADCVoxelFx()
@@ -32,6 +35,7 @@ void ADCVoxelFx::BeginPlay()
 		Ism->AddInstances(Hidden, false);
 		Meshes.Add(Ism);
 		Puffs.AddDefaulted();
+		Shown.Add(0);
 	}
 }
 
@@ -44,7 +48,7 @@ void ADCVoxelFx::Spawn(int32 Kind, const FVector& Where, float Radius, int32 Cou
 {
 	const FDCFxKind& K = UDCVoxelSettings::Get().FxKinds[Kind];
 	TArray<FPuff>& List = Puffs[Kind];
-	const float Now = GetWorld()->GetTimeSeconds();
+	const float Now = FxTime;
 	for (int32 i = 0; i < Count; ++i)
 	{
 		if (List.Num() >= K.Pool)
@@ -91,7 +95,7 @@ void ADCVoxelFx::SpawnKind(FName Kind, const FVector& Where, float Radius, int32
 
 void ADCVoxelFx::Burn(FName Emitter, const FVector& Where, float Radius, float Seconds)
 {
-	const float Now = GetWorld()->GetTimeSeconds();
+	const float Now = FxTime;
 	Burns.Add({Emitter, Where, Radius, Now + Seconds, Now});
 }
 
@@ -104,10 +108,13 @@ void ADCVoxelFx::ClearAll()
 	}
 }
 
-void ADCVoxelFx::Tick(float DeltaSeconds)
+void ADCVoxelFx::Tick(float WorldDeltaSeconds)
 {
-	Super::Tick(DeltaSeconds);
-	const float Now = GetWorld()->GetTimeSeconds();
+	Super::Tick(WorldDeltaSeconds);
+	// Puffs live on this machine's presentation clock (a dying player's Last Frame slows them, R21).
+	const float DeltaSeconds = WorldDeltaSeconds * UDCPresentationClock::Dilation(this);
+	FxTime += DeltaSeconds;
+	const float Now = FxTime;
 	for (int32 i = Burns.Num() - 1; i >= 0; --i)
 	{
 		FBurn& B = Burns[i];
@@ -125,6 +132,11 @@ void ADCVoxelFx::Tick(float DeltaSeconds)
 	}
 	const TArray<FDCFxKind>& Kinds = UDCVoxelSettings::Get().FxKinds;
 	TArray<FTransform> Xf;
+	// Puffs shrink away near the local camera: a smoke cube never fills the lens (CP4 frames: the view went brown).
+	const APlayerController* PC = GetWorld()->GetFirstPlayerController();
+	const bool bHaveEye = PC && PC->PlayerCameraManager;
+	const FVector Eye = bHaveEye ? PC->PlayerCameraManager->GetCameraLocation() : FVector::ZeroVector;
+	const FDCVoxelTuning& Tn = UDCVoxelSettings::Get().Tuning;
 	for (int32 k = 0; k < Puffs.Num() && k < Meshes.Num(); ++k)
 	{
 		const FDCFxKind& K = Kinds[k];
@@ -140,15 +152,22 @@ void ADCVoxelFx::Tick(float DeltaSeconds)
 			const float U = FMath::Clamp((Now - P.Born) / P.Life, 0.f, 1.f);
 			// Pop in, grow toward the end size, shrink away in the last fifth: chunky, never a fade.
 			const float Pop = FMath::Min(U * 8.f, 1.f) * FMath::Min((1.f - U) * 5.f, 1.f);
-			const float Size = FMath::Lerp(K.SizeStart, K.SizeEnd, U) * Pop;
+			const float Near = bHaveEye ? FMath::Clamp((FVector::Dist(P.Pos, Eye) - Tn.FxNearHideCm) / FMath::Max(Tn.FxNearFadeCm, 1.f), 0.f, 1.f) : 1.f;
+			const float Size = FMath::Lerp(K.SizeStart, K.SizeEnd, U) * Pop * Near;
 			Xf.Add(FTransform(K.Stretch > 1.f ? FRotator::ZeroRotator : P.Spin, P.Pos, FVector(Size / 100.f, Size / 100.f, Size * K.Stretch / 100.f)));
 		}
-		const int32 Pool = Meshes[k]->GetInstanceCount();
-		while (Xf.Num() < Pool)
+		const int32 Live = Xf.Num();
+		const int32 Touch = FMath::Min(FMath::Max(Live, Shown[k]), Meshes[k]->GetInstanceCount());
+		if (Touch == 0)
+		{
+			continue; // nothing live now or last frame: the pool stays hidden untouched
+		}
+		while (Xf.Num() < Touch)
 		{
 			Xf.Add(FTransform(FQuat::Identity, FVector(0, 0, -100000.f), FVector::ZeroVector));
 		}
-		Xf.SetNum(Pool);
+		Xf.SetNum(Touch);
 		Meshes[k]->BatchUpdateInstancesTransforms(0, Xf, true, true, true);
+		Shown[k] = Live;
 	}
 }

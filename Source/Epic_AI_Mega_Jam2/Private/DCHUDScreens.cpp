@@ -55,13 +55,14 @@ using namespace DCHudScreens;
 bool ADCHUD::Button(const FString& Label, FName Id, float X, float Y, float W, float H, bool bEnabled, bool bSelected)
 {
 	// Buttons are usable: signal yellow, or paper with an ink frame when picked (red stays for danger, R6).
-	const FLinearColor Fill = !bEnabled ? FLinearColor(0.3f, 0.3f, 0.3f, 0.8f) : (bSelected ? Paper : Gold);
-	if (bSelected)
+	// Disabled: paper with an ink outline and ink type (grey on grey did not read, CP3 vision minor).
+	const FLinearColor Fill = !bEnabled ? Paper : (bSelected ? Paper : Gold);
+	if (bSelected || !bEnabled)
 	{
 		Box(X - Sx(3.f), Y - Sx(3.f), W + Sx(6.f), H + Sx(6.f), Ink);
 	}
 	Box(X, Y, W, H, Fill);
-	Text(Label, X + W * 0.5f, Y + H * 0.5f - Sx(14.f), bEnabled ? Ink : Paper, 0.7f, true);
+	Text(Label, X + W * 0.5f, Y + H * 0.5f - Sx(14.f), bEnabled ? TextOn(Fill) : FLinearColor(Ink.R, Ink.G, Ink.B, 0.6f), 0.7f, true);
 	if (bEnabled)
 	{
 		AddHitBox(FVector2D(X, Y), FVector2D(W, H), Id, true);
@@ -152,7 +153,17 @@ void ADCHUD::DrawDraft(ADCGameState& GS, ADCCharacter* Me)
 			const bool bPicked = PS->Upgrades.Contains(Def->Id);
 			const float Y = Sx(290.f) + Row++ * (CardH + Sx(14.f));
 			Box(X, Y, ColW, CardH, bPicked ? Gold : Paper);
-			Text(Def->DisplayName.ToString().ToUpper(), X + Sx(16.f), Y + Sx(10.f), Ink, 0.7f);
+			// Card art (R11) in a square at the left, the words beside it.
+			float Tx = X + Sx(16.f);
+			int32 Wrap = 52;
+			if (const TObjectPtr<UTexture2D>* Icon = CardIcons.Find(Def->Id))
+			{
+				const float S = CardH - Sx(16.f);
+				DrawTexture(*Icon, X + Sx(8.f), Y + Sx(8.f), S, S, 0.f, 0.f, 1.f, 1.f, FLinearColor::White, BLEND_Opaque);
+				Tx = X + S + Sx(22.f);
+				Wrap = 40;
+			}
+			Text(Def->DisplayName.ToString().ToUpper(), Tx, Y + Sx(10.f), bPicked ? Night : Ink, 0.7f);
 			// Description wrapped by words into short lines.
 			TArray<FString> Words;
 			Def->Description.ToString().ParseIntoArray(Words, TEXT(" "));
@@ -160,15 +171,15 @@ void ADCHUD::DrawDraft(ADCGameState& GS, ADCCharacter* Me)
 			float Ly = Y + Sx(52.f);
 			for (const FString& Word : Words)
 			{
-				if (Line.Len() + Word.Len() > 52)
+				if (Line.Len() + Word.Len() > Wrap)
 				{
-					Text(Line, X + Sx(16.f), Ly, Ink, 0.5f);
+					Text(Line, Tx, Ly, bPicked ? Night : Ink, 0.5f);
 					Ly += Sx(26.f);
 					Line.Reset();
 				}
 				Line += (Line.IsEmpty() ? TEXT("") : TEXT(" ")) + Word;
 			}
-			Text(Line, X + Sx(16.f), Ly, Ink, 0.5f);
+			Text(Line, Tx, Ly, bPicked ? Night : Ink, 0.5f);
 			if (!PS->bDraftDone)
 			{
 				AddHitBox(FVector2D(X, Y), FVector2D(ColW, CardH), FName(*FString::Printf(TEXT("pick|%s"), *Def->Id.ToString())), true);
@@ -290,7 +301,7 @@ void ADCHUD::DrawFinalCut(ADCGameState& GS, ADCCharacter* Me)
 	ADCPlayerController* PC = Cast<ADCPlayerController>(PlayerOwner);
 	const ADCPlayerState* PS = PC ? PC->GetPlayerState<ADCPlayerState>() : nullptr;
 	// The editor's desk in cream and ink (R6): picks are marked in signal yellow, nothing else is coloured.
-	Box(0, 0, W, H, Paper);
+	PaperSheet(0, 0, W, H);
 	Box(Sx(40.f), Sx(86.f), W - Sx(80.f), Sx(3.f), Ink);
 	Text(TEXT("FINAL CUT"), W * 0.5f, Sx(24.f), Ink, 1.4f, true);
 	Text(FString::Printf(TEXT("PICK %d SHOTS FOR THE FRONT PAGE. THE CRITIC RANKED THEM; OVERRULE AT WILL.   %s"), T.Run.FinalCutPicks, *Clock(GS.PhaseEndTime - GS.Now())),
@@ -326,7 +337,7 @@ void ADCHUD::DrawFinalCut(ADCGameState& GS, ADCCharacter* Me)
 		{
 			Frame(X - Sx(10.f), Y - Sx(10.f), CardW + Sx(20.f), CardW * 9.f / 16.f + Sx(50.f), Sx(8.f), Gold);
 			Box(X + CardW - Sx(96.f), Y + CardW * 9.f / 16.f + Sx(2.f), Sx(92.f), Sx(26.f), Gold);
-			Text(FString::Printf(TEXT("PICK %d"), Order + 1), X + CardW - Sx(90.f), Y + CardW * 9.f / 16.f + Sx(2.f), Ink, 0.6f);
+			Text(FString::Printf(TEXT("PICK %d"), Order + 1), X + CardW - Sx(90.f), Y + CardW * 9.f / 16.f + Sx(2.f), Night, 0.6f);
 		}
 		if (!PS->bFinalCutDone)
 		{
@@ -405,36 +416,112 @@ void ADCHUD::DrawFrontPage(ADCGameState& GS, ADCCharacter* Me)
 		bPressPlayed = true;
 		DCAudio::Play2D(this, TEXT("Press"), 1.f); // the printing press rolls
 	}
-	Box(0, 0, W, H, Paper);
-	Text(TEXT("THE DAILY DIRECTIVE"), W * 0.5f, Sx(18.f), Ink, 2.6f, true);
+	PaperSheet(0, 0, W, H);
+	const float M = Sx(28.f); // page margin: a dense broadsheet, not a poster on a wall
+	const float Bottom = H - Sx(110.f);
+	// Body copy: real sentences from data (FrontPageCopy), word-wrapped in small body type, ragged right; the seed
+	// picks where each column starts so columns read differently. Greeked bars only when no copy shipped.
+	const TArray<FString>& Copy = UDCTuning::Get().FrontPageCopy;
+	const FString Who = GS.PlayerArray.Num() > 0 && GS.PlayerArray[0] ? GS.PlayerArray[0]->GetPlayerName().ToUpper() : FString(TEXT("OUR CORRESPONDENT"));
+	auto Greek = [this, &Copy, &Who](float X, float Y, float ColW, float ColH, uint32 Seed)
+	{
+		const float Line = Sx(15.f);
+		const float Scale = 0.42f;
+		int32 Row = 0;
+		FString Cur;
+		auto Flush = [&]()
+		{
+			if ((Row + 1) * Line <= ColH && !Cur.IsEmpty())
+			{
+				Text(Cur, X, Y + Row * Line, FLinearColor(Ink.R, Ink.G, Ink.B, 0.85f), Scale, false, SmallFont);
+			}
+			++Row;
+			Cur.Reset();
+		};
+		if (Copy.IsEmpty())
+		{
+			for (int32 i = 0; (i + 1) * Line <= ColH; ++i)
+			{
+				Box(X, Y + i * Line, ColW * 0.9f, Sx(5.f), FLinearColor(Ink.R, Ink.G, Ink.B, 0.42f));
+			}
+			return;
+		}
+		for (int32 n = 0; (Row + 1) * Line <= ColH && n < 64; ++n)
+		{
+			FString Sentence = Copy[(Seed + n) % Copy.Num()].Replace(TEXT("{PLAYER}"), *Who);
+			TArray<FString> Words;
+			Sentence.ParseIntoArray(Words, TEXT(" "));
+			for (const FString& Word : Words)
+			{
+				const FString Try = Cur.IsEmpty() ? Word : Cur + TEXT(" ") + Word;
+				float Tw = 0.f, Th = 0.f;
+				TextSize(SmallFont, Try, Scale * TextBoost * UiScale, Tw, Th);
+				if (Tw > ColW && !Cur.IsEmpty())
+				{
+					Flush();
+					Cur = Word;
+				}
+				else
+				{
+					Cur = Try;
+				}
+			}
+			if (n % 3 == 2)
+			{
+				Flush(); // a paragraph break now and then
+			}
+		}
+		Flush();
+	};
+	Text(TEXT("The Daily Directive"), W * 0.5f, Sx(10.f), Ink, 2.4f, true, MastFont); // descenders clear the rule
+	// Ears either side of the masthead.
+	Box(M, Sx(30.f), Sx(250.f), Sx(70.f), FLinearColor(Ink.R, Ink.G, Ink.B, 0.08f));
+	Text(FString::Printf(TEXT("VOL. 1  NO. %d"), GS.RunSeed), M + Sx(12.f), Sx(38.f), Ink, 0.55f);
+	Text(TEXT("PRINTED UNDER ORBIT"), M + Sx(12.f), Sx(66.f), Ink, 0.45f);
 	Box(Sx(40.f), Sx(120.f), W - Sx(80.f), Sx(4.f), Ink);
 	Text(TEXT("SPECIAL REEL EDITION  |  PRICE: ONE PHOTO  |  ALL NEWS IS GOOD NEWS"), W * 0.5f, Sx(130.f), Ink, 0.55f, true);
 	Box(Sx(40.f), Sx(162.f), W - Sx(80.f), Sx(2.f), Ink);
 
-	// Headline: scaled down until it fits the page width.
-	float Scale = 2.f, Tw = 0.f, Th = 0.f;
+	// Headline: paper type on one solid red band (the page's single accent), scaled down until it fits.
+	float Scale = 1.8f, Tw = 0.f, Th = 0.f;
 	for (; Scale > 0.7f; Scale -= 0.1f)
 	{
-		Canvas->TextSize(BigFont, GS.Headline, Tw, Th, Scale * TextBoost * UiScale, Scale * TextBoost * UiScale);
-		if (Tw < W - Sx(100.f))
+		TextSize(HeadFont, GS.Headline, Scale * TextBoost * UiScale, Tw, Th);
+		if (Tw < W - Sx(120.f))
 		{
 			break;
 		}
 	}
-	Text(GS.Headline, W * 0.5f, Sx(176.f), Red, Scale, true);
+	Box(M, Sx(172.f), W - 2.f * M, Sx(84.f), Magenta); // the headline band is a neon accent (red is danger only)
+	Text(GS.Headline, W * 0.5f, Sx(172.f) + (Sx(84.f) - Th) * 0.5f, Ink, Scale, true, HeadFont);
 
 	if (PC && GS.PagePicks.IsValidIndex(GS.HeadlineIndex))
 	{
 		const FDCPagePick& Top = GS.PagePicks[GS.HeadlineIndex];
-		const float BigW = W * 0.56f;
-		const float Y = Sx(290.f);
-		DrawPhotoCard(PC->GetPhotoImage(Top.Photo.PhotoId), Top.Photo.Grade, Sx(60.f), Y, BigW, 1.f, true);
+		const float BigW = W * 0.58f;
+		const float Y = Sx(272.f);
+		DrawPhotoCard(PC->GetPhotoImage(Top.Photo.PhotoId), Top.Photo.Grade, M, Y, BigW, 1.f, true);
+		const float CapY = Y + BigW * 9.f / 16.f + Sx(4.f);
 		Text(FString::Printf(TEXT("PHOTO: %s  |  CRITIC %s  |  %d VOTE%s  |  PAGE SCORE %s"), *(Top.Photo.CoStar.IsEmpty() ? Top.PlayerName.ToUpper() : Top.PlayerName.ToUpper() + TEXT(" WITH ") + Top.Photo.CoStar.ToUpper()), *FText::AsNumber(Top.Photo.Grade.Score).ToString(),
-			Top.Votes, Top.Votes == 1 ? TEXT("") : TEXT("S"), *FText::AsNumber(Top.PageScore).ToString()), Sx(60.f), Y + BigW * 9.f / 16.f + Sx(6.f), Ink, 0.55f);
+			Top.Votes, Top.Votes == 1 ? TEXT("") : TEXT("S"), *FText::AsNumber(Top.PageScore).ToString()), M, CapY, Ink, 0.55f);
+		// Three columns of copy under the lead photo, split by hairline rules.
+		const float CopyY = CapY + Sx(30.f);
+		const float ColGap = Sx(18.f);
+		const float ColW = (BigW - 2.f * ColGap) / 3.f;
+		for (int32 c = 0; c < 3; ++c)
+		{
+			const float Cx = M + c * (ColW + ColGap);
+			Greek(Cx, CopyY, ColW, Bottom - CopyY - Sx(8.f), 977u * (c + 1) + static_cast<uint32>(GS.RunSeed));
+			if (c > 0)
+			{
+				Box(Cx - ColGap * 0.5f, CopyY, Sx(1.f), Bottom - CopyY - Sx(8.f), FLinearColor(Ink.R, Ink.G, Ink.B, 0.5f));
+			}
+		}
 
 		// Full edition (R22): up to two runner-up columns down the right, each under its own satirical headline.
-		const float SideX = Sx(60.f) + BigW + Sx(50.f);
-		const float SideW = W - SideX - Sx(60.f);
+		const float SideX = M + BigW + Sx(30.f);
+		const float SideW = W - SideX - M;
+		Box(SideX - Sx(15.f), Y - Sx(8.f), Sx(2.f), Bottom - Y, Ink);
 		TArray<int32> Runners;
 		for (int32 i = 0; i < GS.PagePicks.Num(); ++i)
 		{
@@ -445,37 +532,40 @@ void ADCHUD::DrawFrontPage(ADCGameState& GS, ADCCharacter* Me)
 		}
 		Runners.StableSort([&GS](int32 A, int32 B) { return GS.PagePicks[A].PageScore > GS.PagePicks[B].PageScore; });
 		Runners.SetNum(FMath::Min(Runners.Num(), 2));
-		const float ColumnH = (H - Sx(120.f) - Sx(290.f)) / 2.f;
-		const float CardW = FMath::Min(SideW, (ColumnH - Sx(96.f)) * 16.f / 9.f);
+		const float ColumnH = (Bottom - Y) / 2.f;
+		const float CardW = FMath::Min(SideW * 0.62f, (ColumnH - Sx(96.f)) * 16.f / 9.f);
 		for (int32 k = 0; k < Runners.Num(); ++k)
 		{
 			const FDCPagePick& P = GS.PagePicks[Runners[k]];
-			const float Cy = Sx(290.f) + k * ColumnH;
+			const float Cy = Y + k * ColumnH;
 			Box(SideX, Cy - Sx(8.f), SideW, Sx(2.f), Ink);
 			// The column headline shrinks until it fits the column.
 			float HeadScale = 0.9f, Hw = 0.f, Hh = 0.f;
 			for (; HeadScale > 0.42f; HeadScale -= 0.04f)
 			{
-				Canvas->TextSize(BigFont, P.Headline, Hw, Hh, HeadScale * TextBoost * UiScale, HeadScale * TextBoost * UiScale);
+				TextSize(HeadFont, P.Headline, HeadScale * TextBoost * UiScale, Hw, Hh);
 				if (Hw < SideW)
 				{
 					break;
 				}
 			}
-			Text(P.Headline, SideX, Cy, Ink, HeadScale);
+			Text(P.Headline, SideX, Cy, Ink, HeadScale, false, HeadFont);
 			const float PhotoY = Cy + Hh + Sx(8.f);
 			DrawPhotoCard(PC->GetPhotoImage(P.Photo.PhotoId), P.Photo.Grade, SideX, PhotoY, CardW, 1.f, false);
 			const FString Byline = P.Photo.CoStar.IsEmpty() ? P.PlayerName.ToUpper() : P.PlayerName.ToUpper() + TEXT(" WITH ") + P.Photo.CoStar.ToUpper();
 			Text(FString::Printf(TEXT("PHOTO: %s  |  CRITIC %s  |  %d VOTE%s"), *Byline, *FText::AsNumber(P.Photo.Grade.Score).ToString(), P.Votes, P.Votes == 1 ? TEXT("") : TEXT("S")),
 				SideX, PhotoY + CardW * 9.f / 16.f + Sx(4.f), Ink, 0.45f);
+			// Copy wraps beside the photo and runs on under it.
+			const float BesideX = SideX + CardW + Sx(14.f);
+			Greek(BesideX, PhotoY, SideX + SideW - BesideX, CardW * 9.f / 16.f, 31u * (k + 7) + static_cast<uint32>(GS.RunSeed));
+			const float UnderY = PhotoY + CardW * 9.f / 16.f + Sx(26.f);
+			Greek(SideX, UnderY, SideW, Cy + ColumnH - UnderY - Sx(14.f), 57u * (k + 3) + static_cast<uint32>(GS.RunSeed));
 		}
 	}
-	if (GS.bRunFailed)
-	{
-		// The mock-heroic correction edition: a stamped banner under the masthead.
-		Box(W * 0.5f - Sx(210.f), Sx(78.f), Sx(420.f), Sx(40.f), Ink);
-		Text(TEXT("CORRECTION EDITION"), W * 0.5f, Sx(84.f), Paper, 0.8f, true);
-	}
+	// The other ear: the edition, stamped in ink (a failed run prints the mock-heroic correction edition).
+	Box(W - M - Sx(250.f), Sx(30.f), Sx(250.f), Sx(70.f), GS.bRunFailed ? Ink : FLinearColor(Ink.R, Ink.G, Ink.B, 0.08f));
+	Text(GS.bRunFailed ? TEXT("CORRECTION") : TEXT("LATE FINAL"), W - M - Sx(125.f), Sx(36.f), GS.bRunFailed ? Paper : Ink, 0.7f, true);
+	Text(TEXT("EDITION"), W - M - Sx(125.f), Sx(68.f), GS.bRunFailed ? Paper : Ink, 0.45f, true);
 	Box(Sx(40.f), H - Sx(110.f), W - Sx(80.f), Sx(2.f), Ink);
 	Text(GS.Subhead, W * 0.5f, H - Sx(100.f), Ink, 0.55f, true);
 	if (GetNetMode() != NM_Client)
