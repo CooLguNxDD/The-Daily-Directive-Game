@@ -209,6 +209,8 @@ private:
 		FDCVoxelOpResult Result;
 		uint32 Hash = 0;
 		float ApplyMs = 0.f;
+		float DeriveMs = 0.f;
+		float HashMs = 0.f;
 		bool bPrepared = false;
 	};
 	TArray<FQueuedOp> QueuedOps;
@@ -238,6 +240,8 @@ private:
 	void PrewarmPieces(int32 PerFrame);
 	TMap<int32, TArray<TObjectPtr<UProceduralMeshComponent>>> FreePieces;
 	TMap<TObjectPtr<UProceduralMeshComponent>, int32> PieceCm;
+	/** Every pooled piece, so garbage collection sees them (the maps above are not UPROPERTYs). */
+	UPROPERTY() TArray<TObjectPtr<UProceduralMeshComponent>> PieceAll;
 	UMaterialInterface* VoxelMaterial();
 	/** One instance of the voxel material per voxel size: its edge bevel sits on that grid (V4.2). */
 	UMaterialInterface* VoxelMaterialFor(int32 VoxelCm);

@@ -216,10 +216,7 @@ void ADCHUD::DrawReel(ADCGameState& GS, ADCCharacter* Me)
 {
 	ON_SCOPE_EXIT
 	{
-		if (Me)
-		{
-			DrawToast(*Me); // e.g. the last sector's quota verdict, said as the reel starts
-		}
+		// No toast here: the last sector's verdict crossed the clip (review CP26); the front page lists quotas met.
 		if (ADCPlayerController* StampPC = Cast<ADCPlayerController>(PlayerOwner))
 		{
 			DrawStamp(*StampPC); // a second take's stamp slides in like any photo

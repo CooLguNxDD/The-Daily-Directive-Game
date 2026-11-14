@@ -409,14 +409,18 @@ namespace DCVoxelOps
 
 		// Takes cells from layer ZFrom up that Pick selects; clears them in the grid with one chunk-wise pass over the
 		// same layers (only when something was taken).
-		auto TakePiece = [&](FDCVoxelPiece& Piece, int32 ZFrom, TFunctionRef<bool(int32, int32, int32)> Pick)
+		// Takes cells inside the local box [Lo, Hi) that Pick selects; clears them in the grid with one chunk-wise pass
+		// over that box only (a sign's piece scans the sign, not the tower above it: review CP26, 1.3-2 s ops).
+		auto TakePiece = [&](FDCVoxelPiece& Piece, const FIntVector& InLo, const FIntVector& InHi, TFunctionRef<bool(int32, int32, int32)> Pick)
 		{
+			const FIntVector Lo = InLo.ComponentMax(FIntVector::ZeroValue);
+			const FIntVector Hi = InHi.ComponentMin(Size);
 			const int32 Before = Piece.Cells.Num();
-			for (int32 Z = FMath::Max(ZFrom, 0); Z < Size.Z; ++Z)
+			for (int32 Z = Lo.Z; Z < Hi.Z; ++Z)
 			{
-				for (int32 Y = 0; Y < Size.Y; ++Y)
+				for (int32 Y = Lo.Y; Y < Hi.Y; ++Y)
 				{
-					for (int32 X = 0; X < Size.X; ++X)
+					for (int32 X = Lo.X; X < Hi.X; ++X)
 					{
 						uint8& Cell = Box.V[Box.Index(X, Y, Z)];
 						if (Cell != 0 && Pick(X, Y, Z))
@@ -432,13 +436,14 @@ namespace DCVoxelOps
 			if (Piece.Cells.Num() > Before)
 			{
 				// The box copy is cleared already; clear the grid in one chunk-wise pass (taken cells now read 0 in Box).
-				World.EditBox(FIntVector(T.ScanMin.X, T.ScanMin.Y, Box.Min.Z + FMath::Max(ZFrom, 0)), T.ScanMax, true, [&Box](const FIntVector& P, uint8 Old) -> uint8
+				World.EditBox(Box.Min + Lo, Box.Min + Hi, true, [&Box](const FIntVector& P, uint8 Old) -> uint8
 				{
 					const FIntVector L = P - Box.Min;
 					return Box.V[Box.Index(L.X, L.Y, L.Z)] == 0 ? 0 : Old;
 				});
 			}
 		};
+
 
 		if (Break != INDEX_NONE)
 		{
@@ -461,7 +466,7 @@ namespace DCVoxelOps
 					Crossing.Emplace(L0, L1);
 				}
 			}
-			TakePiece(Piece, LocalBreak + 1, [&Crossing](int32 X, int32 Y, int32 Z)
+			TakePiece(Piece, FIntVector(0, 0, LocalBreak + 1), Size, [&Crossing](int32 X, int32 Y, int32 Z)
 			{
 				return !Crossing.ContainsByPredicate([X, Y, Z](const TPair<FIntVector, FIntVector>& B)
 				{
@@ -513,7 +518,7 @@ namespace DCVoxelOps
 			FDCVoxelPiece SignPiece;
 			SignPiece.Lot = T.Lot;
 			SignPiece.Dir = Dir;
-			TakePiece(SignPiece, S0.Z, [S0, S1](int32 X, int32 Y, int32 Z)
+			TakePiece(SignPiece, S0, S1, [S0, S1](int32 X, int32 Y, int32 Z)
 			{
 				return X >= S0.X && Y >= S0.Y && Z >= S0.Z && X < S1.X && Y < S1.Y && Z < S1.Z;
 			});
@@ -586,7 +591,7 @@ namespace DCVoxelOps
 		}
 		if (bAnyLoose)
 		{
-			TakePiece(Drop, 0, [&Reached, &BIndex, K](int32 X, int32 Y, int32 Z) { return !Reached[BIndex(X / K, Y / K, Z / K)]; });
+			TakePiece(Drop, FIntVector::ZeroValue, Size, [&Reached, &BIndex, K](int32 X, int32 Y, int32 Z) { return !Reached[BIndex(X / K, Y / K, Z / K)]; });
 		}
 		if (Drop.Cells.Num() > 0)
 		{
@@ -778,54 +783,90 @@ namespace DCVoxelOps
 
 	TArray<TArray<int32>> SplitFragments(const TArray<FIntVector>& Cells, int32 BlockCells, int32 MaxFragments)
 	{
+		// Budgeted split (advisor CP23): start with one fragment and keep halving the one with the longest extent along
+		// that axis until the budget is spent or every fragment is at most BlockCells long. Doubling a block size to
+		// fit a cap turned hollow tower tops into 16 m facade sheets. Coordinates decide everything (ties by the
+		// fragment's min corner), so the tree never depends on the order of the piece's cells.
 		TArray<TArray<int32>> Out;
 		if (Cells.Num() == 0)
 		{
 			return Out;
 		}
-		int32 Block = FMath::Max(BlockCells, 1);
-		const int32 Cap = FMath::Max(MaxFragments, 1);
-		for (;;)
+		struct FGroup
 		{
-			TMap<FIntVector, int32> Index;
-			TArray<FIntVector> Keys;
-			Out.Reset();
-			for (int32 i = 0; i < Cells.Num(); ++i)
+			TArray<int32> Idx;
+			FIntVector Lo, Hi; // inclusive bounds
+		};
+		auto Bounds = [&Cells](FGroup& G)
+		{
+			G.Lo = FIntVector(MAX_int32);
+			G.Hi = FIntVector(MIN_int32);
+			for (int32 i : G.Idx)
 			{
-				const FIntVector& C = Cells[i];
-				const FIntVector K(FMath::FloorToInt(static_cast<float>(C.X) / Block), FMath::FloorToInt(static_cast<float>(C.Y) / Block), FMath::FloorToInt(static_cast<float>(C.Z) / Block));
-				int32* Found = Index.Find(K);
-				if (!Found)
-				{
-					Found = &Index.Add(K, Out.Num());
-					Keys.Add(K);
-					Out.AddDefaulted();
-				}
-				Out[*Found].Add(i);
+				G.Lo = G.Lo.ComponentMin(Cells[i]);
+				G.Hi = G.Hi.ComponentMax(Cells[i]);
 			}
-			if (Out.Num() <= Cap)
-			{
-				// Order by block coordinate (z, y, x) so the result never depends on the cell order of the piece.
-				TArray<int32> Order;
-				for (int32 i = 0; i < Keys.Num(); ++i)
-				{
-					Order.Add(i);
-				}
-				Order.Sort([&Keys](int32 A, int32 B)
-				{
-					const FIntVector& KA = Keys[A];
-					const FIntVector& KB = Keys[B];
-					return KA.Z != KB.Z ? KA.Z < KB.Z : (KA.Y != KB.Y ? KA.Y < KB.Y : KA.X < KB.X);
-				});
-				TArray<TArray<int32>> Sorted;
-				for (int32 i : Order)
-				{
-					Sorted.Add(MoveTemp(Out[i]));
-				}
-				return Sorted;
-			}
-			Block *= 2;
+		};
+		auto Longest = [](const FGroup& G, int32& Axis)
+		{
+			const FIntVector E = G.Hi - G.Lo + FIntVector(1);
+			Axis = E.X >= E.Y && E.X >= E.Z ? 0 : (E.Y >= E.Z ? 1 : 2);
+			return E[Axis];
+		};
+		auto Before = [](const FIntVector& A, const FIntVector& B)
+		{
+			return A.Z != B.Z ? A.Z < B.Z : (A.Y != B.Y ? A.Y < B.Y : A.X < B.X);
+		};
+		TArray<FGroup> Groups;
+		FGroup& First = Groups.AddDefaulted_GetRef();
+		First.Idx.Reserve(Cells.Num());
+		for (int32 i = 0; i < Cells.Num(); ++i)
+		{
+			First.Idx.Add(i);
 		}
+		Bounds(First);
+		const int32 Cap = FMath::Max(MaxFragments, 1);
+		const int32 MinLen = FMath::Max(BlockCells, 1);
+		while (Groups.Num() < Cap)
+		{
+			int32 Pick = INDEX_NONE, PickLen = 0, PickAxis = 0;
+			for (int32 g = 0; g < Groups.Num(); ++g)
+			{
+				int32 Axis = 0;
+				const int32 Len = Longest(Groups[g], Axis);
+				if (Len > MinLen && (Len > PickLen || (Len == PickLen && Before(Groups[g].Lo, Groups[Pick].Lo))))
+				{
+					Pick = g;
+					PickLen = Len;
+					PickAxis = Axis;
+				}
+			}
+			if (Pick == INDEX_NONE)
+			{
+				break;
+			}
+			const int32 Mid = Groups[Pick].Lo[PickAxis] + PickLen / 2;
+			FGroup A, B;
+			for (int32 i : Groups[Pick].Idx)
+			{
+				(Cells[i][PickAxis] < Mid ? A : B).Idx.Add(i);
+			}
+			if (A.Idx.Num() == 0 || B.Idx.Num() == 0)
+			{
+				break; // cannot happen with Len > 1, kept as a guard against a stuck loop
+			}
+			Bounds(A);
+			Bounds(B);
+			Groups[Pick] = MoveTemp(A);
+			Groups.Add(MoveTemp(B));
+		}
+		Groups.Sort([&Before](const FGroup& A, const FGroup& B) { return Before(A.Lo, B.Lo); });
+		for (FGroup& G : Groups)
+		{
+			G.Idx.Sort(); // cell order inside a fragment follows the piece (identical on every machine)
+			Out.Add(MoveTemp(G.Idx));
+		}
+		return Out;
 	}
 
 	void FragmentTree(const TArray<FIntVector>& Cells, int32 VoxelCm, float ChunkCm, int32 MaxChunks, float LeafCm, int32 MaxLeaves,

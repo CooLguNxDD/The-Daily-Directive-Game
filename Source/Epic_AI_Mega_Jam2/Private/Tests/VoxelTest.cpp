@@ -410,6 +410,65 @@ bool FDCVoxelSignBreakTest::RunTest(const FString&)
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDCVoxelFragmentBudgetTest, "Epic_AI_Mega_Jam2.Voxel.FragmentBudget", VoxelFlags)
+bool FDCVoxelFragmentBudgetTest::RunTest(const FString&)
+{
+	// Advisor CP23: a hollow tower top split under a budget never yields facade sheets; the split uses the budget,
+	// halves the longest fragments first and does not depend on the cell order.
+	TArray<FIntVector> Cells;
+	for (int32 Z = 0; Z < 120; ++Z)
+		for (int32 Y = 0; Y < 80; ++Y)
+			for (int32 X = 0; X < 80; ++X)
+				if (X < 2 || Y < 2 || X >= 78 || Y >= 78 || Z % 30 == 0)
+				{
+					Cells.Add(FIntVector(X, Y, Z));
+				}
+	const TArray<TArray<int32>> A = DCVoxelOps::SplitFragments(Cells, 10, 16);
+	TestEqual(TEXT("the budget is used"), A.Num(), 16);
+	int32 Longest = 0;
+	for (const TArray<int32>& G : A)
+	{
+		FIntVector Lo(MAX_int32), Hi(MIN_int32);
+		for (int32 i : G)
+		{
+			Lo = Lo.ComponentMin(Cells[i]);
+			Hi = Hi.ComponentMax(Cells[i]);
+		}
+		const FIntVector E = Hi - Lo + FIntVector(1);
+		Longest = FMath::Max3(Longest, E.X, FMath::Max(E.Y, E.Z));
+	}
+	// A doubling rule gave 16 fragments of a 64-cell block here (whole faces); halving the longest keeps every
+	// fragment at most half the piece's longest side.
+	TestTrue(FString::Printf(TEXT("no fragment longer than half the piece (longest %d of 120)"), Longest), Longest <= 60);
+	// Shuffled input: the same fragments (as cell sets).
+	TArray<int32> Perm;
+	for (int32 i = 0; i < Cells.Num(); ++i)
+	{
+		Perm.Add(i);
+	}
+	FRandomStream Rng(7);
+	for (int32 i = Perm.Num() - 1; i > 0; --i)
+	{
+		Perm.Swap(i, Rng.RandRange(0, i));
+	}
+	TArray<FIntVector> Shuffled;
+	for (int32 i : Perm)
+	{
+		Shuffled.Add(Cells[i]);
+	}
+	const TArray<TArray<int32>> B = DCVoxelOps::SplitFragments(Shuffled, 10, 16);
+	bool bSame = A.Num() == B.Num();
+	for (int32 g = 0; bSame && g < A.Num(); ++g)
+	{
+		TSet<FIntVector> SA, SB;
+		for (int32 i : A[g]) { SA.Add(Cells[i]); }
+		for (int32 i : B[g]) { SB.Add(Shuffled[i]); }
+		bSame = SA.Num() == SB.Num() && SA.Difference(SB).Num() == 0;
+	}
+	TestTrue(TEXT("cell order does not change the fragments"), bSame);
+	return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDCVoxelDataTest, "Epic_AI_Mega_Jam2.Voxel.ShippedData", VoxelFlags)
 bool FDCVoxelDataTest::RunTest(const FString&)
 {
