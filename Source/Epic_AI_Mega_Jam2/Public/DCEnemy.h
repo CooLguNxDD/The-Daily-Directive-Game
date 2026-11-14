@@ -62,6 +62,7 @@ public:
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UStaticMeshComponent> LegB;
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UStaticMeshComponent> LegC;
 	UPROPERTY(VisibleAnywhere) TObjectPtr<USpotLightComponent> Spot;
+	UPROPERTY(VisibleAnywhere) TObjectPtr<class UPointLightComponent> GlowLight;
 
 	/** Spotlight: where the beam points (replicated so every machine draws the same cone). */
 	UPROPERTY(Replicated) FVector_NetQuantize LightTarget;

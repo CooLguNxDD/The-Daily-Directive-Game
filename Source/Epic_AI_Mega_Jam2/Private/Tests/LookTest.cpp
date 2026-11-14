@@ -36,6 +36,13 @@ bool FDCPostStackTest::RunTest(const FString&)
 	Peak.Add(TEXT("Flash"), 1.f);
 	const FDCPostResult AtPeak = DCPostStack::Compose(T.PostLayers, Peak, 2);
 	TestTrue(TEXT("flash layer carries the bloom peak"), FlashRow && FMath::IsNearlyEqual(AtPeak.Bloom, Base.Bloom + FlashRow->Bloom, 0.01f) && AtPeak.Bloom > Base.Bloom * 4.f);
+	// Bloom threshold (advisor CP11): the base grade blooms only lights above the window tier; the flash lowers it so
+	// the blast keeps its big bloom.
+	TestTrue(TEXT("base bloom has a threshold"), Base.BloomThreshold > 0.f);
+	TestTrue(TEXT("flash peak blooms more of the frame than the base"), AtPeak.BloomThreshold < Base.BloomThreshold);
+	// The screen stops down a little at the peak (advisor CP11): the kick never lifts the frame.
+	const FDCPostLayer* KickRow = T.PostLayers.FindByPredicate([](const FDCPostLayer& L) { return L.Id == TEXT("FlashKick"); });
+	TestTrue(TEXT("flash kick stops down"), KickRow && KickRow->Exposure <= 0.f);
 	// The photo caps the bloom at full flash (R5: the target stays readable).
 	Peak.Add(TEXT("Photo"), 1.f);
 	const FDCPostLayer* PhotoRow = T.PostLayers.FindByPredicate([](const FDCPostLayer& L) { return L.Id == TEXT("Photo"); });

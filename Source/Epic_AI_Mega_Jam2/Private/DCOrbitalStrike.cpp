@@ -235,11 +235,21 @@ void ADCOrbitalStrike::TickTelegraph(float Now, const FDCStratagemDef& Def)
 
 void ADCOrbitalStrike::DetonateLocal(const FDCStratagemDef& Def)
 {
-	// The blast light takes over from the beam's contact light: fire colour, high over the core, long reach.
-	Light->SetRelativeLocation(FVector(0, 0, 600.f));
-	Light->SetLightColor(UDCTuning::Get().Look.Fire);
-	Light->SetAttenuationRadius(UDCTuning::Get().Look.BlastLightRadiusCm);
+	// The blast light takes over from the beam's contact light: fire colour. It rims the target from behind (seen from
+	// this machine's camera) rather than flooding the facade the camera looks at.
+	const FDCLookTuning& BlastLook = UDCTuning::Get().Look;
 	const FVector Here = GetActorLocation();
+	FVector Away = FVector::ZeroVector;
+	if (const APlayerController* ViewPC = UGameplayStatics::GetPlayerController(this, 0))
+	{
+		FVector Eye;
+		FRotator EyeRot;
+		ViewPC->GetPlayerViewPoint(Eye, EyeRot);
+		Away = FVector(Here.X - Eye.X, Here.Y - Eye.Y, 0.f).GetSafeNormal();
+	}
+	Light->SetRelativeLocation(Away * Def.BlastRadius * BlastLook.BlastLightBehind + FVector(0, 0, BlastLook.BlastLightHeightCm));
+	Light->SetLightColor(BlastLook.Fire);
+	Light->SetAttenuationRadius(BlastLook.BlastLightRadiusScale > 0.f ? Def.BlastRadius * BlastLook.BlastLightRadiusScale : BlastLook.BlastLightRadiusCm);
 	float Proximity = 0.4f;
 	if (APlayerController* PC = UGameplayStatics::GetPlayerController(this, 0))
 	{
