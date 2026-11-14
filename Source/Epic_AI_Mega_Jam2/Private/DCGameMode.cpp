@@ -900,6 +900,7 @@ void ADCGameMode::CheckWipe()
 	// Everyone is down: the run fails, but the reel still plays (R12).
 	UE_LOG(LogTemp, Display, TEXT("DCWIPE all %d players down in sector %d: run failed, rolling the reel"), Players().Num(), GS->SectorIndex + 1);
 	GS->bRunFailed = true;
+	EndObjective(); // the sector's order fails with the crew (R4: the reel still plays)
 	ClearCombat();
 	EnterPhase(EDCRunPhase::Reel);
 }
