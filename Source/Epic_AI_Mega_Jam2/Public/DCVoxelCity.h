@@ -176,6 +176,8 @@ private:
 	bool UploadCell(const FIntVector4& Cell);
 	/** Set by Build until the first full upload is done (load-phase budget). */
 	bool bLoading = false;
+	/** The current load came from an async (sector card) build. */
+	bool bAsyncLoad = false;
 	/** An off-thread sector craft in flight (Build with bAsync); FinishBuild swaps it in. */
 	/** A chunk's padded voxel snapshot taken on the craft worker (the mesh job input), so the game thread never copies
 	 *  every chunk of a fresh city in one frame (R13: ~0.7 s sector-start frame). */

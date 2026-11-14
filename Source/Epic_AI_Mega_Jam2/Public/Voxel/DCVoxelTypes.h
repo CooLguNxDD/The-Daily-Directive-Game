@@ -189,6 +189,8 @@ struct FDCVoxelTuning
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float UploadLoadBudgetMs = 60.f;
 	/** Most render cells uploaded per frame while the sector loads under the card. */
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 UploadLoadMaxCells = 12;
+	/** Load budget for a synchronous build (the reel restage): fast, no cell cap. */
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float UploadSyncLoadBudgetMs = 60.f;
 	/** Per-vertex ambient occlusion strength (0 = flat faces). */
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float AOStrength = 0.38f;
 	/** Flying voxel chunks spawned when a piece lands (cosmetic, pooled). */

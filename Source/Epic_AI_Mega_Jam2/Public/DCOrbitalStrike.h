@@ -56,6 +56,7 @@ private:
 	TArray<FVector4f> CubeSeeds;
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UStaticMeshComponent> Shock;
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UPointLightComponent> Light;
+	UPROPERTY(VisibleAnywhere) TObjectPtr<UPointLightComponent> FillLight;
 	UPROPERTY() TObjectPtr<UMaterialInstanceDynamic> BeamMat;
 	UPROPERTY() TObjectPtr<UMaterialInstanceDynamic> FireMat;
 	UPROPERTY() TObjectPtr<UMaterialInstanceDynamic> CoreMat;
