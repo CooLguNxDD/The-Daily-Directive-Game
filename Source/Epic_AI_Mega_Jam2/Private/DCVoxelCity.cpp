@@ -1623,7 +1623,7 @@ void ADCVoxelCity::TickFalling(float Now)
 	{
 		const float WorldNow = GetWorld()->GetTimeSeconds();
 		Fading[i].Added = Fading[i].Added < 0.f ? Fading[i].Start : Fading[i].Added;
-		if (const UPrimitiveComponent* Flying = Fading[i].bReserved ? Fading[i].Body.Get() : nullptr)
+		if (UPrimitiveComponent* Flying = Fading[i].bReserved ? Fading[i].Body.Get() : nullptr)
 		{
 			// A stray still in the air keeps flying (no shrink) until it nears the street or runs out of time.
 			const FVector P = Flying->GetComponentLocation();
