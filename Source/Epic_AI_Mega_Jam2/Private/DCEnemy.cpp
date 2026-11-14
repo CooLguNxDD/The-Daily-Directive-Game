@@ -331,6 +331,23 @@ namespace
 		E.GroundMove(Here + E.Heading * 600.f, Def.Speed * 0.35f, Dt, Def.HoverHeight);
 	}
 
+	void TickNest(ADCEnemy& E, const FDCEnemyDef& Def, float Dt, float Now)
+	{
+		// R3 Hive nest: stays put, pulses its faction out while it stands.
+		if (Def.SpawnEverySeconds <= 0.f || Def.SpawnCount <= 0 || Now < E.NextAttackTime)
+		{
+			return;
+		}
+		E.NextAttackTime = Now + Def.SpawnEverySeconds;
+		const UDCUnits* Units = UDCUnits::Get(&E);
+		ADCGameMode* GM = E.GetWorld()->GetAuthGameMode<ADCGameMode>();
+		if (GM && Units && Units->CountAlive(E.GetFaction()) < Def.SpawnMaxAlive)
+		{
+			GM->HostSpawnSquad(E.GetFaction(), Def.SpawnCount, E.GetActorLocation(), 250.f);
+			E.Cue(TEXT("Groan"));
+		}
+	}
+
 	using FBehaviour = void (*)(ADCEnemy&, const FDCEnemyDef&, float, float);
 	const TMap<FName, FBehaviour>& Behaviours()
 	{
@@ -339,6 +356,7 @@ namespace
 			{Spotlight, &TickSpotlight},
 			{Walker, &TickWalker},
 			{TEXT("Infantry"), &TickInfantry},
+			{TEXT("Nest"), &TickNest},
 		};
 		return Map;
 	}

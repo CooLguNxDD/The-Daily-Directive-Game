@@ -435,6 +435,11 @@ struct FDCEnemyDef
 	UPROPERTY(EditAnywhere, Config, Category = "Enemy") FName GoalActCue;
 	UPROPERTY(EditAnywhere, Config, Category = "Enemy") float GoalActRadiusCm = 500.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Enemy") float GoalActSeconds = 2.5f;
+	/** Behaviour Nest (the Hive): a fixed unit that sends SpawnCount units of its faction every SpawnEverySeconds while
+	 *  fewer than SpawnMaxAlive of its faction live. Killing it stops the flow (and it is worth KillPoints). */
+	UPROPERTY(EditAnywhere, Config, Category = "Enemy") float SpawnEverySeconds = 0.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Enemy") int32 SpawnCount = 0;
+	UPROPERTY(EditAnywhere, Config, Category = "Enemy") int32 SpawnMaxAlive = 16;
 	/** Squad shape for ground infantry (formation registry): Crowd, Line, Skirmish. Spacing between slots (cm). */
 	UPROPERTY(EditAnywhere, Config, Category = "Enemy") FName Formation = TEXT("Crowd");
 	UPROPERTY(EditAnywhere, Config, Category = "Enemy") float FormationSpacingCm = 220.f;

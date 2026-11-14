@@ -46,6 +46,10 @@ struct FDCFactionDef
 	/** Played at a unit's feet on every machine when it appears (a voxel Fx emitter id; None = nothing). The Hive
 	 *  bursts out of the street in dust. */
 	UPROPERTY(EditAnywhere, Config, Category = "Faction") FName SpawnFx;
+	/** Nests: at sector start, NestCount units of NestUnit (a Behaviour="Nest" row) burst up in the ring around the
+	 *  crew when the faction is on the map (main or invader). */
+	UPROPERTY(EditAnywhere, Config, Category = "Faction") FName NestUnit;
+	UPROPERTY(EditAnywhere, Config, Category = "Faction") int32 NestCount = 0;
 	/** Night read: one unit in CueLightEvery carries a small shadowless light in the cue colour (0 = none), so a squad
 	 *  shows its colour on the street without a light per unit (advisor a-2). Cosmetic, picked per machine. */
 	UPROPERTY(EditAnywhere, Config, Category = "Faction") int32 CueLightEvery = 0;

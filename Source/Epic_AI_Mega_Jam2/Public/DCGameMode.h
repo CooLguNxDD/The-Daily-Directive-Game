@@ -34,6 +34,8 @@ public:
 	virtual void PreLogin(const FString& Options, const FString& Address, const FUniqueNetIdRepl& UniqueId, FString& ErrorMessage) override;
 
 	void CallStrike(const FDCStratagemDef& Def, const FVector& Target, AController* Caller);
+	/** R3 nests and other host spawners: a squad of a faction around a point (queued, a few per frame). */
+	int32 HostSpawnSquad(FName Faction, int32 Count, const FVector& Centre, float Spread) { return SpawnSquad(Faction, Count, Centre, Spread); }
 	/** Packaged-build smoke (-dcsmoke): start, strike a tower, check the collapse, log DCSMOKE, quit. */
 	void StartSmoke();
 	void OnPhotoGraded(ADCCharacter* Photographer, const FDCPhotoRecord& Record, const FDCPhotoInputs& Inputs, TArray<FDCPoseSample>&& Poses);
@@ -128,6 +130,7 @@ private:
 	int32 NextSquadId = 1;
 	float NextTerritoryTime = 0.f;
 	bool bOpeningDone = false;
+	bool bNestsDone = false;
 	/** Rolled spawns waiting their frame (advisor a-3: a squad drop is N model meshes; at most FactionMix.SpawnsPerFrame
 	 *  start per tick). Rolls happen at queue time, so the seeded sequence is unchanged. */
 	struct FPendingSpawn
