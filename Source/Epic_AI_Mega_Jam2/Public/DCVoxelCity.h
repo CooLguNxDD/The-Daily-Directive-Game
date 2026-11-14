@@ -102,10 +102,14 @@ private:
 	 *  StartWorldTime. CommitOp is the rest at the apply time (uploads released, fx, player lift, log). */
 	void PrepareOp(const FDCVoxelOp& Op, FDCVoxelOpResult& Result, bool bAnimate, float StartWorldTime);
 	void CommitOp(const FDCVoxelOp& Op, FDCVoxelOpResult& Result, bool bAnimate, float ApplyMs, uint32 Hash, bool bOffThread);
-	/** Set while a prepared op waits for its apply time: chunk uploads hold so the old mesh shows until the commit. */
+	/** Set while a prepared op waits for its apply time: that op's cells (HeldCells) hold so the old mesh shows until
+	 *  the commit; every other cell keeps uploading under the budget. */
 	bool bHoldUploads = false;
-	/** The commit frame uploads every ready cell at once (crater and broken towers in the detonation frame). */
-	bool bCommitBurst = false;
+	TSet<FIntVector4> HeldCells;
+	/** The commit frame uploads exactly the op's cells at once (crater and broken towers in the detonation frame); cells
+	 *  whose mesh job is still running go first on the next frames. Never a lifted budget for the rest. */
+	TSet<FIntVector4> CommitCells;
+	bool UploadCell(const FIntVector4& Cell);
 	struct FQueuedOp
 	{
 		FDCVoxelOp Op;

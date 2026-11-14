@@ -827,6 +827,8 @@ void ADCGameMode::OnPlayerDowned(ADCCharacter* Player)
 	else if (P.LastFrameSlowMo > 0.f && Player)
 	{
 		Player->ClientLastFrameSlowMo(P.LastFrameSlowMo, P.LastFrameSlowMoSeconds);
+		UE_LOG(LogTemp, Display, TEXT("DCLASTFRAME co-op: local slow motion %.2f for %.1f s sent to %s; shared clock stays %.2f"), P.LastFrameSlowMo, P.LastFrameSlowMoSeconds,
+			Player->GetPlayerState() ? *Player->GetPlayerState()->GetPlayerName() : TEXT("?"), GetWorldSettings()->TimeDilation);
 	}
 	CheckWipe();
 }

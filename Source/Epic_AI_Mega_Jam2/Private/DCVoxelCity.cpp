@@ -340,6 +340,8 @@ void ADCVoxelCity::EndPlay(const EEndPlayReason::Type Reason)
 		InFlightTask.Wait();
 		InFlight.Reset();
 		bHoldUploads = false; // a dropped held op never blocks later uploads
+		HeldCells.Reset();
+		CommitCells.Reset();
 	}
 	for (const TSharedPtr<FMeshJob>& Job : Jobs)
 	{
@@ -395,6 +397,8 @@ void ADCVoxelCity::Clear()
 		InFlightTask.Wait();
 		InFlight.Reset();
 		bHoldUploads = false; // a dropped held op never blocks later uploads
+		HeldCells.Reset();
+		CommitCells.Reset();
 	}
 	QueuedOps.Reset();
 	SurfaceCache.Reset();
@@ -564,7 +568,8 @@ void ADCVoxelCity::FinishInFlight()
 	if (Done->bPrepared)
 	{
 		bHoldUploads = false;
-		bCommitBurst = true;
+		CommitCells.Append(HeldCells);
+		HeldCells.Reset();
 		CommitOp(Done->Op, Done->Result, Done->bAnimate, Done->ApplyMs, Done->Hash, true);
 	}
 	else
@@ -623,6 +628,17 @@ void ADCVoxelCity::CommitOp(const FDCVoxelOp& Op, FDCVoxelOpResult& Result, bool
 void ADCVoxelCity::PrepareOp(const FDCVoxelOp& Op, FDCVoxelOpResult& Result, bool bAnimate, float StartWorldTime)
 {
 	const float Now = StartWorldTime;
+	const int32 FirstJob = Jobs.Num();
+	ON_SCOPE_EXIT
+	{
+		for (int32 i = FirstJob; i < Jobs.Num(); ++i)
+		{
+			if (!Jobs[i]->Piece && Jobs[i]->Grid != INDEX_NONE)
+			{
+				HeldCells.Add(Key(Jobs[i]->Grid, CellOf(Jobs[i]->Grid, Jobs[i]->Chunk)));
+			}
+		}
+	};
 
 	// The crater shows now; rubble chunks wait for their piece to land.
 	TSet<FIntVector> Defer;
@@ -794,78 +810,92 @@ void ADCVoxelCity::UploadCells()
 	TSet<FIntVector4> Busy;
 	for (const TSharedPtr<FMeshJob>& Job : Jobs)
 	{
-		if (Job->Grid != INDEX_NONE)
+		if (Job->Grid != INDEX_NONE && !Job->Piece)
 		{
 			Busy.Add(Key(Job->Grid, CellOf(Job->Grid, Job->Chunk)));
 		}
 	}
-	if (bHoldUploads)
+	// 1. A committed op's own cells, all at once (the detonation frame shows the whole op).
+	for (auto It = CommitCells.CreateIterator(); It; ++It)
 	{
-		return; // a prepared op waits for its apply time: the old mesh stays until the commit
+		if (Busy.Contains(*It))
+		{
+			continue;
+		}
+		if (DirtyCells.Contains(*It))
+		{
+			UploadCell(*It);
+		}
+		It.RemoveCurrent();
 	}
-	int32 Budget = FMath::Max(1, UDCVoxelSettings::Get().Tuning.UploadsPerFrame);
-	if (bCommitBurst)
-	{
-		bCommitBurst = false;
-		Budget = MAX_int32; // the commit frame shows the whole op at once
-	}
+	// 2. Everything else under the millisecond budget; a held op's cells wait for its commit.
+	const FDCVoxelTuning& Tn = UDCVoxelSettings::Get().Tuning;
+	const double Start = FPlatformTime::Seconds();
+	const int32 Cap = FMath::Max(1, Tn.UploadsPerFrame);
 	TArray<FIntVector4> Ready;
 	for (const FIntVector4& Cell : DirtyCells)
 	{
-		if (!Busy.Contains(Cell))
+		if (!Busy.Contains(Cell) && !(bHoldUploads && HeldCells.Contains(Cell)))
 		{
 			Ready.Add(Cell);
-			if (Ready.Num() >= Budget)
-			{
-				break;
-			}
 		}
 	}
-	FDCVoxelMeshData Merged;
+	int32 Done = 0;
 	for (const FIntVector4& Cell : Ready)
 	{
-		DirtyCells.Remove(Cell);
-		Merged.Reset();
-		const int32 G = Cell.X;
-		const float ChunkCm = FDCVoxelChunk::Size * GridAt(G).VoxelCm;
-		for (const FIntVector& Chunk : CellChunks.FindRef(Cell))
+		if (Done > 0 && (Done >= Cap || (FPlatformTime::Seconds() - Start) * 1000.0 >= Tn.UploadBudgetMs))
 		{
-			const FDCVoxelMeshData* M = ChunkMeshes.Find(Key(G, Chunk));
-			if (!M)
-			{
-				continue;
-			}
-			const FVector Offset = FVector(Chunk) * ChunkCm;
-			const int32 Base = Merged.Positions.Num();
-			for (const FVector& P : M->Positions)
-			{
-				Merged.Positions.Add(P + Offset);
-			}
-			Merged.Normals.Append(M->Normals);
-			Merged.UVs.Append(M->UVs);
-			Merged.Colors.Append(M->Colors);
-			for (int32 Index : M->Indices)
-			{
-				Merged.Indices.Add(Base + Index);
-			}
+			break;
 		}
-		TObjectPtr<UProceduralMeshComponent>& Mesh = Cells.FindOrAdd(Cell);
-		if (Merged.IsEmpty())
+		UploadCell(Cell);
+		++Done;
+	}
+}
+
+bool ADCVoxelCity::UploadCell(const FIntVector4& Cell)
+{
+	DirtyCells.Remove(Cell);
+	FDCVoxelMeshData Merged;
+	const int32 G = Cell.X;
+	const float ChunkCm = FDCVoxelChunk::Size * GridAt(G).VoxelCm;
+	for (const FIntVector& Chunk : CellChunks.FindRef(Cell))
+	{
+		const FDCVoxelMeshData* M = ChunkMeshes.Find(Key(G, Chunk));
+		if (!M)
 		{
-			if (Mesh)
-			{
-				Mesh->ClearAllMeshSections();
-			}
 			continue;
 		}
-		if (!Mesh)
+		const FVector Offset = FVector(Chunk) * ChunkCm;
+		const int32 Base = Merged.Positions.Num();
+		for (const FVector& P : M->Positions)
 		{
-			Mesh = NewMesh(true, GridAt(G).VoxelCm);
-			Mesh->SetRelativeLocation(GridAt(G).ToWorld(FIntVector::ZeroValue));
-			Mesh->ComponentTags.Add(G == 0 ? FName(TEXT("Terrain")) : FName(*FString::Printf(TEXT("Lot%d"), G - 1)));
+			Merged.Positions.Add(P + Offset);
 		}
-		Mesh->CreateMeshSection(0, Merged.Positions, Merged.Indices, Merged.Normals, Merged.UVs, Merged.Colors, {}, true);
+		Merged.Normals.Append(M->Normals);
+		Merged.UVs.Append(M->UVs);
+		Merged.Colors.Append(M->Colors);
+		for (int32 Index : M->Indices)
+		{
+			Merged.Indices.Add(Base + Index);
+		}
 	}
+	TObjectPtr<UProceduralMeshComponent>& Mesh = Cells.FindOrAdd(Cell);
+	if (Merged.IsEmpty())
+	{
+		if (Mesh)
+		{
+			Mesh->ClearAllMeshSections();
+		}
+		return false;
+	}
+	if (!Mesh)
+	{
+		Mesh = NewMesh(true, GridAt(G).VoxelCm);
+		Mesh->SetRelativeLocation(GridAt(G).ToWorld(FIntVector::ZeroValue));
+		Mesh->ComponentTags.Add(G == 0 ? FName(TEXT("Terrain")) : FName(*FString::Printf(TEXT("Lot%d"), G - 1)));
+	}
+	Mesh->CreateMeshSection(0, Merged.Positions, Merged.Indices, Merged.Normals, Merged.UVs, Merged.Colors, {}, true);
+	return true;
 }
 
 void ADCVoxelCity::SetTowerOffset(int32 Lot, const FVector& Offset)

@@ -148,6 +148,9 @@ struct FDCVoxelTuning
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float ToppleDegrees = 38.f;
 	/** Chunk mesh uploads per frame (time slicing on the game thread; meshing itself runs on worker threads). */
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 UploadsPerFrame = 24;
+	/** Game-thread milliseconds per frame for cell uploads (merge + mesh section); UploadsPerFrame stays a cap. At
+	 *  least one cell uploads per frame. A strike's commit frame uploads only that op's cells, outside this budget. */
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float UploadBudgetMs = 4.f;
 	/** Per-vertex ambient occlusion strength (0 = flat faces). */
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float AOStrength = 0.38f;
 	/** Flying voxel chunks spawned when a piece lands (cosmetic, pooled). */
