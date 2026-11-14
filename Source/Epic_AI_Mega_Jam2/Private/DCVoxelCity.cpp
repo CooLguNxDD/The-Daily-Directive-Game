@@ -597,7 +597,32 @@ void ADCVoxelCity::Build(int32 RunSeed, int32 SectorIndex, int32 BuildId, bool b
 	Pending->BuildId = BuildId;
 	Pending->Start = Start;
 	TSharedPtr<FDCVoxelSector> Out = Pending->Out;
-	Pending->Task = UE::Tasks::Launch(UE_SOURCE_LOCATION, [CraftAll, Out]() { CraftAll(*Out); });
+	Pending->Pads = MakeShared<TArray<FPrePad>>();
+	TSharedPtr<TArray<FPrePad>> Pads = Pending->Pads;
+	Pending->HashOut = MakeShared<uint32>(0);
+	TSharedPtr<uint32> HashOut = Pending->HashOut;
+	Pending->Task = UE::Tasks::Launch(UE_SOURCE_LOCATION, [CraftAll, Out, Pads, HashOut]()
+	{
+		CraftAll(*Out);
+		// Mesh-job inputs and the content hash, off the game thread too (grid order: terrain, towers, props).
+		const int32 N = Out->Towers.Num();
+		for (int32 G = 0; G < N + 2; ++G)
+		{
+			FDCVoxelGrid& Grid = G == 0 ? Out->Terrain : (G <= N ? Out->Towers[G - 1].Grid : Out->Props);
+			if (!Grid.Data.HasDirty())
+			{
+				continue;
+			}
+			for (const FIntVector& Chunk : Grid.Data.TakeDirty())
+			{
+				FPrePad& P = Pads->AddDefaulted_GetRef();
+				P.Grid = G;
+				P.Chunk = Chunk;
+				Grid.Data.CopyPadded(Chunk, P.Padded);
+			}
+		}
+		*HashOut = Out->Hash();
+	});
 	PendingCraft = Pending;
 	BuiltId = BuildId; // SyncBuild sees this build as started
 }
@@ -612,11 +637,11 @@ void ADCVoxelCity::FlushPendingCraft()
 	const TSharedPtr<FPendingCraft> Done = PendingCraft;
 	Done->Task.Wait();
 	Sector = MoveTemp(*Done->Out);
-	FinishBuild(Done->RunSeed, Done->SectorIndex, Done->BuildId, Done->Start);
+	FinishBuild(Done->RunSeed, Done->SectorIndex, Done->BuildId, Done->Start, Done->Pads.Get(), *Done->HashOut);
 	PendingCraft.Reset();
 }
 
-void ADCVoxelCity::FinishBuild(int32 RunSeed, int32 SectorIndex, int32 BuildId, double Start)
+void ADCVoxelCity::FinishBuild(int32 RunSeed, int32 SectorIndex, int32 BuildId, double Start, TArray<FPrePad>* Pads, uint32 Hash)
 {
 	const UDCVoxelSettings& V = UDCVoxelSettings::Get();
 	const UDCTuning& T = UDCTuning::Get();
@@ -626,11 +651,18 @@ void ADCVoxelCity::FinishBuild(int32 RunSeed, int32 SectorIndex, int32 BuildId, 
 	BuiltId = BuildId;
 	BuiltSeed = RunSeed;
 	AppliedSeq = 0;
-	QueueAllDirty(nullptr);
+	if (Pads)
+	{
+		QueuePadded(*Pads);
+	}
+	else
+	{
+		QueueAllDirty(nullptr);
+	}
 	bLoading = true;
 	PrewarmBodies(); // R26 bodies registered once at sector start, parked until a break
 	UE_LOG(LogTemp, Display, TEXT("DCVOXEL build sector=%d build=%d towers=%d craft=%.0f ms hash=%08x%s"), SectorIndex, BuildId, Sector.Towers.Num(),
-		(FPlatformTime::Seconds() - Start) * 1000.0, Sector.Hash(), PendingCraft.IsValid() ? TEXT(" async") : TEXT(""));
+		(FPlatformTime::Seconds() - Start) * 1000.0, Pads ? Hash : Sector.Hash(), Pads ? TEXT(" async") : TEXT(""));
 }
 
 FDCVoxelOpResult ADCVoxelCity::ApplyOp(const FDCVoxelOp& Op, bool bAnimate)
@@ -1126,6 +1158,27 @@ void ADCVoxelCity::SpawnDueShards(float Now)
 		}
 		PendingShards.RemoveAtSwap(i);
 	}
+}
+
+void ADCVoxelCity::QueuePadded(TArray<FPrePad>& Pads)
+{
+	const float AO = UDCVoxelSettings::Get().Tuning.AOStrength;
+	for (FPrePad& P : Pads)
+	{
+		TSharedPtr<FMeshJob> Job = MakeShared<FMeshJob>();
+		Job->Grid = P.Grid;
+		Job->Chunk = P.Chunk;
+		Job->BuildId = BuiltId;
+		FDCVoxelMeshData* Out = &Job->Mesh;
+		TArray<FColor> JobColors = Colors;
+		const float Vcm = GridAt(P.Grid).VoxelCm;
+		Job->Task = UE::Tasks::Launch(TEXT("DCVoxelChunkMesh"), [Padded = MoveTemp(P.Padded), JobColors = MoveTemp(JobColors), Vcm, AO, Out]()
+		{
+			DCVoxelMesher::MeshPadded(Padded, JobColors, Vcm, AO, *Out);
+		});
+		Jobs.Add(Job);
+	}
+	Pads.Reset();
 }
 
 void ADCVoxelCity::QueueDirty(int32 GridIndex, const TSet<FIntVector>& Chunks)

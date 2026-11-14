@@ -177,9 +177,19 @@ private:
 	/** Set by Build until the first full upload is done (load-phase budget). */
 	bool bLoading = false;
 	/** An off-thread sector craft in flight (Build with bAsync); FinishBuild swaps it in. */
+	/** A chunk's padded voxel snapshot taken on the craft worker (the mesh job input), so the game thread never copies
+	 *  every chunk of a fresh city in one frame (R13: ~0.7 s sector-start frame). */
+	struct FPrePad
+	{
+		int32 Grid = 0;
+		FIntVector Chunk = FIntVector::ZeroValue;
+		TArray<uint8> Padded;
+	};
 	struct FPendingCraft
 	{
 		TSharedPtr<FDCVoxelSector> Out;
+		TSharedPtr<TArray<FPrePad>> Pads;
+		TSharedPtr<uint32> HashOut;
 		UE::Tasks::FTask Task;
 		int32 RunSeed = 0;
 		int32 SectorIndex = INDEX_NONE;
@@ -187,7 +197,8 @@ private:
 		double Start = 0.0;
 	};
 	TSharedPtr<FPendingCraft> PendingCraft;
-	void FinishBuild(int32 RunSeed, int32 SectorIndex, int32 BuildId, double Start);
+	void FinishBuild(int32 RunSeed, int32 SectorIndex, int32 BuildId, double Start, TArray<FPrePad>* Pads = nullptr, uint32 Hash = 0);
+	void QueuePadded(TArray<FPrePad>& Pads);
 	/** Waits for an in-flight craft and swaps it in (an op never applies to a half-built city). */
 	void FlushPendingCraft();
 	struct FQueuedOp

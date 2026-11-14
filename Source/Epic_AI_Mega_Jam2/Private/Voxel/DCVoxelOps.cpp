@@ -454,9 +454,11 @@ namespace DCVoxelOps
 			TArray<TPair<FIntVector, FIntVector>> Crossing;
 			for (const FDCVoxelSign& Sign : T.Signs)
 			{
-				if (Sign.BoxMin.Z <= LocalBreak && Sign.BoxMax.Z > LocalBreak + 1)
+				const FIntVector L0 = Sign.BoxMin - Box.Min;
+				const FIntVector L1 = Sign.BoxMax - Box.Min;
+				if (L0.Z <= LocalBreak && L1.Z > LocalBreak + 1)
 				{
-					Crossing.Emplace(Sign.BoxMin - Box.Min, Sign.BoxMax - Box.Min);
+					Crossing.Emplace(L0, L1);
 				}
 			}
 			TakePiece(Piece, LocalBreak + 1, [&Crossing](int32 X, int32 Y, int32 Z)
@@ -483,7 +485,9 @@ namespace DCVoxelOps
 		const int32 Hold = FMath::Clamp(Ctx.Tuning->SignHoldPercent, 0, 100);
 		for (const FDCVoxelSign& Sign : T.Signs)
 		{
-			if (Sign.BackCells <= 0)
+			// Box.Min.Z is 0 (the scan box starts at the ground), so local and grid z agree here.
+			const bool bCrossesBreak = Break != INDEX_NONE && Sign.BoxMin.Z - Box.Min.Z <= Break && Sign.BoxMax.Z - Box.Min.Z > Break + 1;
+			if (Sign.BackCells <= 0 && !bCrossesBreak)
 			{
 				continue;
 			}
@@ -500,8 +504,7 @@ namespace DCVoxelOps
 					}
 				}
 			}
-			const bool bCrossesBreak = Break != INDEX_NONE && Sign.BoxMin.Z <= Break && Sign.BoxMax.Z > Break + 1;
-			if (!bCrossesBreak && static_cast<int64>(Left) * 100 >= static_cast<int64>(Sign.BackCells) * Hold)
+			if (!bCrossesBreak && static_cast<int64>(Left) * 100 >= static_cast<int64>(FMath::Max(Sign.BackCells, 1)) * Hold)
 			{
 				continue;
 			}

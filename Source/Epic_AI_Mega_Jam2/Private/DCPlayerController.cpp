@@ -472,6 +472,9 @@ void ADCPlayerController::TickPerf()
 	if (const ADCVoxelCity* City = ADCVoxelCity::Get(this))
 	{
 		PerfMaxFalling = FMath::Max(PerfMaxFalling, City->GetFallingCount());
+		// Load phase (advisor CP15: rows carry the phase): any frame of the second with the sector still crafting or
+		// uploading under the sector card.
+		bPerfLoading = bPerfLoading || City->IsCrafting() || !City->IsLoaded();
 	}
 	const double Now = FPlatformTime::Seconds();
 	if (PerfWindowStart <= 0.0)
@@ -493,11 +496,12 @@ void ADCPlayerController::TickPerf()
 	const ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>();
 	const float GpuMs = FPlatformTime::ToMilliseconds(RHIGetGPUFrameCycles());
 	const FIntPoint View = GEngine && GEngine->GameViewport ? GEngine->GameViewport->Viewport->GetSizeXY() : FIntPoint::ZeroValue;
-	UE_LOG(LogTemp, Display, TEXT("DCPERF frames=%d avg_ms=%.2f p95_ms=%.2f max_ms=%.2f gpu_ms=%.2f players=%d falling_max=%d phase=%d view=%dx%d"),
+	UE_LOG(LogTemp, Display, TEXT("DCPERF frames=%d avg_ms=%.2f p95_ms=%.2f max_ms=%.2f gpu_ms=%.2f players=%d falling_max=%d phase=%d loading=%d view=%dx%d"),
 		Sorted.Num(), Sum / Sorted.Num(), Sorted[FMath::Min(Sorted.Num() - 1, FMath::FloorToInt32(Sorted.Num() * 0.95f))], Sorted.Last(), GpuMs,
-		GS ? GS->PlayerArray.Num() : 0, PerfMaxFalling, GS ? static_cast<int32>(GS->Phase) : -1, View.X, View.Y);
+		GS ? GS->PlayerArray.Num() : 0, PerfMaxFalling, GS ? static_cast<int32>(GS->Phase) : -1, bPerfLoading ? 1 : 0, View.X, View.Y);
 	PerfFrameMs.Reset();
 	PerfMaxFalling = 0;
+	bPerfLoading = false;
 	PerfWindowStart = Now;
 }
 
@@ -536,15 +540,16 @@ void ADCPlayerController::TickBuilderFlow()
 		{23.5, [this]() { UE_LOG(LogTemp, Display, TEXT("DCSETTINGSFLOW J press done, pawn z=%.0f"), GetPawn() ? GetPawn()->GetActorLocation().Z : -1.f); }},
 		{24.0, []() { FGenericPlatformMisc::RequestExit(false); }},
 	};
+	// Shots 6 s after opening: an editor -game run compiles the voxel preview shaders on demand first.
 	const TArray<TPair<double, TFunction<void()>>> BuilderSteps = {
 		{5.0, [this]() { OpenBuilder(); }},
-		{7.0, [&]() { Shot(TEXT("01_builder_default.png")); }},
-		{8.5, [&]() { Shot(TEXT("02_builder_turned.png")); }},
-		{9.0, [this]() { BuilderCycle(0, 1); BuilderCycle(1, 1); BuilderSwatch(true, 2); BuilderSwatch(false, 4); }},
-		{10.5, [&]() { Shot(TEXT("03_builder_helmet_trench.png")); }},
-		{11.0, [this]() { BuilderCycle(2, 1); BuilderCycle(3, 1); BuilderSwatch(true, 1); }},
-		{12.5, [&]() { Shot(TEXT("04_builder_filmbelt_boxcam.png")); }},
-		{13.0, [this]()
+		{11.0, [&]() { Shot(TEXT("01_builder_default.png")); }},
+		{12.5, [&]() { Shot(TEXT("02_builder_turned.png")); }},
+		{13.0, [this]() { BuilderCycle(0, 1); BuilderCycle(1, 1); BuilderSwatch(true, 2); BuilderSwatch(false, 4); }},
+		{14.5, [&]() { Shot(TEXT("03_builder_helmet_trench.png")); }},
+		{15.0, [this]() { BuilderCycle(2, 1); BuilderCycle(3, 1); BuilderSwatch(true, 1); }},
+		{16.5, [&]() { Shot(TEXT("04_builder_filmbelt_boxcam.png")); }},
+		{17.0, [this]()
 		{
 			// A friend's photographer: another valid outfit (every slot cycled, other swatches), encoded and pasted back.
 			const UDCTuning& T = UDCTuning::Get();
@@ -561,10 +566,10 @@ void ADCPlayerController::TickBuilderFlow()
 			BuilderImport(Code);
 			UE_LOG(LogTemp, Display, TEXT("DCBUILDERFLOW after import: %s (%s)"), *DCOutfit::Encode(BuilderOutfit), *BuilderMessage);
 		}},
-		{14.5, [&]() { Shot(TEXT("05_builder_code_loaded.png")); }},
-		{15.0, [this]() { BuilderImport(TEXT("DC1-NOT-A-REAL-CODE")); }},
-		{15.8, [&]() { Shot(TEXT("06_builder_bad_code_rejected.png")); }},
-		{16.5, []() { FGenericPlatformMisc::RequestExit(false); }},
+		{18.5, [&]() { Shot(TEXT("05_builder_code_loaded.png")); }},
+		{19.0, [this]() { BuilderImport(TEXT("DC1-NOT-A-REAL-CODE")); }},
+		{19.8, [&]() { Shot(TEXT("06_builder_bad_code_rejected.png")); }},
+		{20.5, []() { FGenericPlatformMisc::RequestExit(false); }},
 	};
 	const TArray<TPair<double, TFunction<void()>>>& Steps = bSettingsFlow ? SettingsSteps : BuilderSteps;
 	if (Steps.IsValidIndex(Step) && T >= Steps[Step].Key)

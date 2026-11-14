@@ -73,6 +73,7 @@ public:
 	TArray<float> PerfFrameMs;
 	double PerfWindowStart = 0.0;
 	int32 PerfMaxFalling = 0;
+	bool bPerfLoading = false;
 	virtual void Tick(float DeltaSeconds) override;
 
 	UDCInputSet* GetInputSet();
