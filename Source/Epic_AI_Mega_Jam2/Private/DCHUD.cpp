@@ -296,7 +296,7 @@ void ADCHUD::DrawStrikeInfo(ADCCharacter& Me)
 		{
 			Box(X - Sx(6.f), Y - Sx(1.f), Sx(450.f), Sx(25.f), bAfford && Ready <= 0.f ? Gold : FLinearColor(Red.R, Red.G, Red.B, 0.25f));
 		}
-		Text(Line, X, Y, bSel ? Ink : FLinearColor(Ink.R, Ink.G, Ink.B, 0.6f), 0.65f);
+		Text(Line, X, Y, bSel ? (bAfford && Ready <= 0.f ? Night : Ink) : FLinearColor(Ink.R, Ink.G, Ink.B, 0.6f), 0.65f);
 		Y += Sx(26.f);
 	}
 	Text(TEXT("LMB CALL   Q / WHEEL SWITCH"), X, Y + Sx(6.f), FLinearColor(Ink.R, Ink.G, Ink.B, 0.7f), 0.55f);
@@ -350,7 +350,7 @@ void ADCHUD::DrawViewfinder(ADCCharacter& Me)
 		// Never under the timer and quota bar at the top.
 		const float Ty = FMath::Max(S.Y, Sx(120.f) + Th + 4.f);
 		Box(S.X - Tw * 0.5f - 6.f, Ty - Th - 4.f, Tw + 12.f, Th + 4.f, FLinearColor(Gold.R, Gold.G, Gold.B, 0.9f * Pulse));
-		Text(Label, S.X, Ty - Th - 3.f, Ink, 0.7f, true);
+		Text(Label, S.X, Ty - Th - 3.f, Night, 0.7f, true);
 		DrawLine(S.X, Ty, S.X, Ty + Sx(18.f), Gold, 2.f);
 	}
 
@@ -383,7 +383,7 @@ void ADCHUD::DrawStatus(ADCGameState& GS, ADCCharacter& Me)
 
 	// Paper plates with ink type and a thin ink rule (art bible: cream and ink; Saltline HUD language): readable over
 	// a bright sky and a blast alike.
-	const FLinearColor Plate(Paper.R, Paper.G, Paper.B, 1.f); // opaque: ink type never sits on the city behind it
+	const FLinearColor Plate(Paper.R, Paper.G, Paper.B, 0.86f); // dark glass (R25): light type stays readable over the city
 	// Propaganda Points, the currency the shots buy firepower with.
 	Box(Sx(24.f), Sx(24.f), Sx(330.f), Sx(74.f), Plate);
 	Box(Sx(24.f), Sx(24.f), Sx(5.f), Sx(74.f), Ink);
@@ -430,7 +430,7 @@ void ADCHUD::DrawStatus(ADCGameState& GS, ADCCharacter& Me)
 		const bool bActive = static_cast<int32>(Me.GetSlot()) == i;
 		const float X = W * 0.5f - Sx(255.f) + i * Sx(170.f);
 		Box(X, H - Sx(70.f), Sx(160.f), Sx(44.f), bActive ? FLinearColor(Gold.R, Gold.G, Gold.B, 0.95f) : Plate);
-		Text(Names[i], X + Sx(80.f), H - Sx(62.f), bActive ? Ink : FLinearColor(Ink.R, Ink.G, Ink.B, 0.6f), 0.75f, true);
+		Text(Names[i], X + Sx(80.f), H - Sx(62.f), bActive ? Night : FLinearColor(Ink.R, Ink.G, Ink.B, 0.6f), 0.75f, true);
 	}
 	if (Me.IsDrawing())
 	{
@@ -492,7 +492,7 @@ void ADCHUD::DrawPhotoCard(UTexture* Image, const FDCPhotoGrade& Grade, float X,
 	const FVector Pivot(Cx, By + Bh * 0.5f, 0.f);
 	Canvas->Canvas->PushRelativeTransform(FTranslationMatrix(-Pivot) * FRotationMatrix(FRotator(0.f, Tilt, 0.f)) * FTranslationMatrix(Pivot));
 	// A signal-yellow plate with ink type and an ink double rule: legible on any print, even on small cards.
-	const FLinearColor InkStamp(Ink.R, Ink.G, Ink.B, 0.95f);
+	const FLinearColor InkStamp(Night.R, Night.G, Night.B, 0.95f); // night type on the lime stamp
 	Box(Bx, By, Bw, Bh, FLinearColor(Gold.R, Gold.G, Gold.B, 0.95f));
 	Frame(Bx, By, Bw, Bh, Sx(4.f), InkStamp);
 	Frame(Bx + Sx(7.f), By + Sx(7.f), Bw - Sx(14.f), Bh - Sx(14.f), Sx(1.5f), InkStamp);
@@ -517,7 +517,7 @@ void ADCHUD::DrawPhotoCard(UTexture* Image, const FDCPhotoGrade& Grade, float X,
 		TextSize(BigFont, Word, 0.8f * TagScale * TextBoost * UiScale, Cw, Ch);
 		const bool bWarn = Grade.bSpotlit && Category == Grade.Categories[0];
 		Box(X + Sx(14.f), Ty, Cw + Sx(12.f), Ch + Sx(2.f), bWarn ? Red : Gold);
-		Text(Word, X + Sx(20.f), Ty, bWarn ? Paper : Ink, 0.8f * TagScale);
+		Text(Word, X + Sx(20.f), Ty, Night, 0.8f * TagScale);
 		Ty += Ch + Sx(6.f);
 	}
 }
@@ -529,14 +529,14 @@ void ADCHUD::PaperSheet(float X, float Y, float W, float H)
 		bPaperTried = true;
 		PaperTex = Cast<UTexture2D>(UDCTuning::Get().Assets.PaperGrain.TryLoad());
 	}
-	if (!PaperTex)
+	// R25: a dark glass sheet (no paper left): night ground, faint scanlines, thin cyan rules at the top and bottom.
+	Box(X, Y, W, H, Paper);
+	for (float Ly = Y; Ly < Y + H; Ly += Sx(4.f))
 	{
-		Box(X, Y, W, H, Paper);
-		return;
+		Box(X, Ly, W, 1.f, FLinearColor(Ink.R, Ink.G, Ink.B, 0.025f));
 	}
-	// The texture is about paper cream already; tinted to the palette paper so the sheet stays #F2E8D0 on average.
-	const float Tile = FMath::Max(W, H); // one sheet: the generated paper is not seamless (tiles showed a grid)
-	DrawTexture(PaperTex, X, Y, W, H, 0.f, 0.f, W / Tile, H / Tile, FLinearColor(1.01f, 1.0f, 0.99f, 1.f), BLEND_Opaque);
+	Box(X, Y + Sx(4.f), W, Sx(2.f), FLinearColor(Cyan.R, Cyan.G, Cyan.B, 0.8f));
+	Box(X, Y + H - Sx(6.f), W, Sx(2.f), FLinearColor(Cyan.R, Cyan.G, Cyan.B, 0.8f));
 }
 
 UTexture2D* ADCHUD::StampGrit()
@@ -718,7 +718,7 @@ void ADCHUD::DrawDowned(ADCCharacter& Me)
 		// R21: one last shutter from where they fell.
 		const float Pulse = 0.75f + 0.25f * FMath::Sin(RealNow * 6.f);
 		Box(W * 0.5f - Sx(230.f), H * 0.62f, Sx(460.f), Sx(56.f), FLinearColor(Gold.R, Gold.G, Gold.B, 0.95f * Pulse));
-		Text(TEXT("LAST FRAME  -  LMB"), W * 0.5f, H * 0.62f + Sx(8.f), Ink, 1.f, true);
+		Text(TEXT("LAST FRAME  -  LMB"), W * 0.5f, H * 0.62f + Sx(8.f), Night, 1.f, true);
 	}
 }
 

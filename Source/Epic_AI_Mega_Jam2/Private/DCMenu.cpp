@@ -73,7 +73,7 @@ namespace DCMenuStyle
 				.HAlign(HAlign_Center).VAlign(VAlign_Center)
 				.OnClicked_Lambda([OnClick]() { OnClick(); return FReply::Handled(); })
 				[
-					SNew(STextBlock).Text(FText::FromString(Text)).Font(Font(22)).ColorAndOpacity(Fill.Equals(Ink) ? Paper : Ink)
+					SNew(STextBlock).Text(FText::FromString(Text)).Font(Font(22)).ColorAndOpacity(TextOn(Fill))
 				]
 			];
 		if (OutButton)

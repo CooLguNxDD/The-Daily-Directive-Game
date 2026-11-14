@@ -199,7 +199,7 @@ void ADCCharacter::BeginPlay()
 	}
 	PhotoCamMesh->AttachToComponent(GetMesh(), FAttachmentTransformRules::SnapToTargetNotIncludingScale, Hand);
 	PhotoCamMesh->SetStaticMesh(DCAssets::Cube());
-	PhotoCamMesh->SetMaterial(0, DCAssets::MakeFlat(this, FLinearColor(0.9f, 0.85f, 0.75f)));
+	PhotoCamMesh->SetMaterial(0, DCAssets::MakeFlat(this, FLinearColor(0.024f, 0.552f, 0.687f), 0.6f));
 	if (const FDCVoxelMeshData* Cam = DCVoxelModels::Mesh(T.Assets.ChestCamModel))
 	{
 		ChestCam = NewObject<UProceduralMeshComponent>(this, TEXT("ChestCam"));

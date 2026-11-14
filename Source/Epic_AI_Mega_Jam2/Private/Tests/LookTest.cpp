@@ -98,7 +98,17 @@ bool FDCNewsprintTest::RunTest(const FString&)
 			Max = FMath::Max(Max, L);
 		}
 	}
-	TestTrue(TEXT("halftone shows dots"), Max - Min > 40);
+	// The print's texture is data: halftone dots (newsprint) or feed scanlines (R25 news feed). Check the one in use.
+	if (P.HalftoneMix > 0.f && P.DotCell > 0)
+	{
+		TestTrue(TEXT("halftone shows dots"), Max - Min > 40);
+	}
+	if (P.ScanlineEvery > 0)
+	{
+		auto RowMean = [&](int32 Y) { int64 Acc = 0; for (int32 X = 14; X < W - 14; ++X) { Acc += Printed[Y * W + X].G; } return static_cast<float>(Acc) / (W - 28); };
+		const int32 ScanY = ((H - 14) / P.ScanlineEvery) * P.ScanlineEvery;
+		TestTrue(TEXT("feed scanlines darken every Nth row"), RowMean(ScanY) < RowMean(ScanY + 1) * (1.f - P.ScanlineDark * 0.5f));
+	}
 	TestTrue(TEXT("the dim tower beside the white blast is lifted (R5)"), Sum / FMath::Max(1, W - 28) > 60);
 	AddInfo(FString::Printf(TEXT("DCPRINT tower row mean %lld (source 34), min %d max %d, gamma %.2f"), Sum / FMath::Max(1, W - 28), Min, Max, DCNewsprint::MidGamma(Px, P, Gain, Offset)));
 	return true;

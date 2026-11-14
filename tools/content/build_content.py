@@ -116,7 +116,7 @@ return Base * Shade * (1.0 - 0.38 * Wet);
 
 VOXEL_ROUGH_HLSL = r"""
 // Surface wetness (R18): up faces gloss as they get wet (rain), walls stay matte.
-return lerp(0.9, 0.5, saturate(Normal.z) * Wetness); // 0.22 mirrored the cream sky: wet streets read as snow
+return lerp(0.9, 0.2, saturate(Normal.z) * Wetness); // R25: wet streets mirror the neon (the night sky is dark)
 """
 
 

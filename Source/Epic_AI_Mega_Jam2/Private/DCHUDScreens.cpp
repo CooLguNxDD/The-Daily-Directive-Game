@@ -62,7 +62,7 @@ bool ADCHUD::Button(const FString& Label, FName Id, float X, float Y, float W, f
 		Box(X - Sx(3.f), Y - Sx(3.f), W + Sx(6.f), H + Sx(6.f), Ink);
 	}
 	Box(X, Y, W, H, Fill);
-	Text(Label, X + W * 0.5f, Y + H * 0.5f - Sx(14.f), bEnabled ? Ink : FLinearColor(Ink.R, Ink.G, Ink.B, 0.6f), 0.7f, true);
+	Text(Label, X + W * 0.5f, Y + H * 0.5f - Sx(14.f), bEnabled ? TextOn(Fill) : FLinearColor(Ink.R, Ink.G, Ink.B, 0.6f), 0.7f, true);
 	if (bEnabled)
 	{
 		AddHitBox(FVector2D(X, Y), FVector2D(W, H), Id, true);
@@ -163,7 +163,7 @@ void ADCHUD::DrawDraft(ADCGameState& GS, ADCCharacter* Me)
 				Tx = X + S + Sx(22.f);
 				Wrap = 40;
 			}
-			Text(Def->DisplayName.ToString().ToUpper(), Tx, Y + Sx(10.f), Ink, 0.7f);
+			Text(Def->DisplayName.ToString().ToUpper(), Tx, Y + Sx(10.f), bPicked ? Night : Ink, 0.7f);
 			// Description wrapped by words into short lines.
 			TArray<FString> Words;
 			Def->Description.ToString().ParseIntoArray(Words, TEXT(" "));
@@ -173,13 +173,13 @@ void ADCHUD::DrawDraft(ADCGameState& GS, ADCCharacter* Me)
 			{
 				if (Line.Len() + Word.Len() > Wrap)
 				{
-					Text(Line, Tx, Ly, Ink, 0.5f);
+					Text(Line, Tx, Ly, bPicked ? Night : Ink, 0.5f);
 					Ly += Sx(26.f);
 					Line.Reset();
 				}
 				Line += (Line.IsEmpty() ? TEXT("") : TEXT(" ")) + Word;
 			}
-			Text(Line, Tx, Ly, Ink, 0.5f);
+			Text(Line, Tx, Ly, bPicked ? Night : Ink, 0.5f);
 			if (!PS->bDraftDone)
 			{
 				AddHitBox(FVector2D(X, Y), FVector2D(ColW, CardH), FName(*FString::Printf(TEXT("pick|%s"), *Def->Id.ToString())), true);
@@ -337,7 +337,7 @@ void ADCHUD::DrawFinalCut(ADCGameState& GS, ADCCharacter* Me)
 		{
 			Frame(X - Sx(10.f), Y - Sx(10.f), CardW + Sx(20.f), CardW * 9.f / 16.f + Sx(50.f), Sx(8.f), Gold);
 			Box(X + CardW - Sx(96.f), Y + CardW * 9.f / 16.f + Sx(2.f), Sx(92.f), Sx(26.f), Gold);
-			Text(FString::Printf(TEXT("PICK %d"), Order + 1), X + CardW - Sx(90.f), Y + CardW * 9.f / 16.f + Sx(2.f), Ink, 0.6f);
+			Text(FString::Printf(TEXT("PICK %d"), Order + 1), X + CardW - Sx(90.f), Y + CardW * 9.f / 16.f + Sx(2.f), Night, 0.6f);
 		}
 		if (!PS->bFinalCutDone)
 		{
@@ -492,8 +492,8 @@ void ADCHUD::DrawFrontPage(ADCGameState& GS, ADCCharacter* Me)
 			break;
 		}
 	}
-	Box(M, Sx(172.f), W - 2.f * M, Sx(84.f), Red);
-	Text(GS.Headline, W * 0.5f, Sx(172.f) + (Sx(84.f) - Th) * 0.5f, Paper, Scale, true, HeadFont);
+	Box(M, Sx(172.f), W - 2.f * M, Sx(84.f), Magenta); // the headline band is a neon accent (red is danger only)
+	Text(GS.Headline, W * 0.5f, Sx(172.f) + (Sx(84.f) - Th) * 0.5f, Ink, Scale, true, HeadFont);
 
 	if (PC && GS.PagePicks.IsValidIndex(GS.HeadlineIndex))
 	{
