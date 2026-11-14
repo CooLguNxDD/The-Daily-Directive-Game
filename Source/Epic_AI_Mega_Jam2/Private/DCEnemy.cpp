@@ -978,7 +978,7 @@ void ADCEnemy::Tick(float DeltaSeconds)
 
 float ADCEnemy::TakeDamage(float Damage, const FDamageEvent& DamageEvent, AController* EventInstigator, AActor* DamageCauser)
 {
-	if (!HasAuthority() || !IsAlive())
+	if (!HasAuthority() || !IsAlive() || !CanBeDamaged())
 	{
 		return 0.f;
 	}

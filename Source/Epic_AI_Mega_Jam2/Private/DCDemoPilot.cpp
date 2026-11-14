@@ -602,6 +602,11 @@ void ADCDemoPilot::AddLineupShot()
 					E->InitKind(Kind);
 					E->FinishSpawning(Xf);
 					E->CustomTimeDilation = 0.f;
+					E->SetCanBeDamaged(false); // a frozen exhibit: nobody shoots it and no unit targets it
+					if (UDCUnits* Live = UDCUnits::Get(this))
+					{
+						Live->Remove(E);
+					}
 					Lineup.Add(E);
 					UE_LOG(LogDCDemo, Display, TEXT("DEMO lineup col=%d row=%d faction=%s unit=%s at %s"), i, r, *T.Factions[i].Id.ToString(), *Kind.ToString(), *Where.ToCompactString());
 				}
@@ -996,13 +1001,14 @@ void ADCDemoPilot::BuildScript()
 		}
 		int32 Cycles = CyclesPerSector;
 		FParse::Value(FCommandLine::Get(), TEXT("dccycles="), Cycles); // more strike-and-snap cycles per sector
-		for (int32 Cycle = 0; Cycle < Cycles; ++Cycle)
-		{
-			AddCycle(FString::Printf(TEXT("%s_c%d"), *S, Cycle));
-		}
+		// Before the first strike: a clean street, inside the crew grace.
 		if (Sector == 0 && FParse::Param(FCommandLine::Get(), TEXT("dclineup")))
 		{
 			AddLineupShot();
+		}
+		for (int32 Cycle = 0; Cycle < Cycles; ++Cycle)
+		{
+			AddCycle(FString::Printf(TEXT("%s_c%d"), *S, Cycle));
 		}
 		if (FParse::Param(FCommandLine::Get(), TEXT("dcclashshot")))
 		{
