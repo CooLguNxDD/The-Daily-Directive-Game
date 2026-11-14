@@ -264,6 +264,7 @@ void ADCGameMode::RestartRun()
 
 void ADCGameMode::ClearCombat()
 {
+	PendingSpawns.Reset();
 	for (ADCEnemy* E : TActorRange<ADCEnemy>(GetWorld()))
 	{
 		E->Destroy();
@@ -407,6 +408,7 @@ void ADCGameMode::TickSectorPhase(float Now)
 	TickWaves(Now);
 	TickPressure(Now);
 	TickFactions(Now);
+	TickSpawns();
 	TickObjective(Now);
 	TickPendingCollapses(Now);
 	TickScoop(Now);

@@ -60,6 +60,7 @@ struct FDCFactionMixRule
 	UPROPERTY(EditAnywhere, Config, Category = "Faction") float StrikeStartSeconds = 35.f;
 	/** Faction strikes wait while the city's physics body load is above this (the crew's shots own the body budget). */
 	UPROPERTY(EditAnywhere, Config, Category = "Faction") float StrikeMaxBodyLoad = 0.35f;
+	UPROPERTY(EditAnywhere, Config, Category = "Faction") int32 SpawnsPerFrame = 2;
 	/** Territory: the map splits into ZonesPerSide^2 zones, all the main faction's at the start; every
 	 *  TerritorySeconds a zone goes to the faction with the most live units in it, if it outnumbers the owner there. */
 	UPROPERTY(EditAnywhere, Config, Category = "Faction") int32 ZonesPerSide = 3;

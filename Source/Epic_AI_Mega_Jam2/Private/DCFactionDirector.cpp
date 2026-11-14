@@ -107,18 +107,28 @@ int32 ADCGameMode::SpawnSquad(FName Faction, int32 Count, const FVector& Centre,
 		FVector Where = Centre + FVector(SectorRng.FRandRange(-Spread, Spread), SectorRng.FRandRange(-Spread, Spread), 0.f);
 		Where.Z = (City ? City->SurfaceZCm(Where) : 0.f) + Def->HoverHeight;
 		const FTransform Xf(FRotator(0, SectorRng.FRandRange(0, 360), 0), Where);
-		// Never inside a tower: a spot that would collide is nudged clear or skipped.
-		ADCEnemy* E = GetWorld()->SpawnActorDeferred<ADCEnemy>(ADCEnemy::StaticClass(), Xf, nullptr, nullptr, ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButDontSpawnIfColliding);
-		if (!E)
-		{
-			continue;
-		}
-		E->InitKind(Def->Id);
-		E->HostSetSquad(Squad, i, Count);
-		E->FinishSpawning(Xf);
+		PendingSpawns.Add({Def->Id, Xf, Squad, i, Count});
 		++Landed;
 	}
 	return Landed;
+}
+
+void ADCGameMode::TickSpawns()
+{
+	const int32 N = FMath::Min(PendingSpawns.Num(), FMath::Max(1, UDCTuning::Get().FactionMix.SpawnsPerFrame));
+	for (int32 i = 0; i < N; ++i)
+	{
+		const FPendingSpawn& P = PendingSpawns[i];
+		// Never inside a tower: a spot that would collide is nudged clear or skipped.
+		ADCEnemy* E = GetWorld()->SpawnActorDeferred<ADCEnemy>(ADCEnemy::StaticClass(), P.Xf, nullptr, nullptr, ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButDontSpawnIfColliding);
+		if (E)
+		{
+			E->InitKind(P.Kind);
+			E->HostSetSquad(P.Squad, P.Slot, P.Size);
+			E->FinishSpawning(P.Xf);
+		}
+	}
+	PendingSpawns.RemoveAt(0, N, EAllowShrinking::No);
 }
 
 void ADCGameMode::TickFactions(float Now)

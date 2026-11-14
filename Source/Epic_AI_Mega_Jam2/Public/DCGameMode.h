@@ -127,6 +127,18 @@ private:
 	TMap<FName, float> FactionStrikeReady;
 	int32 NextSquadId = 1;
 	float NextTerritoryTime = 0.f;
+	/** Rolled spawns waiting their frame (advisor a-3: a squad drop is N model meshes; at most FactionMix.SpawnsPerFrame
+	 *  start per tick). Rolls happen at queue time, so the seeded sequence is unchanged. */
+	struct FPendingSpawn
+	{
+		FName Kind;
+		FTransform Xf;
+		int32 Squad = 0;
+		int32 Slot = 0;
+		int32 Size = 1;
+	};
+	TArray<FPendingSpawn> PendingSpawns;
+	void TickSpawns();
 	// R4 objective director (DCObjectiveDirector.cpp).
 	void StartObjective();
 	void TickObjective(float Now);
