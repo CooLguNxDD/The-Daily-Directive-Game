@@ -476,6 +476,8 @@ void ADCPlayerController::TickPerf()
 	}
 	const float FrameMs = static_cast<float>(FApp::GetDeltaTime() * 1000.0);
 	PerfFrameMs.Add(FrameMs);
+	PerfGameMsSum += FPlatformTime::ToMilliseconds(GGameThreadTime);
+	PerfRenderMsSum += FPlatformTime::ToMilliseconds(GRenderThreadTime);
 	if (FrameMs > 50.f)
 	{
 		// Which thread stalled: game, render, GPU (previous frame's timings, the closest the engine keeps).
@@ -509,10 +511,12 @@ void ADCPlayerController::TickPerf()
 	const ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>();
 	const float GpuMs = FPlatformTime::ToMilliseconds(RHIGetGPUFrameCycles());
 	const FIntPoint View = GEngine && GEngine->GameViewport ? GEngine->GameViewport->Viewport->GetSizeXY() : FIntPoint::ZeroValue;
-	UE_LOG(LogTemp, Display, TEXT("DCPERF frames=%d avg_ms=%.2f p95_ms=%.2f max_ms=%.2f gpu_ms=%.2f players=%d falling_max=%d phase=%d loading=%d view=%dx%d"),
+	UE_LOG(LogTemp, Display, TEXT("DCPERF frames=%d avg_ms=%.2f p95_ms=%.2f max_ms=%.2f gpu_ms=%.2f game_ms=%.2f render_ms=%.2f players=%d falling_max=%d phase=%d loading=%d view=%dx%d"),
 		Sorted.Num(), Sum / Sorted.Num(), Sorted[FMath::Min(Sorted.Num() - 1, FMath::FloorToInt32(Sorted.Num() * 0.95f))], Sorted.Last(), GpuMs,
+		PerfGameMsSum / Sorted.Num(), PerfRenderMsSum / Sorted.Num(),
 		GS ? GS->PlayerArray.Num() : 0, PerfMaxFalling, GS ? static_cast<int32>(GS->Phase) : -1, bPerfLoading ? 1 : 0, View.X, View.Y);
 	PerfFrameMs.Reset();
+	PerfGameMsSum = PerfRenderMsSum = 0.0;
 	PerfMaxFalling = 0;
 	bPerfLoading = false;
 	PerfWindowStart = Now;

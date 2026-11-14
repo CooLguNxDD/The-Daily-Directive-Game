@@ -280,6 +280,8 @@ struct FDCVoxelTuning
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 ShardMax = 110;
 	/** Physics shards spawned per frame at most (the rest follow next frames; R13 spawn burst). */
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 ShardSpawnsPerFrame = 28;
+	/** Flying leaf pieces cast shadows (off: R13, advisor a-15; chunks always cast). */
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") bool PhysicsLeafShadows = false;
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float ShardGrowCm = 150.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 ShardBlockMax = 4;
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float ShardSpeedCms = 850.f;

@@ -71,6 +71,7 @@ public:
 	/** Stores the builder's outfit in its save slot and rebuilds the preview and the menu. */
 	void BuilderChanged(const FString& Message);
 	TArray<float> PerfFrameMs;
+	double PerfGameMsSum = 0.0, PerfRenderMsSum = 0.0; // R13 (advisor a-15): which thread a slow second sits on
 	double PerfWindowStart = 0.0;
 	int32 PerfMaxFalling = 0;
 	bool bPerfLoading = false;

@@ -1738,8 +1738,7 @@ void ADCVoxelCity::TickFalling(float Now)
 		{
 			// Drops from the first frame under (exaggerated) gravity, so the top never hangs over the bitten floors,
 			// and leans away from the blast as it goes.
-			F.Comp->SetWorldRotation(FQuat(F.Axis, FMath::DegreesToRadians(F.MaxAngle * U * U)));
-			F.Comp->SetWorldLocation(F.Pivot - FVector(0, 0, Drop));
+			F.Comp->SetWorldLocationAndRotation(F.Pivot - FVector(0, 0, Drop), FQuat(F.Axis, FMath::DegreesToRadians(F.MaxAngle * U * U))); // one tree update
 		}
 		if (F.Frags.Num() > 0)
 		{
@@ -1869,6 +1868,9 @@ UBoxComponent* ADCVoxelCity::MakeBody(const TSharedPtr<FFalling>& Shared, int32 
 	Box->SetAngularDamping(Tn.PhysicsAngularDamping);
 	Box->SetMassOverrideInKg(NAME_None, Fr.Mass, true);
 	Fr.Comp->AttachToComponent(Box, FAttachmentTransformRules::KeepWorldTransform); // keeps its emissive faces
+	// R13 (advisor a-15): flying leaves skip shadow casting (hundreds of moving meshes invalidating shadow pages);
+	// chunks keep theirs; ReleasePiece restores it for the pool.
+	Fr.Comp->SetCastShadow(bChunk || Tn.PhysicsLeafShadows);
 	Box->SetPhysicsLinearVelocity(V);
 	Box->SetPhysicsAngularVelocityInDegrees(SpinDeg);
 	Fr.Body = Box;

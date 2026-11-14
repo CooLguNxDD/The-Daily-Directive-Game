@@ -661,6 +661,33 @@ void ADCDemoPilot::AddObjectiveRun(const FString& S)
 			Release(TEXT("Sprint"));
 			return bOver;
 		}
+		// Self-defence: a hostile unit within ObjDefendCm gets the rifle (Slot1, real Fire), like a player would.
+		const ADCEnemy* Threat = nullptr;
+		float ThreatD = ObjDefendCm;
+		if (const UDCUnits* Live = UDCUnits::Get(this))
+		{
+			const TArray<FDCFactionDef>& Factions = UDCTuning::Get().Factions;
+			for (const ADCEnemy* U : Live->All())
+			{
+				const float UD = U && U->IsAlive() && U->CanBeDamaged() && DCFactionRules::FightsCrew(Factions, U->GetFaction())
+					? FVector::Dist(U->GetActorLocation(), Me->GetActorLocation()) : ThreatD;
+				Threat = UD < ThreatD ? U : Threat;
+				ThreatD = FMath::Min(ThreatD, UD);
+			}
+		}
+		if (Threat && ObjStrikePhase == 0)
+		{
+			if (!bObjDefending)
+			{
+				Tap(TEXT("Slot1"));
+				bObjDefending = true;
+			}
+			Release(TEXT("Sprint"));
+			AimAt(Threat->GetActorLocation() + FVector(0, 0, 40.f));
+			Tap(TEXT("Fire"));
+			return false;
+		}
+		bObjDefending = false;
 		// Destroy: within ObjStrikeRangeCm of the marked tower, with the free laser ready, call it on the tower's base with
 		// the real Slot2 / Fire actions (two polls apart so the selection lands), then back to walking.
 		const FDCObjectiveDef* Def = O->GetDef();
