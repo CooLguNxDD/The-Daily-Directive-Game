@@ -39,6 +39,9 @@ struct FDCFactionDef
 	UPROPERTY(EditAnywhere, Config, Category = "Faction") float StrikeInterval = 0.f;
 	/** Telegraph toast every player sees ({M} = metres away). */
 	UPROPERTY(EditAnywhere, Config, Category = "Faction") FString StrikeToast;
+	/** Played at a unit's feet on every machine when it appears (a voxel Fx emitter id; None = nothing). The Hive
+	 *  bursts out of the street in dust. */
+	UPROPERTY(EditAnywhere, Config, Category = "Faction") FName SpawnFx;
 	/** The one light cue of the faction (HUD tag, sector card rule, tracer colour). */
 	UPROPERTY(EditAnywhere, Config, Category = "Faction") FLinearColor Cue = FLinearColor::White;
 };
