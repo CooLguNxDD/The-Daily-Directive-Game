@@ -888,10 +888,12 @@ void ADCVoxelCity::HostRest(FFalling& F)
 		R.AxisX = DCVoxelOps::AxisIndex(B->GetForwardVector());
 		R.AxisZ = DCVoxelOps::AxisIndex(B->GetUpVector());
 	}
-	if (Op.Rests.Num() == 0)
+	if (Op.Rests.Num() == 0 && Debris == 0)
 	{
 		return;
 	}
+	// Every body flew off as debris (review CP39): an empty Rest op still goes out, so every machine removes the
+	// provisional pile where nothing landed instead of revealing it.
 	Op.CenterCm = DCVoxelMath::ToCm(F.LandCenter);
 	const int32 Seq = GS->AddVoxelOp(Op).Seq;
 	TWeakObjectPtr<ADCGameState> WeakGS(GS);
