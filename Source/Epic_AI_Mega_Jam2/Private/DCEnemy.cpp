@@ -58,6 +58,22 @@ namespace
 			return;
 		}
 		ADCCharacter* Target = E.FindTarget(FMath::Max(Def.SenseRange, Aggro), true);
+		if (!Target)
+		{
+			// R3: no crew in reach: a hostile faction's unit in sense range comes before hunting the crew (fights the
+			// player did not start).
+			if (Now >= E.NextRetarget)
+			{
+				E.NextRetarget = Now + 0.25f;
+				E.Foe = E.FindFoe(Def.SenseRange);
+			}
+			if (AActor* Foe = E.Foe.Get(); Foe && !Cast<ADCCharacter>(Foe) && Cast<ADCEnemy>(Foe)->IsAlive())
+			{
+				E.SteerTowards(Foe->GetActorLocation() + FVector(0, 0, 60.f), Def.Speed, Dt, Def.HoverHeight);
+				E.HostAttack(Foe, Now);
+				return;
+			}
+		}
 		const ADCCharacter* Hunted = Target ? nullptr : E.FindTarget(Def.HuntRangeCm, false);
 		if (Hunted)
 		{
@@ -68,18 +84,6 @@ namespace
 		}
 		if (!Target)
 		{
-			// R3: no crew in reach: the drones go for a hostile faction's unit (fights the player did not start).
-			if (Now >= E.NextRetarget)
-			{
-				E.NextRetarget = Now + 0.25f;
-				E.Foe = E.FindFoe(Def.SenseRange);
-			}
-			if (AActor* Foe = E.Foe.Get(); Foe && !Cast<ADCCharacter>(Foe))
-			{
-				E.SteerTowards(Foe->GetActorLocation() + FVector(0, 0, 60.f), Def.Speed, Dt, Def.HoverHeight);
-				E.HostAttack(Foe, Now);
-				return;
-			}
 			E.Heading = E.Heading.RotateAngleAxis(25.f * Dt, FVector::UpVector);
 			E.SteerTowards(E.GetActorLocation() + E.Heading * 600.f, Def.Speed * 0.4f, Dt, Def.HoverHeight);
 			E.bRushing = false;
