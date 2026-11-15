@@ -118,16 +118,23 @@ def add_dissolve(mat, emissive_src, dissolve_src, x, y):
     glow = lib.create_material_expression(mat, unreal.MaterialExpressionScalarParameter, x, y + 420)
     glow.set_editor_property("parameter_name", "DissolveEdgeGlow")
     glow.set_editor_property("default_value", 3.0)
-    edge_col = lib.create_material_expression(mat, unreal.MaterialExpressionMultiply, x + 450, y + 200)
-    lib.connect_material_expressions(edge, "", edge_col, "A")
-    lib.connect_material_expressions(col, "", edge_col, "B")
-    edge_glow = lib.create_material_expression(mat, unreal.MaterialExpressionMultiply, x + 600, y + 250)
-    lib.connect_material_expressions(edge_col, "", edge_glow, "A")
-    lib.connect_material_expressions(glow, "", edge_glow, "B")
-    total = lib.create_material_expression(mat, unreal.MaterialExpressionAdd, x + 750, y + 200)
-    lib.connect_material_expressions(emissive_src, "", total, "A")
-    lib.connect_material_expressions(edge_glow, "", total, "B")
-    lib.connect_material_property(total, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
+    # Emissive = the material's own emissive + the warm edge, in one Custom node (no Multiply nodes: a Multiply on the
+    # vector parameter's output failed with "float2 and float3" in both twins).
+    emi = lib.create_material_expression(mat, unreal.MaterialExpressionCustom, x + 450, y + 200)
+    emi.set_editor_property("code", "return Base.rgb + EdgeColor.rgb * (Glow * Edge);")
+    emi.set_editor_property("output_type", unreal.CustomMaterialOutputType.CMOT_FLOAT3)
+    emi.set_editor_property("description", "DissolveEmissive")
+    einputs = []
+    for n in ["Base", "EdgeColor", "Glow", "Edge"]:
+        ci = unreal.CustomInput()
+        ci.set_editor_property("input_name", n)
+        einputs.append(ci)
+    emi.set_editor_property("inputs", einputs)
+    lib.connect_material_expressions(emissive_src, "", emi, "Base")
+    lib.connect_material_expressions(col, "", emi, "EdgeColor")
+    lib.connect_material_expressions(glow, "", emi, "Glow")
+    lib.connect_material_expressions(edge, "", emi, "Edge")
+    lib.connect_material_property(emi, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
 
 
 def build_flat_material(name="M_DCFlat", dissolve=False):
