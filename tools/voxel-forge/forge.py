@@ -26,6 +26,10 @@ Recipe language: one op per line, '#' starts a comment. Coordinates are voxels, 
     mirror x|y|z                     copies the half below the middle onto the other side
     noise p seed slot                removes surface voxels of slot with probability p (weathering)
     pivot x y z                      model origin in voxels (default: bottom centre)
+    part Role x0 y0 z0 x1 y1 z1 jx jy jz   R20 animation segment: solid voxels in the box (max exclusive) move with
+                                     Role (a +UnitGaits limb: LegL, LegR, ArmL, ArmR, Head, ...), rotating about the
+                                     joint (voxel corner units). Later parts win; voxels in no part are the root body.
+                                     Copied into the .dcvox header; the preview's 4th panel tints each part
     image file x y0 z0 w h s0 t1 s1 ...  quantizes a picture (path relative to the recipe) onto the +x-facing plane
                                      at x, y0..y0+w, z0..z0+h: each pixel's luminance (0..1) walks the ladder
                                      s0 < t1 <= s1 < t2 <= s2 ... (generated sign art -> neon voxels)
@@ -67,6 +71,7 @@ class Model:
         self.v = np.zeros((16, 16, 16), dtype=np.uint8)  # [x, y, z], value = slot index + 1
         self.slots: list[tuple[str, str]] = []  # (slot, palette name)
         self.pivot: tuple[int, int, int] | None = None
+        self.parts: list[tuple[str, list[int], list[float]]] = []  # (role, box, joint) in voxels
 
     # ---- shapes: each returns a boolean mask over the volume
     def coords(self):
@@ -151,6 +156,7 @@ class Model:
             "mirror": lambda: self._mirror(toks[1]),
             "noise": lambda: self._noise(float(toks[1]), int(toks[2]), toks[3]),
             "image": lambda: self._image(toks[1:]),
+            "part": lambda: self._part(toks[1:]),
         }
         if k in handlers:
             handlers[k]()
@@ -163,6 +169,19 @@ class Model:
             self.v[self.shape(kind, args)] = self.slot_index(slot)
             return
         raise ValueError(f"line {lineno}: unknown op '{k}'")
+
+    def _part(self, toks):
+        if len(toks) != 10:
+            raise ValueError("part: Role x0 y0 z0 x1 y1 z1 jx jy jz")
+        self.parts.append((toks[0], [int(t) for t in toks[1:7]], [float(t) for t in toks[7:10]]))
+
+    def part_map(self) -> np.ndarray:
+        """Part index + 1 per voxel (0 = root body), later parts win; only solid voxels belong to a part."""
+        out = np.zeros(self.v.shape, dtype=np.uint8)
+        for i, (_, b, _) in enumerate(self.parts, 1):
+            out[b[0]:b[3], b[1]:b[4], b[2]:b[5]] = i
+        out[self.v == 0] = 0
+        return out
 
     def _carve(self, toks):
         if toks[0] == "poly":
@@ -256,6 +275,8 @@ def write_dcvox(m: Model, palette: dict, out: Path):
         "slots " + " ".join(pal for _, pal in m.slots),
         f"solid {int((m.v != 0).sum())}",
     ]
+    for role, b, j in m.parts:
+        lines.append("part " + role + " " + " ".join(str(c) for c in b) + " " + " ".join(f"{c:g}" for c in j))
     body = []
     for i in range(0, len(runs), 24):
         body.append(" ".join(runs[i:i + 24]))
@@ -277,7 +298,8 @@ def render(m: Model, palette: dict, out: Path, scale: int = 6):
         return tuple(int(v * k) for v in c)
 
     W = 360
-    img = Image.new("RGB", (W * 3, W + 30), (242, 232, 208))
+    panels = 4 if m.parts else 3
+    img = Image.new("RGB", (W * panels, W + 30), (242, 232, 208))
     d = ImageDraw.Draw(img)
     # iso view
     s = max(2, int(W / (sx + sy + sz) * 1.2))
@@ -296,11 +318,20 @@ def render(m: Model, palette: dict, out: Path, scale: int = 6):
         d.polygon(left, fill=shade(c, 0.72), outline=(22, 22, 26))
         d.polygon(right, fill=shade(c, 0.86), outline=(22, 22, 26))
 
-    def ortho(panel, axis_u, axis_v, depth_axis, flip_depth):
+    tints = [(90, 90, 90), (230, 60, 60), (60, 120, 230), (240, 200, 40), (60, 190, 90), (200, 80, 220), (40, 210, 210), (250, 140, 40)]
+    roles = sorted({r for r, _, _ in m.parts}, key=[r for r, _, _ in m.parts].index)
+    pm = m.part_map() if m.parts else None
+
+    def ortho(panel, axis_u, axis_v, depth_axis, flip_depth, parts=False):
         cell = max(1, int((W - 20) / max(m.v.shape[axis_u], m.v.shape[axis_v])))
         x0 = panel * W + 10
         y0 = 10
-        vol = m.v if not flip_depth else np.flip(m.v, axis=depth_axis)
+        src = m.v
+        if parts:  # segment index (role order) + 1, root = 1
+            src = np.where(m.v != 0, 1, 0).astype(np.uint8)
+            for i, (r, _, _) in enumerate(m.parts, 1):
+                src[pm == i] = roles.index(r) + 2
+        vol = src if not flip_depth else np.flip(src, axis=depth_axis)
         first = np.argmax(np.moveaxis(vol != 0, depth_axis, -1), axis=-1)
         any_ = np.any(np.moveaxis(vol != 0, depth_axis, -1), axis=-1)
         vals = np.take_along_axis(np.moveaxis(vol, depth_axis, -1), first[..., None], axis=-1)[..., 0]
@@ -311,13 +342,16 @@ def render(m: Model, palette: dict, out: Path, scale: int = 6):
                 if not any_[i, j]:
                     continue
                 u, v = (i, j) if rem[0] == axis_u else (j, i)
-                c = shade(cols[int(vals[i, j])], 0.9)
+                c = shade(tints[(int(vals[i, j]) - 1) % len(tints)] if parts else cols[int(vals[i, j])], 0.9)
                 X = x0 + u * cell
                 Y = y0 + (m.v.shape[axis_v] - 1 - v) * cell
                 d.rectangle([X, Y, X + cell - 1, Y + cell - 1], fill=c, outline=(22, 22, 26) if cell > 3 else None)
 
     ortho(1, 0, 2, 1, False)  # front: looking along +y
     ortho(2, 1, 2, 0, False)  # side: looking along +x
+    if m.parts:
+        ortho(3, 1, 2, 0, False, parts=True)  # side view (both legs) tinted by animation segment
+        d.text((3 * W + 10, W + 8), "parts: root " + " ".join(f"{i + 2}={r}" for i, r in enumerate(roles)), fill=(22, 22, 26))
     d.text((10, W + 8), f"{m.name}  {sx}x{sy}x{sz} @ {m.grid_cm} cm  solid {int(solid.sum())}   iso | front | side", fill=(22, 22, 26))
     img.save(out)
 

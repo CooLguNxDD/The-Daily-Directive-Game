@@ -34,6 +34,8 @@ public:
 	bool IsStunned(float Now) const { return Now < StunnedUntil; }
 	bool IsWalker() const;
 	FName GetKind() const { return Kind; }
+	/** R20: the unit's animator (null for units without a gait row). */
+	class UDCUnitAnimator* GetAnimator() const { return Anim; }
 	const FDCEnemyDef* GetDef() const;
 	/** R3: the unit's faction (its +Enemies row); None = the regime's machines of old (they fight the crew only). */
 	FName GetFaction() const;
@@ -94,7 +96,17 @@ private:
 	UFUNCTION(NetMulticast, Unreliable) void MulticastShot(FVector_NetQuantize From, FVector_NetQuantize To);
 	/** Gait read for rigid voxel models (local, every machine): bob and sway while the actor moves. */
 	void TickGait(float DeltaSeconds);
+	/** The rigid bob and sway for units without a gait row (before R20). */
+	void TickBob(const FDCEnemyDef& Def, float DeltaSeconds);
 	UPROPERTY() TObjectPtr<class UProceduralMeshComponent> ModelComp;
+	/** R20 (h-anim): poses the model's segments from motion, health and AttackSeq on every machine; null without a gait. */
+	UPROPERTY() TObjectPtr<class UDCUnitAnimator> Anim;
+	/** R20: bumped by the host per attack so every machine plays the attack clip (melee has no multicast). */
+	UPROPERTY(Replicated) uint8 AttackSeq = 0;
+	/** R20: the crumb burst waits for the death clip; EndPlay bursts if the actor goes first. */
+	void BurstBody();
+	bool bBodyBurst = false;
+	FTimerHandle BurstTimer;
 	FVector GaitLast = FVector::ZeroVector;
 	float GaitPhase = 0.f;
 	FVector SmoothModel = FVector::ZeroVector;

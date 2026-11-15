@@ -18,6 +18,7 @@
 #include "Rules/DCMusicRules.h"
 #include "Rules/DCCueMix.h"
 #include "Rules/DCSoundQueue.h"
+#include "Rules/DCUnitAnim.h"
 #include "DCTuning.generated.h"
 
 /** R16 aiming with a gun (hold Aim: right mouse / left trigger), one feature, tuned while playing (Aim= in DefaultGame.ini). */
@@ -602,6 +603,8 @@ struct FDCEnemyDef
 	UPROPERTY(EditAnywhere, Config, Category = "Enemy") float BobCm = 0.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Enemy") float SwayDeg = 0.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Enemy") float StepHz = 2.f;
+	/** R20: the +UnitGaits row this unit walks, idles, attacks, flinches, dies and spawns with (None = the old rigid bob). */
+	UPROPERTY(EditAnywhere, Config, Category = "Enemy") FName Gait;
 	/** Replication rate (Hz): ground infantry is fine at 10 (advisor a-2). */
 	UPROPERTY(EditAnywhere, Config, Category = "Enemy") float NetHz = 30.f;
 };
@@ -900,6 +903,12 @@ public:
 	/** R3 factions and how each map's mix is rolled. */
 	UPROPERTY(EditAnywhere, Config, Category = "Enemy") TArray<FDCFactionDef> Factions;
 	UPROPERTY(EditAnywhere, Config, Category = "Enemy") FDCFactionMixRule FactionMix;
+	/** R20 unit animation: gaits per faction look, one-shot clips, LOD by camera distance, and the unit material
+	 *  (M_DCVoxelUnit: segments turn about their joints in the vertex shader from custom primitive data). */
+	UPROPERTY(EditAnywhere, Config, Category = "Anim") TArray<FDCUnitGait> UnitGaits;
+	UPROPERTY(EditAnywhere, Config, Category = "Anim") TArray<FDCUnitClip> UnitClips;
+	UPROPERTY(EditAnywhere, Config, Category = "Anim") TArray<FDCAnimLod> AnimLods;
+	UPROPERTY(EditAnywhere, Config, Category = "Anim") FSoftObjectPath UnitMaterial = FSoftObjectPath(TEXT("/Game/DC/Materials/M_DCVoxelUnit.M_DCVoxelUnit"));
 	/** R4 sector objectives (picked per sector by the run seed) and how they read in the world. */
 	UPROPERTY(EditAnywhere, Config, Category = "Objective") TArray<FDCObjectiveDef> Objectives;
 	UPROPERTY(EditAnywhere, Config, Category = "Objective") FDCObjectiveLook ObjectiveLook;

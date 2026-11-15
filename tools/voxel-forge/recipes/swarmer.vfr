@@ -16,3 +16,6 @@ beam 14 17 7 14 20 1 1 trim
 # eye
 box 23 8 7 27 12 10 eye
 mirror y
+# R20 animation segments: the four blade legs flutter (roll) about the hull edge on each side.
+part BladeL 0 0 0 28 3 14 9 3 7
+part BladeR 0 17 0 28 20 14 9 17 7

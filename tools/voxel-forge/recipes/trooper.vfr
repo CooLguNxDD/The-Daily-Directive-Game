@@ -19,3 +19,9 @@ beam 7 12 27 15 12 24 1.2 trim
 box 13 11 23 16 13 26 trim
 beam 7 2 27 10 1 20 1.1 trim
 pivot 8 7 0
+# R20 animation segments (roles from +UnitGaits): legs swing from the hip, gun arm and off arm from the shoulder.
+part LegL 0 0 0 16 7 18 8 4 18
+part LegR 0 7 0 16 14 18 8 10 18
+part ArmL 0 0 19 16 3 29 7 2 27
+part ArmR 0 11 22 16 14 29 7 12 27
+part Head 0 0 30 16 14 38 7 7 30

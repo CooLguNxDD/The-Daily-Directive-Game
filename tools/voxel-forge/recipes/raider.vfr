@@ -20,3 +20,9 @@ beam 8 2 27 14 2 23 1.1 steel
 # Cue band round the chest, readable from every side (lineup2).
 box 4 2 23 12 12 24 band
 pivot 8 7 0
+# R20 animation segments: legs below the coat hem swing from it, rifle and hook arms from the shoulders.
+part LegL 0 0 0 16 7 10 7.5 4.5 10
+part LegR 0 7 0 16 14 10 7.5 9.5 10
+part ArmL 8 0 19 16 3 28 8 2 27
+part ArmR 0 12 17 16 14 28 8 12 27
+part Head 0 4 29 16 10 36 8 7 29
