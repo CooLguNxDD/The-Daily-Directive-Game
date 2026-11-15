@@ -3162,11 +3162,15 @@ void ADCVoxelCity::TickDissolveCam()
 		ShotCamera->GetCameraComponent()->SetFieldOfView(60.f);
 	}
 	const FVector At = Target->Bounds.Origin;
-	// From the player's own eye (a clear line: the player watched the strike), zoomed onto the piece with a narrow lens.
+	// From above the piece (see below), zoomed onto it with a narrow lens.
 	if (PC->GetViewTarget() != ShotCamera)
 	{
-		// Captured once, before the switch (afterwards the camera manager reports the shot camera itself).
-		DissolveCamEye = (PC->PlayerCameraManager ? PC->PlayerCameraManager->GetCameraLocation() : At + FVector(-1500.f, 0.f, 800.f)) + FVector(0.f, 0.f, 150.f);
+		// Captured once, before the switch. Above the resting piece, leaning toward the player's side: from the player's
+		// eye a toppled tower's rubble hid the piece (dissolve-6f4334f frames showed the inside of the pile).
+		const FVector From = PC->PlayerCameraManager ? PC->PlayerCameraManager->GetCameraLocation() : At + FVector(-1500.f, 0.f, 0.f);
+		const FVector Side = FVector(From.X - At.X, From.Y - At.Y, 0.f).GetSafeNormal();
+		const float Height = FMath::Max(700.f, Target->Bounds.SphereRadius * 5.f);
+		DissolveCamEye = At + Side * Height * 0.45f + FVector(0.f, 0.f, Height);
 	}
 	const FVector Eye = DissolveCamEye;
 	ShotCamera->GetCameraComponent()->SetFieldOfView(FMath::Clamp(FMath::RadiansToDegrees(2.f * FMath::Atan(Target->Bounds.SphereRadius * 1.6f / FMath::Max(FVector::Dist(Eye, At), 1.f))), 8.f, 60.f));
