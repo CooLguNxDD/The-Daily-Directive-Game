@@ -15,6 +15,8 @@
 #include "Rules/DCPostStack.h"
 #include "Rules/DCRunRules.h"
 #include "Rules/DCWeather.h"
+#include "Rules/DCMusicRules.h"
+#include "Rules/DCCueMix.h"
 #include "Rules/DCSoundQueue.h"
 #include "DCTuning.generated.h"
 
@@ -879,6 +881,13 @@ public:
 	UPROPERTY(EditAnywhere, Config, Category = "Sky") TArray<FDCSkyPropDef> SkyProps;
 	/** Sound cues written as data (weapons, strikes), beside the code synth cues. */
 	UPROPERTY(EditAnywhere, Config, Category = "Sound") TArray<FDCSoundRecipe> SoundRecipes;
+	/** R14 music: the player's mix and intensity reading, the track files, the combat layers and what each phase plays. */
+	/** R13 remix: per-cue level trims and remixed recordings (+CueMix rows), inside the cue's sound class. */
+	UPROPERTY(EditAnywhere, Config, Category = "Sound") TArray<FDCCueMix> CueMix;
+	UPROPERTY(EditAnywhere, Config, Category = "Music") FDCMusicTuning Music;
+	UPROPERTY(EditAnywhere, Config, Category = "Music") TArray<FDCMusicTrack> MusicTracks;
+	UPROPERTY(EditAnywhere, Config, Category = "Music") TArray<FDCMusicLayer> MusicLayers;
+	UPROPERTY(EditAnywhere, Config, Category = "Music") TArray<FDCMusicPhase> MusicPhases;
 	/** R13 sound classes (voice and start budgets, priority, pitch range, level, merge window) and the shared mix limits. */
 	UPROPERTY(EditAnywhere, Config, Category = "Sound") TArray<FDCSoundClassDef> SoundClasses;
 	UPROPERTY(EditAnywhere, Config, Category = "Sound") FDCSoundMixTuning SoundMix;
@@ -937,6 +946,14 @@ public:
 		static FDCWeaponDef Fallback;
 		Fallback.Stats = Rifle;
 		return Fallback;
+	}
+	const FDCMusicTrack* FindMusicTrack(FName Id) const
+	{
+		return MusicTracks.FindByPredicate([Id](const FDCMusicTrack& D) { return D.Id == Id; });
+	}
+	const FDCMusicPhase* FindMusicPhase(EDCRunPhase Phase) const
+	{
+		return MusicPhases.FindByPredicate([Phase](const FDCMusicPhase& D) { return D.Phase == Phase; });
 	}
 	const FDCSoundRecipe* FindSoundRecipe(FName Id) const
 	{

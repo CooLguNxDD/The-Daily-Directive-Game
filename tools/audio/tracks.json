@@ -1,0 +1,29 @@
+{
+  "_doc": "R14 music source manifest: one row per generated track. gen_music.py renders each row with ACE-Step 1.5 on the local ComfyUI (AceMusic nodes), make_loop.py cuts a bar-aligned loop (Trim*, Bars) and writes Content/DC/Audio/Source/<Id>.wav. The game reads the imported S_Music_<Id> assets through Music= / +MusicTracks in Config/DefaultGame.ini; this file is a tool input only.",
+  "tracks": [
+    {
+      "Id": "MenuNoir",
+      "Caption": "film noir jazz, instrumental, slow smoky tenor saxophone melody, upright bass walking softly, brushed snare, sparse piano chords, rain on a window, late night city, melancholic, 1940s detective film score, warm and moody",
+      "Bpm": 72, "Key": "D Minor", "Seconds": 80, "Seed": 1401,
+      "TrimHeadSeconds": 6.0, "Bars": 16, "LoopFadeBars": 1, "TargetRmsDb": -20.0
+    },
+    {
+      "Id": "MenuNoirB",
+      "Caption": "film noir jazz ballad, instrumental, muted trumpet melody, slow vibraphone, upright bass, soft brushed drums, smoky lounge at 3am, neon rain, melancholic and elegant, detective film score",
+      "Bpm": 66, "Key": "G Minor", "Seconds": 80, "Seed": 1402,
+      "TrimHeadSeconds": 6.0, "Bars": 16, "LoopFadeBars": 1, "TargetRmsDb": -20.0
+    },
+    {
+      "Id": "Peaceful",
+      "Caption": "dark noir ambient underscore, instrumental, quiet and tense, low sustained strings, lonely muted trumpet, soft upright bass pulse, distant piano notes, rainy neon city at night, suspense film score, no drums",
+      "Bpm": 80, "Key": "D Minor", "Seconds": 80, "Seed": 1403,
+      "TrimHeadSeconds": 6.0, "Bars": 20, "LoopFadeBars": 1, "TargetRmsDb": -21.0
+    },
+    {
+      "Id": "Fighting",
+      "Caption": "intense noir action film score, instrumental, driving war drums and timpani, staccato low strings ostinato, aggressive brass stabs, pounding upright bass, dark big band jazz meets war, urgent, cinematic battle",
+      "Bpm": 120, "Key": "D Minor", "Seconds": 80, "Seed": 1404,
+      "TrimHeadSeconds": 6.0, "Bars": 32, "LoopFadeBars": 1, "TargetRmsDb": -18.0
+    }
+  ]
+}

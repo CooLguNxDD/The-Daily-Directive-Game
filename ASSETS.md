@@ -18,7 +18,7 @@ art) is in the game.
 | Orbital strikes, supply pods, enemies | spawned at run time | C++ actors from engine basic shapes |
 | `M_DCFlat` flat colour + glow material | `Content/DC/Materials/M_DCFlat.uasset` | built by `tools/content/build_content.py` |
 | `L_City` empty level | `Content/DC/Maps/L_City.umap` | built by `tools/content/build_content.py`; everything in it is spawned by C++ |
-| All sound and music | synthesised at start-up | `DCAudio.cpp` renders every cue from code recipes; no audio files |
+| All sound effects, and the fallback march music | synthesised at start-up | `DCAudio.cpp` renders every cue from code recipes and `+SoundRecipes` rows; the march plays only when no R14 music track loads |
 | HUD, menus, newspaper front page | drawn at run time | Canvas HUD (`DCHUD*.cpp`) and Slate (`DCMenu.cpp`) |
 
 ## Generated (R11, R25)
@@ -66,3 +66,18 @@ art) is in the game.
 
 ## Store packs
 None are used. Store packs, if added later, stay local-only under `Content/_LocalPacks/` and get a row here.
+
+## Generated music (R14)
+| Track | Path | Tool | Notes |
+|-------|------|------|-------|
+| MenuNoir (title menu set (with MenuNoirB), front page) | `Content/DC/Audio/S_Music_MenuNoir.uasset` (loop source `Content/DC/Audio/Source/MenuNoir.wav`) | local ComfyUI ACE-Step 1.5 turbo (`ace_step_1.5_turbo_aio`, built-in nodes) via `tools/audio/gen_music.py`, seed 1401, 72 bpm, D Minor, 2026-11-14 | prompt in `tools/audio/tracks.json`; instrumental; looped by `tools/audio/make_loop.py` (16 bars, 53.3 s, equal-power seam crossfade, -20.0 dB RMS); imported by `tools/content/build_content.py` |
+| MenuNoirB (title menu set, reel, final cut, vote) | `Content/DC/Audio/S_Music_MenuNoirB.uasset` (loop source `Content/DC/Audio/Source/MenuNoirB.wav`) | local ComfyUI ACE-Step 1.5 turbo (`ace_step_1.5_turbo_aio`, built-in nodes) via `tools/audio/gen_music.py`, seed 1402, 66 bpm, G Minor, 2026-11-14 | prompt in `tools/audio/tracks.json`; instrumental; looped by `tools/audio/make_loop.py` (16 bars, 58.2 s, equal-power seam crossfade, -20.0 dB RMS); imported by `tools/content/build_content.py` |
+| Peaceful (sector Calm layer, draft) | `Content/DC/Audio/S_Music_Peaceful.uasset` (loop source `Content/DC/Audio/Source/Peaceful.wav`) | local ComfyUI ACE-Step 1.5 turbo (`ace_step_1.5_turbo_aio`, built-in nodes) via `tools/audio/gen_music.py`, seed 1403, 80 bpm, D Minor, 2026-11-14 | prompt in `tools/audio/tracks.json`; instrumental; looped by `tools/audio/make_loop.py` (20 bars, 60.0 s, equal-power seam crossfade, -24.92 dB RMS); imported by `tools/content/build_content.py` |
+| Fighting (sector Fight layer (combat intensity >= 0.4)) | `Content/DC/Audio/S_Music_Fighting.uasset` (loop source `Content/DC/Audio/Source/Fighting.wav`) | local ComfyUI ACE-Step 1.5 turbo (`ace_step_1.5_turbo_aio`, built-in nodes) via `tools/audio/gen_music.py`, seed 1404, 120 bpm, D Minor, 2026-11-14 | prompt in `tools/audio/tracks.json`; instrumental; looped by `tools/audio/make_loop.py` (32 bars, 64.0 s, equal-power seam crossfade, -18.0 dB RMS); imported by `tools/content/build_content.py` |
+
+## Remixed sound effects (R13)
+| Cue | Path | Tool | Notes |
+|-----|------|------|-------|
+| Detonation | `Content/DC/Audio/S_Sfx_Detonation.uasset` (source `Content/DC/Audio/Source/Sfx_Detonation.wav`) | local ComfyUI EzAudio via `.claude/skills/cat-fleet/scripts/comfy.py audio` from `tools/audio/make_sfx.py`, seed 1341 (picked by envelope score from 1311, 1321, 1331, 1341), 2026-11-14 | prompt in `tools/audio/sfx.json`; 4.5 s, faded tail, loudest 300 ms at -13.0 dB (the synth original's level); used through `+CueMix` once the audio subsystem reads its Sound |
+| Collapse | `Content/DC/Audio/S_Sfx_Collapse.uasset` (source `Content/DC/Audio/Source/Sfx_Collapse.wav`) | local ComfyUI EzAudio via `.claude/skills/cat-fleet/scripts/comfy.py audio` from `tools/audio/make_sfx.py`, seed 1322 (picked by envelope score from 1312, 1322, 1332, 1342), 2026-11-14 | prompt in `tools/audio/sfx.json`; 4.5 s, faded tail, loudest 300 ms at -21.0 dB (the synth original's level); used through `+CueMix` once the audio subsystem reads its Sound |
+| Creak | `Content/DC/Audio/S_Sfx_Creak.uasset` (source `Content/DC/Audio/Source/Sfx_Creak.wav`) | local ComfyUI EzAudio via `.claude/skills/cat-fleet/scripts/comfy.py audio` from `tools/audio/make_sfx.py`, seed 1313 (picked by envelope score from 1313, 1323, 1333, 1343), 2026-11-14 | prompt in `tools/audio/sfx.json`; 2.0 s, faded tail, loudest 300 ms at -17.0 dB (the synth original's level); used through `+CueMix` once the audio subsystem reads its Sound |

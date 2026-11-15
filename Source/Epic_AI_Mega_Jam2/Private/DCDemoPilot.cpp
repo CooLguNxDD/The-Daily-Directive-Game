@@ -7,6 +7,7 @@
 #include "DCVoxelCity.h"
 #include "Rules/DCFactionRules.h"
 #include "DCAudio.h"
+#include "DCMusic.h"
 
 #include "DCBuilding.h"
 #include "DCEnemy.h"
@@ -1296,6 +1297,10 @@ void ADCDemoPilot::AddCueRoll()
 			Audio->StartEvidenceRecording(this);
 			Audio->SetMusicVolume(0.f);
 		}
+		if (UDCMusicSubsystem* Score = UDCMusicSubsystem::Get(this))
+		{
+			Score->SetDuck(0.f);
+		}
 		return true;
 	});
 	for (const FName& Cue : DCAudio::CueNames())
@@ -1310,6 +1315,10 @@ void ADCDemoPilot::AddCueRoll()
 		if (UDCAudioSubsystem* Audio = GetGameInstance()->GetSubsystem<UDCAudioSubsystem>())
 		{
 			Audio->SetMusicVolume(1.f);
+		}
+		if (UDCMusicSubsystem* Score = UDCMusicSubsystem::Get(this))
+		{
+			Score->SetDuck(1.f);
 		}
 		return true;
 	});
