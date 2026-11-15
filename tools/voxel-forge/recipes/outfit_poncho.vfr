@@ -1,17 +1,16 @@
-# Outfit body (R18): a rain poncho draped wider than the torso in three tiers, accent hem band and one glow stripe.
-# Torso inside x 1..7, y 2..10 (pivot 4 6 0 on spine_03, hung lower than the vest).
+# Outfit body (R18): a rain poncho that flares from sloped shoulders to a wide round hem (a cone over the torso),
+# accent hem band and front stripe, one glow stripe. Torso inside x 4..10, y 3..11 (pivot 7 7 0 on spine_03, hung
+# lower than the vest).
 name outfit_poncho
 grid 5
-size 9 12 12
+size 14 14 12
 slot cloth SwatchMain
 slot hem SwatchAccent
 slot glow SwatchGlow
-box 0 0 0 9 12 4 cloth
-box 0 1 4 8 11 8 cloth
-box 0 1 8 8 11 11 cloth
-box 1 3 11 7 9 12 cloth
-carve box 1 2 0 7 10 11
-carve box 2 4 11 6 8 12
-paint box 0 0 1 9 12 2 hem
-paint box 0 0 6 9 12 7 glow
-pivot 4 6 0
+cone 7 7 0 12 6.8 4.6 cloth
+carve box 4 3 0 10 11 11
+carve cyl 7 7 11 12 1.6
+paint box 0 0 0 14 14 1 hem
+paint box 6.5 0 0 7.5 14 12 hem
+paint box 0 0 4 14 14 5 glow
+pivot 7 7 0
