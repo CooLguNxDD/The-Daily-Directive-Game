@@ -214,9 +214,14 @@ namespace DCMenu
 		},
 		[&]()
 		{
-			Column->AddSlot().AutoHeight().HAlign(HAlign_Center)[Label(FString::Printf(TEXT("HOSTING. FRIENDS JOIN: %s (port %d)"), *LocalAddress(), Port), 20, Ink)];
+			// R26: an EOS host has no IP listener, so its lobby shows only the join code.
+			const UDCOnline* Online = UDCOnline::Get(PC);
+			if (!(Online && Online->IsCarrying()))
+			{
+				Column->AddSlot().AutoHeight().HAlign(HAlign_Center)[Label(FString::Printf(TEXT("HOSTING. FRIENDS JOIN: %s (port %d)"), *LocalAddress(), Port), 20, Ink)];
+			}
 			// R26: the online join code (or why the host fell back to the network).
-			if (const UDCOnline* Online = UDCOnline::Get(PC); Online && !Online->GetStatus().IsEmpty())
+			if (Online && !Online->GetStatus().IsEmpty())
 			{
 				const bool bCode = Online->GetState() == EDCOnlineState::Hosting && !Online->GetCode().IsEmpty() && Online->GetStatus().Contains(Online->GetCode());
 				Column->AddSlot().AutoHeight().HAlign(HAlign_Center).Padding(0, 6)[Label(Online->GetStatus(), bCode ? 30 : 15, Gold)];

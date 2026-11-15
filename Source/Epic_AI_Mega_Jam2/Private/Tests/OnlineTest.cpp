@@ -90,6 +90,10 @@ bool FDCOnlineSwitchTest::RunTest(const FString&)
 		}
 	}
 	TestTrue(TEXT("GameNetDriver defined"), bFound);
+	// The EOS SDK prints the product and client ids at info level: its log category keeps warnings and errors only.
+	FString SdkLog;
+	GConfig->GetString(TEXT("Core.Log"), TEXT("LogEOSSDK"), SdkLog, GEngineIni);
+	TestTrue(TEXT("LogEOSSDK capped at Warning (no ids in logs)"), SdkLog.Equals(TEXT("Warning"), ESearchCase::IgnoreCase) || SdkLog.Equals(TEXT("Error"), ESearchCase::IgnoreCase));
 	TestFalse(TEXT("transport states"), DCOnlineRules::UsesTransport(EDCOnlineState::Off) || DCOnlineRules::UsesTransport(EDCOnlineState::Failed) || DCOnlineRules::UsesTransport(EDCOnlineState::Ready));
 	TestTrue(TEXT("hosting carries"), DCOnlineRules::UsesTransport(EDCOnlineState::Hosting) && DCOnlineRules::UsesTransport(EDCOnlineState::Joining));
 	return true;
