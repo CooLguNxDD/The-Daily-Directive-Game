@@ -108,8 +108,28 @@ void ADCVoxelCity::SetChipProps(const FDCCityPlan& Plan)
 	}
 }
 
+void ADCVoxelCity::CheckChipHash()
+{
+	const ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>();
+	const double Real = FPlatformTime::Seconds();
+	if (GetNetMode() != NM_Client || !bFollowGameState || !GS || GS->VoxelOps.Num() == 0 || Real < ChipCheckNext || !IsOpQueueIdle() || bLoading)
+	{
+		return;
+	}
+	const FDCVoxelOp& Last = GS->VoxelOps.Last();
+	if (Last.Build != BuiltId || Last.Seq != AppliedSeq || Last.Seq == ChipCheckedSeq || Last.ResultHash == 0 || !DCVoxelOps::IsChipOnly(Last))
+	{
+		return;
+	}
+	ChipCheckedSeq = Last.Seq;
+	ChipCheckNext = Real + 1.0; // at most once a second (a whole-city hash, cached per chunk)
+	const uint32 Mine = Sector.Hash();
+	UE_LOG(LogTemp, Display, TEXT("DCCHIP check seq=%d chips=%d hash=%08x host=%08x %s"), Last.Seq, Last.Chips.Num(), Mine, Last.ResultHash, Mine == Last.ResultHash ? TEXT("match=host") : TEXT("MISMATCH=host"));
+}
+
 void ADCVoxelCity::TickChips()
 {
+	CheckChipHash();
 	const FDCVoxelTuning& Tn = UDCVoxelSettings::Get().Tuning;
 	if (!ChipsOn(Tn) || !HasAuthority() || GetNetMode() == NM_Client || BuiltSector == INDEX_NONE || bLoading || !bHostRests)
 	{
