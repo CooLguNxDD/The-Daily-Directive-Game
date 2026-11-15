@@ -118,17 +118,22 @@ void ADCGameMode::StartSmoke()
 {
 	// Packaged-build smoke (-dcsmoke, run by the gate's full tier on the archived exe): the run starts, HQ drops a
 	// laser on a tower, the tower collapses, then the game quits with one DCSMOKE line the gate checks.
+	// Building HP (human 16:32): one laser no longer fells a tower, so HQ lands four lasers on the lowest tower;
+	// the smoke then also proves the health ledger adding up to a fall in the packaged build.
 	FTimerHandle Strike, Verdict;
 	GetWorldTimerManager().SetTimer(Strike, FTimerDelegate::CreateWeakLambda(this, [this]
 	{
 		const FDCStratagemDef* Def = UDCTuning::Get().FindStratagem(TEXT("OrbitalLaser"));
+		ADCBuilding* Low = nullptr;
 		for (ADCBuilding* B : TActorRange<ADCBuilding>(GetWorld()))
 		{
-			if (Def && !B->IsCollapsed())
-			{
-				CallStrike(*Def, B->GetActorLocation(), nullptr);
-				break;
-			}
+			Low = !B->IsCollapsed() && (!Low || B->GetSpec().Floors < Low->GetSpec().Floors) ? B : Low;
+		}
+		for (int32 i = 0; Def && Low && i < 4; ++i)
+		{
+			FTimerHandle Each;
+			const FVector At = Low->GetActorLocation();
+			GetWorldTimerManager().SetTimer(Each, FTimerDelegate::CreateWeakLambda(this, [this, Def, At] { CallStrike(*Def, At, nullptr); }), 0.01f + i * 0.6f, false);
 		}
 	}), 2.f, false);
 	GetWorldTimerManager().SetTimer(Verdict, FTimerDelegate::CreateWeakLambda(this, [this]
@@ -143,7 +148,7 @@ void ADCGameMode::StartSmoke()
 		UE_LOG(LogTemp, Display, TEXT("DCSMOKE %s phase=%d towers=%d blasts=%d collapses=%d players=%d"), bPass ? TEXT("PASS") : TEXT("FAIL"),
 			GS ? static_cast<int32>(GS->Phase) : -1, Towers, GS ? GS->Blasts.Num() : 0, GS ? GS->Collapses.Num() : 0, Players().Num());
 		FGenericPlatformMisc::RequestExit(false);
-	}), 9.f, false);
+	}), 12.f, false);
 }
 
 TArray<ADCPlayerState*> ADCGameMode::Players() const
