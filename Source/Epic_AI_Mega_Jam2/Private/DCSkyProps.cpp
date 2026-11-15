@@ -53,6 +53,7 @@ void ADCEnvironment::BuildSkyProps(int32 RunSeed, int32 SectorIndex, float HalfC
 		}
 	}
 	UpdateSkyProps(0.f);
+	UE_LOG(LogTemp, Display, TEXT("DCSKY sector=%d meshes=%d first=%s"), SectorIndex, SkyMeshes.Num(), SkyMeshes.Num() > 0 ? *SkyMeshes[0]->GetComponentLocation().ToCompactString() : TEXT("none"));
 }
 
 void ADCEnvironment::UpdateSkyProps(float DeltaSeconds)

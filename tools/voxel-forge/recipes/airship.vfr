@@ -3,7 +3,7 @@
 grid 10
 size 60 20 22
 slot hull InkBlue
-slot screen NeonCyan
+slot screen NeonCyanEdge
 slot frame Ink
 slot lamp Lamp
 slot steel Steel

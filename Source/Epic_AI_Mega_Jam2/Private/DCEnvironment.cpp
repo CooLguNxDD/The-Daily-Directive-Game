@@ -327,6 +327,15 @@ void ADCEnvironment::UpdateWeather(float DeltaSeconds)
 		const FDCWeatherState Rolled = ADCVoxelCity::WeatherAt(GS->RunSeed, GS->SectorIndex, Fraction);
 		Now = Rolled.Arc.IsNone() ? Now : Rolled;
 	}
+	// Evidence (-dcweather=<Profile>): hold one weather profile for the whole run (look checks of rain, snow, ash).
+	static FString Forced;
+	static const bool bForced = FParse::Value(FCommandLine::Get(), TEXT("dcweather="), Forced);
+	const FDCWeatherProfile* Hold = bForced ? UDCTuning::Get().WeatherProfiles.FindByPredicate([](const FDCWeatherProfile& P) { return P.Id == FName(*Forced); }) : nullptr;
+	if (Hold)
+	{
+		Now.Blend = *Hold;
+		Now.From = Now.To = Hold->Id;
+	}
 	if (Now.From != Weather.From || Now.To != Weather.To)
 	{
 		UE_LOG(LogTemp, Display, TEXT("DCWEATHER sector=%d season=%s arc=%s %s -> %s"), GS ? GS->SectorIndex : -1, *Now.Season.ToString(), *Now.Arc.ToString(), *Now.From.ToString(), *Now.To.ToString());

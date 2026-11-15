@@ -3,7 +3,7 @@
 grid 10
 size 16 16 92
 slot body InkBlue
-slot win WindowDim
+slot win Window
 slot neon NeonCyanEdge
 slot steel Steel
 slot lamp Lamp
