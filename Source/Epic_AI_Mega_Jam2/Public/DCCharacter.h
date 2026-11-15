@@ -197,6 +197,8 @@ private:
 	UPROPERTY(Replicated) bool bCameraRaised = false;
 	UPROPERTY(Replicated) bool bSprinting = false;
 	UPROPERTY(Replicated) float Health = 100.f;
+	/** Host clock of the last damage taken (health regen waits RegenDelaySeconds after it). */
+	float HostHurtAt = -100.f;
 	UPROPERTY(ReplicatedUsing = OnRep_Downed) bool bDowned = false;
 	/** Last Frame (R21): a downed player keeps one shutter, spent or lost on revive. */
 	UPROPERTY(Replicated) bool bLastFrameReady = false;

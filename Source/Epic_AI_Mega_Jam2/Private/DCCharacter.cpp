@@ -1117,6 +1117,7 @@ void ADCCharacter::HostApplyHurt(float InAmount, const FVector& From)
 		return;
 	}
 	Health = FMath::Max(0.f, Health - Amount);
+	HostHurtAt = Now();
 	ClientHurt(From);
 	if (Health <= 0.f)
 	{
@@ -1458,6 +1459,15 @@ void ADCCharacter::Tick(float DeltaSeconds)
 	{
 		UpdateRevive(DeltaSeconds);
 		RecordPose();
+		// Health regen by crew size (data, default none): only standing players, only after a quiet spell.
+		const FDCMoveTuning& Mv = UDCTuning::Get().Move;
+		const AGameStateBase* RegenGS = GetWorld()->GetGameState();
+		const int32 Crew = RegenGS ? FMath::Max(1, RegenGS->PlayerArray.Num()) : 1;
+		const float Rate = Mv.RegenPerSecondByPlayers.Num() > 0 ? Mv.RegenPerSecondByPlayers[FMath::Min(Crew, Mv.RegenPerSecondByPlayers.Num()) - 1] : 0.f;
+		if (Rate > 0.f && !bDowned && Health < Mv.MaxHealth && Now() - HostHurtAt >= Mv.RegenDelaySeconds)
+		{
+			Health = FMath::Min(Mv.MaxHealth, Health + Rate * DeltaSeconds);
+		}
 	}
 	if (!IsLocallyControlled() || !GetController())
 	{

@@ -37,6 +37,10 @@ struct FDCMoveTuning
 	UPROPERTY(EditAnywhere, Config, Category = "Move") float ArmLength = 260.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Move") FVector ShoulderOffset = FVector(0.f, 65.f, 65.f);
 	UPROPERTY(EditAnywhere, Config, Category = "Move") float MaxHealth = 100.f;
+	/** Health regen (host): RegenPerSecondByPlayers[players - 1] health a second once RegenDelaySeconds pass without
+	 *  damage (0 = none; the human picks the solo value, 2026-11-14). Downed players never regen. */
+	UPROPERTY(EditAnywhere, Config, Category = "Move") float RegenDelaySeconds = 4.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Move") TArray<float> RegenPerSecondByPlayers = {0.f, 0.f, 0.f, 0.f};
 	/** Landing dip as a spring (Saltline, R9): accel = -x * Stiffness - v * Damping; dip capped at LandDipMaxCm. */
 	UPROPERTY(EditAnywhere, Config, Category = "Move") float LandDipStiffness = 150.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Move") float LandDipDamping = 17.f;
