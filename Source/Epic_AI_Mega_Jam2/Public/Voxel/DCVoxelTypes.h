@@ -423,7 +423,7 @@ struct FDCVoxelTuning
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 ChipBucketCm = 30;
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float ChipHp = 1.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float ChipPropHp = 1.f;
-	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 ChipStructureVoxels = 300;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 ChipStructureVoxels = 1000;
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float ChipStructureMinSeconds = 3.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float ChipStructureMaxBodyLoad = 0.6f;
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 ChipCrumbs = 3;
