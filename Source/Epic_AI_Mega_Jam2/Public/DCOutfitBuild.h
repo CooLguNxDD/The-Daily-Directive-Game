@@ -14,4 +14,6 @@ namespace DCOutfitBuild
 	EPIC_AI_MEGA_JAM2_API UProceduralMeshComponent* Apply(USkeletalMeshComponent* Mesh, const FDCOutfit& Outfit, TArray<TObjectPtr<UProceduralMeshComponent>>& Out);
 	/** Decodes a share code against the shipped data (default outfit on any error). */
 	EPIC_AI_MEGA_JAM2_API FDCOutfit FromCode(const FString& Code);
+	/** Decodes untrusted text against the shipped slots, parts, swatches and glows (DCOutfit::Decode). */
+	EPIC_AI_MEGA_JAM2_API bool Decode(const FString& Code, FDCOutfit& Out, FString& Error);
 }

@@ -1,5 +1,7 @@
 #include "DCDemoPilot.h"
 #include "Camera/CameraActor.h"
+#include "Camera/PlayerCameraManager.h"
+#include "GameFramework/CharacterMovementComponent.h"
 #include "DCObjective.h"
 #include "DCUnits.h"
 #include "DCVoxelCity.h"
@@ -642,6 +644,59 @@ void ADCDemoPilot::SideCam(bool bOn)
 	}
 }
 
+void ADCDemoPilot::AddAim()
+{
+	// R16 evidence (-dcaim): rifle out, hold the real Aim action: frames hip vs aimed (zoom, tight crosshair), aim up and
+	// down from the side camera (the aim pose follows the pitch), fire while aimed; DCAIM lines with FOV and state.
+	Add(0.f, [this] { const ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>(); return GS && GS->Phase == EDCRunPhase::Sector; }, 120.f);
+	Add(0.6f, [this] { Tap(TEXT("Slot1")); return true; });
+	Add(0.8f, [this] { Shot(TEXT("aim_hip")); LogAim(TEXT("hip")); Press(TEXT("Aim")); return true; });
+	Add(0.5f, [this] { Shot(TEXT("aim_in")); LogAim(TEXT("aimed")); return true; });
+	for (const float Up : {600.f, -500.f})
+	{
+		Add(0.4f, [this, Up]
+		{
+			const APawn* Me = GetWorld()->GetFirstPlayerController() ? GetWorld()->GetFirstPlayerController()->GetPawn() : nullptr;
+			if (Me)
+			{
+				AimAt(Me->GetActorLocation() + Me->GetActorForwardVector() * 1000.f + FVector(0, 0, Up));
+			}
+			return true;
+		});
+		Add(0.5f, [this, Up] { Shot(Up > 0.f ? TEXT("aim_up") : TEXT("aim_down")); LogAim(Up > 0.f ? TEXT("up") : TEXT("down")); SideCam(true); return true; });
+		Add(0.3f, [this, Up] { SideCam(true); Shot(Up > 0.f ? TEXT("aim_up_side") : TEXT("aim_down_side")); return true; });
+		Add(0.1f, [this] { SideCam(false); return true; });
+	}
+	for (int32 i = 0; i < 6; ++i)
+	{
+		Add(0.15f, [this, i] { Tap(TEXT("Fire")); if (i == 2) { Shot(TEXT("aim_fire")); } return true; });
+	}
+	Add(0.3f, [this] { Release(TEXT("Aim")); return true; });
+	Add(0.5f, [this] { Shot(TEXT("aim_out")); LogAim(TEXT("released")); return true; });
+}
+
+void ADCDemoPilot::LogAim(const TCHAR* Tag)
+{
+	const APlayerController* PC = GetWorld()->GetFirstPlayerController();
+	const ADCCharacter* Me = PC ? Cast<ADCCharacter>(PC->GetPawn()) : nullptr;
+	if (Me && PC->PlayerCameraManager)
+	{
+		UE_LOG(LogDCDemo, Display, TEXT("DCAIM %s aiming=%d fov=%.1f pitch=%.1f speed=%.0f"), Tag, Me->IsRifleAiming() ? 1 : 0, PC->PlayerCameraManager->GetFOVAngle(), Me->GetAimPitch(), Me->GetCharacterMovement() ? Me->GetCharacterMovement()->MaxWalkSpeed : 0.f);
+	}
+}
+
+void ADCDemoPilot::AddSwarmed()
+{
+	// R17 evidence (-dcswarmed): after the crew grace the pawn stands still in the street for 30 s while units close in
+	// and hit it; DCSHAKE lines (hits per second vs hit shakes and flinches) and a frame every 3 s.
+	Add(0.f, [this] { const ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>(); return GS && GS->Phase == EDCRunPhase::Sector; }, 120.f);
+	Add(UDCTuning::Get().FactionMix.CrewGraceSeconds + 2.f, [this] { Tap(TEXT("Slot1")); return true; });
+	for (int32 i = 0; i < 10; ++i)
+	{
+		Add(3.f, [this, i] { Shot(FString::Printf(TEXT("swarmed_%02d"), i * 3)); return true; });
+	}
+}
+
 void ADCDemoPilot::AddRunFire()
 {
 	// R10 evidence (-dcrunfire): rifle out, sprint and strafe with the real Move/Sprint actions while tapping Fire;
@@ -931,7 +986,7 @@ void ADCDemoPilot::AddObjectiveRun(const FString& S)
 			ObjCheckReal = Real + 1.5;
 		}
 		return false;
-	}, 200.f);
+	}, 900.f); // the step ends with the sector (bOver); finalobj-Destroy-s777-0ad4bc5 timed out at 200 s with the extract open
 	Add(0.5f, [this, S] { Release(TEXT("Move")); Release(TEXT("Sprint")); Shot(S + TEXT("_obj_end")); return true; });
 }
 
@@ -1337,6 +1392,14 @@ void ADCDemoPilot::BuildScript()
 		if (Sector == 0 && FParse::Param(FCommandLine::Get(), TEXT("dcrunfire")))
 		{
 			AddRunFire();
+		}
+		if (Sector == 0 && FParse::Param(FCommandLine::Get(), TEXT("dcaim")))
+		{
+			AddAim();
+		}
+		if (Sector == 0 && FParse::Param(FCommandLine::Get(), TEXT("dcswarmed")))
+		{
+			AddSwarmed();
 		}
 		if (Sector == 0 && FParse::Param(FCommandLine::Get(), TEXT("dcindoors")))
 		{

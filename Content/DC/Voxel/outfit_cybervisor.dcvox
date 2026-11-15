@@ -1,0 +1,10 @@
+dcvox 1
+name outfit_cybervisor
+grid_cm 5
+size 7 6 7
+pivot 3 3 0
+slots Steel SwatchGlow SwatchAccent
+solid 37
+rle
+79*0 2*3 4*0 3*1 3*2 6*0 1*2 6*0 1*2 6*0 1*2 6*0 1*2 1*0 1*1 2*3 3*2 1*0 6*1 6*0 1*1 6*0 1*1 6*0
+1*1 6*0 1*1 1*0 1*1 2*3 3*1 37*0 1*1 41*0 1*1 41*0 1*2 4*0

@@ -39,6 +39,9 @@ public:
 	UPROPERTY(EditAnywhere, Config, Category = "Fx") TArray<FDCPropLightDef> PropLights;
 	/** Vertex-colour material for voxel meshes (BaseColor = sRGB vertex colour, Emissive = alpha glow). */
 	UPROPERTY(EditAnywhere, Config, Category = "City") FSoftObjectPath VoxelMaterial = FSoftObjectPath(TEXT("/Game/DC/Materials/M_DCVoxel.M_DCVoxel"));
+	/** R15: masked twins used while blocks and crumbs clear away (noise dissolve with a warm edge; tools/content/build_content.py). */
+	UPROPERTY(EditAnywhere, Config, Category = "City") FSoftObjectPath VoxelDissolveMaterial = FSoftObjectPath(TEXT("/Game/DC/Materials/M_DCVoxelDissolve.M_DCVoxelDissolve"));
+	UPROPERTY(EditAnywhere, Config, Category = "City") FSoftObjectPath FlatDissolveMaterial = FSoftObjectPath(TEXT("/Game/DC/Materials/M_DCFlatDissolve.M_DCFlatDissolve"));
 
 	bool IsVoxelCity() const { return Mode == TEXT("Voxel") && Recipes.Num() > 0 && Palette.Num() > 0; }
 	const FDCVoxelSectorLayout& SectorLayout(int32 Sector) const;

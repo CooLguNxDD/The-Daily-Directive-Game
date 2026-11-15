@@ -1,0 +1,23 @@
+# Outfit body (R18): a puffy bomber jacket, rounded corners and sloped shoulders, accent U collar and ribbed waistband,
+# steel zip, a glowing sleeve patch. Torso frame as outfit_vest (pivot 4 5 0 on spine_03), one voxel bulkier.
+name outfit_bomber
+grid 5
+size 9 10 12
+slot jacket SwatchMain
+slot rib SwatchAccent
+slot zip Steel
+slot patch SwatchGlow
+box 0 0 0 9 10 11 jacket
+carve box 0 0 0 1 1 11
+carve box 8 0 0 9 1 11
+carve box 0 9 0 1 10 11
+carve box 8 9 0 9 10 11
+carve box 0 0 10 9 1 11
+carve box 0 9 10 9 10 11
+carve box 1 1 0 8 9 10
+box 1 2 10 7 8 12 rib
+carve box 2 3 10 7 7 12
+paint box 0 0 0 9 10 2 rib
+paint box 8 4 2 9 6 10 zip
+paint box 3 0 7 6 1 9 patch
+pivot 4 5 0

@@ -51,6 +51,9 @@ private:
 	void AddLineupShot();
 	void AddSupplyCall();
 	void AddRunFire();
+	void AddAim();
+	void LogAim(const TCHAR* Tag);
+	void AddSwarmed();
 	void AddIndoors();
 	void SideCam(bool bOn);
 	UPROPERTY() TObjectPtr<class ACameraActor> EvidenceCam;

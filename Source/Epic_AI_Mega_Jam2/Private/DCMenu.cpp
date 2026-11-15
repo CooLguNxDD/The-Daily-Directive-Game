@@ -122,8 +122,13 @@ namespace DCMenu
 		TSharedRef<SVerticalBox> Column = SNew(SVerticalBox);
 		Column->AddSlot().AutoHeight().HAlign(HAlign_Center)[Label(TEXT("DIRECTOR'S CUT"), 64, Ink)];
 		Column->AddSlot().AutoHeight().HAlign(HAlign_Center)[Label(TEXT("FRONT PAGE"), 40, Ink)];
-		Column->AddSlot().AutoHeight().HAlign(HAlign_Center).Padding(0, 8, 0, 24)
-			[Label(TEXT("Call the strike. Run toward it. Snap the collapse at peak bloom.\nYour photos buy bigger bombs. The best one makes the front page."), 16, Ink)];
+		// The builder (mode 3, R18) needs the height for its rows: no tagline and no key hints there.
+		const bool bBuilderPage = Mode == 3;
+		if (!bBuilderPage)
+		{
+			Column->AddSlot().AutoHeight().HAlign(HAlign_Center).Padding(0, 8, 0, 24)
+				[Label(TEXT("Call the strike. Run toward it. Snap the collapse at peak bloom.\nYour photos buy bigger bombs. The best one makes the front page."), 16, Ink)];
+		}
 
 		const uint16 Port = static_cast<uint16>(UDCTuning::Get().Run.Port);
 		// One builder per menu mode, picked by index.
@@ -178,15 +183,16 @@ namespace DCMenu
 		},
 		[&]()
 		{
-			// Photographer builder (R23): one row per slot, two swatch rows, save slots, share code in and out.
+			// Photographer builder (R23, R18): one row per slot, swatch and glow rows, a preset row, save slots and a
+			// random button, share code in and out.
 			const UDCTuning& T = UDCTuning::Get();
 			const FDCOutfit& O = PC->GetBuilderOutfit();
 			auto Row = [&](const FString& Name, TFunction<void(int32)> Step)
 			{
 				return SNew(SHorizontalBox)
-					+ SHorizontalBox::Slot().AutoWidth()[SNew(SBox).WidthOverride(70.f).HeightOverride(52.f)[Button(TEXT("<"), [Step]() { Step(-1); }, Gold)]]
-					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[SNew(SBox).WidthOverride(380.f)[Label(Name, 20, Ink)]]
-					+ SHorizontalBox::Slot().AutoWidth()[SNew(SBox).WidthOverride(70.f).HeightOverride(52.f)[Button(TEXT(">"), [Step]() { Step(1); }, Gold)]];
+					+ SHorizontalBox::Slot().AutoWidth()[SNew(SBox).WidthOverride(70.f).HeightOverride(46.f)[Button(TEXT("<"), [Step]() { Step(-1); }, Gold)]]
+					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[SNew(SBox).WidthOverride(400.f)[Label(Name, 19, Ink)]]
+					+ SHorizontalBox::Slot().AutoWidth()[SNew(SBox).WidthOverride(70.f).HeightOverride(46.f)[Button(TEXT(">"), [Step]() { Step(1); }, Gold)]];
 			};
 			auto Act = [Weak](TFunction<void(ADCPlayerController&)> Fn)
 			{
@@ -210,12 +216,17 @@ namespace DCMenu
 			auto SwatchName = [&T](uint8 I) { return T.OutfitSwatches.IsValidIndex(I) ? T.OutfitSwatches[I].Id.ToString().ToUpper() : FString(); };
 			Column->AddSlot().AutoHeight().HAlign(HAlign_Center)[Row(TEXT("MAIN: ") + SwatchName(O.Main), [Act](int32 Step) { Act([Step](ADCPlayerController& P) { P.BuilderSwatch(true, Step); })(); })];
 			Column->AddSlot().AutoHeight().HAlign(HAlign_Center)[Row(TEXT("ACCENT: ") + SwatchName(O.Accent), [Act](int32 Step) { Act([Step](ADCPlayerController& P) { P.BuilderSwatch(false, Step); })(); })];
+			const FString GlowName = T.OutfitGlows.IsValidIndex(O.Glow) ? T.OutfitGlows[O.Glow].Id.ToString().ToUpper() : FString();
+			Column->AddSlot().AutoHeight().HAlign(HAlign_Center)[Row(TEXT("GLOW: ") + GlowName, [Act](int32 Step) { Act([Step](ADCPlayerController& P) { P.BuilderGlow(Step); })(); })];
+			const FString PresetName = PC->GetBuilderPresetName().IsEmpty() ? FString(TEXT("PICK A LOOK")) : PC->GetBuilderPresetName().ToUpper();
+			Column->AddSlot().AutoHeight().HAlign(HAlign_Center)[Row(TEXT("PRESET: ") + PresetName, [Act](int32 Step) { Act([Step](ADCPlayerController& P) { P.BuilderPreset(Step); })(); })];
 			TSharedRef<SHorizontalBox> Slots = SNew(SHorizontalBox);
 			for (int32 i = 0; i < T.Run.CharacterSlots; ++i)
 			{
-				Slots->AddSlot().AutoWidth().Padding(4, 0)[SNew(SBox).WidthOverride(130.f)[Button(FString::Printf(TEXT("SLOT %d"), i + 1),
+				Slots->AddSlot().AutoWidth().Padding(4, 0)[SNew(SBox).WidthOverride(120.f)[Button(FString::Printf(TEXT("SLOT %d"), i + 1),
 					Act([i](ADCPlayerController& P) { P.BuilderSelectSlot(i); }), i == PC->GetBuilderSlot() ? Ink : Gold)]];
 			}
+			Slots->AddSlot().AutoWidth().Padding(4, 0)[SNew(SBox).WidthOverride(150.f)[Button(TEXT("RANDOM"), Act([](ADCPlayerController& P) { P.BuilderRandom(); }))]];
 			Column->AddSlot().AutoHeight().HAlign(HAlign_Center).Padding(0, 8, 0, 0)[Slots];
 			const FString Code = DCOutfit::Encode(O);
 			TSharedRef<SEditableTextBox> CodeBox = SNew(SEditableTextBox).Text(FText::FromString(Code)).Font(Font(20, "Regular")).Justification(ETextJustify::Center);
@@ -265,7 +276,7 @@ namespace DCMenu
 		}};
 		Modes[FMath::Min<int32>(Mode, UE_ARRAY_COUNT(Modes) - 1)]();
 		Column->AddSlot().AutoHeight().HAlign(HAlign_Center).Padding(0, 20, 0, 0)
-			[Label(FString::Printf(TEXT("WASD move  %s sprint  %s jump  %s crouch  |  1 rifle  2 strike  3 camera\n%s raise camera  %s shoot / call / snap  |  %s revive  [ ] sensitivity"), *PC->KeyFor(TEXT("Sprint")).ToUpper(), *PC->KeyFor(TEXT("Jump")).ToUpper(), *PC->KeyFor(TEXT("Crouch")).ToUpper(), *PC->KeyFor(TEXT("Aim")).ToUpper(), *PC->KeyFor(TEXT("Fire")).ToUpper(), *PC->KeyFor(TEXT("Interact")).ToUpper()), 12, Ink)]; // the saved bindings
+			[bBuilderPage ? SNullWidget::NullWidget : Label(FString::Printf(TEXT("WASD move  %s sprint  %s jump  %s crouch  |  1 rifle  2 strike  3 camera\n%s raise camera  %s shoot / call / snap  |  %s revive  [ ] sensitivity"), *PC->KeyFor(TEXT("Sprint")).ToUpper(), *PC->KeyFor(TEXT("Jump")).ToUpper(), *PC->KeyFor(TEXT("Crouch")).ToUpper(), *PC->KeyFor(TEXT("Aim")).ToUpper(), *PC->KeyFor(TEXT("Fire")).ToUpper(), *PC->KeyFor(TEXT("Interact")).ToUpper()), 12, Ink)]; // the saved bindings
 
 		// Key art fills the screen (generated, R11); the menu sits on its empty left third, so the first ten seconds
 		// show the game: a beam, a toppling voxel tower, a photographer (R7).

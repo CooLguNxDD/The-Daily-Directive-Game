@@ -213,6 +213,9 @@ struct FDCVoxelTuning
 	/** Game-thread milliseconds per frame for cell uploads (merge + mesh section); UploadsPerFrame stays a cap. At
 	 *  least one cell uploads per frame. A strike's commit frame uploads only that op's cells, outside this budget. */
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float UploadBudgetMs = 4.f;
+	// R13 (advisor a-22): chunk re-meshes after an op run on the background task pool so the render thread's own tasks
+	// do not queue behind hundreds of mesher jobs (render stalls of 55-125 ms after a strike). Builds stay foreground.
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") bool bOpMeshInBackground = true;
 	/** Falling-piece mesh sections created per frame stop after this many ms (advisor CP26 #5: ~50 fragment sections
 	 *  in one frame cost 25-35 ms); the rest wait for the next frame, a piece shows once all its fragments are in. */
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float PieceUploadBudgetMs = 4.f;
@@ -318,6 +321,13 @@ struct FDCVoxelTuning
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float CrumbBounce = 0.3f;
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float CrumbLifeSeconds = 7.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float CrumbShrinkSeconds = 1.2f;
+	/** R15 block clear look: rested pieces (over PhysicsFadeSeconds) and crumbs (over CrumbShrinkSeconds) dissolve in a
+	 *  world-space noise with a faint warm edge instead of shrinking to a point. Edge colour, glow, width and noise size. */
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") FLinearColor DissolveEdgeColor = FLinearColor(1.f, 0.45f, 0.15f, 1.f);
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float DissolveEdgeGlow = 3.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float DissolveEdge = 0.12f;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float DissolveNoiseCm = 18.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float CrumbDissolveNoiseCm = 4.f;
 	/** Crumbs keep this share of their voxel's glow (lit windows sparkle as they fall, never cream confetti). */
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float CrumbGlowScale = 0.35f;
 	/** Crumbs start at most CrumbSpawnPerFrame per frame (the rest queue), and a break throws (1 - CrumbLoadCut x body

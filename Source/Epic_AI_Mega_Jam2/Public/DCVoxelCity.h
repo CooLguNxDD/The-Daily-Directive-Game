@@ -165,8 +165,16 @@ private:
 		/** When it joined the list (-1 = not seen yet): a flying stray postpones its fade until it nears the street,
 		 *  at most PhysicsStrayFlySeconds (CP40 major: strays faded mid-flight). */
 		float Added = -1.f;
+		/** R15: switched to the dissolve material (custom primitive data 0 = amount). */
+		bool bDissolving = false;
 	};
 	TArray<FDCFading> Fading;
+	/** R15: swap a fading piece (and its attached leaves) to the dissolve twin of its voxel material; false when the
+	 *  dissolve material is not built (the fade falls back to the shrink). */
+	bool StartDissolve(UPrimitiveComponent* Mesh);
+	void SetDissolve(UPrimitiveComponent* Mesh, float Amount);
+	UMaterialInterface* DissolveMaterialFor(int32 VoxelCm);
+	UPROPERTY() TMap<int32, TObjectPtr<class UMaterialInstanceDynamic>> DissolveMIDs;
 	/** -dccollapsecam evidence camera (step -1 = off). */
 	void TickCollapseCam();
 	int32 CollapseCamStep = -1;
@@ -299,6 +307,7 @@ private:
 	FDCVoxelSector Sector;
 	FDCVoxelOpContext OpCtx;
 	TArray<FColor> Colors;
+	TSharedPtr<const TArray<FColor>> SharedColors; // one immutable copy of Colors the mesher jobs share (no copy per job)
 	int32 BuiltSector = INDEX_NONE;
 	int32 BuiltId = 0;
 	int32 BuiltSeed = 0;

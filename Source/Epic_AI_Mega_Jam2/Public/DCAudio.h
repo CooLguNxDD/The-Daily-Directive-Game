@@ -4,6 +4,8 @@
 
 #include "CoreMinimal.h"
 #include "Subsystems/GameInstanceSubsystem.h"
+#include "Containers/Ticker.h"
+#include "Rules/DCSoundQueue.h"
 #include "DCAudio.generated.h"
 
 class USoundAttenuation;
@@ -16,6 +18,7 @@ class EPIC_AI_MEGA_JAM2_API UDCAudioSubsystem : public UGameInstanceSubsystem
 
 public:
 	virtual void Initialize(FSubsystemCollectionBase& Collection) override;
+	virtual void Deinitialize() override;
 
 	void PlayAt(const UObject* WorldContext, FName Cue, const FVector& Location, float Volume, float Pitch);
 	void Play2D(const UObject* WorldContext, FName Cue, float Volume, float Pitch);
@@ -37,6 +40,20 @@ public:
 
 private:
 	class USoundWaveProcedural* MakeWave(FName Cue) const;
+	/** R13: a pooled wave for the cue whose last play has ended (refilled), a new pool entry, or null when the pool is full. */
+	class USoundWaveProcedural* AcquireWave(FName Cue, float Pitch, int32 Priority);
+	/** R13: once per frame: merge, budget and start the queued plays (DCAUDIO lines log what was dropped). */
+	bool FlushQueue(float DeltaSeconds);
+	void Start(const FDCSoundRequest& R);
+
+	TArray<FDCSoundRequest> Queue;
+	TArray<FDCSoundVoice> Voices;
+	UPROPERTY() TArray<TObjectPtr<class USoundWaveProcedural>> PoolWaves;
+	TArray<double> PoolFreeAt;
+	TMap<FName, TArray<int32>> PoolOf;
+	FTSTicker::FDelegateHandle FlushHandle;
+	int32 Dropped = 0;
+	int32 MergedCount = 0;
 
 	TMap<FName, TSharedPtr<TArray<uint8>>> Bank;
 	UPROPERTY() TObjectPtr<USoundAttenuation> Attenuation;

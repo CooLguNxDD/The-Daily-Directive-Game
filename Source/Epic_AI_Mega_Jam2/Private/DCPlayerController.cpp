@@ -171,7 +171,7 @@ void ADCPlayerController::ServerSetOutfit_Implementation(const FString& Code)
 	const UDCTuning& T = UDCTuning::Get();
 	FDCOutfit Outfit;
 	FString Error;
-	if (!DCOutfit::Decode(Code, T.OutfitSlots, T.OutfitParts, T.OutfitSwatches.Num(), Outfit, Error))
+	if (!DCOutfitBuild::Decode(Code, Outfit, Error))
 	{
 		UE_LOG(LogTemp, Display, TEXT("DCOUTFIT rejected '%s': %s (default kept)"), *Code.Left(40), *Error);
 		Outfit = DCOutfit::Default(T.OutfitSlots);
@@ -364,18 +364,63 @@ void ADCPlayerController::BuilderCycle(int32 SlotIndex, int32 Step)
 
 void ADCPlayerController::BuilderSwatch(bool bMain, int32 Step)
 {
-	const int32 Count = FMath::Max(UDCTuning::Get().OutfitSwatches.Num(), 1);
 	uint8& Which = bMain ? BuilderOutfit.Main : BuilderOutfit.Accent;
-	Which = static_cast<uint8>(((Which + Step) % Count + Count) % Count);
+	Which = DCOutfit::Wrap(Which, Step, UDCTuning::Get().OutfitSwatches.Num());
 	BuilderChanged(TEXT(""));
+}
+
+void ADCPlayerController::BuilderGlow(int32 Step)
+{
+	BuilderOutfit.Glow = DCOutfit::Wrap(BuilderOutfit.Glow, Step, UDCTuning::Get().OutfitGlows.Num());
+	BuilderChanged(TEXT(""));
+}
+
+void ADCPlayerController::BuilderPreset(int32 Step)
+{
+	const UDCTuning& T = UDCTuning::Get();
+	if (T.OutfitPresets.IsEmpty())
+	{
+		return;
+	}
+	// The first press lands on the first (or last) preset; later presses step from the one worn.
+	if (BuilderPresetIndex < 0)
+	{
+		BuilderPresetIndex = Step > 0 ? -1 : 0;
+	}
+	BuilderPresetIndex = DCOutfit::Wrap(BuilderPresetIndex, Step, T.OutfitPresets.Num());
+	const FDCOutfitPreset& Preset = T.OutfitPresets[BuilderPresetIndex];
+	FDCOutfit Worn;
+	FString Error;
+	if (!DCOutfit::FromPreset(Preset, T.OutfitSlots, T.OutfitParts, T.OutfitSwatches, T.OutfitGlows, Worn, Error))
+	{
+		BuilderMessage = Error.ToUpper();
+		MenuMode = 254;
+		return;
+	}
+	BuilderOutfit = Worn;
+	BuilderChanged(FString::Printf(TEXT("PRESET: %s"), *Preset.DisplayName.ToString().ToUpper()));
+}
+
+void ADCPlayerController::BuilderRandom()
+{
+	const UDCTuning& T = UDCTuning::Get();
+	FRandomStream Rng(static_cast<int32>(FPlatformTime::Cycles()));
+	BuilderOutfit = DCOutfit::Random(Rng, T.OutfitSlots, T.OutfitParts, T.OutfitSwatches.Num(), T.OutfitGlows.Num());
+	BuilderPresetIndex = -1;
+	BuilderChanged(TEXT("RANDOM PHOTOGRAPHER"));
+}
+
+FString ADCPlayerController::GetBuilderPresetName() const
+{
+	const TArray<FDCOutfitPreset>& Presets = UDCTuning::Get().OutfitPresets;
+	return Presets.IsValidIndex(BuilderPresetIndex) ? Presets[BuilderPresetIndex].DisplayName.ToString() : FString();
 }
 
 void ADCPlayerController::BuilderImport(const FString& Code)
 {
-	const UDCTuning& T = UDCTuning::Get();
 	FDCOutfit Loaded;
 	FString Error;
-	if (!DCOutfit::Decode(Code, T.OutfitSlots, T.OutfitParts, T.OutfitSwatches.Num(), Loaded, Error))
+	if (!DCOutfitBuild::Decode(Code, Loaded, Error))
 	{
 		BuilderMessage = FString::Printf(TEXT("CODE NOT LOADED: %s"), *Error.ToUpper());
 		MenuMode = 254;
@@ -562,7 +607,7 @@ void ADCPlayerController::TickBuilderFlow()
 		{24.0, []() { FGenericPlatformMisc::RequestExit(false); }},
 	};
 	// Shots 6 s after opening: an editor -game run compiles the voxel preview shaders on demand first.
-	const TArray<TPair<double, TFunction<void()>>> BuilderSteps = {
+	TArray<TPair<double, TFunction<void()>>> BuilderSteps = {
 		{5.0, [this]() { OpenBuilder(); }},
 		{11.0, [&]() { Shot(TEXT("01_builder_default.png")); }},
 		{12.5, [&]() { Shot(TEXT("02_builder_turned.png")); }},
@@ -570,34 +615,75 @@ void ADCPlayerController::TickBuilderFlow()
 		{14.5, [&]() { Shot(TEXT("03_builder_helmet_trench.png")); }},
 		{15.0, [this]() { BuilderCycle(2, 1); BuilderCycle(3, 1); BuilderSwatch(true, 1); }},
 		{16.5, [&]() { Shot(TEXT("04_builder_filmbelt_boxcam.png")); }},
-		{17.0, [this]()
-		{
-			// A friend's photographer: another valid outfit (every slot cycled, other swatches), encoded and pasted back.
-			const UDCTuning& T = UDCTuning::Get();
-			FDCOutfit Friend = DCOutfit::Default(T.OutfitSlots);
-			for (int32 Slot = 0; Slot < T.OutfitSlots.Num(); ++Slot)
-			{
-				DCOutfit::Cycle(Friend, Slot, Slot + 1, T.OutfitSlots, T.OutfitParts);
-			}
-			const int32 Swatches = FMath::Max(T.OutfitSwatches.Num(), 1);
-			Friend.Main = static_cast<uint8>((BuilderOutfit.Main + 2) % Swatches);
-			Friend.Accent = static_cast<uint8>((BuilderOutfit.Accent + 3) % Swatches);
-			const FString Code = DCOutfit::Encode(Friend);
-			UE_LOG(LogTemp, Display, TEXT("DCBUILDERFLOW friend code %s"), *Code);
-			BuilderImport(Code);
-			UE_LOG(LogTemp, Display, TEXT("DCBUILDERFLOW after import: %s (%s)"), *DCOutfit::Encode(BuilderOutfit), *BuilderMessage);
-		}},
-		{18.5, [&]() { Shot(TEXT("05_builder_code_loaded.png")); }},
-		{19.0, [this]() { BuilderImport(TEXT("DC1-NOT-A-REAL-CODE")); }},
-		{19.8, [&]() { Shot(TEXT("06_builder_bad_code_rejected.png")); }},
-		{20.2, [this]() { BuilderExportCard(); UE_LOG(LogTemp, Display, TEXT("DCBUILDERFLOW card: %s"), *BuilderMessage); }},
-		{21.0, [&]() { Shot(TEXT("07_builder_id_card_exported.png")); }},
-		// R5 parity: the same outfit in play (DCOUTFIT ... wears <code> matches the card's code).
-		{21.5, [this]() { CloseBuilder(); }},
-		{22.5, [this]() { MenuSolo(); }},
-		{33.0, [&]() { Shot(TEXT("08_same_outfit_in_play.png")); }},
-		{34.0, []() { FGenericPlatformMisc::RequestExit(false); }},
 	};
+	// R18 evidence, from the data: every part of every slot worn (a frame each), every preset, two random outfits, the
+	// glow colours, and an old DC1 code loading the same outfit.
+	double At = 16.5;
+	auto Then = [&](double Gap, TFunction<void()> Fn) { At += Gap; BuilderSteps.Add({At, MoveTemp(Fn)}); };
+	const UDCTuning& Tune = UDCTuning::Get();
+	for (int32 Slot = 0; Slot < Tune.OutfitSlots.Num(); ++Slot)
+	{
+		const TArray<const FDCOutfitPart*> Parts = DCOutfit::PartsOf(Tune.OutfitSlots[Slot], Tune.OutfitParts);
+		for (int32 i = 0; i < Parts.Num(); ++i)
+		{
+			const FString Name = FString::Printf(TEXT("r18_%s_%02d_%s.png"), *Tune.OutfitSlots[Slot].ToString().ToLower(), i, *Parts[i]->Id.ToString().ToLower());
+			Then(0.4, [this, Slot, i]() { BuilderOutfit.Parts[Slot] = static_cast<uint8>(i); BuilderOutfit.Glow = static_cast<uint8>(Slot % FMath::Max(UDCTuning::Get().OutfitGlows.Num(), 1)); BuilderChanged(TEXT("")); });
+			Then(1.2, [&, Name]() { Shot(Name); });
+		}
+	}
+	for (int32 i = 0; i < Tune.OutfitPresets.Num(); ++i)
+	{
+		const FString Name = FString::Printf(TEXT("r18_preset_%s.png"), *Tune.OutfitPresets[i].Id.ToString().ToLower());
+		Then(0.4, [this]() { BuilderPreset(1); UE_LOG(LogTemp, Display, TEXT("DCBUILDERFLOW preset %s: %s"), *GetBuilderPresetName(), *DCOutfit::Encode(BuilderOutfit)); });
+		Then(1.2, [&, Name]() { Shot(Name); });
+	}
+	for (int32 i = 0; i < 2; ++i)
+	{
+		const FString Name = FString::Printf(TEXT("r18_random_%d.png"), i + 1);
+		Then(0.4, [this]() { BuilderRandom(); UE_LOG(LogTemp, Display, TEXT("DCBUILDERFLOW random: %s"), *DCOutfit::Encode(BuilderOutfit)); });
+		Then(1.2, [&, Name]() { Shot(Name); });
+	}
+	for (int32 i = 0; i < Tune.OutfitGlows.Num(); ++i)
+	{
+		const FString Name = FString::Printf(TEXT("r18_glow_%s.png"), *Tune.OutfitGlows[i].Id.ToString().ToLower());
+		Then(0.4, [this, i]() { BuilderPresetIndex = 0; BuilderPreset(1); BuilderOutfit.Glow = static_cast<uint8>(i); BuilderChanged(TEXT("")); });
+		Then(1.2, [&, Name]() { Shot(Name); });
+	}
+	Then(0.4, [this]()
+	{
+		// An old (R23) share code still loads the outfit it was made for.
+		BuilderImport(TEXT("DC1-04010-20000-0503F"));
+		UE_LOG(LogTemp, Display, TEXT("DCBUILDERFLOW old code DC1-04010-20000-0503F -> %s (%s)"), *DCOutfit::Encode(BuilderOutfit), *BuilderMessage);
+	});
+	Then(1.2, [&]() { Shot(TEXT("r18_old_code_loaded.png")); });
+	Then(0.4, [this]()
+	{
+		// A friend's photographer: another valid outfit (every slot cycled, other swatches), encoded and pasted back.
+		const UDCTuning& T = UDCTuning::Get();
+		FDCOutfit Friend = DCOutfit::Default(T.OutfitSlots);
+		for (int32 Slot = 0; Slot < T.OutfitSlots.Num(); ++Slot)
+		{
+			DCOutfit::Cycle(Friend, Slot, Slot + 1, T.OutfitSlots, T.OutfitParts);
+		}
+		Friend.Main = DCOutfit::Wrap(BuilderOutfit.Main, 2, T.OutfitSwatches.Num());
+		Friend.Accent = DCOutfit::Wrap(BuilderOutfit.Accent, 3, T.OutfitSwatches.Num());
+		const FString Code = DCOutfit::Encode(Friend);
+		UE_LOG(LogTemp, Display, TEXT("DCBUILDERFLOW friend code %s"), *Code);
+		BuilderImport(Code);
+		UE_LOG(LogTemp, Display, TEXT("DCBUILDERFLOW after import: %s (%s)"), *DCOutfit::Encode(BuilderOutfit), *BuilderMessage);
+	});
+	Then(1.5, [&]() { Shot(TEXT("05_builder_code_loaded.png")); });
+	Then(0.5, [this]() { BuilderImport(TEXT("DC1-NOT-A-REAL-CODE")); });
+	Then(0.8, [&]() { Shot(TEXT("06_builder_bad_code_rejected.png")); });
+	// R5 + R18: the ID card of an outfit made of new parts (the second preset: visor, hoodie, drone, drone camera).
+	Then(0.4, [this]() { BuilderPresetIndex = 0; BuilderPreset(1); });
+	Then(1.5, [this]() { BuilderExportCard(); UE_LOG(LogTemp, Display, TEXT("DCBUILDERFLOW card: %s"), *BuilderMessage); });
+	Then(0.8, [&]() { Shot(TEXT("07_builder_id_card_exported.png")); });
+	// R5 parity: the same outfit in play (DCOUTFIT ... wears <code> matches the card's code).
+	Then(0.5, [this]() { CloseBuilder(); });
+	Then(1.0, [this]() { MenuSolo(); });
+	Then(10.5, [&]() { Shot(TEXT("08_same_outfit_in_play.png")); });
+	Then(1.0, []() { FGenericPlatformMisc::RequestExit(false); });
 	const TArray<TPair<double, TFunction<void()>>>& Steps = bSettingsFlow ? SettingsSteps : BuilderSteps;
 	if (Steps.IsValidIndex(Step) && T >= Steps[Step].Key)
 	{

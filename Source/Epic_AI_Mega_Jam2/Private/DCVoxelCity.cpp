@@ -731,7 +731,66 @@ void ADCVoxelCity::ReleasePiece(UPrimitiveComponent* Piece)
 	Mesh->SetOwnerNoSee(false);
 	Mesh->SetCastShadow(true);
 	Mesh->SetMaterial(0, VoxelMaterialFor(*Cm));
+	Mesh->SetCustomPrimitiveDataFloat(0, 0.f); // R15: a reused piece starts solid
 	FreePieces.FindOrAdd(*Cm).Add(Mesh);
+}
+
+UMaterialInterface* ADCVoxelCity::DissolveMaterialFor(int32 VoxelCm)
+{
+	if (const TObjectPtr<UMaterialInstanceDynamic>* Found = DissolveMIDs.Find(VoxelCm))
+	{
+		return *Found;
+	}
+	UMaterialInterface* Parent = Cast<UMaterialInterface>(UDCVoxelSettings::Get().VoxelDissolveMaterial.TryLoad());
+	UMaterialInstanceDynamic* Base = Cast<UMaterialInstanceDynamic>(VoxelMaterialFor(VoxelCm));
+	if (!Parent || !Base)
+	{
+		DissolveMIDs.Add(VoxelCm, nullptr); // not built: remember, fall back to the shrink
+		return nullptr;
+	}
+	UMaterialInstanceDynamic* Mid = UMaterialInstanceDynamic::Create(Parent, this);
+	Mid->CopyParameterOverrides(Base); // the same voxel look (palette edges, form floor, wetness) as the solid piece
+	const FDCVoxelTuning& Tn = UDCVoxelSettings::Get().Tuning;
+	Mid->SetVectorParameterValue(TEXT("DissolveEdgeColor"), Tn.DissolveEdgeColor);
+	Mid->SetScalarParameterValue(TEXT("DissolveEdgeGlow"), Tn.DissolveEdgeGlow);
+	Mid->SetScalarParameterValue(TEXT("DissolveEdge"), Tn.DissolveEdge);
+	Mid->SetScalarParameterValue(TEXT("DissolveNoiseCm"), Tn.DissolveNoiseCm);
+	DissolveMIDs.Add(VoxelCm, Mid);
+	return Mid;
+}
+
+bool ADCVoxelCity::StartDissolve(UPrimitiveComponent* Mesh)
+{
+	UProceduralMeshComponent* Proc = Cast<UProceduralMeshComponent>(Mesh);
+	const int32* Cm = Proc ? PieceCm.Find(Proc) : nullptr;
+	UMaterialInterface* Mat = Cm ? DissolveMaterialFor(*Cm) : nullptr;
+	if (!Mat)
+	{
+		return false;
+	}
+	Mesh->SetMaterial(0, Mat);
+	for (USceneComponent* Child : Mesh->GetAttachChildren())
+	{
+		UProceduralMeshComponent* Leaf = Cast<UProceduralMeshComponent>(Child);
+		const int32* LeafCm = Leaf ? PieceCm.Find(Leaf) : nullptr;
+		if (UMaterialInterface* LeafMat = LeafCm ? DissolveMaterialFor(*LeafCm) : nullptr)
+		{
+			Leaf->SetMaterial(0, LeafMat);
+		}
+	}
+	return true;
+}
+
+void ADCVoxelCity::SetDissolve(UPrimitiveComponent* Mesh, float Amount)
+{
+	Mesh->SetCustomPrimitiveDataFloat(0, Amount);
+	for (USceneComponent* Child : Mesh->GetAttachChildren())
+	{
+		if (UProceduralMeshComponent* Leaf = Cast<UProceduralMeshComponent>(Child))
+		{
+			Leaf->SetCustomPrimitiveDataFloat(0, Amount);
+		}
+	}
 }
 
 void ADCVoxelCity::PrewarmPieces(int32 PerFrame)
@@ -942,6 +1001,7 @@ void ADCVoxelCity::FinishBuild(int32 RunSeed, int32 SectorIndex, int32 BuildId, 
 	const UDCTuning& T = UDCTuning::Get();
 	OpCtx = V.OpContext(T.City.BlockSizeCm);
 	Colors = V.MeshColors();
+	SharedColors = MakeShared<const TArray<FColor>>(Colors);
 	BuiltSector = SectorIndex;
 	BuiltId = BuildId;
 	BuiltSeed = RunSeed;
@@ -1545,6 +1605,7 @@ void ADCVoxelCity::SpawnDueShards(float Now)
 void ADCVoxelCity::QueuePadded(TArray<FPrePad>& Pads)
 {
 	const float AO = UDCVoxelSettings::Get().Tuning.AOStrength;
+	SharedColors = SharedColors.IsValid() ? SharedColors : MakeShared<const TArray<FColor>>(Colors);
 	for (FPrePad& P : Pads)
 	{
 		TSharedPtr<FMeshJob> Job = MakeShared<FMeshJob>();
@@ -1552,11 +1613,10 @@ void ADCVoxelCity::QueuePadded(TArray<FPrePad>& Pads)
 		Job->Chunk = P.Chunk;
 		Job->BuildId = BuiltId;
 		FDCVoxelMeshData* Out = &Job->Mesh;
-		TArray<FColor> JobColors = Colors;
 		const float Vcm = GridAt(P.Grid).VoxelCm;
-		Job->Task = UE::Tasks::Launch(TEXT("DCVoxelChunkMesh"), [Padded = MoveTemp(P.Padded), JobColors = MoveTemp(JobColors), Vcm, AO, Out]()
+		Job->Task = UE::Tasks::Launch(TEXT("DCVoxelChunkMesh"), [Padded = MoveTemp(P.Padded), JobColors = SharedColors, Vcm, AO, Out]()
 		{
-			DCVoxelMesher::MeshPadded(Padded, JobColors, Vcm, AO, *Out);
+			DCVoxelMesher::MeshPadded(Padded, *JobColors, Vcm, AO, *Out);
 		});
 		Jobs.Add(Job);
 	}
@@ -1570,6 +1630,8 @@ void ADCVoxelCity::QueueDirty(int32 GridIndex, const TSet<FIntVector>& Chunks)
 	const float AO = UDCVoxelSettings::Get().Tuning.AOStrength;
 	// Snapshots in parallel (read-only on the grid; a whole city at once cost ~0.7 s on one thread: reel restage).
 	TArray<FIntVector> List = Chunks.Array();
+	const UE::Tasks::ETaskPriority Priority = UDCVoxelSettings::Get().Tuning.bOpMeshInBackground && !bLoading ? UE::Tasks::ETaskPriority::BackgroundNormal : UE::Tasks::ETaskPriority::Normal;
+	SharedColors = SharedColors.IsValid() ? SharedColors : MakeShared<const TArray<FColor>>(Colors);
 	TArray<TArray<uint8>> Padded;
 	Padded.SetNum(List.Num());
 	ParallelFor(List.Num(), [&](int32 i) { Grid.Data.CopyPadded(List[i], Padded[i]); }, List.Num() < 16);
@@ -1580,11 +1642,10 @@ void ADCVoxelCity::QueueDirty(int32 GridIndex, const TSet<FIntVector>& Chunks)
 		Job->Chunk = List[i];
 		Job->BuildId = BuiltId;
 		FDCVoxelMeshData* Out = &Job->Mesh;
-		TArray<FColor> JobColors = Colors;
-		Job->Task = UE::Tasks::Launch(TEXT("DCVoxelChunkMesh"), [Pad = MoveTemp(Padded[i]), JobColors = MoveTemp(JobColors), Vcm, AO, Out]()
+		Job->Task = UE::Tasks::Launch(TEXT("DCVoxelChunkMesh"), [Pad = MoveTemp(Padded[i]), JobColors = SharedColors, Vcm, AO, Out]()
 		{
-			DCVoxelMesher::MeshPadded(Pad, JobColors, Vcm, AO, *Out);
-		});
+			DCVoxelMesher::MeshPadded(Pad, *JobColors, Vcm, AO, *Out);
+		}, Priority);
 		Jobs.Add(Job);
 	}
 }
@@ -1846,7 +1907,13 @@ void ADCVoxelCity::TickFalling(float Now)
 			Fading.RemoveAtSwap(i);
 			continue;
 		}
-		if (Fading[i].Body.IsValid())
+		// R15: the piece dissolves (noise, warm edge) where it lies; without the dissolve material it shrinks as before.
+		Fading[i].bDissolving = Fading[i].bDissolving || (A > 0.f && StartDissolve(Mesh));
+		if (Fading[i].bDissolving)
+		{
+			SetDissolve(Mesh, A);
+		}
+		else if (Fading[i].Body.IsValid())
 		{
 			Mesh->SetRelativeScale3D(FVector(FMath::Max(1.f - A, 0.01f))); // leaves shrink with their chunk
 		}

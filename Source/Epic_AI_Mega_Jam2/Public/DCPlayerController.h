@@ -66,6 +66,8 @@ public:
 	FName AwaitingKey;
 	FDCOutfit BuilderOutfit;
 	int32 BuilderSlot = 0;
+	/** R18: the OutfitPresets row last applied (-1 = none yet; the PRESET row starts at the first). */
+	int32 BuilderPresetIndex = -1;
 	FString BuilderMessage;
 	UPROPERTY() TObjectPtr<class ADCOutfitPreview> OutfitPreview;
 	/** Stores the builder's outfit in its save slot and rebuilds the preview and the menu. */
@@ -155,6 +157,14 @@ public:
 	void CloseBuilder();
 	void BuilderCycle(int32 SlotIndex, int32 Step);
 	void BuilderSwatch(bool bMain, int32 Step);
+	/** R18: steps the accent glow colour (OutfitGlows). */
+	void BuilderGlow(int32 Step);
+	/** R18: steps through OutfitPresets and wears the one it lands on. */
+	void BuilderPreset(int32 Step);
+	/** R18: a random outfit (every slot, both swatches, the glow). */
+	void BuilderRandom();
+	/** R18: the display name of the last applied preset (empty before one was picked). */
+	FString GetBuilderPresetName() const;
 	void BuilderSelectSlot(int32 Slot);
 	void BuilderImport(const FString& Code);
 	void BuilderCopyCode();
