@@ -9,7 +9,19 @@
 #include "DCGameState.h"
 #include "DCTuning.h"
 #include "EngineUtils.h"
+#include "Misc/CommandLine.h"
+#include "Misc/Parse.h"
 #include "Voxel/DCVoxelSettings.h"
+
+namespace
+{
+	/** Tuning ChipsEnabled, or -dcchips on the host (evidence runs while the data default is off). */
+	bool ChipsOn(const FDCVoxelTuning& Tn)
+	{
+		static const bool bForce = FParse::Param(FCommandLine::Get(), TEXT("dcchips"));
+		return Tn.ChipsEnabled || bForce;
+	}
+}
 
 int32 ADCVoxelCity::ChipGridOf(const UPrimitiveComponent* Comp) const
 {
@@ -39,7 +51,7 @@ int32 ADCVoxelCity::ChipGridOf(const UPrimitiveComponent* Comp) const
 void ADCVoxelCity::HostChip(const FHitResult& Hit, const FDCWeaponDef& Weapon, const AActor* Shooter)
 {
 	const FDCVoxelTuning& Tn = UDCVoxelSettings::Get().Tuning;
-	if (!Tn.ChipsEnabled || Weapon.ChipDamage <= 0.f || !HasAuthority() || GetNetMode() == NM_Client || BuiltSector == INDEX_NONE || !bHostRests)
+	if (!ChipsOn(Tn) || Weapon.ChipDamage <= 0.f || !HasAuthority() || GetNetMode() == NM_Client || BuiltSector == INDEX_NONE || !bHostRests)
 	{
 		return;
 	}
@@ -65,7 +77,7 @@ void ADCVoxelCity::HostChip(const FHitResult& Hit, const FDCWeaponDef& Weapon, c
 void ADCVoxelCity::TickChips()
 {
 	const FDCVoxelTuning& Tn = UDCVoxelSettings::Get().Tuning;
-	if (!Tn.ChipsEnabled || !HasAuthority() || GetNetMode() == NM_Client || BuiltSector == INDEX_NONE || bLoading || !bHostRests)
+	if (!ChipsOn(Tn) || !HasAuthority() || GetNetMode() == NM_Client || BuiltSector == INDEX_NONE || bLoading || !bHostRests)
 	{
 		return;
 	}

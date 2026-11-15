@@ -63,6 +63,19 @@ Unreal Engine 5.9 jam game. Engine: `L:/unreal/UE_5.9` (registered source build,
   host targets and damages, every machine places its copy from the replicated owner/anchor, shots multicast.
   Models `tools/voxel-forge/recipes/companion_{drone,sentry}.vfr`. Logs: `DCCOMPANION`, `DCREINFORCE`, `DCLASTSTAND`.
 
+## Weapon chips (R24, final run)
+- Every weapon hit wears the city (advisor a-37): `+Weapons` rows carry `ChipDamage`, `ChipRadiusCm`, `ChipsPerSecond`;
+  `Tuning=` carries `ChipsEnabled` and the `Chip*` window, budget, support and bite numbers. Host-only ledger
+  `Rules/DCChipRules` (bucket damage, per-shooter rate, window flush under entry and render-cell budgets, structure
+  trigger once per interval under the body-load gate); `ADCVoxelCity::HostChip`/`TickChips` in `DCVoxelChips.cpp`,
+  called from the host's pellet loop (`DCCharacter.cpp` ServerFire).
+- Op kinds dispatch through the registry in `DCVoxelOps.cpp` (`FindKind`/`Run`: Strike, Fell, Rest, Chip, one shared
+  `StructureTail`). A `Chip` op lists spheres (`Chips[]`, tower lot or `PropGrid`) and optional `StructureLots` (base
+  bite on the shooters' side, then the structure pass; committed two-phase like a strike). Chip-only ops skip the
+  street snapshot, keep the surface cache, throw crumbs (never shard bodies) and fold on replay.
+- Evidence flags: `-dcchips` (host: chips on while the data default is off), `-dcchipfire` (pilot: sustained fire at
+  the nearest tower's wall foot for 60 s, fixed-pose `chipfire_*` frames, `DEMO chipfire` hash lines); logs `DCCHIP`.
+
 ## Editor MCP
 - Epic's MCP server (`ModelContextProtocol` + `AllToolsets` in the `.uproject`) serves `unreal-mcp` on `http://127.0.0.1:23444/mcp` (auto-start and port in the per-user `Saved/Config/WindowsEditor/EditorPerProjectUserSettings.ini`; `.mcp.json` and the other client configs point there).
 - Claude Code: the `unreal-mcp` skill of the `unreal-engine-skills-for-claude-code` plugin. Start a session with `cats game-dev` from the monorepo root.
