@@ -1,0 +1,23 @@
+# Street food cart (R12, OldTown): ink cart body on two wheels, steel counter, a warm lamp under a small cyan
+# canopy, a steaming pot (Paper glow sparingly). Faces +x.
+grid 5
+size 14 24 34
+slot body InkBrown
+slot steel Steel
+slot wheel Ink
+slot lamp Lamp
+slot canopy NeonCyan
+slot edge NeonCyanEdge
+box 1 1 4 13 23 16 body
+box 0 0 16 14 24 17 steel
+beam 7 2 2 7 2 2 2 wheel
+beam 7 22 2 7 22 2 2 wheel
+box 1 1 17 2 2 30 steel
+box 1 22 17 2 23 30 steel
+box 12 1 17 13 2 30 steel
+box 12 22 17 13 23 30 steel
+box 0 0 30 14 24 32 canopy
+box 13 0 29 14 24 30 edge
+cyl 5 8 17 21 3 steel
+box 6 14 26 9 17 29 lamp
+pivot 7 12 0

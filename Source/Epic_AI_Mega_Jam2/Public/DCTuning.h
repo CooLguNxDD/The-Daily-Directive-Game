@@ -72,6 +72,72 @@ struct FDCRifleTuning
 	UPROPERTY(EditAnywhere, Config, Category = "Rifle") int32 LowAmmoWarning = 8;
 };
 
+/** R8: a player weapon in the gun slot (slot 1; press 1 again or roll the wheel to switch). Stats are the rifle's
+ *  fields; the row adds pellets, the sound cue, the forge model and the tracer look. Row 0 is the starting weapon. */
+USTRUCT(BlueprintType)
+struct FDCWeaponDef
+{
+	GENERATED_BODY()
+	UPROPERTY(EditAnywhere, Config, Category = "Weapon") FName Id = TEXT("Rifle");
+	UPROPERTY(EditAnywhere, Config, Category = "Weapon") FText DisplayName;
+	/** Short label on the HUD slot bar ("1 <label>"). */
+	UPROPERTY(EditAnywhere, Config, Category = "Weapon") FString HudLabel = TEXT("RIFLE");
+	UPROPERTY(EditAnywhere, Config, Category = "Weapon") FDCRifleTuning Stats;
+	/** Traces per trigger pull (a scattergun fires several); each pellet deals Stats.Damage. */
+	UPROPERTY(EditAnywhere, Config, Category = "Weapon") int32 Pellets = 1;
+	/** Spread multiplier while moving. */
+	UPROPERTY(EditAnywhere, Config, Category = "Weapon") float MoveSpreadScale = 1.6f;
+	/** Camera shake per shot. */
+	UPROPERTY(EditAnywhere, Config, Category = "Weapon") float Trauma = 0.06f;
+	/** Sound cue (code synth or a +SoundRecipes row). */
+	UPROPERTY(EditAnywhere, Config, Category = "Weapon") FName Sound = TEXT("Rifle");
+	UPROPERTY(EditAnywhere, Config, Category = "Weapon") float SoundVolume = 0.9f;
+	/** Forge model (Content/DC/Voxel/<Model>.dcvox) on the gun prop, placed relative to the hand. */
+	UPROPERTY(EditAnywhere, Config, Category = "Weapon") FName Model = TEXT("rifle");
+	UPROPERTY(EditAnywhere, Config, Category = "Weapon") FVector ModelLocation = FVector::ZeroVector;
+	UPROPERTY(EditAnywhere, Config, Category = "Weapon") FRotator ModelRotation = FRotator::ZeroRotator;
+	UPROPERTY(EditAnywhere, Config, Category = "Weapon") float ModelScale = 1.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Weapon") FLinearColor TracerColor = FLinearColor(1.f, 0.8f, 0.4f);
+	UPROPERTY(EditAnywhere, Config, Category = "Weapon") float TracerGlow = 60.f;
+	/** Tracer thickness (scale of the 1 m cube). */
+	UPROPERTY(EditAnywhere, Config, Category = "Weapon") float TracerWidth = 0.03f;
+	UPROPERTY(EditAnywhere, Config, Category = "Weapon") float TracerSeconds = 0.04f;
+	/** A supply pod's ammo is scaled by this for this weapon (shells come in fewer than rounds). */
+	UPROPERTY(EditAnywhere, Config, Category = "Weapon") float PodAmmoScale = 1.f;
+};
+
+/** One layer of a data sound recipe: a tone (Wave Sine, Square, Saw, Tri) gliding F0 -> F1 Hz, or Noise low-passed
+ *  with a cutoff gliding F0 -> F1 Hz. Repeat copies the layer every RepeatGap seconds (ticks, rattles). */
+USTRUCT(BlueprintType)
+struct FDCSoundLayer
+{
+	GENERATED_BODY()
+	UPROPERTY(EditAnywhere, Config, Category = "Sound") FName Wave = TEXT("Noise");
+	UPROPERTY(EditAnywhere, Config, Category = "Sound") float Start = 0.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Sound") float Dur = 0.1f;
+	UPROPERTY(EditAnywhere, Config, Category = "Sound") float Amp = 0.5f;
+	UPROPERTY(EditAnywhere, Config, Category = "Sound") float F0 = 1000.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Sound") float F1 = 1000.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Sound") float Decay = 8.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Sound") float Attack = 0.002f;
+	UPROPERTY(EditAnywhere, Config, Category = "Sound") float Vibrato = 0.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Sound") int32 Repeat = 1;
+	UPROPERTY(EditAnywhere, Config, Category = "Sound") float RepeatGap = 0.f;
+};
+
+/** A sound cue written as data (R8, R12): rendered by the same synth as the code cues when the game starts. */
+USTRUCT(BlueprintType)
+struct FDCSoundRecipe
+{
+	GENERATED_BODY()
+	UPROPERTY(EditAnywhere, Config, Category = "Sound") FName Id;
+	UPROPERTY(EditAnywhere, Config, Category = "Sound") float Seconds = 0.5f;
+	UPROPERTY(EditAnywhere, Config, Category = "Sound") int32 Seed = 7;
+	/** Soft-clip drive of the mix. */
+	UPROPERTY(EditAnywhere, Config, Category = "Sound") float Gain = 1.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Sound") TArray<FDCSoundLayer> Layers;
+};
+
 /** A stratagem the player can call. Heavier ones cost Propaganda Points. */
 USTRUCT(BlueprintType)
 struct FDCStratagemDef
@@ -98,6 +164,16 @@ struct FDCStratagemDef
 	UPROPERTY(EditAnywhere, Config, Category = "Strike") FName Behaviour = TEXT("Laser");
 	UPROPERTY(EditAnywhere, Config, Category = "Strike") bool bStartsUnlocked = true;
 	UPROPERTY(EditAnywhere, Config, Category = "Strike") FLinearColor BeamColor = FLinearColor(1.f, 0.1f, 0.05f);
+	/** R12: how the blasts of a multi-blast strike are laid out, resolved by the pattern registry in CallStrike:
+	 *  Scatter (random within BlastScatterCm), Line (walked along the caller's line of fire over BlastScatterCm),
+	 *  Ring (the first at the target, the rest on a ring of BlastScatterCm). */
+	UPROPERTY(EditAnywhere, Config, Category = "Strike") FName Pattern = TEXT("Scatter");
+	/** R12 sound and look per strike: cue names (code synth or +SoundRecipes) and the telegraph beam width scale. */
+	UPROPERTY(EditAnywhere, Config, Category = "Strike") FName ChargeSound = TEXT("LaserCharge");
+	UPROPERTY(EditAnywhere, Config, Category = "Strike") FName BeepSound = TEXT("Telegraph");
+	UPROPERTY(EditAnywhere, Config, Category = "Strike") FName BlastSound = TEXT("Detonation");
+	UPROPERTY(EditAnywhere, Config, Category = "Strike") float BlastPitch = 1.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Strike") float BeamWidthScale = 1.f;
 };
 
 USTRUCT(BlueprintType)
@@ -708,6 +784,10 @@ public:
 	UPROPERTY(EditAnywhere, Config, Category = "Photo") FDCPhotoTuning Photo;
 	UPROPERTY(EditAnywhere, Config, Category = "Move") FDCMoveTuning Move;
 	UPROPERTY(EditAnywhere, Config, Category = "Rifle") FDCRifleTuning Rifle;
+	/** R8 player weapons (slot 1). Empty = the rifle from Rifle= alone. */
+	UPROPERTY(EditAnywhere, Config, Category = "Weapon") TArray<FDCWeaponDef> Weapons;
+	/** Sound cues written as data (weapons, strikes), beside the code synth cues. */
+	UPROPERTY(EditAnywhere, Config, Category = "Sound") TArray<FDCSoundRecipe> SoundRecipes;
 	UPROPERTY(EditAnywhere, Config, Category = "Camera") FDCCameraTuning Camera;
 	UPROPERTY(EditAnywhere, Config, Category = "Economy") FDCEconomyTuning Economy;
 	UPROPERTY(EditAnywhere, Config, Category = "City") FDCCityTuning City;
@@ -748,6 +828,22 @@ public:
 	/** Preset applied at start (-dcpost=<Id> on the command line wins). */
 	UPROPERTY(EditAnywhere, Config, Category = "Post") FName PostPreset = TEXT("High");
 
+	int32 NumWeapons() const { return FMath::Max(Weapons.Num(), 1); }
+	/** The weapon row at Index; with no rows, the rifle built from Rifle=. */
+	const FDCWeaponDef& Weapon(int32 Index) const
+	{
+		if (Weapons.IsValidIndex(Index))
+		{
+			return Weapons[Index];
+		}
+		static FDCWeaponDef Fallback;
+		Fallback.Stats = Rifle;
+		return Fallback;
+	}
+	const FDCSoundRecipe* FindSoundRecipe(FName Id) const
+	{
+		return SoundRecipes.FindByPredicate([Id](const FDCSoundRecipe& D) { return D.Id == Id; });
+	}
 	const FDCStratagemDef* FindStratagem(FName Id) const
 	{
 		return Stratagems.FindByPredicate([Id](const FDCStratagemDef& D) { return D.Id == Id; });

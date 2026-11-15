@@ -1,0 +1,11 @@
+# Rooftop chimney stack (R12 rooftop detail): brick-brown flue cluster with steel caps. 10 cm grid.
+grid 10
+size 8 8 16
+slot brick InkBrown
+slot cap Steel
+box 0 0 0 4 4 14 brick
+box 4 3 0 8 7 11 brick
+box 0 0 14 4 4 15 cap
+box 4 3 11 8 7 12 cap
+carve box 1 1 14 3 3 15
+carve box 5 4 11 7 6 12

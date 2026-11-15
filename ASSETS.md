@@ -53,6 +53,9 @@ art) is in the game.
 | Faction sound cues (FactionShot, Groan, FactionStrike) | synthesised at run time | C++ synth in `DCAudio.cpp` |
 | Shareable ID card (turntable PNG) | written to `Saved/IdCards/` at run time | C++ canvas render target from the builder's turntable capture (`DCIdCard.cpp`, R5) |
 | Newsprint photo print (halftone, grain, border); fallback stamp grit when `T_StampGrit` is missing | at run time | C++ (`Rules/DCNewsprint.cpp`, `DCHUD::StampGrit`) |
+| Player weapons (R8, final run): `scattergun` (Riot Scattergun), `marksman` (Press Marksman), `smg` (Flash SMG), beside the earlier `rifle` | `Content/DC/Voxel/<name>.dcvox` | `tools/voxel-forge/forge.py` from `tools/voxel-forge/recipes/<name>.vfr` (original designs, 2026-11-14); stats, sound, model and tracer per `+Weapons` row |
+| Weapon and strike sound cues (R8, R12): `Scattergun`, `Marksman`, `Smg`, `JetDive`, `StrafeHit`, `ShellWhistle`, `DrillSpin` | synthesised at run time | `+SoundRecipes` rows in `Config/DefaultGame.ini` rendered by the `DCAudio.cpp` synth (no audio files) |
+| City props (R12, final run): OldTown `food_cart`, `scooter`, `phone_booth`; Ministry `planter`, `speaker_pole`; Ruins `sandbags`, `tank_trap`, `drums`; rooftops `roof_garden`, `chimney` | `Content/DC/Voxel/<name>.dcvox` | `tools/voxel-forge/forge.py` from `tools/voxel-forge/recipes/<name>.vfr` (original designs, 2026-11-14); placed by the district `+RuleSets` |
 | Decay effects, voxel blast core, weather precipitation | at run time | C++ pooled instanced cubes (`DCVoxelFx`, `DCOrbitalStrike`) from ini rows |
 
 ## Store packs

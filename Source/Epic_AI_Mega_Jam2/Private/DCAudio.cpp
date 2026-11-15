@@ -1,5 +1,6 @@
 #include "DCAudio.h"
 #include "DCSave.h"
+#include "DCTuning.h"
 
 #include "AudioMixerBlueprintLibrary.h"
 #include "Camera/PlayerCameraManager.h"
@@ -170,6 +171,33 @@ namespace
 		return Map;
 	}
 
+	/** A data recipe (+SoundRecipes) through the same synth: layers dispatched by wave name, no branches per kind. */
+	TArray<int16> RenderData(const FDCSoundRecipe& Recipe)
+	{
+		FSynth S(FMath::Clamp(Recipe.Seconds, 0.01f, 20.f), Recipe.Seed);
+		using FLayerFn = void (*)(FSynth&, const FDCSoundLayer&, float Start);
+		static const TMap<FName, FLayerFn> Layers = {
+			{TEXT("Noise"), [](FSynth& Sy, const FDCSoundLayer& L, float At) { Sy.Noise(At, L.Dur, L.Amp, L.F0, L.F1, L.Decay, L.Attack); }},
+			{TEXT("Sine"), [](FSynth& Sy, const FDCSoundLayer& L, float At) { Sy.Tone(At, L.Dur, L.F0, L.F1, EWave::Sine, L.Amp, L.Decay, L.Attack, L.Vibrato); }},
+			{TEXT("Square"), [](FSynth& Sy, const FDCSoundLayer& L, float At) { Sy.Tone(At, L.Dur, L.F0, L.F1, EWave::Square, L.Amp, L.Decay, L.Attack, L.Vibrato); }},
+			{TEXT("Saw"), [](FSynth& Sy, const FDCSoundLayer& L, float At) { Sy.Tone(At, L.Dur, L.F0, L.F1, EWave::Saw, L.Amp, L.Decay, L.Attack, L.Vibrato); }},
+			{TEXT("Tri"), [](FSynth& Sy, const FDCSoundLayer& L, float At) { Sy.Tone(At, L.Dur, L.F0, L.F1, EWave::Tri, L.Amp, L.Decay, L.Attack, L.Vibrato); }},
+		};
+		for (const FDCSoundLayer& L : Recipe.Layers)
+		{
+			const FLayerFn* Fn = Layers.Find(L.Wave);
+			if (!Fn || L.F0 <= 0.f || L.F1 <= 0.f)
+			{
+				continue; // untrusted data: an unknown wave or a zero frequency is skipped, never a crash
+			}
+			for (int32 r = 0; r < FMath::Clamp(L.Repeat, 1, 64); ++r)
+			{
+				(*Fn)(S, L, L.Start + r * L.RepeatGap);
+			}
+		}
+		return S.Finish(Recipe.Gain);
+	}
+
 	TArray<uint8> ToBytes(const TArray<int16>& Samples)
 	{
 		TArray<uint8> Bytes;
@@ -185,13 +213,21 @@ namespace DCAudio
 	{
 		TArray<FName> Names;
 		Recipes().GetKeys(Names);
+		for (const FDCSoundRecipe& Data : UDCTuning::Get().SoundRecipes)
+		{
+			Names.AddUnique(Data.Id);
+		}
 		return Names;
 	}
 
 	TArray<int16> Render(FName Cue)
 	{
-		const FRecipe* Recipe = Recipes().Find(Cue);
-		return Recipe ? (*Recipe)() : TArray<int16>();
+		if (const FRecipe* Recipe = Recipes().Find(Cue))
+		{
+			return (*Recipe)();
+		}
+		const FDCSoundRecipe* Data = UDCTuning::Get().FindSoundRecipe(Cue);
+		return Data ? RenderData(*Data) : TArray<int16>();
 	}
 
 	static UDCAudioSubsystem* Get(const UObject* WorldContext)
@@ -231,6 +267,13 @@ void UDCAudioSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 	for (const TPair<FName, FRecipe>& Pair : Recipes())
 	{
 		Bank.Add(Pair.Key, MakeShared<TArray<uint8>>(ToBytes(Pair.Value())));
+	}
+	for (const FDCSoundRecipe& Data : UDCTuning::Get().SoundRecipes)
+	{
+		if (!Bank.Contains(Data.Id)) // a code cue of the same name wins
+		{
+			Bank.Add(Data.Id, MakeShared<TArray<uint8>>(ToBytes(RenderData(Data))));
+		}
 	}
 	Attenuation = NewObject<USoundAttenuation>(this);
 	Attenuation->Attenuation.bAttenuate = true;
