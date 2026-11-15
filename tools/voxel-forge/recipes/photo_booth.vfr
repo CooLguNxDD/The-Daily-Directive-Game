@@ -1,0 +1,18 @@
+# Photo booth (R23 street/plaza, on theme): a tall ink booth with a half-drawn dark curtain, a cyan flash panel over the
+# entry and a strip-print slot with a warm lamp. Faces +x.
+grid 5
+size 22 18 46
+slot body Ink
+slot trim Trim
+slot curtain InkBrown
+slot flash NeonCyan
+slot edge NeonCyanEdge
+slot lamp WindowDim
+shell 0 0 0 22 18 42 2 body
+carve box 20 3 2 22 15 38
+box 20 3 2 21 9 38 curtain
+box 0 0 42 22 18 44 trim
+box 21 2 39 22 16 42 edge
+box 21 3 40 22 15 41 flash
+box 4 16 20 10 17 24 lamp
+box 2 6 4 8 12 14 trim
