@@ -78,6 +78,48 @@ bool FDCPcgRulesTest::RunTest(const FString&)
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDCRecipeKindsTest, "Epic_AI_Mega_Jam2.District.RecipeKinds", DistrictFlags)
+bool FDCRecipeKindsTest::RunTest(const FString&)
+{
+	// R23: every shipped recipe names registered craft kinds (roof, sign, facade and base bays), its optional window and
+	// edge materials are palette rows, and every recipe a rule set or landmark roll names exists.
+	const UDCVoxelSettings& V = UDCVoxelSettings::Get();
+	auto InPalette = [&V](FName Id) { return Id.IsNone() || V.Palette.ContainsByPredicate([Id](const FDCVoxelMaterial& M) { return M.Id == Id; }); };
+	for (const FDCVoxelRecipe& R : V.Recipes)
+	{
+		TestTrue(FString::Printf(TEXT("recipe %s roof %s is registered"), *R.Id.ToString(), *R.Roof.ToString()), DCVoxelCraft::IsRoofKind(R.Roof));
+		TestTrue(FString::Printf(TEXT("recipe %s sign %s is registered"), *R.Id.ToString(), *R.SignKind.ToString()), DCVoxelCraft::IsSignKind(R.SignKind));
+		for (const FString& Pattern : {R.Facade, R.Base})
+		{
+			for (const TCHAR Bay : Pattern)
+			{
+				TestTrue(FString::Printf(TEXT("recipe %s bay %c is registered"), *R.Id.ToString(), Bay), DCVoxelCraft::IsBayKind(Bay));
+			}
+		}
+		for (FName Id : {R.WindowOff, R.WindowAlt, R.PosterEdge})
+		{
+			TestTrue(FString::Printf(TEXT("recipe %s material %s is in the palette"), *R.Id.ToString(), *Id.ToString()), InPalette(Id));
+		}
+	}
+	auto IsRecipe = [&V](FName Id) { return V.Recipes.ContainsByPredicate([Id](const FDCVoxelRecipe& R) { return R.Id == Id; }); };
+	for (const FDCDistrictRule& D : V.Districts)
+	{
+		TestTrue(FString::Printf(TEXT("district %s landmark recipe exists"), *D.Id.ToString()), IsRecipe(D.LandmarkRecipe));
+		const FDCPcgRuleSet* LotRules = V.RuleSet(D.Rules);
+		TestNotNull(*FString::Printf(TEXT("district %s lot rules %s exist"), *D.Id.ToString(), *D.Rules.ToString()), LotRules);
+		TestNotNull(*FString::Printf(TEXT("district %s prop rules %s exist"), *D.Id.ToString(), *D.Props.ToString()), V.RuleSet(D.Props));
+		for (const TCHAR* Slot : {TEXT("LowRecipe"), TEXT("LandmarkRecipe")})
+		{
+			const FDCPcgRule* Rule = LotRules ? LotRules->Find(Slot) : nullptr;
+			for (const FDCPcgChoice& C : Rule ? Rule->Choices : TArray<FDCPcgChoice>())
+			{
+				TestTrue(FString::Printf(TEXT("district %s %s %s exists"), *D.Id.ToString(), Slot, *C.Value.ToString()), IsRecipe(C.Value));
+			}
+		}
+	}
+	return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDCDistrictBuilderTest, "Epic_AI_Mega_Jam2.District.CityBuilder", DistrictFlags)
 bool FDCDistrictBuilderTest::RunTest(const FString&)
 {
@@ -88,7 +130,12 @@ bool FDCDistrictBuilderTest::RunTest(const FString&)
 		const FDCDistrictRule& D = *V.District(Sector);
 		const FDCCityPlan P = Plan(4242, Sector);
 		TestTrue(FString::Printf(TEXT("sector %d: same seed, same plan"), Sector), P.LotKinds == Plan(4242, Sector).LotKinds && P.Props.Num() == Plan(4242, Sector).Props.Num());
-		TestTrue(FString::Printf(TEXT("sector %d: landmark placed"), Sector), P.Buildings.IsValidIndex(P.Landmark) && V.Recipes[P.Buildings[P.Landmark].Spec.Recipe].Id == D.LandmarkRecipe);
+		// The landmark recipe is the lot rules' LandmarkRecipe roll (R23) or the district row's.
+		const FDCPcgRuleSet* LotRules = V.RuleSet(D.Rules);
+		const FDCPcgRule* LandmarkPick = LotRules ? LotRules->Find(TEXT("LandmarkRecipe")) : nullptr;
+		const FName LandmarkId = P.Buildings.IsValidIndex(P.Landmark) ? V.Recipes[P.Buildings[P.Landmark].Spec.Recipe].Id : NAME_None;
+		const bool bRolled = LandmarkPick && LandmarkPick->Choices.ContainsByPredicate([LandmarkId](const FDCPcgChoice& C) { return C.Value == LandmarkId; });
+		TestTrue(FString::Printf(TEXT("sector %d: landmark placed (%s)"), Sector, *LandmarkId.ToString()), P.Buildings.IsValidIndex(P.Landmark) && (bRolled || LandmarkId == D.LandmarkRecipe));
 		TestTrue(FString::Printf(TEXT("sector %d: at least MinTowers"), Sector), P.Buildings.Num() >= D.MinTowers);
 		TestTrue(FString::Printf(TEXT("sector %d: props placed"), Sector), P.Props.Num() > 10);
 		for (const FDCPropPlan& Prop : P.Props)

@@ -42,6 +42,14 @@ namespace
 				{ const bool bCol = (O >= B / 6 && O < B / 2 - B / 15) || (O >= B / 2 + B / 15 && O < B - B / 6); return bCol && H >= Sill && H < Sill + Win ? EOpening::Window : EOpening::Solid; }},
 			{TEXT('D'), [](int32 O, int32 H, int32 B, int32, int32)
 				{ return O >= B / 4 && O < B - B / 4 && H >= 1 && H < B * 2 / 3 ? EOpening::Open : EOpening::Solid; }},
+			// R23: a ribbon window (the whole bay, half the window height), twin tall slots, and a storefront (ground
+			// floors: glass nearly floor to ceiling).
+			{TEXT('R'), [](int32 O, int32 H, int32 B, int32 Sill, int32 Win)
+				{ return O >= B / 12 && O < B - B / 12 && H >= Sill && H < Sill + FMath::Max(1, Win / 2) ? EOpening::Window : EOpening::Solid; }},
+			{TEXT('T'), [](int32 O, int32 H, int32 B, int32, int32)
+				{ const int32 Half = FMath::Max(1, B / 20); const bool bSlot = FMath::Abs(O - B / 3) <= Half || FMath::Abs(O - 2 * B / 3) <= Half; return bSlot && H >= B / 10 && H < B - B / 10 ? EOpening::Window : EOpening::Solid; }},
+			{TEXT('X'), [](int32 O, int32 H, int32 B, int32, int32)
+				{ return O >= B / 12 && O < B - B / 12 && H >= 2 && H < B * 3 / 4 ? EOpening::Window : EOpening::Solid; }},
 		};
 		return Table;
 	}
@@ -167,6 +175,105 @@ namespace
 					const int32 Top = Parapet(W, F, TopZ, Ids);
 					const FIntVector Base(Rng.RandRange(F.Min.X + 4 * U, F.Max.X - 5 * U), Rng.RandRange(F.Min.Y + 4 * U, F.Max.Y - 5 * U), TopZ + 1);
 					return FMath::Max(Top, Mast(W, Base, 30, 2, Ids.Trim, U));
+				}},
+			// R23 roof kinds. Tiered: stacked eaves (a pagoda-like crown), each tier a smaller box under a trim eave one
+			// unit wider than it; a short finial on top.
+			{TEXT("Tiered"), [](FDCVoxelWorld& W, const FFaceFrame& F, int32 TopZ, const FCraftIds& Ids, FRandomStream&)
+				{
+					const int32 U = Ids.Unit;
+					int32 Z = TopZ + 1;
+					for (int32 Tier = 0; Tier < 4; ++Tier)
+					{
+						const int32 In = Tier * 4 * U;
+						if (F.Max.X - F.Min.X <= In * 2 + 4 * U || F.Max.Y - F.Min.Y <= In * 2 + 4 * U)
+						{
+							break;
+						}
+						const FIntVector Lo(F.Min.X + In, F.Min.Y + In, 0), Hi(F.Max.X - In, F.Max.Y - In, 0);
+						W.FillBox(FIntVector(Lo.X - U, Lo.Y - U, Z), FIntVector(Hi.X + U, Hi.Y + U, Z + U), Ids.Trim);
+						// Each tier is a shell (walls one unit thick): the inside stays air, cheap to mesh and to break.
+						W.FillBox(FIntVector(Lo.X + U, Lo.Y + U, Z + U), FIntVector(Hi.X - U, Hi.Y - U, Z + 5 * U), Ids.Wall);
+						W.FillBox(FIntVector(Lo.X + 2 * U, Lo.Y + 2 * U, Z + U), FIntVector(Hi.X - 2 * U, Hi.Y - 2 * U, Z + 5 * U - 1), 0);
+						Z += 5 * U;
+					}
+					W.FillBox(FIntVector((F.Min.X + F.Max.X) / 2 - U, (F.Min.Y + F.Max.Y) / 2 - U, Z), FIntVector((F.Min.X + F.Max.X) / 2 + U, (F.Min.Y + F.Max.Y) / 2 + U, Z + U), Ids.Trim);
+					return Mast(W, FIntVector((F.Min.X + F.Max.X) / 2, (F.Min.Y + F.Max.Y) / 2, Z + U), 6, 0, Ids.Trim, U);
+				}},
+			// Dome: a voxel half-ellipsoid over the deck with a thin neon ring (the sign edge colour) at its foot.
+			{TEXT("Dome"), [](FDCVoxelWorld& W, const FFaceFrame& F, int32 TopZ, const FCraftIds& Ids, FRandomStream&)
+				{
+					const int32 U = Ids.Unit;
+					const int32 Top = Parapet(W, F, TopZ, Ids);
+					const float Cx = (F.Min.X + F.Max.X) * 0.5f, Cy = (F.Min.Y + F.Max.Y) * 0.5f;
+					const float R = FMath::Min(F.Max.X - F.Min.X, F.Max.Y - F.Min.Y) * 0.5f - U;
+					const int32 H = FMath::Max(U, FMath::RoundToInt32(R * 0.7f));
+					for (int32 Dz = 0; Dz < H; ++Dz)
+					{
+						const float Rz = R * FMath::Sqrt(FMath::Max(0.f, 1.f - FMath::Square(static_cast<float>(Dz) / H)));
+						const uint8 Mat = Dz < 1 ? Ids.PosterEdge : (Dz % (4 * U) == 0 ? Ids.Trim : Ids.Wall);
+						for (int32 Y = FMath::FloorToInt32(Cy - Rz); Y <= FMath::CeilToInt32(Cy + Rz); ++Y)
+						{
+							for (int32 X = FMath::FloorToInt32(Cx - Rz); X <= FMath::CeilToInt32(Cx + Rz); ++X)
+							{
+								const float D2 = FMath::Square(X + 0.5f - Cx) + FMath::Square(Y + 0.5f - Cy);
+								// A shell two voxels thick: the inside stays air (cheap to mesh and to break).
+								if (D2 <= Rz * Rz && D2 >= FMath::Square(FMath::Max(0.f, Rz - 2.f)) - 0.01f)
+								{
+									W.Set(FIntVector(X, Y, TopZ + 1 + Dz), Mat);
+								}
+							}
+						}
+						if (Rz < 2.f)
+						{
+							W.FillBox(FIntVector(FMath::FloorToInt32(Cx) - 1, FMath::FloorToInt32(Cy) - 1, TopZ + 1 + Dz), FIntVector(FMath::FloorToInt32(Cx) + 1, FMath::FloorToInt32(Cy) + 1, TopZ + 2 + Dz), Ids.Wall);
+						}
+					}
+					return FMath::Max(Top, Mast(W, FIntVector(FMath::FloorToInt32(Cx), FMath::FloorToInt32(Cy), TopZ + 1 + H), 5, 0, Ids.Trim, U));
+				}},
+			// Helipad: a low parapet, a raised slab deck with a painted cross mark and dim warm corner lights.
+			{TEXT("Helipad"), [](FDCVoxelWorld& W, const FFaceFrame& F, int32 TopZ, const FCraftIds& Ids, FRandomStream&)
+				{
+					const int32 U = Ids.Unit;
+					for (int32 Z = TopZ + 1; Z < TopZ + 1 + U; ++Z)
+					{
+						RingLayer(W, F, Z, 0, Ids.Trim);
+					}
+					const int32 Z = TopZ + 1 + U;
+					const FIntVector Lo(F.Min.X + 2 * U, F.Min.Y + 2 * U, Z), Hi(F.Max.X - 2 * U, F.Max.Y - 2 * U, Z + U);
+					if (Hi.X - Lo.X < 8 * U || Hi.Y - Lo.Y < 8 * U)
+					{
+						return Z;
+					}
+					W.FillBox(Lo, Hi, Ids.Slab);
+					const FIntVector C((Lo.X + Hi.X) / 2, (Lo.Y + Hi.Y) / 2, Hi.Z - 1);
+					const int32 Arm = FMath::Min(Hi.X - Lo.X, Hi.Y - Lo.Y) / 3;
+					W.FillBox(FIntVector(C.X - Arm, C.Y - U / 2, C.Z), FIntVector(C.X + Arm, C.Y - U / 2 + U, C.Z + 1), Ids.Trim);
+					W.FillBox(FIntVector(C.X - U / 2, C.Y - Arm, C.Z), FIntVector(C.X - U / 2 + U, C.Y + Arm, C.Z + 1), Ids.Trim);
+					for (const FIntVector& Corner : {FIntVector(Lo.X, Lo.Y, Hi.Z), FIntVector(Hi.X - U, Lo.Y, Hi.Z), FIntVector(Lo.X, Hi.Y - U, Hi.Z), FIntVector(Hi.X - U, Hi.Y - U, Hi.Z)})
+					{
+						W.FillBox(Corner, Corner + FIntVector(U, U, U), Ids.Window);
+					}
+					return Hi.Z + U;
+				}},
+			// Sawtooth: an industrial roof of north-light ridges across X, the steep side glazed (the alternate window).
+			{TEXT("Sawtooth"), [](FDCVoxelWorld& W, const FFaceFrame& F, int32 TopZ, const FCraftIds& Ids, FRandomStream&)
+				{
+					const int32 U = Ids.Unit;
+					const int32 Pitch = 6 * U;
+					const int32 Rise = 4 * U;
+					for (int32 X0 = F.Min.X; X0 + Pitch <= F.Max.X; X0 += Pitch)
+					{
+						// Skins only: the sloped deck, the glazed steep face, and the two gable ends.
+						for (int32 Dx = 0; Dx < Pitch; ++Dx)
+						{
+							const int32 H = FMath::Max(1, Rise * (Dx + 1) / Pitch);
+							W.FillBox(FIntVector(X0 + Dx, F.Min.Y, TopZ + H), FIntVector(X0 + Dx + 1, F.Max.Y, TopZ + 1 + H), Ids.Wall);
+							W.FillBox(FIntVector(X0 + Dx, F.Min.Y, TopZ + 1), FIntVector(X0 + Dx + 1, F.Min.Y + 1, TopZ + 1 + H), Ids.Wall);
+							W.FillBox(FIntVector(X0 + Dx, F.Max.Y - 1, TopZ + 1), FIntVector(X0 + Dx + 1, F.Max.Y, TopZ + 1 + H), Ids.Wall);
+						}
+						W.FillBox(FIntVector(X0 + Pitch - 1, F.Min.Y + 1, TopZ + 1), FIntVector(X0 + Pitch, F.Max.Y - 1, TopZ + Rise), Ids.WindowAlt);
+					}
+					return TopZ + 1 + Rise;
 				}},
 		};
 		return Table;
@@ -424,6 +531,10 @@ namespace DCVoxelCraft
 			Lot.Spec.Floors = FMath::Max(2, Rng.RandRange(R.MinFloors, R.MaxFloors));
 		}
 	}
+
+	bool IsRoofKind(FName Roof) { return Roofs().Contains(Roof); }
+	bool IsSignKind(FName Sign) { return Signs().Contains(Sign); }
+	bool IsBayKind(TCHAR Bay) { return Bays().Contains(Bay); }
 
 	void CraftTower(FDCVoxelTower& Tower, const FDCLotPlan& Lot, int32 LotIndex, const FDCVoxelCraftContext& Ctx)
 	{

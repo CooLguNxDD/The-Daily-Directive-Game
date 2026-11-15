@@ -1,0 +1,14 @@
+# Work zone cones (R23 street): three dim amber cones with ink bands around a manhole-sized patch, one tipped over.
+grid 5
+size 30 24 10
+slot cone Lamp
+slot band Ink
+slot base Trim
+box 2 2 0 9 9 1 base
+cone 5 5 1 9 3 0.6 cone
+paint box 0 0 4 10 10 5 band
+box 18 3 0 25 10 1 base
+cone 21 6 1 9 3 0.6 cone
+paint box 16 0 4 27 12 5 band
+beam 6 16 2 15 20 2 1.6 cone
+beam 4 15 2 6 16 2 2.4 base

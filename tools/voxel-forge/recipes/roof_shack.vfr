@@ -1,0 +1,18 @@
+# Rooftop shack (R23 roof): a squatter's tin hut with a lit window, a satellite dish and a lamp over the door.
+grid 10
+size 26 22 24
+slot wall InkBrown
+slot roof Steel
+slot warm Window
+slot door Ink
+slot lamp Lamp
+slot dish Trim
+shell 2 2 0 22 20 16 1 wall
+poly 16 18 roof 0,0 24,0 24,22 0,22
+carve box 21 8 1 22 13 12
+box 21 8 1 22 13 12 door
+carve box 9 1 7 15 2 12
+box 9 2 7 15 3 12 warm
+box 22 9 13 24 12 14 lamp
+cyl 7 11 18 22 0.8 dish
+ellipsoid 7 11 22 4 4 1.5 dish

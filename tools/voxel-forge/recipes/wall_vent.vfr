@@ -1,0 +1,12 @@
+# Wall vent (R23 wall mount): a square steel duct box with louvres and a stain streak below.
+grid 10
+size 4 10 14
+slot box Steel
+slot louvre Ink
+slot stain Rubble
+pivot 0 5 0
+box 0 1 5 3 9 13 box
+paint box 2 2 6 3 8 7 louvre
+paint box 2 2 8 3 8 9 louvre
+paint box 2 2 10 3 8 11 louvre
+box 0 3 0 1 7 5 stain
