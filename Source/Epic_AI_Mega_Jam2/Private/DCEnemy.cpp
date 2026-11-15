@@ -143,6 +143,12 @@ namespace
 	{
 		// R11: a walker marches on the nearest standing tower and shoulders it over; with none left it hunts players.
 		ADCCharacter* Target = E.FindTarget(Def.SenseRange, false);
+		// Human 16:25: a crew member in range gets a telegraphed big shot; the walker stands while it charges, then
+		// walks on (shoot, walk, shoot).
+		if (E.HostTickRanged(Def, Target, Now))
+		{
+			return;
+		}
 		const ADCBuilding* Tower = nullptr;
 		float Best = TNumericLimits<float>::Max();
 		for (ADCBuilding* B : TActorRange<ADCBuilding>(E.GetWorld()))
@@ -1027,6 +1033,103 @@ void ADCEnemy::SteerTowards(const FVector& Goal, float Speed, float DeltaSeconds
 	}
 }
 
+bool ADCEnemy::HostTickRanged(const FDCEnemyDef& Def, ADCCharacter* Target, float Now)
+{
+	if (Def.RangedRangeCm <= 0.f)
+	{
+		return false;
+	}
+	if (RangedChargeEnd >= 0.f)
+	{
+		if (Now < RangedChargeEnd)
+		{
+			return true;
+		}
+		RangedChargeEnd = -1.f;
+		HostRangedFire(Def, Now);
+		return false;
+	}
+	if (!Target || Target->IsDowned() || Now < NextAttackTime)
+	{
+		return false;
+	}
+	const FVector From = GetActorLocation();
+	const FVector At = Target->GetActorLocation();
+	if (FVector::Dist2D(From, At) > Def.RangedRangeCm)
+	{
+		return false;
+	}
+	const ADCVoxelCity* City = ADCVoxelCity::Get(this);
+	if (City && City->IsSightBlocked(From, At, TArray<int32>()))
+	{
+		NextAttackTime = Now + 0.5f; // look again soon, not every tick
+		return false;
+	}
+	RangedAt = At; // a fixed point: the crew can step out of the line
+	RangedChargeEnd = Now + Def.ChargeSeconds;
+	MulticastRangedCharge(From, At, Def.ChargeSeconds);
+	UE_LOG(LogTemp, Display, TEXT("DCWALKER %s charges at %s (%.0f m)"), *GetName(), *At.ToCompactString(), FVector::Dist2D(From, At) / 100.f);
+	return true;
+}
+
+void ADCEnemy::HostRangedFire(const FDCEnemyDef& Def, float Now)
+{
+	NextAttackTime = Now + Def.AttackInterval;
+	++AttackSeq; // R20: every machine plays the attack clip
+	MulticastRangedFire(GetActorLocation(), RangedAt, Def.ShotBlastCm);
+	UDCUnits* Budget = UDCUnits::Get(this);
+	int32 Hit = 0;
+	for (ADCCharacter* C : TActorRange<ADCCharacter>(GetWorld()))
+	{
+		if (C->IsDowned() || FVector::Dist(C->GetActorLocation(), RangedAt) > Def.ShotBlastCm)
+		{
+			continue;
+		}
+		const float Hurt = CrewDamage(GetWorld(), Def.Damage);
+		C->HostApplyHurt(Budget ? Budget->SpendCrewDamage(*C, Hurt, Now) : Hurt, RangedAt);
+		++Hit;
+	}
+	UE_LOG(LogTemp, Display, TEXT("DCWALKER %s fired at %s blast=%.0f hit=%d"), *GetName(), *RangedAt.ToCompactString(), Def.ShotBlastCm, Hit);
+}
+
+void ADCEnemy::MulticastRangedCharge_Implementation(FVector_NetQuantize From, FVector_NetQuantize To, float Seconds)
+{
+	ChargeLineFrom = From;
+	ChargeLineTo = To;
+	ChargeLineEndReal = GetWorld()->GetRealTimeSeconds() + Seconds;
+	NextChargeLineReal = 0.0;
+	DCAudio::PlayAt(this, TEXT("LaserCharge"), From, 0.8f, 0.7f);
+}
+
+void ADCEnemy::MulticastRangedFire_Implementation(FVector_NetQuantize From, FVector_NetQuantize To, float BlastCm)
+{
+	ChargeLineEndReal = -1.0;
+	const FDCEnemyDef* Def = GetDef();
+	const ADCVoxelCity* City = ADCVoxelCity::Get(this);
+	if (ADCVoxelFx* Fx = City ? City->GetFx() : nullptr)
+	{
+		const FLinearColor Beam = Def ? Def->EyeColor : FLinearColor::Red;
+		Fx->Tracer(From, To, Beam, UDCVoxelSettings::Get().Tuning.TracerGlow * 3.f);
+		Fx->Emit(TEXT("Crater"), To, BlastCm);
+	}
+	DCAudio::PlayAt(this, TEXT("Detonation"), To, 0.45f, 1.35f);
+}
+
+void ADCEnemy::TickRangedLine(const FDCEnemyDef& Def)
+{
+	const double Real = GetWorld()->GetRealTimeSeconds();
+	if (Real >= ChargeLineEndReal || Real < NextChargeLineReal)
+	{
+		return;
+	}
+	NextChargeLineReal = Real + 0.08;
+	const ADCVoxelCity* City = ADCVoxelCity::Get(this);
+	if (ADCVoxelFx* Fx = City ? City->GetFx() : nullptr)
+	{
+		Fx->Tracer(ChargeLineFrom, ChargeLineTo, Def.EyeColor, UDCVoxelSettings::Get().Tuning.TracerGlow);
+	}
+}
+
 void ADCEnemy::TryAttack(ADCCharacter* Target, float Now)
 {
 	const FDCEnemyDef* Def = GetDef();
@@ -1062,6 +1165,10 @@ void ADCEnemy::Tick(float DeltaSeconds)
 	if (IsAlive() || Anim)
 	{
 		TickGait(DeltaSeconds); // R20: an animated unit keeps posing through its death clip
+	}
+	if (IsAlive())
+	{
+		TickRangedLine(*Def); // the charge sight line, every machine
 	}
 	if (!IsAlive())
 	{

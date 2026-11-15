@@ -614,6 +614,12 @@ struct FDCEnemyDef
 	 *  ShotRange it can see (host voxel sight line), Damage per hit, ShotSpread degrees of miss. */
 	UPROPERTY(EditAnywhere, Config, Category = "Enemy") float ShotRange = 0.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Enemy") float ShotSpread = 2.f;
+	/** Big-machine ranged shot (Walker, human 16:25): 0 = none. Every AttackInterval, a crew member in sight within
+	 *  RangedRangeCm makes the unit stop and charge for ChargeSeconds (LaserCharge cue, red sight line from its eye to a
+	 *  fixed point), then a beam and a blast of ShotBlastCm land there: Damage to every crew member inside. */
+	UPROPERTY(EditAnywhere, Config, Category = "Enemy") float RangedRangeCm = 0.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Enemy") float ChargeSeconds = 1.2f;
+	UPROPERTY(EditAnywhere, Config, Category = "Enemy") float ShotBlastCm = 300.f;
 	/** Hit and run: a foe closer than this makes the unit back off while it keeps firing (0 = holds its ground). */
 	UPROPERTY(EditAnywhere, Config, Category = "Enemy") float KiteCm = 0.f;
 	/** A sound every machine hears from the unit every IdleCueSeconds (+-40 %, staggered per unit); None = silent. */
