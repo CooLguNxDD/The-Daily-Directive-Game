@@ -17,6 +17,7 @@
 #include "Brushes/SlateColorBrush.h"
 #include "Brushes/SlateRoundedBoxBrush.h"
 #include "Widgets/Input/SButton.h"
+#include "DCSave.h"
 #include "Widgets/Input/SEditableTextBox.h"
 #include "Widgets/Layout/SBorder.h"
 #include "Widgets/Layout/SBox.h"
@@ -137,6 +138,23 @@ namespace DCMenu
 		{
 			TSharedRef<SEditableTextBox> Address = SNew(SEditableTextBox).Text(FText::FromString(TEXT("127.0.0.1"))).Font(Font(20, "Regular")).Justification(ETextJustify::Center);
 			Column->AddSlot().AutoHeight().HAlign(HAlign_Center)[Button(TEXT("SOLO RUN"), Click(&ADCPlayerController::MenuSolo), Gold, &GSoloButton)];
+			{
+				// R25: until the page has been opened once (saved), the button shines: a pulsing glow in the noir accent.
+				const UDCSaveSubsystem* Save = UDCSaveSubsystem::Get(PC);
+				const bool bShine = Save && !Save->Settings.bHowToPlaySeen;
+				const FLinearColor Glow = UDCTuning::Get().Look.HowToShineColor;
+				const float Hz = UDCTuning::Get().Look.HowToShineHz;
+				Column->AddSlot().AutoHeight().HAlign(HAlign_Center)
+					[SNew(SBorder)
+					.BorderImage(FCoreStyle::Get().GetBrush("WhiteBrush"))
+					.Padding(FMargin(bShine ? 4.f : 0.f))
+					.BorderBackgroundColor_Lambda([bShine, Glow, Hz]()
+						{
+							const float A = bShine ? 0.35f + 0.65f * (0.5f + 0.5f * FMath::Sin(FPlatformTime::Seconds() * UE_TWO_PI * Hz)) : 0.f;
+							return FSlateColor(FLinearColor(Glow.R, Glow.G, Glow.B, A));
+						})
+					[Button(TEXT("HOW TO PLAY"), Click(&ADCPlayerController::OpenHowTo), bShine ? Glow : Gold)]];
+			}
 			Column->AddSlot().AutoHeight().HAlign(HAlign_Center)[Button(TEXT("HOST CO-OP (1-4)"), Click(&ADCPlayerController::MenuHost))];
 			Column->AddSlot().AutoHeight().HAlign(HAlign_Center)[Button(TEXT("YOUR PHOTOGRAPHER"), Click(&ADCPlayerController::OpenBuilder))];
 			Column->AddSlot().AutoHeight().HAlign(HAlign_Center)[Button(TEXT("SETTINGS"), Click(&ADCPlayerController::OpenSettings))];
@@ -248,7 +266,7 @@ namespace DCMenu
 			// Settings (R24): every change is saved at once (Saved/DCSave/settings.json).
 			Column->AddSlot().AutoHeight().HAlign(HAlign_Center).Padding(0, 0, 0, 10)[Label(TEXT("SETTINGS"), 30, Ink)];
 			for (const TPair<FName, const TCHAR*>& R : {TPair<FName, const TCHAR*>(TEXT("Volume"), TEXT("VOLUME")), TPair<FName, const TCHAR*>(TEXT("Mouse"), TEXT("MOUSE")),
-				TPair<FName, const TCHAR*>(TEXT("Quality"), TEXT("QUALITY")), TPair<FName, const TCHAR*>(TEXT("Window"), TEXT("WINDOW"))})
+				TPair<FName, const TCHAR*>(TEXT("Quality"), TEXT("QUALITY")), TPair<FName, const TCHAR*>(TEXT("Window"), TEXT("WINDOW")), TPair<FName, const TCHAR*>(TEXT("Hints"), TEXT("HINTS"))})
 			{
 				const FName Id = R.Key;
 				auto Stepper = [Weak, Id](int32 D) { return [Weak, Id, D]() { if (ADCPlayerController* P = Weak.Get()) { P->SettingsStep(Id, D); } }; };
@@ -273,6 +291,24 @@ namespace DCMenu
 			Column->AddSlot().AutoHeight().HAlign(HAlign_Center)[Keys];
 			Column->AddSlot().AutoHeight().HAlign(HAlign_Center).Padding(0, 4, 0, 0)[SNew(SBox).WidthOverride(260.f)[Button(TEXT("RESET KEYS"), Click(&ADCPlayerController::ResetKeys))]];
 			Column->AddSlot().AutoHeight().HAlign(HAlign_Center).Padding(0, 10, 0, 0)[Button(TEXT("BACK"), Click(&ADCPlayerController::CloseSettings), Ink)];
+		},
+		[&]()
+		{
+			// R25 "How to play": sections from +HowToPlay (data), then PLAY (offered before the first run) or BACK.
+			Column->AddSlot().AutoHeight().HAlign(HAlign_Center).Padding(0, 0, 0, 8)[Label(TEXT("HOW TO PLAY"), 30, Ink)];
+			for (const FDCHowToSection& Sec : UDCTuning::Get().HowToPlay)
+			{
+				Column->AddSlot().AutoHeight().HAlign(HAlign_Left).Padding(0, 10, 0, 2)[Label(Sec.Title, 18, Gold)];
+				for (const FString& Line : Sec.Lines)
+				{
+					Column->AddSlot().AutoHeight().HAlign(HAlign_Left)[Label(Line, 14, Ink)];
+				}
+			}
+			if (PC->IsHowToThenSolo())
+			{
+				Column->AddSlot().AutoHeight().HAlign(HAlign_Center).Padding(0, 16, 0, 0)[Button(TEXT("PLAY"), Click(&ADCPlayerController::HowToPlaySolo), Gold, &GSoloButton)];
+			}
+			Column->AddSlot().AutoHeight().HAlign(HAlign_Center).Padding(0, PC->IsHowToThenSolo() ? 4 : 16, 0, 0)[Button(TEXT("BACK"), Click(&ADCPlayerController::CloseHowTo), Ink)];
 		}};
 		Modes[FMath::Min<int32>(Mode, UE_ARRAY_COUNT(Modes) - 1)]();
 		Column->AddSlot().AutoHeight().HAlign(HAlign_Center).Padding(0, 20, 0, 0)

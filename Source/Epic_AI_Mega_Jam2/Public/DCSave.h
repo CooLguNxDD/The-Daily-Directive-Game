@@ -22,6 +22,10 @@ struct FDCSettingsSave
 	UPROPERTY() bool bFullscreen = false;
 	/** Rebound actions: action name -> key name (empty = the defaults). */
 	UPROPERTY() TMap<FString, FString> KeyBindings;
+	/** R25 tutorial: hints off, the "How to play" page opened once (its button stops shining), hints already shown. */
+	UPROPERTY() bool bHintsOff = false;
+	UPROPERTY() bool bHowToPlaySeen = false;
+	UPROPERTY() TArray<FName> HintsSeen;
 };
 
 USTRUCT()

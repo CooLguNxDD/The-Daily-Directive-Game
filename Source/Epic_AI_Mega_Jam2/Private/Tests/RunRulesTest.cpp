@@ -3,6 +3,7 @@
 #include "DCTuning.h"
 #include "DCUpgrades.h"
 #include "DCLanBeacon.h"
+#include "DCHints.h"
 #include "Misc/AutomationTest.h"
 #include "Rules/DCPhotoRules.h"
 #include "Rules/DCRunRules.h"
@@ -232,6 +233,18 @@ bool FDCRunDataTest::RunTest(const FString&)
 	TestTrue(TEXT("R4: Overexposed 1.5x at 0.0 s"), Over && Over->Label == TEXT("OVEREXPOSED") && FMath::IsNearlyEqual(Over->Multiplier, 1.5f));
 	TestTrue(TEXT("R4: Peak Cinema 3.0x in 0.2-0.8 s"), Peak && Peak->Label == TEXT("PEAK CINEMA") && FMath::IsNearlyEqual(Peak->Multiplier, 3.f));
 	TestTrue(TEXT("R15: headline templates exist"), T.Run.Headlines.Num() > 0);
+	// R25 tutorial: a how-to page of at least three sections, and every hint card names a known trigger.
+	TestTrue(TEXT("R25: how-to page has at least three sections"), T.HowToPlay.Num() >= 3);
+	for (const FDCHowToSection& Sec : T.HowToPlay)
+	{
+		TestTrue(FString::Printf(TEXT("R25: how-to section %s has lines"), *Sec.Title), !Sec.Title.IsEmpty() && Sec.Lines.Num() > 0);
+	}
+	TestTrue(TEXT("R25: hint cards exist"), T.Hints.Num() > 0);
+	for (const FDCHintDef& H : T.Hints)
+	{
+		TestTrue(FString::Printf(TEXT("R25: hint %s names a known trigger"), *H.Id.ToString()), DCHints::IsKnown(H.Id));
+		TestTrue(FString::Printf(TEXT("R25: hint %s has text and time"), *H.Id.ToString()), !H.Text.IsEmpty() && H.Seconds > 0.f);
+	}
 	return true;
 }
 
