@@ -6,6 +6,7 @@
 #include "Containers/Ticker.h"
 #include "DCOnlineTransport.h"
 #include "Features/IModularFeatures.h"
+#include "EOSSharedTypes.h"
 #include "IEOSSDKManager.h"
 #include "Modules/ModuleManager.h"
 #include "SocketSubsystemEOS.h"
