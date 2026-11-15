@@ -264,6 +264,8 @@ namespace DCVoxelCraft
 		Plan.GridX = Gx;
 		Plan.GridY = Gy;
 		Plan.LotSizeCm = D.LotSizeCm;
+		Plan.StreetMaterial = D.StreetMaterial;
+		Plan.LotMaterial = D.LotMaterial;
 		const float Pitch = D.LotSizeCm + D.StreetWidthCm;
 		const float OffX = (Gx - 1) * Pitch * 0.5f;
 		const float OffY = (Gy - 1) * Pitch * 0.5f;

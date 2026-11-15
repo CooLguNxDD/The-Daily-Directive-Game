@@ -119,6 +119,7 @@ bool FDCRecipeKindsTest::RunTest(const FString&)
 	for (const FDCDistrictRule& D : V.Districts)
 	{
 		TestTrue(FString::Printf(TEXT("district %s landmark recipe exists"), *D.Id.ToString()), IsRecipe(D.LandmarkRecipe));
+		TestTrue(FString::Printf(TEXT("district %s street/lot materials are palette rows"), *D.Id.ToString()), InPalette(D.StreetMaterial) && InPalette(D.LotMaterial));
 		const FDCPcgRuleSet* LotRules = V.RuleSet(D.Rules);
 		TestNotNull(*FString::Printf(TEXT("district %s lot rules %s exist"), *D.Id.ToString(), *D.Rules.ToString()), LotRules);
 		TestNotNull(*FString::Printf(TEXT("district %s prop rules %s exist"), *D.Id.ToString(), *D.Props.ToString()), V.RuleSet(D.Props));
