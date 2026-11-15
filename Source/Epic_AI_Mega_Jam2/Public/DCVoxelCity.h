@@ -195,6 +195,8 @@ private:
 	bool UploadCell(const FIntVector4& Cell);
 	/** Set by Build until the first full upload is done (load-phase budget). */
 	bool bLoading = false;
+	/** A committed op hands the next queued op to the following Tick (R13: the detonation frame only commits). */
+	bool bStartOpNextTick = false;
 	/** The current load came from an async (sector card) build. */
 	bool bAsyncLoad = false;
 	/** An off-thread sector craft in flight (Build with bAsync); FinishBuild swaps it in. */

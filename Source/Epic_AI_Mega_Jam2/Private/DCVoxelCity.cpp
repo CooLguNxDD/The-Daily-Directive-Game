@@ -192,12 +192,25 @@ float ADCVoxelCity::SurfaceZCm(const FVector& Where) const
 
 float ADCVoxelCity::ScanSurface(const FIntVector& C) const
 {
+	// Top solid voxel of the column, chunk by chunk (R13, advisor a-16: one map lookup per chunk instead of one per
+	// voxel; the op snapshot scans ~11k columns in the detonation frame). Same result as the per-voxel scan.
+	using FChunk = FDCVoxelChunk;
 	const FDCVoxelGrid& T = Sector.Terrain;
-	for (int32 Z = UDCVoxelSettings::Get().Tuning.GroundLayers + 60; Z >= 0; --Z)
+	const int32 Top = UDCVoxelSettings::Get().Tuning.GroundLayers + 60;
+	const int32 LX = C.X & FChunk::Mask, LY = C.Y & FChunk::Mask;
+	for (int32 CZ = Top >> FChunk::Bits; CZ >= 0; --CZ)
 	{
-		if (T.Data.IsSolid(FIntVector(C.X, C.Y, Z)))
+		const FChunk* Chunk = T.Data.FindChunk(FIntVector(C.X >> FChunk::Bits, C.Y >> FChunk::Bits, CZ));
+		if (!Chunk || Chunk->Solid == 0)
 		{
-			return static_cast<float>(T.OriginCm.Z + (Z + 1) * T.VoxelCm);
+			continue;
+		}
+		for (int32 Z = FMath::Min(Top, CZ * FChunk::Size + FChunk::Mask); Z >= CZ * FChunk::Size; --Z)
+		{
+			if (Chunk->V[FChunk::Index(LX, LY, Z & FChunk::Mask)] != 0)
+			{
+				return static_cast<float>(T.OriginCm.Z + (Z + 1) * T.VoxelCm);
+			}
 		}
 	}
 	return 0.f;
@@ -2085,6 +2098,8 @@ void ADCVoxelCity::OnBodyHit(UPrimitiveComponent* HitComp, AActor* Other, UPrimi
 	if (ADCDebrisPool* Pool = GS && GS->GetEnvironment() ? GS->GetEnvironment()->GetDebrisPool() : nullptr)
 	{
 		FRandomStream Rng(GetTypeHash(Where));
+		FDCShardBurst Queued; // through the ShardSpawnsPerFrame queue (R13, advisor a-16): several landings share a frame
+		Queued.Start = TNumericLimits<float>::Lowest();
 		for (int32 i = 0; i < Tn.LandingDebris / 3; ++i)
 		{
 			FDCDebrisSpawn D;
@@ -2093,8 +2108,9 @@ void ADCVoxelCity::OnBodyHit(UPrimitiveComponent* HitComp, AActor* Other, UPrimi
 			D.AngularVelocityDeg = Rng.VRand() * 400.f;
 			D.Color = F->Color * Rng.FRandRange(0.8f, 1.4f);
 			D.LifeSeconds = UDCTuning::Get().City.DebrisLifeSeconds * 0.5f;
-			Pool->Spawn(D);
+			Queued.Spawns.Add(D);
 		}
+		PendingShards.Add(MoveTemp(Queued));
 	}
 	DCAudio::PlayAt(this, TEXT("Collapse"), Where, 0.6f);
 }
@@ -2182,6 +2198,8 @@ void ADCVoxelCity::Land(FFalling& F)
 	{
 		FRandomStream Rng(GetTypeHash(Where));
 		const float S = Sector.Terrain.VoxelCm / 100.f;
+		FDCShardBurst Queued; // through the ShardSpawnsPerFrame queue (R13, advisor a-16)
+		Queued.Start = TNumericLimits<float>::Lowest();
 		for (int32 i = 0; i < Tn.LandingDebris; ++i)
 		{
 			FDCDebrisSpawn D;
@@ -2190,8 +2208,9 @@ void ADCVoxelCity::Land(FFalling& F)
 			D.AngularVelocityDeg = Rng.VRand() * 300.f;
 			D.Color = F.Color * Rng.FRandRange(0.7f, 1.3f);
 			D.LifeSeconds = UDCTuning::Get().City.DebrisLifeSeconds * Rng.FRandRange(0.4f, 0.8f);
-			Pool->Spawn(D);
+			Queued.Spawns.Add(D);
 		}
+		PendingShards.Add(MoveTemp(Queued));
 	}
 	DCAudio::PlayAt(this, TEXT("Collapse"), Where, 1.f);
 }
@@ -2260,6 +2279,15 @@ void ADCVoxelCity::Tick(float DeltaSeconds)
 	const ADCGameState* State = GetWorld()->GetGameState<ADCGameState>();
 	double PrepMs = 0.0;
 	double CommitMs = 0.0; // advisor CP26: the hitch log scopes the op's game-thread prepare and commit too
+	double NextOpMs = 0.0;
+	if (bStartOpNextTick)
+	{
+		// The op after a commit starts a frame later (advisor a-16): the detonation frame carries only the commit.
+		bStartOpNextTick = false;
+		const double N0 = FPlatformTime::Seconds();
+		StartNextOp();
+		NextOpMs = (FPlatformTime::Seconds() - N0) * 1000.0;
+	}
 	if (InFlight.IsValid() && InFlightTask.IsCompleted())
 	{
 		const float Lead = State ? InFlight->Op.Time - State->Now() : 0.f;
@@ -2276,7 +2304,7 @@ void ADCVoxelCity::Tick(float DeltaSeconds)
 		{
 			const double C0 = FPlatformTime::Seconds();
 			FinishInFlight();
-			StartNextOp();
+			bStartOpNextTick = true;
 			CommitMs = (FPlatformTime::Seconds() - C0) * 1000.0;
 		}
 	}
@@ -2297,9 +2325,9 @@ void ADCVoxelCity::Tick(float DeltaSeconds)
 	TickLampLights();
 	TickCollapseCam();
 	// Hitch log (R13): which stage of the city's frame went long.
-	if ((T3 - T0) * 1000.0 + PrepMs + CommitMs > UDCVoxelSettings::Get().Tuning.HitchLogMs)
+	if ((T3 - T0) * 1000.0 + PrepMs + CommitMs + NextOpMs > UDCVoxelSettings::Get().Tuning.HitchLogMs)
 	{
-		UE_LOG(LogTemp, Display, TEXT("DCHITCH city prep=%.1f commit=%.1f poll=%.1f upload=%.1f falling=%.1f crumb=%.1f ms (%d live) bodies=%d cells=%d->%d jobs=%d"), PrepMs, CommitMs, (T1 - T0) * 1000.0, (T2 - T1) * 1000.0, (T3 - T2) * 1000.0,
+		UE_LOG(LogTemp, Display, TEXT("DCHITCH city next=%.1f prep=%.1f commit=%.1f poll=%.1f upload=%.1f falling=%.1f crumb=%.1f ms (%d live) bodies=%d cells=%d->%d jobs=%d"), NextOpMs, PrepMs, CommitMs, (T1 - T0) * 1000.0, (T2 - T1) * 1000.0, (T3 - T2) * 1000.0,
 			Crumbs ? Crumbs->LastTickMs : 0.f, Crumbs ? Crumbs->LiveCount() : 0, BodiesReserved, DirtyBefore, DirtyCells.Num(), Jobs.Num());
 		if ((T3 - T2) * 1000.0 > UDCVoxelSettings::Get().Tuning.HitchLogMs * 0.25)
 		{
