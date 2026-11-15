@@ -1,0 +1,8 @@
+# Pothole patch (R23 ground cover): a ragged dark patch with a rubble lip, one voxel high (reads as a hole at night).
+grid 5
+size 30 26 1
+slot hole WindowOff
+slot lip Rubble
+ellipsoid 15 13 0 14 12 1 lip
+ellipsoid 15 13 0 11 9 1 hole
+noise 0.25 21 lip

@@ -1,0 +1,11 @@
+# Speed bump (R23 ground): a low rounded hump across the lane with worn paint stripes. Long axis along y.
+grid 5
+size 8 64 2
+slot bump Kerb
+slot paint Paint
+box 0 0 0 8 64 1 bump
+box 2 0 1 6 64 2 bump
+paint box 0 4 0 8 10 2 paint
+paint box 0 20 0 8 26 2 paint
+paint box 0 36 0 8 42 2 paint
+paint box 0 52 0 8 58 2 paint
