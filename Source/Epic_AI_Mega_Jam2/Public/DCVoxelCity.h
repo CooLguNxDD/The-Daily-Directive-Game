@@ -254,6 +254,16 @@ private:
 	void RebuildWalkMask(int32 Lot);
 	/** R13: the last commit split (CommitOp/FinishOp vs the caller's OnDone), for DCHITCH. */
 	double LastCommitOpMs = 0.0, LastOnDoneMs = 0.0;
+	/** R1 attribution (advisor a-36): what this frame's PollJobs absorbed. */
+	struct FPollStats
+	{
+		int32 Chunks = 0;
+		int32 Pieces = 0;
+		double PieceMs = 0.0;
+		double WorstPieceMs = 0.0;
+		int32 WorstPieceVerts = 0;
+	};
+	FPollStats PollStats;
 	/** The current load came from an async (sector card) build. */
 	bool bAsyncLoad = false;
 	/** An off-thread sector craft in flight (Build with bAsync); FinishBuild swaps it in. */
