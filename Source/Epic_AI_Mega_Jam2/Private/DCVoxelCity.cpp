@@ -2413,10 +2413,13 @@ void ADCVoxelCity::Tick(float DeltaSeconds)
 		// R6: walk masks for the freshly built city (the build's workers are done, no op is writing).
 		WalkMaskBuildId = BuiltId;
 		WalkMasks.Reset();
+		int32 WithDoors = 0;
 		for (int32 Lot = 0; Lot < Sector.Towers.Num(); ++Lot)
 		{
 			RebuildWalkMask(Lot);
+			WithDoors += WalkMasks.IsValidIndex(Lot) && WalkMasks[Lot].bValid && WalkMasks[Lot].Portals.Num() > 0 ? 1 : 0;
 		}
+		UE_LOG(LogTemp, Display, TEXT("DCWALK masks built sector=%d towers=%d with doors=%d"), BuiltSector, Sector.Towers.Num(), WithDoors);
 	}
 	double CommitMs = 0.0; // advisor CP26: the hitch log scopes the op's game-thread prepare and commit too
 	double NextOpMs = 0.0;

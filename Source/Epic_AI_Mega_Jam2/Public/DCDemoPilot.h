@@ -47,6 +47,9 @@ private:
 	void AddLineupShot();
 	void AddSupplyCall();
 	void AddRunFire();
+	void AddIndoors();
+	int32 IndoorLot = INDEX_NONE;
+	FVector IndoorDoor = FVector::ZeroVector;
 	FVector SupplyAt = FVector::ZeroVector;
 	TArray<TWeakObjectPtr<class ADCEnemy>> Lineup;
 	FVector LineupMid = FVector::ZeroVector;

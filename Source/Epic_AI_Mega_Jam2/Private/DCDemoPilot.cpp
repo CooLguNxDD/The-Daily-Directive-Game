@@ -558,6 +558,61 @@ void ADCDemoPilot::AddClashShot(const FString& S)
 	Add(0.6f, [this, S] { Shot(S + TEXT("_clash_stamp")); LogPhoto(); Release(TEXT("Aim")); return true; });
 }
 
+void ADCDemoPilot::AddIndoors()
+{
+	// R6 evidence (-dcindoors): once the crew grace is over, the pawn is placed 3 m inside the standing tower nearest
+	// to it that has a door (a logged pilot aid), holds there 30 s and logs how many hostile ground units stand inside
+	// the same tower every 5 s (DEMO indoors), with frames.
+	Add(0.f, [this] { const ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>(); return GS && GS->Phase == EDCRunPhase::Sector; }, 120.f);
+	Add(18.f, [this]
+	{
+		APawn* Me = GetWorld()->GetFirstPlayerController() ? GetWorld()->GetFirstPlayerController()->GetPawn() : nullptr;
+		const ADCVoxelCity* City = ADCVoxelCity::Get(this);
+		IndoorLot = INDEX_NONE;
+		float Best = TNumericLimits<float>::Max();
+		for (int32 Lot = 0; Me && City && Lot < 64; ++Lot)
+		{
+			FVector Door;
+			if (City->NearestPortal(Lot, Me->GetActorLocation(), Door) && FVector::DistSquared2D(Door, Me->GetActorLocation()) < Best)
+			{
+				Best = FVector::DistSquared2D(Door, Me->GetActorLocation());
+				IndoorLot = Lot;
+				IndoorDoor = Door;
+			}
+		}
+		if (Me && IndoorLot != INDEX_NONE)
+		{
+			const FVector Into = (IndoorDoor - Me->GetActorLocation()).GetSafeNormal2D();
+			const FVector Inside = IndoorDoor + Into * 300.f + FVector(0, 0, Me->GetActorLocation().Z - IndoorDoor.Z + 20.f);
+			Me->SetActorLocation(Inside, false, nullptr, ETeleportType::TeleportPhysics);
+			UE_LOG(LogDCDemo, Display, TEXT("DEMO indoors: pawn placed inside lot %d at %s (door %s; pilot aid)"), IndoorLot, *Inside.ToCompactString(), *IndoorDoor.ToCompactString());
+		}
+		return true;
+	});
+	for (int32 i = 0; i < 6; ++i)
+	{
+		Add(5.f, [this, i]
+		{
+			const ADCVoxelCity* City = ADCVoxelCity::Get(this);
+			const UDCUnits* Units = UDCUnits::Get(this);
+			const TArray<FDCFactionDef>& Factions = UDCTuning::Get().Factions;
+			int32 Inside = 0;
+			int32 Near = 0;
+			const APawn* Me = GetWorld()->GetFirstPlayerController() ? GetWorld()->GetFirstPlayerController()->GetPawn() : nullptr;
+			for (const ADCEnemy* U : Units ? Units->All() : TArray<TObjectPtr<ADCEnemy>>())
+			{
+				const bool bHostile = U && U->IsAlive() && DCFactionRules::FightsCrew(Factions, U->GetFaction());
+				Inside += bHostile && City && City->StandingLotAt(U->GetActorLocation()) == IndoorLot ? 1 : 0;
+				Near += bHostile && Me && FVector::Dist(U->GetActorLocation(), Me->GetActorLocation()) < 1500.f ? 1 : 0;
+			}
+			UE_LOG(LogDCDemo, Display, TEXT("DEMO indoors t=%d s: lot %d hostiles inside=%d within 15 m=%d player inside=%d"), (i + 1) * 5, IndoorLot, Inside, Near,
+				Me && City && City->StandingLotAt(Me->GetActorLocation()) == IndoorLot ? 1 : 0);
+			Shot(FString::Printf(TEXT("indoors_%02d"), (i + 1) * 5));
+			return true;
+		});
+	}
+}
+
 void ADCDemoPilot::AddRunFire()
 {
 	// R10 evidence (-dcrunfire): rifle out, sprint and strafe with the real Move/Sprint actions while tapping Fire;
@@ -1148,6 +1203,10 @@ void ADCDemoPilot::BuildScript()
 		}
 		int32 Cycles = CyclesPerSector;
 		FParse::Value(FCommandLine::Get(), TEXT("dccycles="), Cycles); // more strike-and-snap cycles per sector
+		if (Sector == 0 && FParse::Param(FCommandLine::Get(), TEXT("dcindoors")))
+		{
+			AddIndoors();
+		}
 		if (Sector == 0 && FParse::Param(FCommandLine::Get(), TEXT("dcrunfire")))
 		{
 			AddRunFire();
