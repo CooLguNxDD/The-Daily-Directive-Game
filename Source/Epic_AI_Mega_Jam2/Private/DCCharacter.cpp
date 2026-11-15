@@ -1463,10 +1463,10 @@ void ADCCharacter::Tick(float DeltaSeconds)
 		const FDCMoveTuning& Mv = UDCTuning::Get().Move;
 		const AGameStateBase* RegenGS = GetWorld()->GetGameState();
 		const int32 Crew = RegenGS ? FMath::Max(1, RegenGS->PlayerArray.Num()) : 1;
-		const float Rate = Mv.RegenPerSecondByPlayers.Num() > 0 ? Mv.RegenPerSecondByPlayers[FMath::Min(Crew, Mv.RegenPerSecondByPlayers.Num()) - 1] : 0.f;
-		if (Rate > 0.f && !bDowned && Health < Mv.MaxHealth && Now() - HostHurtAt >= Mv.RegenDelaySeconds)
+		const float RegenRate = Mv.RegenPerSecondByPlayers.Num() > 0 ? Mv.RegenPerSecondByPlayers[FMath::Min(Crew, Mv.RegenPerSecondByPlayers.Num()) - 1] : 0.f;
+		if (RegenRate > 0.f && !bDowned && Health < Mv.MaxHealth && Now() - HostHurtAt >= Mv.RegenDelaySeconds)
 		{
-			Health = FMath::Min(Mv.MaxHealth, Health + Rate * DeltaSeconds);
+			Health = FMath::Min(Mv.MaxHealth, Health + RegenRate * DeltaSeconds);
 		}
 	}
 	if (!IsLocallyControlled() || !GetController())
