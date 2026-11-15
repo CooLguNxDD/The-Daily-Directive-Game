@@ -410,6 +410,15 @@ USoundWaveProcedural* UDCAudioSubsystem::AcquireWave(FName Cue, float Pitch, int
 
 float UDCAudioSubsystem::CueSeconds(FName Cue) const
 {
+	// A remixed recording is what plays: its own length holds the class voice and the merge window (review F25).
+	if (const USoundBase* Remix = MixSounds.FindRef(Cue))
+	{
+		const float D = Remix->GetDuration();
+		if (D > 0.f && !Remix->IsLooping())
+		{
+			return D;
+		}
+	}
 	const TSharedPtr<TArray<uint8>>* Data = Bank.Find(Cue);
 	return Data ? (*Data)->Num() / (2.f * SampleRate) : 0.f;
 }
