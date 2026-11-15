@@ -72,7 +72,7 @@ namespace DCOnlineRules
 		OutCode.Reset();
 		for (const TCHAR C : Input.ToUpper())
 		{
-			if (C == TEXT(' ') || C == TEXT('-') || C == TEXT('\t'))
+			if (FChar::IsWhitespace(C) || C == TEXT('-'))
 			{
 				continue;
 			}

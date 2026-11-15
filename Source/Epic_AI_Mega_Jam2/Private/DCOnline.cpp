@@ -11,6 +11,7 @@
 #include "HAL/PlatformTime.h"
 #include "UnrealClient.h"
 #include "Kismet/GameplayStatics.h"
+#include "HAL/FileManager.h"
 #include "Misc/CommandLine.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
@@ -161,6 +162,7 @@ void UDCOnline::Start(EDCOnlineIntent InIntent)
 	Options.DisplayName = S.DisplayName;
 	Options.BucketId = S.BucketId;
 	Options.CacheDirectory = FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir() / TEXT("EOSCache"));
+	IFileManager::Get().MakeDirectory(*Options.CacheDirectory, true);
 	Options.bFreshDevice = FParse::Param(FCommandLine::Get(), TEXT("dceosfreshdevice"));
 	const int32 This = Attempt;
 	TWeakObjectPtr<UDCOnline> Weak(this);

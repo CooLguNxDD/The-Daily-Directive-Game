@@ -53,6 +53,7 @@ bool FDCOnlineCodeTest::RunTest(const FString&)
 		TestTrue(FString::Printf(TEXT("%s normalizes"), *Code), DCOnlineRules::NormalizeCode(Code, S.CodeAlphabet, S.CodeLength, Back) && Back == Code);
 		FString Typed = Code.ToLower();
 		Typed.InsertAt(3, TEXT(" - "));
+		Typed += TEXT("\r\n");
 		TestTrue(TEXT("typed in lower case with a dash"), DCOnlineRules::NormalizeCode(Typed, S.CodeAlphabet, S.CodeLength, Back) && Back == Code);
 		Seen.Add(Code);
 	}
