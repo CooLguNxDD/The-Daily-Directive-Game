@@ -384,6 +384,14 @@ private:
 
 	UPROPERTY() TObjectPtr<USceneComponent> Root;
 	UPROPERTY() TArray<TObjectPtr<UProceduralMeshComponent>> MeshPool;
+	/** R1 (advisor a-41): a held op's new cell meshes, built ahead in parked spare components; the commit swaps them in. */
+	UPROPERTY() TMap<FIntVector4, TObjectPtr<UProceduralMeshComponent>> Staged;
+	/** Parked cell components by voxel size (their material), reused for staging. MeshPool keeps them alive. */
+	TMap<int32, TArray<TObjectPtr<UProceduralMeshComponent>>> SpareCells;
+	void StageHeldCells(const TSet<FIntVector4>& Busy);
+	bool SwapStaged(const FIntVector4& Cell);
+	void ParkSpare(int32 G, UProceduralMeshComponent* Mesh);
+	void UnstageAll();
 	/** Pooled sign lights (R25) and the signs whose voxels were carved (lot, sign index): their light is gone. */
 	UPROPERTY() TArray<TObjectPtr<class URectLightComponent>> SignLightPool;
 	TSet<FIntPoint> DeadSigns;

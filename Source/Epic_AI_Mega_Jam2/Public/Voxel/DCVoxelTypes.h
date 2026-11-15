@@ -239,6 +239,10 @@ struct FDCVoxelTuning
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float PieceUploadBudgetMs = 4.f;
 	/** In play, finished chunk meshes absorbed per frame stop after this many ms (the rest wait a frame). */
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float PollChunkBudgetMs = 5.f;
+	/** Held-op cells staged ahead per frame stop after this many ms (advisor a-41: the commit frame only swaps). */
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float StageBudgetMs = 4.f;
+	/** Staged and spare cell components wait this far under their place (visible to the renderer, out of sight, no collision). */
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float StageParkDepthCm = 200000.f;
 	/** Load phase: after a Build (sector start, a reel clip's rebuild) until every cell is up, the budget is this many
 	 *  ms, so the city stands before the clip or the first strike (a 4 ms budget left the reel's city empty). */
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float UploadLoadBudgetMs = 60.f;

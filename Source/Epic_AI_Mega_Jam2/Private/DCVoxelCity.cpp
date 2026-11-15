@@ -715,6 +715,7 @@ void ADCVoxelCity::EndPlay(const EEndPlayReason::Type Reason)
 		bHoldUploads = false; // a dropped held op never blocks later uploads
 		HeldCells.Reset();
 		CommitCells.Reset();
+		UnstageAll();
 	}
 	for (const TSharedPtr<FMeshJob>& Job : Jobs)
 	{
@@ -901,6 +902,7 @@ void ADCVoxelCity::Clear()
 		bHoldUploads = false; // a dropped held op never blocks later uploads
 		HeldCells.Reset();
 		CommitCells.Reset();
+		UnstageAll();
 	}
 	QueuedOps.Reset();
 	SurfaceCache.Reset();
@@ -919,6 +921,8 @@ void ADCVoxelCity::Clear()
 		}
 	}
 	MeshPool.Reset();
+	Staged.Reset();
+	SpareCells.Reset();
 	Cells.Reset();
 	CellChunks.Reset();
 	ChunkMeshes.Reset();
@@ -1878,6 +1882,105 @@ namespace
 	}
 }
 
+void ADCVoxelCity::StageHeldCells(const TSet<FIntVector4>& Busy)
+{
+	// A staged cell whose chunks are meshing again is stale: back to the spares, it stages again when ready.
+	for (auto It = Staged.CreateIterator(); It; ++It)
+	{
+		if (Busy.Contains(It.Key()) || (!HeldCells.Contains(It.Key()) && !CommitCells.Contains(It.Key()))) // held, or committing now
+		{
+			ParkSpare(It.Key().X, It.Value());
+			It.RemoveCurrent();
+		}
+	}
+	if (!bHoldUploads)
+	{
+		return;
+	}
+	const FDCVoxelTuning& Tn = UDCVoxelSettings::Get().Tuning;
+	const double Start = FPlatformTime::Seconds();
+	int32 Done = 0;
+	for (const FIntVector4& Cell : HeldCells)
+	{
+		if (Staged.Contains(Cell) || Busy.Contains(Cell) || !DirtyCells.Contains(Cell))
+		{
+			continue;
+		}
+		if (Done > 0 && (FPlatformTime::Seconds() - Start) * 1000.0 >= Tn.StageBudgetMs)
+		{
+			break;
+		}
+		FDCVoxelMeshData Merged;
+		MergeCell(Cell, Merged);
+		++Done;
+		if (Merged.IsEmpty())
+		{
+			continue; // a fully cleared cell: the commit clears the live one (no spare needed)
+		}
+		FProcMeshSection Section;
+		BuildSection(Merged, Section);
+		const int32 G = Cell.X;
+		const int32 Cm = GridAt(G).VoxelCm;
+		TArray<TObjectPtr<UProceduralMeshComponent>>& Free = SpareCells.FindOrAdd(Cm);
+		UProceduralMeshComponent* Spare = Free.Num() > 0 ? Free.Pop(EAllowShrinking::No).Get() : nullptr;
+		if (!Spare)
+		{
+			Spare = NewMesh(false, Cm);
+		}
+		const TObjectPtr<UProceduralMeshComponent>* Live = Cells.Find(Cell);
+		const FVector At = Live && *Live ? (*Live)->GetRelativeLocation() : GridAt(G).ToWorld(FIntVector::ZeroValue);
+		Spare->SetRelativeLocation(At - FVector(0.f, 0.f, Tn.StageParkDepthCm));
+		Spare->ComponentTags.Reset();
+		Spare->ComponentTags.Add(G == 0 ? FName(TEXT("Terrain")) : FName(*FString::Printf(TEXT("Lot%d"), G - 1)));
+		Spare->SetProcMeshSection(0, Section); // render proxy, ray-tracing build and collision cook happen now, parked
+		Staged.Add(Cell, Spare);
+	}
+	if (Done > 0 && (FPlatformTime::Seconds() - Start) * 1000.0 > Tn.HitchLogMs * 0.25)
+	{
+		UE_LOG(LogTemp, Display, TEXT("DCSTAGE cells=%d ms=%.1f staged=%d held=%d"), Done, (FPlatformTime::Seconds() - Start) * 1000.0, Staged.Num(), HeldCells.Num());
+	}
+}
+
+bool ADCVoxelCity::SwapStaged(const FIntVector4& Cell)
+{
+	TObjectPtr<UProceduralMeshComponent> Spare;
+	if (!Staged.RemoveAndCopyValue(Cell, Spare) || !Spare)
+	{
+		return false;
+	}
+	TObjectPtr<UProceduralMeshComponent>& Live = Cells.FindOrAdd(Cell);
+	const FVector At = Live ? Live->GetRelativeLocation() : GridAt(Cell.X).ToWorld(FIntVector::ZeroValue);
+	Spare->SetRelativeLocation(At);
+	Spare->SetCollisionProfileName(TEXT("BlockAll"));
+	if (Live)
+	{
+		ParkSpare(Cell.X, Live);
+	}
+	Live = Spare;
+	DirtyCells.Remove(Cell);
+	return true;
+}
+
+void ADCVoxelCity::ParkSpare(int32 G, UProceduralMeshComponent* Mesh)
+{
+	if (!Mesh)
+	{
+		return;
+	}
+	Mesh->SetCollisionProfileName(TEXT("NoCollision"));
+	Mesh->SetRelativeLocation(Mesh->GetRelativeLocation() - FVector(0.f, 0.f, UDCVoxelSettings::Get().Tuning.StageParkDepthCm));
+	SpareCells.FindOrAdd(GridAt(G).VoxelCm).Add(Mesh);
+}
+
+void ADCVoxelCity::UnstageAll()
+{
+	for (const TPair<FIntVector4, TObjectPtr<UProceduralMeshComponent>>& It : Staged)
+	{
+		ParkSpare(It.Key.X, It.Value);
+	}
+	Staged.Reset();
+}
+
 void ADCVoxelCity::UploadCells()
 {
 	if (DirtyCells.Num() == 0)
@@ -1896,6 +1999,8 @@ void ADCVoxelCity::UploadCells()
 	}
 	// 1. A committed op's own cells, all at once (the detonation frame shows the whole op). R1 (spikes-cb1f180: 12 of 13
 	//    sector-play spikes were this frame, 17-24 ms for 16-21 cells): the merges run in parallel, sections stay serial.
+	// R1 (advisor a-41): the held op's cells are staged ahead into parked spare components; the commit only swaps.
+	StageHeldCells(Busy);
 	TArray<FIntVector4> CommitNow;
 	// The whole op shows in one frame (advisor a-38): while any of its cells still waits for a chunk (PollChunkBudgetMs
 	// can defer chunk results), none of them uploads.
@@ -1911,6 +2016,20 @@ void ADCVoxelCity::UploadCells()
 			CommitNow.Add(*It);
 		}
 		It.RemoveCurrent();
+	}
+	const double TS0 = FPlatformTime::Seconds();
+	int32 Swapped = 0;
+	for (int32 i = CommitNow.Num() - 1; i >= 0; --i)
+	{
+		if (SwapStaged(CommitNow[i]))
+		{
+			CommitNow.RemoveAtSwap(i, EAllowShrinking::No);
+			++Swapped;
+		}
+	}
+	if (Swapped > 0 && (FPlatformTime::Seconds() - TS0) * 1000.0 > UDCVoxelSettings::Get().Tuning.HitchLogMs * 0.25)
+	{
+		UE_LOG(LogTemp, Display, TEXT("DCCOMMIT swapped=%d staged cells in %.1f ms (%d left to apply)"), Swapped, (FPlatformTime::Seconds() - TS0) * 1000.0, CommitNow.Num());
 	}
 	if (CommitNow.Num() > 0)
 	{
