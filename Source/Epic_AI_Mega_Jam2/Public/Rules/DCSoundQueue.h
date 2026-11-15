@@ -34,6 +34,10 @@ struct FDCSoundClassDef
 	/** A merged play gets this much louder (fraction of the quieter request), up to MaxVolume. */
 	UPROPERTY(EditAnywhere, Config, Category = "Sound") float MergeVolumeBoost = 0.3f;
 	UPROPERTY(EditAnywhere, Config, Category = "Sound") float MaxVolume = 1.6f;
+	/** Ducking (human 2026-11-14: other sounds dip under a strike): when this class starts a voice, lower-priority
+	 *  plays that start within DuckSeconds are scaled by (1 - DuckOthers). 0 = no ducking. */
+	UPROPERTY(EditAnywhere, Config, Category = "Sound") float DuckOthers = 0.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Sound") float DuckSeconds = 0.6f;
 };
 
 /** Global mix limits (SoundMix=(...) in Config/DefaultGame.ini). */
