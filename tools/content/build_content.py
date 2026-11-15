@@ -79,7 +79,7 @@ float d = saturate(Dissolve);
 float m = n - d * 1.02;
 float mask = (d <= 0.0 || m >= 0.0) ? 1.0 : 0.0;
 float edge = (d > 0.0 && m >= 0.0) ? saturate(1.0 - m / max(EdgeWidth, 0.001)) : 0.0;
-return float2(mask, edge);
+return Which > 0.5 ? edge : mask;
 """
 
 
@@ -87,46 +87,59 @@ def add_dissolve(mat, emissive_src, dissolve_src, x, y):
     """R15: masked noise dissolve on a material whose emissive output is emissive_src; dissolve_src drives the amount."""
     mat.set_editor_property("blend_mode", unreal.BlendMode.BLEND_MASKED)
     wp = lib.create_material_expression(mat, unreal.MaterialExpressionWorldPosition, x - 300, y)
-    custom = lib.create_material_expression(mat, unreal.MaterialExpressionCustom, x, y)
-    custom.set_editor_property("code", DISSOLVE_HLSL)
-    custom.set_editor_property("output_type", unreal.CustomMaterialOutputType.CMOT_FLOAT2)
-    custom.set_editor_property("description", "Dissolve")
-    inputs = []
-    for n in ["WorldPos", "Dissolve", "NoiseCm", "EdgeWidth"]:
-        ci = unreal.CustomInput()
-        ci.set_editor_property("input_name", n)
-        inputs.append(ci)
-    custom.set_editor_property("inputs", inputs)
-    lib.connect_material_expressions(wp, "", custom, "WorldPos")
-    lib.connect_material_expressions(dissolve_src, "", custom, "Dissolve")
-    for i, (n, v, pin) in enumerate([("DissolveNoiseCm", 18.0, "NoiseCm"), ("DissolveEdge", 0.12, "EdgeWidth")]):
+    prms = []
+    for i, (n, v) in enumerate([("DissolveNoiseCm", 18.0), ("DissolveEdge", 0.12)]):
         prm = lib.create_material_expression(mat, unreal.MaterialExpressionScalarParameter, x - 300, y + 100 + i * 90)
         prm.set_editor_property("parameter_name", n)
         prm.set_editor_property("default_value", v)
-        lib.connect_material_expressions(prm, "", custom, pin)
-    mask = lib.create_material_expression(mat, unreal.MaterialExpressionComponentMask, x + 250, y)
-    mask.set_editor_property("r", True)
-    lib.connect_material_expressions(custom, "", mask, "")
+        prms.append(prm)
+    outs = []
+    # Two single-output Custom nodes (mask, edge): no ComponentMask (its channel flags did not take from Python and a
+    # float2 reached a Multiply: "Failed to compile Material", default material in game).
+    for k, (desc, which) in enumerate([("DissolveMask", 0.0), ("DissolveEdge", 1.0)]):
+        custom = lib.create_material_expression(mat, unreal.MaterialExpressionCustom, x, y + k * 160)
+        custom.set_editor_property("code", DISSOLVE_HLSL)
+        custom.set_editor_property("output_type", unreal.CustomMaterialOutputType.CMOT_FLOAT1)
+        custom.set_editor_property("description", desc)
+        inputs = []
+        for n in ["WorldPos", "Dissolve", "NoiseCm", "EdgeWidth", "Which"]:
+            ci = unreal.CustomInput()
+            ci.set_editor_property("input_name", n)
+            inputs.append(ci)
+        custom.set_editor_property("inputs", inputs)
+        lib.connect_material_expressions(wp, "", custom, "WorldPos")
+        lib.connect_material_expressions(dissolve_src, "", custom, "Dissolve")
+        lib.connect_material_expressions(prms[0], "", custom, "NoiseCm")
+        lib.connect_material_expressions(prms[1], "", custom, "EdgeWidth")
+        w = lib.create_material_expression(mat, unreal.MaterialExpressionConstant, x - 150, y + k * 160 + 60)
+        w.set_editor_property("r", which)
+        lib.connect_material_expressions(w, "", custom, "Which")
+        outs.append(custom)
+    mask, edge = outs
     lib.connect_material_property(mask, "", unreal.MaterialProperty.MP_OPACITY_MASK)
-    edge = lib.create_material_expression(mat, unreal.MaterialExpressionComponentMask, x + 250, y + 100)
-    edge.set_editor_property("g", True)
-    lib.connect_material_expressions(custom, "", edge, "")
     col = lib.create_material_expression(mat, unreal.MaterialExpressionVectorParameter, x, y + 300)
     col.set_editor_property("parameter_name", "DissolveEdgeColor")
     col.set_editor_property("default_value", unreal.LinearColor(1.0, 0.45, 0.15, 1.0))
     glow = lib.create_material_expression(mat, unreal.MaterialExpressionScalarParameter, x, y + 420)
     glow.set_editor_property("parameter_name", "DissolveEdgeGlow")
     glow.set_editor_property("default_value", 3.0)
-    edge_col = lib.create_material_expression(mat, unreal.MaterialExpressionMultiply, x + 450, y + 200)
-    lib.connect_material_expressions(edge, "", edge_col, "A")
-    lib.connect_material_expressions(col, "", edge_col, "B")
-    edge_glow = lib.create_material_expression(mat, unreal.MaterialExpressionMultiply, x + 600, y + 250)
-    lib.connect_material_expressions(edge_col, "", edge_glow, "A")
-    lib.connect_material_expressions(glow, "", edge_glow, "B")
-    total = lib.create_material_expression(mat, unreal.MaterialExpressionAdd, x + 750, y + 200)
-    lib.connect_material_expressions(emissive_src, "", total, "A")
-    lib.connect_material_expressions(edge_glow, "", total, "B")
-    lib.connect_material_property(total, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
+    # Emissive = the material's own emissive + the warm edge, in one Custom node (no Multiply nodes: a Multiply on the
+    # vector parameter's output failed with "float2 and float3" in both twins).
+    emi = lib.create_material_expression(mat, unreal.MaterialExpressionCustom, x + 450, y + 200)
+    emi.set_editor_property("code", "return Base.rgb + EdgeColor.rgb * (Glow * Edge);")
+    emi.set_editor_property("output_type", unreal.CustomMaterialOutputType.CMOT_FLOAT3)
+    emi.set_editor_property("description", "DissolveEmissive")
+    einputs = []
+    for n in ["Base", "EdgeColor", "Glow", "Edge"]:
+        ci = unreal.CustomInput()
+        ci.set_editor_property("input_name", n)
+        einputs.append(ci)
+    emi.set_editor_property("inputs", einputs)
+    lib.connect_material_expressions(emissive_src, "", emi, "Base")
+    lib.connect_material_expressions(col, "", emi, "EdgeColor")
+    lib.connect_material_expressions(glow, "", emi, "Glow")
+    lib.connect_material_expressions(edge, "", emi, "Edge")
+    lib.connect_material_property(emi, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
 
 
 def build_flat_material(name="M_DCFlat", dissolve=False):

@@ -1071,7 +1071,8 @@ void ADCVoxelCity::FinishBuild(int32 RunSeed, int32 SectorIndex, int32 BuildId, 
 		QueueAllDirty(nullptr);
 	}
 	bLoading = true;
-	PrewarmBodies(); // R26 bodies registered once at sector start, parked until a break
+	// R26 bodies are registered a few per quiet frame (PrewarmBodies in Tick), parked until a break: all 420 at once
+	// stalled the render thread ~600 ms in UpdatePrimitive (hitch-2324218).
 	UE_LOG(LogTemp, Display, TEXT("DCVOXEL build sector=%d build=%d towers=%d craft=%.0f ms hash=%08x%s"), SectorIndex, BuildId, Sector.Towers.Num(),
 		(FPlatformTime::Seconds() - Start) * 1000.0, Pads ? Hash : Sector.Hash(), Pads ? TEXT(" async") : TEXT(""));
 }
@@ -1165,7 +1166,7 @@ void ADCVoxelCity::StartNextOp()
 		Job->HashMs = static_cast<float>((FPlatformTime::Seconds() - Derived) * 1000.0);
 		UE_LOG(LogTemp, Display, TEXT("DCOPTIME seq=%d carve=%.0f structure=%.0f settle=%.0f derive=%.0f hash=%.0f ms"), Job->Op.Seq,
 			Job->Result.CarveMs, Job->Result.StructureMs, Job->Result.SettleMs, Job->DeriveMs, Job->HashMs);
-	});
+	}, UDCVoxelSettings::Get().Tuning.bOpMeshInBackground ? UE::Tasks::ETaskPriority::BackgroundHigh : UE::Tasks::ETaskPriority::Normal); // R1 (stat dumphitches: render visibility tasks waited behind game work)
 }
 
 FDCPendingPiece ADCVoxelCity::PendingFor(const FDCVoxelOp& Op) const
@@ -1505,7 +1506,7 @@ void ADCVoxelCity::StartFall(FDCVoxelPiece& Piece, float Now, const TArray<FIntV
 		Job->Task = UE::Tasks::Launch(TEXT("DCVoxelPieceMesh"), [PieceCells = MoveTemp(PieceCells), Mats = MoveTemp(Mats), Pivot, PieceColors = MoveTemp(PieceColors), Vcm, Out]()
 		{
 			DCVoxelMesher::MeshCells(PieceCells, Mats, Pivot, PieceColors, Vcm, *Out);
-		});
+		}, UDCVoxelSettings::Get().Tuning.bOpMeshInBackground ? UE::Tasks::ETaskPriority::BackgroundHigh : UE::Tasks::ETaskPriority::Normal); // R1 (stat dumphitches: render visibility tasks waited behind game work)
 		Jobs.Add(Job);
 	};
 	if (!Pend)
@@ -1561,7 +1562,7 @@ void ADCVoxelCity::StartFall(FDCVoxelPiece& Piece, float Now, const TArray<FIntV
 					FragMats.Add(AllMats->IsValidIndex(i) ? (*AllMats)[i] : 1);
 				}
 				DCVoxelMesher::MeshCells(FragCells, FragMats, Pivot, PieceColors, Vcm, *Out);
-			});
+			}, UDCVoxelSettings::Get().Tuning.bOpMeshInBackground ? UE::Tasks::ETaskPriority::BackgroundHigh : UE::Tasks::ETaskPriority::Normal); // R1 (stat dumphitches: render visibility tasks waited behind game work)
 			Jobs.Add(Job);
 		}
 	}
@@ -2111,11 +2112,11 @@ void ADCVoxelCity::ReleaseBox(UPrimitiveComponent* Body)
 	BoxFree.AddUnique(Box);
 }
 
-void ADCVoxelCity::PrewarmBodies()
+void ADCVoxelCity::PrewarmBodies(int32 PerFrame)
 {
 	const int32 Want = UDCVoxelSettings::Get().Tuning.PhysicsMaxBodies;
 	TArray<UBoxComponent*> Made;
-	while (BoxAll.Num() < Want)
+	while (BoxAll.Num() < Want && Made.Num() < FMath::Max(1, PerFrame))
 	{
 		Made.Add(AcquireBox());
 	}
@@ -2534,6 +2535,7 @@ void ADCVoxelCity::Tick(float DeltaSeconds)
 	if (BuiltSector != INDEX_NONE && Falling.Num() == 0)
 	{
 		PrewarmPieces(6); // a few pooled piece meshes per quiet frame until the body budget is covered
+		PrewarmBodies(UDCVoxelSettings::Get().Tuning.BodyPrewarmPerFrame);
 	}
 	if (bFollowGameState) // the host drives Build and ApplyOp directly first, so following is a no-op there
 	{

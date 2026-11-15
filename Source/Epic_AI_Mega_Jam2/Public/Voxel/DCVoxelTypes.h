@@ -228,9 +228,11 @@ struct FDCVoxelTuning
 	/** Game-thread milliseconds per frame for cell uploads (merge + mesh section); UploadsPerFrame stays a cap. At
 	 *  least one cell uploads per frame. A strike's commit frame uploads only that op's cells, outside this budget. */
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float UploadBudgetMs = 4.f;
-	// R13 (advisor a-22): chunk re-meshes after an op run on the background task pool so the render thread's own tasks
+	// R1 (advisor a-22, hitch-2324218): op work (the op task, chunk re-meshes, falling-piece meshes) runs on the background task pool so the render thread's own tasks
 	// do not queue behind hundreds of mesher jobs (render stalls of 55-125 ms after a strike). Builds stay foreground.
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") bool bOpMeshInBackground = true;
+	/** Physics body boxes registered per quiet frame until PhysicsMaxBodies exist (spread, not one 420-box frame). */
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 BodyPrewarmPerFrame = 24;
 	/** Falling-piece mesh sections created per frame stop after this many ms (advisor CP26 #5: ~50 fragment sections
 	 *  in one frame cost 25-35 ms); the rest wait for the next frame, a piece shows once all its fragments are in. */
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float PieceUploadBudgetMs = 4.f;

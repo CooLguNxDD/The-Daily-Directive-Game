@@ -438,6 +438,20 @@ void UDCAudioSubsystem::StartEvidenceRecording(const UObject* WorldContext)
 	UAudioMixerBlueprintLibrary::StartRecordingOutput(WorldContext, 1800.f);
 	RecordStart = FPlatformTime::Seconds();
 	UE_LOG(LogTemp, Display, TEXT("DCCUE recording started to %s"), *RecordDir);
+	// -dcaudiorecseconds=N: stop and write the mix after N real seconds (a job's timeout may end the run first).
+	float Seconds = 0.f;
+	if (FParse::Value(FCommandLine::Get(), TEXT("dcaudiorecseconds="), Seconds) && Seconds > 0.f)
+	{
+		TWeakObjectPtr<const UObject> Context(WorldContext);
+		FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateWeakLambda(this, [this, Context](float)
+		{
+			if (Context.IsValid())
+			{
+				StopEvidenceRecording(Context.Get());
+			}
+			return false;
+		}), Seconds);
+	}
 }
 
 void UDCAudioSubsystem::StopEvidenceRecording(const UObject* WorldContext)

@@ -139,7 +139,7 @@ private:
 	UPROPERTY() TArray<TObjectPtr<UBoxComponent>> BoxFree;
 	class UBoxComponent* AcquireBox();
 	void ReleaseBox(UPrimitiveComponent* Body);
-	void PrewarmBodies();
+	void PrewarmBodies(int32 PerFrame);
 	/** A chunk that took a hard hit breaks into its leaves (each a body). */
 	void Shatter(const TSharedPtr<FFalling>& F, int32 ChunkIndex);
 	/** Steers, solidifies and shatters the bodies; true when they rest (all still or out of air time). */
