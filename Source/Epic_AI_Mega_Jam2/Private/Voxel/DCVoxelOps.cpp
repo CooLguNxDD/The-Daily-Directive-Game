@@ -860,7 +860,8 @@ namespace DCVoxelOps
 			{
 				Out.TouchedLots.AddUnique(Chip.Grid);
 				const int32 SupportTop = Ctx.Tuning->ChipSupportFloors * FMath::Max(6, Ctx.BayCm / FMath::Max(Grid.VoxelCm, 1));
-				if (SupportTop <= 0 || Grid.ToLocal(Chip.CenterCm).Z < SupportTop)
+				const bool bStanding = !Sector.Towers[Chip.Grid].bFallen; // a stump has nothing left to bring down
+				if (bStanding && (SupportTop <= 0 || Grid.ToLocal(Chip.CenterCm).Z < SupportTop))
 				{
 					Out.ChipCarved.Add(FIntPoint(Chip.Grid, Carved)); // support the host counts toward a structure pass
 				}

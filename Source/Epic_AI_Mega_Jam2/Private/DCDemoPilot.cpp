@@ -870,7 +870,7 @@ void ADCDemoPilot::AddChipFire()
 		const ADCVoxelCity* City = ADCVoxelCity::Get(this);
 		const ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>();
 		UE_LOG(LogDCDemo, Display, TEXT("DEMO chipfire %s: lot %d fallen=%d city hash=%08x ops=%d applied=%d"), *Name, ChipLot, City && City->IsTowerFallen(ChipLot) ? 1 : 0,
-			City ? City->GetHash() : 0u, GS ? GS->VoxelOps.Num() : 0, City ? City->GetAppliedSeq() : 0);
+			City && City->IsOpQueueIdle() ? City->GetHash() : 0u, GS ? GS->VoxelOps.Num() : 0, City ? City->GetAppliedSeq() : 0); // hash 0: an op is on the worker (never hash under it)
 		Shot(Name);
 	};
 	Add(0.6f, [this] { Tap(TEXT("Slot1")); return true; });

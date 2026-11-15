@@ -84,6 +84,12 @@ namespace DCChipRules
 	 *  false (Out untouched) when there is nothing to send. */
 	EPIC_AI_MEGA_JAM2_API bool Flush(FDCChipLedger& L, float Now, const FDCChipParams& P, bool bChipOpOut, float BodyLoad, FDCVoxelOp& Out);
 
+	/** Replicated history bound (R24, review: an engine replicated array holds 65535 bytes of elements by default, ~470
+	 *  ops): a new chip-only op (no StructureLots) merges into Last when Last is a chip-only op of the same build and
+	 *  sector and the chips still fit MaxChips. Chip removals are idempotent and commute, so a client that applied part
+	 *  of Last and then applies the merged entry ends with the same voxels. Takes Op's Seq, Time and a zero hash. */
+	EPIC_AI_MEGA_JAM2_API bool MergeInto(FDCVoxelOp& Last, const FDCVoxelOp& Op, int32 MaxChips);
+
 	/** The host's applied Chip op removed Voxels from Lot (FDCVoxelOpResult::ChipCarved). */
 	EPIC_AI_MEGA_JAM2_API void Credit(FDCChipLedger& L, int32 Lot, int32 Voxels);
 
