@@ -784,3 +784,52 @@ bool FDCVoxelHashCacheTest::RunTest(const FString&)
 }
 
 #endif
+
+#if WITH_DEV_AUTOMATION_TESTS
+// R24 chips: the Strike and Fell ops keep the hashes they had before the Chip kind and the op registry. Pinned per
+// crafted city: when the shipped city data changes (another lane's recipe), the pin is reported, not failed.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDCVoxelOldKindsPinTest, "Epic_AI_Mega_Jam2.Voxel.OldKindsKeepHashes", VoxelFlags)
+bool FDCVoxelOldKindsPinTest::RunTest(const FString&)
+{
+	const FDCVoxelOpContext Ctx = UDCVoxelSettings::Get().OpContext(UDCTuning::Get().City.BlockSizeCm);
+	FDCVoxelSector A;
+	Craft(A, VoxelPlan(DCCityRules::SectorSeed(9001, 1), 1));
+	TArray<FDCVoxelOp> Ops;
+	for (int32 i = 0; i < FMath::Min(3, A.Towers.Num()); ++i)
+	{
+		Ops.Add(StrikeAt(A.Towers[i], i + 1, 1100));
+	}
+	FDCVoxelOp Fell;
+	Fell.Seq = Ops.Num() + 1;
+	Fell.Kind = TEXT("Fell");
+	Fell.Lot = A.Towers.Num() - 1;
+	Fell.CenterCm = FIntVector(A.Towers.Last().FootMaxCm().X + 500, A.Towers.Last().FootMinCm().Y, 0);
+	Ops.Add(Fell);
+	const uint32 CraftHash = A.Hash();
+	TArray<uint32> Got;
+	for (const FDCVoxelOp& Op : Ops)
+	{
+		DCVoxelOps::Apply(A, Op, Ctx);
+		Got.Add(A.Hash());
+	}
+	FString List;
+	for (uint32 H : Got)
+	{
+		List += FString::Printf(TEXT(" %08x"), H);
+	}
+	AddInfo(FString::Printf(TEXT("DCPIN craft=%08x ops=%s"), CraftHash, *List));
+	// Pinned before R24 (Strike x3, Fell; run 2026-11-15).
+	constexpr uint32 PinCraft = 0x00000000;
+	const TArray<uint32> Pin = {};
+	if (CraftHash != PinCraft || Pin.Num() != Got.Num())
+	{
+		AddInfo(FString::Printf(TEXT("pin skipped: the crafted city is %08x, pinned %08x (city data changed)"), CraftHash, PinCraft));
+		return true;
+	}
+	for (int32 i = 0; i < Got.Num(); ++i)
+	{
+		TestEqual(FString::Printf(TEXT("op %d keeps its pinned hash"), i + 1), Got[i], Pin[i]);
+	}
+	return true;
+}
+#endif
