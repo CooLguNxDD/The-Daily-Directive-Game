@@ -40,6 +40,8 @@ public:
 	void Play(EDCUnitClip Next);
 	/** Evidence (-dcanimshot): hold this ground speed instead of the measured one (negative = measure). */
 	float ForcedSpeedCm = -1.f;
+	/** Evidence: pose every frame at full detail whatever the player's camera distance (the showcase films its own way). */
+	bool bForceFullLod = false;
 	bool IsSegmented() const { return bSegmented; }
 	EDCUnitClip GetClip() const { return Clip; }
 

@@ -1,4 +1,4 @@
-// R20 evidence only (-dcanimshot=<dir>): a side-view lineup of one unit per animated kind (-dcanimkinds=A,B,..), held
+// R20 evidence only (-dcanimshot=<dir>): a side-view lineup of one unit per animated kind (-dcanimkinds=A+B+..), held
 // in place (no AI, no damage) and stepped through spawn, idle, walk, run, attack, flinch and death on a fixed camera,
 // with frames at fixed times (a still never proves motion: frames across time per state).
 // -dcanimswarm=N (perf): N units of those kinds in rings round the player, held in place and animated at real time
@@ -26,6 +26,11 @@ public:
 
 private:
 	void Start();
+	/** The showcase camera renders through its own scene capture (the pilot keeps the player's view target). */
+	void MakeCapture(const FVector& Eye, const FVector& LookAt, float Fov, bool bEveryFrame);
+	void WriteFrame(const FString& File);
+	UPROPERTY() TObjectPtr<class USceneCaptureComponent2D> Capture;
+	UPROPERTY() TObjectPtr<class UTextureRenderTarget2D> Target;
 	void StartSwarm(int32 Count);
 	void TickSwarm(float DeltaTime);
 	int32 SwarmCount = 0;
