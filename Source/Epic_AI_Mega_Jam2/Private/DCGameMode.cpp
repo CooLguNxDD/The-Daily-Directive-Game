@@ -685,7 +685,8 @@ void ADCGameMode::EnterDraft(float Now)
 	{
 		TArray<FName> Taken = PS->Upgrades;
 		Taken.Append(GS->Mutators);
-		PS->DraftOffer = DCRunRules::DraftOffer(DCCityRules::SectorSeed(GS->RunSeed, GS->SectorIndex) ^ (++Index * 7919), T.Upgrades, Taken);
+		PS->DraftOffer = DCRunRules::DraftHand(DCCityRules::SectorSeed(GS->RunSeed, GS->SectorIndex) ^ (++Index * 7919), T.Upgrades, T.CardRarities, Taken, T.Run.DraftHandSize);
+		UE_LOG(LogTemp, Display, TEXT("DCDRAFT %s dealt %s"), *PS->GetPlayerName(), *FString::JoinBy(PS->DraftOffer, TEXT(","), [&T](FName Id) { const FDCUpgradeDef* D = T.FindUpgrade(Id); return Id.ToString() + TEXT("/") + (D ? D->Rarity.ToString() : FString(TEXT("?"))); }));
 		PS->bDraftDone = PS->DraftOffer.Num() == 0;
 	}
 }

@@ -9,6 +9,21 @@
 struct FDCUpgradeDef;
 struct FDCScoopDef;
 
+/** A draft card rarity (R21, human 2026-11-15): how often its cards are dealt (Weight, relative) and how the card
+ *  looks (frame colour and width, a glow wash, the label on the card). Rows in Config/DefaultGame.ini +CardRarities. */
+USTRUCT(BlueprintType)
+struct FDCCardRarity
+{
+	GENERATED_BODY()
+	UPROPERTY(EditAnywhere, Config, Category = "Run") FName Id;
+	UPROPERTY(EditAnywhere, Config, Category = "Run") float Weight = 1.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Run") FText Label;
+	UPROPERTY(EditAnywhere, Config, Category = "Run") FLinearColor Color = FLinearColor::White;
+	UPROPERTY(EditAnywhere, Config, Category = "Run") float FramePx = 3.f;
+	/** Alpha of a wash of Color over the card (0 = none): rarer cards glow. */
+	UPROPERTY(EditAnywhere, Config, Category = "Run") float Glow = 0.f;
+};
+
 /** Satirical headline rows (R22): lines for one photo category (ANY = fallback, CORRECTION = a wiped run). Tokens:
  *  {PLAYER}, {SECTOR}, {COSTAR}. */
 USTRUCT(BlueprintType)
@@ -29,6 +44,10 @@ namespace DCRunRules
 	/** The draft (R10): every option still open, grouped by pool in declared order, at most PerPool per pool
 	 *  (a seeded pick when a pool has more). Skips ids in Taken. */
 	EPIC_AI_MEGA_JAM2_API TArray<FName> DraftOffer(int32 Seed, const TArray<FDCUpgradeDef>& Upgrades, const TArray<FName>& Taken, int32 PerPool = 3);
+
+	/** The draft hand (R21): HandSize distinct cards from every open option (any pool), each drawn with the weight of its
+	 *  rarity row (unknown rarity: weight 1), without replacement. Seeded: the host deals and the hand replicates. */
+	EPIC_AI_MEGA_JAM2_API TArray<FName> DraftHand(int32 Seed, const TArray<FDCUpgradeDef>& Upgrades, const TArray<FDCCardRarity>& Rarities, const TArray<FName>& Taken, int32 HandSize);
 
 	/** Does this graded photo satisfy the scoop? */
 	EPIC_AI_MEGA_JAM2_API bool ScoopMet(const FDCScoopDef& Scoop, const FDCPhotoInputs& In, const FDCPhotoGrade& Grade);

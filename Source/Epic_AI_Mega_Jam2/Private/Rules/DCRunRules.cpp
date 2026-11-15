@@ -32,6 +32,48 @@ namespace DCRunRules
 		return Offer;
 	}
 
+	TArray<FName> DraftHand(int32 Seed, const TArray<FDCUpgradeDef>& Upgrades, const TArray<FDCCardRarity>& Rarities, const TArray<FName>& Taken, int32 HandSize)
+	{
+		TArray<FName> Open;
+		TArray<float> Weights;
+		for (const FDCUpgradeDef& U : Upgrades)
+		{
+			if (Taken.Contains(U.Id))
+			{
+				continue;
+			}
+			const FDCCardRarity* R = Rarities.FindByPredicate([&U](const FDCCardRarity& Row) { return Row.Id == U.Rarity; });
+			Open.Add(U.Id);
+			Weights.Add(FMath::Max(R ? R->Weight : 1.f, 0.f));
+		}
+		FRandomStream Rng(Seed);
+		TArray<FName> Hand;
+		while (Hand.Num() < HandSize && Open.Num() > 0)
+		{
+			float Total = 0.f;
+			for (const float W : Weights)
+			{
+				Total += W;
+			}
+			int32 Pick = Open.Num() - 1;
+			float Roll = Rng.FRand() * Total;
+			for (int32 i = 0; i < Open.Num() && Total > 0.f; ++i)
+			{
+				Roll -= Weights[i];
+				if (Roll < 0.f)
+				{
+					Pick = i;
+					break;
+				}
+			}
+			Pick = Total > 0.f ? Pick : Rng.RandRange(0, Open.Num() - 1); // all weights zero: plain uniform
+			Hand.Add(Open[Pick]);
+			Open.RemoveAt(Pick);
+			Weights.RemoveAt(Pick);
+		}
+		return Hand;
+	}
+
 	bool ScoopMet(const FDCScoopDef& Scoop, const FDCPhotoInputs& In, const FDCPhotoGrade& Grade)
 	{
 		if (!Scoop.Timing.IsNone() && Grade.TimingLabel != Scoop.Timing)

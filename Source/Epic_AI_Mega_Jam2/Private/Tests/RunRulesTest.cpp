@@ -45,6 +45,36 @@ bool FDCDraftOfferTest::RunTest(const FString&)
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDCDraftHandTest, "Epic_AI_Mega_Jam2.Run.DraftHand",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FDCDraftHandTest::RunTest(const FString&)
+{
+	// R21: three cards from every pool, weighted by rarity, seeded, never a taken card, never twice in one hand.
+	TArray<FDCUpgradeDef> Ups = {Up(TEXT("A1"), TEXT("A")), Up(TEXT("A2"), TEXT("A")), Up(TEXT("B1"), TEXT("B")), Up(TEXT("C1"), TEXT("C")), Up(TEXT("E1"), TEXT("C"))};
+	Ups[4].Rarity = TEXT("Epic");
+	TArray<FDCCardRarity> Rar;
+	Rar.AddDefaulted(2);
+	Rar[0].Id = TEXT("Common");
+	Rar[0].Weight = 70.f;
+	Rar[1].Id = TEXT("Epic");
+	Rar[1].Weight = 5.f;
+	const TArray<FName> Hand = DCRunRules::DraftHand(42, Ups, Rar, {}, 3);
+	TestEqual(TEXT("three cards"), Hand.Num(), 3);
+	TestEqual(TEXT("same seed, same hand (host and clients)"), DCRunRules::DraftHand(42, Ups, Rar, {}, 3), Hand);
+	TestTrue(TEXT("no card twice"), TSet<FName>(Hand).Num() == Hand.Num());
+	TestTrue(TEXT("taken cards never come back"), !DCRunRules::DraftHand(9, Ups, Rar, {TEXT("A1"), TEXT("A2")}, 3).Contains(TEXT("A1")));
+	TestEqual(TEXT("a small pool deals what is open"), DCRunRules::DraftHand(9, Ups, Rar, {TEXT("A1"), TEXT("A2"), TEXT("B1")}, 3).Num(), 2);
+	int32 EpicSeen = 0, CommonSeen = 0;
+	for (int32 Seed = 0; Seed < 400; ++Seed)
+	{
+		const TArray<FName> H = DCRunRules::DraftHand(Seed, Ups, Rar, {}, 1);
+		EpicSeen += H.Contains(TEXT("E1")) ? 1 : 0;
+		CommonSeen += H.Contains(TEXT("A1")) ? 1 : 0;
+	}
+	TestTrue(TEXT("the epic is dealt far less often than a common"), EpicSeen * 4 < CommonSeen && EpicSeen > 0);
+	return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDCScoopRuleTest, "Epic_AI_Mega_Jam2.Run.Scoops",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FDCScoopRuleTest::RunTest(const FString&)
@@ -178,6 +208,7 @@ bool FDCRunDataTest::RunTest(const FString&)
 	{
 		PerPool.FindOrAdd(U.Pool) += 1;
 		TestTrue(FString::Printf(TEXT("upgrade %s has a known effect"), *U.Id.ToString()), DCUpgrades::IsKnownEffect(U.Effect));
+		TestNotNull(FString::Printf(TEXT("upgrade %s rarity %s has a +CardRarities row (R21)"), *U.Id.ToString(), *U.Rarity.ToString()), T.FindRarity(U.Rarity));
 		if (U.Effect == TEXT("UnlockStratagem"))
 		{
 			TestNotNull(FString::Printf(TEXT("upgrade %s unlocks a defined stratagem"), *U.Id.ToString()), T.FindStratagem(U.Unlock));

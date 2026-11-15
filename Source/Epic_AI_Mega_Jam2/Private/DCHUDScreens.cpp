@@ -124,70 +124,68 @@ void ADCHUD::DrawDraft(ADCGameState& GS, ADCCharacter* Me)
 	{
 		return;
 	}
-	// Three columns, one per pool; each column lists that pool's open options.
-	TArray<FName> Pools;
+	// R21: one column per dealt card (pool on the header), framed by its rarity row: rarer cards wear a wider, brighter
+	// frame, a glow wash and their rarity label.
+	TArray<const FDCUpgradeDef*> Hand;
 	for (const FName& Id : PS->DraftOffer)
 	{
 		if (const FDCUpgradeDef* Def = T.FindUpgrade(Id))
 		{
-			Pools.AddUnique(Def->Pool);
+			Hand.Add(Def);
 		}
 	}
-	const float ColW = Sx(560.f), Gap = Sx(30.f), CardH = Sx(150.f);
-	const float X0 = W * 0.5f - (Pools.Num() * ColW + (Pools.Num() - 1) * Gap) * 0.5f;
-	for (int32 Col = 0; Col < Pools.Num(); ++Col)
+	const float ColW = Sx(500.f), Gap = Sx(36.f), CardH = Sx(470.f);
+	const float X0 = W * 0.5f - (Hand.Num() * ColW + FMath::Max(Hand.Num() - 1, 0) * Gap) * 0.5f;
+	for (int32 Col = 0; Col < Hand.Num(); ++Col)
 	{
+		const FDCUpgradeDef* Def = Hand[Col];
+		const FDCCardRarity* Rar = T.FindRarity(Def->Rarity);
+		const FLinearColor RarColor = Rar ? Rar->Color : Cyan;
 		const float X = X0 + Col * (ColW + Gap);
 		Box(X, Sx(230.f), ColW, Sx(44.f), FLinearColor(Paper.R, Paper.G, Paper.B, 0.92f));
-		Box(X, Sx(270.f), ColW, Sx(3.f), Cyan);
-		Text(PoolLabel(Pools[Col]), X + ColW * 0.5f, Sx(236.f), Cyan, 0.7f, true);
-		int32 Row = 0;
-		for (const FName& Id : PS->DraftOffer)
+		Box(X, Sx(270.f), ColW, Sx(3.f), RarColor);
+		Text(PoolLabel(Def->Pool) + (Rar ? TEXT("  /  ") + Rar->Label.ToString() : FString()), X + ColW * 0.5f, Sx(236.f), RarColor, 0.7f, true);
+		const bool bPicked = PS->Upgrades.Contains(Def->Id);
+		const float Y = Sx(290.f);
+		Box(X, Y, ColW, CardH, Paper);
+		if (Rar && Rar->Glow > 0.f)
 		{
-			const FDCUpgradeDef* Def = T.FindUpgrade(Id);
-			if (!Def || Def->Pool != Pools[Col])
+			Box(X, Y, ColW, CardH, FLinearColor(RarColor.R, RarColor.G, RarColor.B, Rar->Glow));
+		}
+		Frame(X, Y, ColW, CardH, Sx(Rar ? Rar->FramePx : 3.f), bPicked ? Gold : RarColor);
+		if (bPicked)
+		{
+			Box(X, Y, ColW, CardH, FLinearColor(Gold.R, Gold.G, Gold.B, 0.12f)); // picked: lime-lit glass, lime edge
+		}
+		// Card art (R11) as a square on top, the words under it.
+		float Ty = Y + Sx(16.f);
+		if (const TObjectPtr<UTexture2D>* Icon = CardIcons.Find(Def->Id))
+		{
+			const float S = Sx(220.f);
+			DrawTexture(*Icon, X + (ColW - S) * 0.5f, Y + Sx(14.f), S, S, 0.f, 0.f, 1.f, 1.f, FLinearColor::White, BLEND_Opaque);
+			Ty = Y + S + Sx(26.f);
+		}
+		Text(Def->DisplayName.ToString().ToUpper(), X + ColW * 0.5f, Ty, bPicked ? Gold : Ink, 0.7f, true);
+		// Description wrapped by words into short lines.
+		TArray<FString> Words;
+		Def->Description.ToString().ParseIntoArray(Words, TEXT(" "));
+		FString Line;
+		float Ly = Ty + Sx(44.f);
+		const int32 Wrap = 44;
+		for (const FString& Word : Words)
+		{
+			if (Line.Len() + Word.Len() > Wrap)
 			{
-				continue;
+				Text(Line, X + ColW * 0.5f, Ly, Ink, 0.5f, true);
+				Ly += Sx(26.f);
+				Line.Reset();
 			}
-			const bool bPicked = PS->Upgrades.Contains(Def->Id);
-			const float Y = Sx(290.f) + Row++ * (CardH + Sx(14.f));
-			Box(X, Y, ColW, CardH, Paper);
-			if (bPicked)
-			{
-				Box(X, Y, ColW, CardH, FLinearColor(Gold.R, Gold.G, Gold.B, 0.12f)); // picked: lime-lit glass, lime edge
-				Frame(X, Y, ColW, CardH, Sx(4.f), Gold);
-			}
-			// Card art (R11) in a square at the left, the words beside it.
-			float Tx = X + Sx(16.f);
-			int32 Wrap = 52;
-			if (const TObjectPtr<UTexture2D>* Icon = CardIcons.Find(Def->Id))
-			{
-				const float S = CardH - Sx(16.f);
-				DrawTexture(*Icon, X + Sx(8.f), Y + Sx(8.f), S, S, 0.f, 0.f, 1.f, 1.f, FLinearColor::White, BLEND_Opaque);
-				Tx = X + S + Sx(22.f);
-				Wrap = 40;
-			}
-			Text(Def->DisplayName.ToString().ToUpper(), Tx, Y + Sx(10.f), bPicked ? Gold : Ink, 0.7f);
-			// Description wrapped by words into short lines.
-			TArray<FString> Words;
-			Def->Description.ToString().ParseIntoArray(Words, TEXT(" "));
-			FString Line;
-			float Ly = Y + Sx(52.f);
-			for (const FString& Word : Words)
-			{
-				if (Line.Len() + Word.Len() > Wrap)
-				{
-					Text(Line, Tx, Ly, Ink, 0.5f);
-					Ly += Sx(26.f);
-					Line.Reset();
-				}
-				Line += (Line.IsEmpty() ? TEXT("") : TEXT(" ")) + Word;
-			}
-			Text(Line, Tx, Ly, Ink, 0.5f);
-			if (!PS->bDraftDone)
-			{
-				AddHitBox(FVector2D(X, Y), FVector2D(ColW, CardH), FName(*FString::Printf(TEXT("pick|%s"), *Def->Id.ToString())), true);
-			}
+			Line += (Line.IsEmpty() ? TEXT("") : TEXT(" ")) + Word;
+		}
+		Text(Line, X + ColW * 0.5f, Ly, Ink, 0.5f, true);
+		if (!PS->bDraftDone)
+		{
+			AddHitBox(FVector2D(X, Y), FVector2D(ColW, CardH), FName(*FString::Printf(TEXT("pick|%s"), *Def->Id.ToString())), true);
 		}
 	}
 	int32 Done = 0;

@@ -723,6 +723,8 @@ struct FDCUpgradeDef
 	UPROPERTY(EditAnywhere, Config, Category = "Run") FName Unlock;
 	/** Card art on the draft (R11, generated; ASSETS.md); none = a text-only card. */
 	UPROPERTY(EditAnywhere, Config, Category = "Run") FSoftObjectPath Icon;
+	/** R21: a +CardRarities id (Common, Rare, Epic): how often the card is dealt and how its frame looks. */
+	UPROPERTY(EditAnywhere, Config, Category = "Run") FName Rarity = TEXT("Common");
 	UPROPERTY(EditAnywhere, Config, Category = "Run") float Param = 0.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Run") float Param2 = 0.f;
 
@@ -771,6 +773,8 @@ struct FDCRunTuning
 {
 	GENERATED_BODY()
 	UPROPERTY(EditAnywhere, Config, Category = "Run") float DraftSeconds = 25.f;
+	/** R21: cards dealt per draft hand (from every pool, rarity-weighted). */
+	UPROPERTY(EditAnywhere, Config, Category = "Run") int32 DraftHandSize = 3;
 	/** R1 frame time (advisor a-33): -dcperf logs a DCSPIKE line with its frame-scope owners for any frame longer than this (ms; 33 = a frame under 30 fps). */
 	UPROPERTY(EditAnywhere, Config, Category = "Run") float PerfSpikeMs = 33.f;
 	/** Solo (R12): how long a downed player has to finish the self-revive hold before the run fails. */
@@ -921,6 +925,8 @@ public:
 	UPROPERTY(EditAnywhere, Config, Category = "Input") TArray<FDCKeyBinding> Bindings;
 	UPROPERTY(EditAnywhere, Config, Category = "Run") FDCRunTuning Run;
 	UPROPERTY(EditAnywhere, Config, Category = "Run") TArray<FDCUpgradeDef> Upgrades;
+	/** R21 draft rarities (weights and card look). */
+	UPROPERTY(EditAnywhere, Config, Category = "Run") TArray<FDCCardRarity> CardRarities;
 	/** Photographer builder (R23): the slots in recipe order, the parts per slot, and the palette swatches. */
 	UPROPERTY(EditAnywhere, Config, Category = "Outfit") TArray<FName> OutfitSlots;
 	UPROPERTY(EditAnywhere, Config, Category = "Outfit") TArray<FDCOutfitPart> OutfitParts;
@@ -973,6 +979,10 @@ public:
 	const FDCStratagemDef* FindStratagem(FName Id) const
 	{
 		return Stratagems.FindByPredicate([Id](const FDCStratagemDef& D) { return D.Id == Id; });
+	}
+	const FDCCardRarity* FindRarity(FName Id) const
+	{
+		return CardRarities.FindByPredicate([Id](const FDCCardRarity& R) { return R.Id == Id; });
 	}
 	const FDCUpgradeDef* FindUpgrade(FName Id) const
 	{
