@@ -14,6 +14,11 @@
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
 #include "UnrealClient.h"
+#include "Components/SceneCaptureComponent2D.h"
+#include "Engine/TextureRenderTarget2D.h"
+#include "EngineUtils.h"
+#include "HAL/FileManager.h"
+#include "ImageUtils.h"
 
 namespace
 {
@@ -109,10 +114,7 @@ void UDCAnimShowcase::StartSwarm(int32 Count)
 		E->SetCanBeDamaged(false);
 		Units.Add(E);
 	}
-	Camera = World->SpawnActor<ACameraActor>(ACameraActor::StaticClass(), FTransform::Identity);
-	Camera->GetCameraComponent()->SetFieldOfView(80.f);
-	const FVector Eye = Center + FVector(-2600.f, 0.f, 1100.f);
-	Camera->SetActorLocationAndRotation(Eye, (Center - Eye).Rotation());
+	MakeCapture(Center + FVector(-2600.f, 0.f, 1100.f), Center, 80.f, false);
 	UE_LOG(LogTemp, Display, TEXT("DCANIMSWARM spawned %d units round %s, animate=%d"), Units.Num(), *Center.ToCompactString(),
 		FParse::Param(FCommandLine::Get(), TEXT("dcanimoff")) ? 0 : 1);
 	Clock = 0.f;
@@ -217,16 +219,14 @@ void UDCAnimShowcase::Start()
 		UE_LOG(LogTemp, Display, TEXT("DCANIMSHOT unit %s at %s animator=%d segmented=%d"), *Kinds[i], *At.ToCompactString(),
 			E->GetAnimator() ? 1 : 0, E->GetAnimator() && E->GetAnimator()->IsSegmented() ? 1 : 0);
 	}
-	Camera = World->SpawnActor<ACameraActor>(ACameraActor::StaticClass(), FTransform::Identity);
-	Camera->GetCameraComponent()->SetFieldOfView(70.f);
 	const FVector Eye = Center + CamDir * CamDist + FVector(0.f, 0.f, 140.f);
-	Camera->SetActorLocationAndRotation(Eye, (Center + FVector(0.f, 0.f, 90.f) - Eye).Rotation());
+	MakeCapture(Eye, Center + FVector(0.f, 0.f, 90.f), 70.f, true);
 	// Evidence only: a fill light beside the camera (ink-dark units on a night street read as bare silhouettes) and
 	// no HUD over the frame.
-	if (APointLight* Fill = World->SpawnActor<APointLight>(APointLight::StaticClass(), FTransform(Eye + FVector(0.f, 0.f, 200.f))))
+	if (APointLight* Fill = World->SpawnActor<APointLight>(APointLight::StaticClass(), FTransform(Center + CamDir * CamDist * 0.5f + FVector(0.f, 0.f, 350.f))))
 	{
 		Fill->PointLightComponent->SetIntensityUnits(ELightUnits::Candelas);
-		Fill->PointLightComponent->SetIntensity(6000.f);
+		Fill->PointLightComponent->SetIntensity(1200.f);
 		Fill->PointLightComponent->SetAttenuationRadius(CamDist * 3.f);
 		Fill->PointLightComponent->SetCastShadows(false);
 	}
@@ -235,6 +235,50 @@ void UDCAnimShowcase::Start()
 		PC->GetHUD()->bShowHUD = false;
 	}
 	Clock = 0.f;
+}
+
+void UDCAnimShowcase::MakeCapture(const FVector& Eye, const FVector& LookAt, float Fov, bool bEveryFrame)
+{
+	UWorld* World = GetWorld();
+	Camera = World->SpawnActor<ACameraActor>(ACameraActor::StaticClass(), FTransform::Identity);
+	Camera->SetActorLocationAndRotation(Eye, (LookAt - Eye).Rotation());
+	Target = NewObject<UTextureRenderTarget2D>(this);
+	Target->RenderTargetFormat = RTF_RGBA8_SRGB;
+	Target->InitAutoFormat(1600, 900);
+	Target->UpdateResourceImmediate(true);
+	Capture = NewObject<USceneCaptureComponent2D>(Camera);
+	Capture->SetupAttachment(Camera->GetRootComponent());
+	Capture->FOVAngle = Fov;
+	Capture->TextureTarget = Target;
+	Capture->CaptureSource = ESceneCaptureSource::SCS_FinalColorLDR;
+	// Every frame for the lineup, so the capture's own exposure settles like a real view; once per frame shot for the
+	// swarm (its perf run must not pay a second scene render).
+	Capture->bCaptureEveryFrame = bEveryFrame;
+	Capture->bCaptureOnMovement = false;
+	Capture->bAlwaysPersistRenderingState = true;
+	Capture->RegisterComponent();
+}
+
+void UDCAnimShowcase::WriteFrame(const FString& File)
+{
+	if (!Capture || !Target)
+	{
+		return;
+	}
+	// Units the run spawned (not the lineup) stay out of the evidence frame.
+	Capture->HiddenActors.Reset();
+	for (ADCEnemy* E : TActorRange<ADCEnemy>(GetWorld()))
+	{
+		if (!Units.Contains(E))
+		{
+			Capture->HiddenActors.Add(E);
+		}
+	}
+	Capture->CaptureScene();
+	IFileManager::Get().MakeDirectory(*FPaths::GetPath(File), true);
+	TUniquePtr<FArchive> Ar(IFileManager::Get().CreateFileWriter(*File));
+	const bool bOk = Ar && FImageUtils::ExportRenderTarget2DAsPNG(Target, *Ar);
+	UE_LOG(LogTemp, Display, TEXT("DCANIMSHOT frame %s %s"), bOk ? TEXT("wrote") : TEXT("FAILED"), *File);
 }
 
 void UDCAnimShowcase::Tick(float DeltaTime)
@@ -260,18 +304,13 @@ void UDCAnimShowcase::Tick(float DeltaTime)
 			return;
 		}
 	}
-	APlayerController* PC = World->GetFirstPlayerController();
-	if (PC && Camera && PC->GetViewTarget() != Camera)
-	{
-		PC->SetViewTargetWithBlend(Camera, 0.f);
-	}
 	if (bSwarm)
 	{
 		TickSwarm(DeltaTime);
 		Clock += DeltaTime;
 		if (!Dir.IsEmpty() && NextShot == 0 && Clock >= 3.f)
 		{
-			FScreenshotRequest::RequestScreenshot(Dir / TEXT("swarm.png"), false, false);
+			WriteFrame(Dir / TEXT("swarm.png"));
 			++NextShot;
 		}
 		return;
@@ -292,6 +331,7 @@ void UDCAnimShowcase::Tick(float DeltaTime)
 			continue;
 		}
 		Anim->ForcedSpeedCm = Now.SpeedCm;
+		Anim->bForceFullLod = true;
 		if (Cue && Cue->Clip == EDCUnitClip::Flinch)
 		{
 			Anim->Play(EDCUnitClip::Flinch);
@@ -303,7 +343,7 @@ void UDCAnimShowcase::Tick(float DeltaTime)
 	{
 		const FDCAnimShotFrame& S = AnimShotFrames[NextShot];
 		const FString File = Dir / FString::Printf(TEXT("anim_%02d_%s_t%.2f.png"), NextShot, S.Label, S.T);
-		FScreenshotRequest::RequestScreenshot(File, false, false);
+		WriteFrame(File);
 		UE_LOG(LogTemp, Display, TEXT("DCANIMSHOT frame %s"), *File);
 		++NextShot;
 	}

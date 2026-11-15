@@ -26,6 +26,11 @@ public:
 
 private:
 	void Start();
+	/** The showcase camera renders through its own scene capture (the pilot keeps the player's view target). */
+	void MakeCapture(const FVector& Eye, const FVector& LookAt, float Fov, bool bEveryFrame);
+	void WriteFrame(const FString& File);
+	UPROPERTY() TObjectPtr<class USceneCaptureComponent2D> Capture;
+	UPROPERTY() TObjectPtr<class UTextureRenderTarget2D> Target;
 	void StartSwarm(int32 Count);
 	void TickSwarm(float DeltaTime);
 	int32 SwarmCount = 0;

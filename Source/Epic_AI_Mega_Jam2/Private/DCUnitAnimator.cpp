@@ -147,11 +147,12 @@ void UDCUnitAnimator::Advance(float DeltaSeconds, const FVector& Location, float
 	const UWorld* World = GetWorld();
 	const APlayerController* PC = World ? World->GetFirstPlayerController() : nullptr;
 	const APlayerCameraManager* Cam = PC ? PC->PlayerCameraManager.Get() : nullptr;
-	if (!Cam)
+	if (!Cam && !bForceFullLod)
 	{
 		return;
 	}
-	const FDCAnimLod& Lod = DCUnitAnim::Lod(UDCTuning::Get().AnimLods, FVector::Dist(Cam->GetCameraLocation(), Location));
+	const float CamDist = bForceFullLod || !Cam ? 0.f : FVector::Dist(Cam->GetCameraLocation(), Location);
+	const FDCAnimLod& Lod = DCUnitAnim::Lod(UDCTuning::Get().AnimLods, CamDist);
 	Accum += DeltaSeconds;
 	if (Lod.Hz > 0.f && Accum < 1.f / Lod.Hz)
 	{
