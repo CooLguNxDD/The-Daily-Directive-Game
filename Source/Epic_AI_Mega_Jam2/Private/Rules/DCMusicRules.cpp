@@ -52,6 +52,11 @@ namespace DCMusicRules
 		return HeldSeconds >= Cur.MinHoldSeconds && Intensity <= Cur.ExitAt ? Up : Current;
 	}
 
+	float StepSeconds(const FDCMusicTuning& T, float DeltaSeconds)
+	{
+		return FMath::Clamp(DeltaSeconds, 0.f, 2.f / FMath::Clamp(T.SampleHz, 0.5f, 30.f));
+	}
+
 	int32 NextSlot(int32 Slot, int32 Num)
 	{
 		return Num > 0 ? (Slot + 1) % Num : 0;
