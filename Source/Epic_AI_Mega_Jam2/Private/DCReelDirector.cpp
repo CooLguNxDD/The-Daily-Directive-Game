@@ -70,9 +70,9 @@ namespace
 
 	void ShotLowHero(const FShotCtx& C, const FDCReelShot& S, float U, FVector& Eye, FVector& Look)
 	{
-		// Low in front of the photographer, looking up past them toward the strike.
+		// Low in front of the photographer, looking back up at them (reel-1965cb6: looking on toward the subject framed sky).
 		Eye = C.Body + FRotator(0.f, C.Yaw + 25.f + S.SweepDeg * U, 0.f).Vector() * S.DistanceCm + FVector(0, 0, S.HeightCm);
-		Look = FMath::Lerp(C.Body + FVector(0, 0, S.LookUpCm), C.Subject, 0.15f);
+		Look = C.Body + FVector(0, 0, S.LookUpCm);
 	}
 
 	void ShotSideTrack(const FShotCtx& C, const FDCReelShot& S, float U, FVector& Eye, FVector& Look)
