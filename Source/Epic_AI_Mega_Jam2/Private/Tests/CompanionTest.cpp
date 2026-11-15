@@ -102,7 +102,7 @@ bool FDCCardDataTest::RunTest(const FString&)
 		}
 		TestTrue(*FString::Printf(TEXT("%s effect is %s"), K.Card, K.Effect), U->Effect == FName(K.Effect));
 		TestTrue(*FString::Printf(TEXT("%s is Rare or Epic"), K.Card), U->Rarity == TEXT("Rare") || U->Rarity == TEXT("Epic"));
-		TestTrue(*FString::Printf(TEXT("%s has card art"), K.Card), U->Icon.IsValid());
+		TestTrue(*FString::Printf(TEXT("%s card art %s loads"), K.Card, *U->Icon.ToString()), U->Icon.IsValid() && U->Icon.TryLoad() != nullptr);
 	}
 	for (const FDCUpgradeDef& U : T.Upgrades)
 	{
