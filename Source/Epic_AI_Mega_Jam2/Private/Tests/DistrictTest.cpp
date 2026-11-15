@@ -29,7 +29,7 @@ namespace
 		{
 			for (const FDCDistrictRule* D : UDCVoxelSettings::Get().DistrictsFor(Sector))
 			{
-				Out.Add({Sector, D});
+				Out.Emplace(Sector, D);
 			}
 		}
 		return Out;
@@ -199,7 +199,13 @@ bool FDCDistrictBuilderTest::RunTest(const FString&)
 		{
 			const int32 Seed = DCCityRules::SectorSeed(RunSeed, Sector);
 			TestTrue(TEXT("district roll is seeded"), V.District(Sector, Seed) == V.District(Sector, Seed));
-			Seen.Add(V.District(Sector, Seed)->Id);
+			const FName Id = V.District(Sector, Seed)->Id;
+			if (!Seen.Contains(Id))
+			{
+				// Evidence handle: -dcseed=<RunSeed> -dcstartsector=<Sector> builds this district.
+				AddInfo(FString::Printf(TEXT("DCWORLD sector %d district %s first at run seed %d"), Sector, *Id.ToString(), RunSeed));
+			}
+			Seen.Add(Id);
 		}
 		TestEqual(FString::Printf(TEXT("sector %d: every district row is rolled in 64 runs"), Sector), Seen.Num(), Rows.Num());
 	}
