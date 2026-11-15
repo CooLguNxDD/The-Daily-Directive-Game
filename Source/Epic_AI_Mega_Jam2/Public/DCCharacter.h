@@ -190,6 +190,15 @@ private:
 	UPROPERTY(VisibleAnywhere) TObjectPtr<class UInstancedStaticMeshComponent> StrikeMarker;
 	float StrikeMarkerRadius = -1.f;
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UStaticMeshComponent> Tracer;
+	UPROPERTY(VisibleAnywhere) TObjectPtr<UStaticMeshComponent> MuzzleFlash;
+	/** R10 rifle locomotion (cosmetic, every machine): clips preloaded at BeginPlay, the one playing now, and the end of
+	 *  the draw motion it waits for. */
+	UPROPERTY() TArray<TObjectPtr<UAnimSequenceBase>> RifleJogLoaded;
+	UPROPERTY() TArray<TObjectPtr<UAnimSequenceBase>> RifleWalkLoaded;
+	UPROPERTY() TObjectPtr<UAnimSequenceBase> RifleIdleLoaded;
+	UPROPERTY() TObjectPtr<UAnimSequenceBase> LocoClip;
+	float LocoBlockedUntil = 0.f;
+	void UpdateRifleLoco();
 
 	UPROPERTY(ReplicatedUsing = OnRep_Slot) EDCSlot Slot = EDCSlot::Rifle;
 	/** The slot whose draw motion last played on this machine. */
@@ -231,6 +240,7 @@ private:
 	float StepDistance = 0.f;
 	float LastLowAmmoCue = -10.f;
 	float TracerHideTime = 0.f;
+	float MuzzleHideTime = 0.f;
 	bool bTriggerHeld = false;
 	bool bAimHeld = false;
 	bool bInteractHeld = false;
