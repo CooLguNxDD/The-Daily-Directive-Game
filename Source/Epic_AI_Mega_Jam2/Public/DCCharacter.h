@@ -59,6 +59,10 @@ public:
 	// --- State the HUD and enemies read ---
 	EDCSlot GetSlot() const { return Slot; }
 	bool IsCameraRaised() const { return bCameraRaised; }
+	/** R16: aiming the gun (replicated, so every machine shows the aim pose). */
+	bool IsRifleAiming() const { return bRifleAim; }
+	/** Aim pitch (degrees, the control pitch; replicated from the owner) for the aim pose on every machine. */
+	float GetAimPitch() const { return AimPitch; }
 	float GetDownedAt() const { return DownedAt; }
 	bool IsDowned() const { return bDowned; }
 	bool HasLastFrame() const { return bDowned && bLastFrameReady; }
@@ -107,6 +111,10 @@ public:
 	/** R17: hit shake channel (unit hits), capped and rate-limited by FDCCameraTuning; never stacks onto blast shake. */
 	float HitTrauma = 0.f;
 	float LastHitShakeTime = -100.f;
+	int32 ShakeLogHits = 0;
+	int32 ShakeLogFlinches = 0;
+	float ShakeLogMax = 0.f;
+	float ShakeLogNext = 0.f;
 
 private:
 	// Input handlers (bound by action name from the input table).
@@ -166,6 +174,12 @@ private:
 
 	UFUNCTION(Server, Reliable) void ServerSetSlot(EDCSlot NewSlot);
 	UFUNCTION(Server, Reliable) void ServerSetCameraRaised(bool bRaised);
+	UFUNCTION(Server, Reliable) void ServerSetRifleAim(bool bAim);
+	UFUNCTION(Server, Unreliable) void ServerAimPitch(float Pitch);
+	void SetRifleAim(bool bAim);
+	float SentAimPitch = 0.f;
+	float NextAimPitchSend = 0.f;
+	float AimBlend = 0.f;
 	UFUNCTION(Server, Reliable) void ServerSetSprint(bool bSprint);
 	UFUNCTION(Server, Unreliable) void ServerFire(FVector_NetQuantize Start, FVector_NetQuantizeNormal Dir);
 	UFUNCTION(Server, Reliable) void ServerReload();
@@ -228,6 +242,8 @@ private:
 	/** The slot whose draw motion last played on this machine. */
 	EDCSlot DrawnSlot = EDCSlot::Rifle;
 	UPROPERTY(Replicated) bool bCameraRaised = false;
+	UPROPERTY(Replicated) bool bRifleAim = false;
+	UPROPERTY(Replicated) float AimPitch = 0.f;
 	UPROPERTY(Replicated) bool bSprinting = false;
 	UPROPERTY(Replicated) float Health = 100.f;
 	/** Host clock of the last damage taken (health regen waits RegenDelaySeconds after it). */

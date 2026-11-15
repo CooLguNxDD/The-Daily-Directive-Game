@@ -18,6 +18,27 @@
 #include "Rules/DCSoundQueue.h"
 #include "DCTuning.generated.h"
 
+/** R16 aiming with a gun (hold Aim: right mouse / left trigger), one feature, tuned while playing (Aim= in DefaultGame.ini). */
+USTRUCT(BlueprintType)
+struct FDCAimTuning
+{
+	GENERATED_BODY()
+	/** Third-person field of view while aiming (the hip view uses Move.ThirdPersonFOV). */
+	UPROPERTY(EditAnywhere, Config, Category = "Aim") float AimFOV = 55.f;
+	/** Seconds the zoom (FOV, boom, shoulder) takes to settle in and out. */
+	UPROPERTY(EditAnywhere, Config, Category = "Aim") float ZoomSeconds = 0.18f;
+	/** Boom length and shoulder offset while aiming: tighter over the shoulder. */
+	UPROPERTY(EditAnywhere, Config, Category = "Aim") float ArmLength = 150.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Aim") FVector ShoulderOffset = FVector(0.f, 55.f, 60.f);
+	UPROPERTY(EditAnywhere, Config, Category = "Aim") float MoveSpeed = 300.f;
+	/** Spread multiplier while aiming (the moving-spread scale no longer applies). */
+	UPROPERTY(EditAnywhere, Config, Category = "Aim") float SpreadScale = 0.35f;
+	/** Crosshair gap (px at 1080p) while aiming; the hip gap is 8. */
+	UPROPERTY(EditAnywhere, Config, Category = "Aim") float CrosshairGap = 3.f;
+	/** Aim pose: upper-body pitch follows the aim, split over the spine bones, clamped. */
+	UPROPERTY(EditAnywhere, Config, Category = "Aim") float MaxPitchDegrees = 60.f;
+};
+
 USTRUCT(BlueprintType)
 struct FDCMoveTuning
 {
@@ -843,6 +864,7 @@ public:
 	UPROPERTY(EditAnywhere, Config, Category = "Assets") FDCAssetTuning Assets;
 	UPROPERTY(EditAnywhere, Config, Category = "Photo") FDCPhotoTuning Photo;
 	UPROPERTY(EditAnywhere, Config, Category = "Move") FDCMoveTuning Move;
+	UPROPERTY(EditAnywhere, Config, Category = "Aim") FDCAimTuning Aim;
 	UPROPERTY(EditAnywhere, Config, Category = "Rifle") FDCRifleTuning Rifle;
 	/** R8 player weapons (slot 1). Empty = the rifle from Rifle= alone. */
 	UPROPERTY(EditAnywhere, Config, Category = "Weapon") TArray<FDCWeaponDef> Weapons;

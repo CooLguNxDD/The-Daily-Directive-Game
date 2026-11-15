@@ -143,6 +143,8 @@ void ADCCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLife
 	DOREPLIFETIME(ADCCharacter, Slot);
 	DOREPLIFETIME(ADCCharacter, WeaponIndex);
 	DOREPLIFETIME(ADCCharacter, bCameraRaised);
+	DOREPLIFETIME(ADCCharacter, bRifleAim);
+	DOREPLIFETIME_CONDITION(ADCCharacter, AimPitch, COND_SkipOwner);
 	DOREPLIFETIME(ADCCharacter, bSprinting);
 	DOREPLIFETIME(ADCCharacter, Health);
 	DOREPLIFETIME(ADCCharacter, bDowned);
@@ -466,6 +468,11 @@ void ADCCharacter::OnAim(const FInputActionInstance&)
 		Director->SetTakeRaised(true);
 		return;
 	}
+	if (Slot == EDCSlot::Rifle && !bDowned && InSector())
+	{
+		SetRifleAim(true); // R16
+		return;
+	}
 	if (Slot != EDCSlot::Camera || bDowned || !InSector())
 	{
 		return;
@@ -483,6 +490,7 @@ void ADCCharacter::OnAimEnd(const FInputActionInstance&)
 	{
 		Director->SetTakeRaised(false);
 	}
+	SetRifleAim(false);
 	if (!bCameraRaised)
 	{
 		return;
@@ -579,6 +587,7 @@ void ADCCharacter::SelectSlot(EDCSlot NewSlot)
 		bCameraRaised = false;
 		ServerSetCameraRaised(false);
 	}
+	SetRifleAim(false);
 	Slot = NewSlot;
 	ReloadEndTime = -1.f;
 	DrawEndTime = Now() + UDCTuning::Get().Camera.DrawSeconds;
@@ -696,6 +705,30 @@ void ADCCharacter::ServerSetCameraRaised_Implementation(bool bRaised)
 	UpdateMoveSpeed();
 }
 
+void ADCCharacter::SetRifleAim(bool bAim)
+{
+	// R16: the owner predicts, the host validates (rifle out, standing) and replicates to the others.
+	if (bRifleAim == bAim)
+	{
+		return;
+	}
+	bRifleAim = bAim;
+	UpdateMoveSpeed();
+	ServerSetRifleAim(bAim);
+	DCAudio::Play2D(this, TEXT("Draw"), bAim ? 0.35f : 0.2f, bAim ? 1.05f : 0.95f);
+}
+
+void ADCCharacter::ServerSetRifleAim_Implementation(bool bAim)
+{
+	bRifleAim = bAim && Slot == EDCSlot::Rifle && !bDowned;
+	UpdateMoveSpeed();
+}
+
+void ADCCharacter::ServerAimPitch_Implementation(float Pitch)
+{
+	AimPitch = FMath::Clamp(Pitch, -89.f, 89.f); // the others' aim pose only; never used for hits
+}
+
 void ADCCharacter::ServerSetSprint_Implementation(bool bSprint)
 {
 	bSprinting = bSprint;
@@ -705,8 +738,9 @@ void ADCCharacter::ServerSetSprint_Implementation(bool bSprint)
 void ADCCharacter::UpdateMoveSpeed()
 {
 	const FDCMoveTuning& M = UDCTuning::Get().Move;
-	float Speed = bSprinting && !bCameraRaised ? M.SprintSpeed : M.WalkSpeed;
+	float Speed = bSprinting && !bCameraRaised && !bRifleAim ? M.SprintSpeed : M.WalkSpeed;
 	Speed = bCameraRaised ? M.CameraAimSpeed : Speed;
+	Speed = bRifleAim ? UDCTuning::Get().Aim.MoveSpeed : Speed; // R16
 	Speed = bDowned ? 0.f : Speed; // down on the ground in the fall pose: no sliding
 	GetCharacterMovement()->MaxWalkSpeed = Speed;
 }
@@ -732,7 +766,8 @@ void ADCCharacter::FireRifleOnce()
 	FVector ViewLoc;
 	FRotator ViewRot;
 	GetController()->GetPlayerViewPoint(ViewLoc, ViewRot);
-	const float Spread = FMath::DegreesToRadians(R.SpreadDegrees * (GetVelocity().Size2D() > 50.f ? W.MoveSpreadScale : 1.f));
+	const float SpreadScale = bRifleAim ? UDCTuning::Get().Aim.SpreadScale : (GetVelocity().Size2D() > 50.f ? W.MoveSpreadScale : 1.f); // R16
+	const float Spread = FMath::DegreesToRadians(R.SpreadDegrees * SpreadScale);
 	const FVector Dir = FMath::VRandCone(ViewRot.Vector(), Spread);
 	ServerFire(ViewLoc, Dir);
 
@@ -1232,6 +1267,7 @@ void ADCCharacter::ClientHurt_Implementation(FVector_NetQuantize From)
 	const FDCCameraTuning& C = UDCTuning::Get().Camera;
 	const float Now = GetWorld()->GetRealTimeSeconds();
 	LocalFeedback.HurtFrom = From;
+	++ShakeLogHits;
 	if (Now - LastHitShakeTime >= C.HitShakeMinIntervalSeconds)
 	{
 		LastHitShakeTime = Now;
@@ -1242,6 +1278,7 @@ void ADCCharacter::ClientHurt_Implementation(FVector_NetQuantize From)
 		return;
 	}
 	LocalFeedback.HurtTime = Now;
+	++ShakeLogFlinches;
 	DCAudio::Play2D(this, TEXT("Hurt"), 0.7f, FMath::FRandRange(0.95f, 1.05f));
 }
 
@@ -1366,6 +1403,7 @@ void ADCCharacter::HostResupply(int32 Film, int32 AmmoAdd, float Heal)
 
 void ADCCharacter::OnRep_Downed()
 {
+	bRifleAim = bRifleAim && !bDowned; // R16: a downed player stops aiming on every machine
 	UpdateMoveSpeed();
 	const UDCTuning& T = UDCTuning::Get();
 	if (bDowned)
@@ -1543,6 +1581,18 @@ void ADCCharacter::UpdateView(float DeltaSeconds)
 	Trauma = FMath::Max(0.f, Trauma - DeltaSeconds * 1.6f);
 	HitTrauma = FMath::Max(0.f, HitTrauma - DeltaSeconds * UDCTuning::Get().Camera.HitTraumaDecayPerSecond);
 	const float Shake = FMath::Max(Trauma * Trauma, HitTrauma * HitTrauma); // R17: hits never stack onto blast shake
+	ShakeLogMax = FMath::Max(ShakeLogMax, HitTrauma);
+	if (GetWorld()->GetRealTimeSeconds() >= ShakeLogNext)
+	{
+		// R17 evidence: hits taken this second against the hit shakes and flinches they produced.
+		if (ShakeLogHits > 0)
+		{
+			UE_LOG(LogTemp, Display, TEXT("DCSHAKE 1s hits=%d flinches=%d hitshake_max=%.2f (cap %.2f) blast=%.2f"), ShakeLogHits, ShakeLogFlinches, ShakeLogMax, UDCTuning::Get().Camera.HitTraumaCap, Trauma);
+		}
+		ShakeLogNext = GetWorld()->GetRealTimeSeconds() + 1.f;
+		ShakeLogHits = ShakeLogFlinches = 0;
+		ShakeLogMax = 0.f;
+	}
 	const float T = GetWorld()->GetRealTimeSeconds();
 	const FRotator Jitter(FMath::PerlinNoise1D(T * 23.f) * 4.f * Shake, FMath::PerlinNoise1D(T * 19.f + 7.f) * 4.f * Shake, FMath::PerlinNoise1D(T * 17.f + 3.f) * 3.f * Shake);
 	ThirdCam->SetRelativeRotation(Jitter);
@@ -1554,14 +1604,32 @@ void ADCCharacter::UpdateView(float DeltaSeconds)
 	const float Accel = -LandDip * M.LandDipStiffness - LandDipVel * M.LandDipDamping;
 	LandDipVel += Accel * DeltaSeconds;
 	LandDip = FMath::Clamp(LandDip + LandDipVel * DeltaSeconds, -M.LandDipMaxCm, M.LandDipMaxCm);
-	Boom->SocketOffset = M.ShoulderOffset + FVector(0.f, 0.f, LandDip);
+	// R16: aiming tightens the camera over the shoulder with a short zoom (FOV, boom, offset settle in Aim.ZoomSeconds).
+	const FDCAimTuning& AimT = UDCTuning::Get().Aim;
+	const float ZoomSpeed = 3.f / FMath::Max(AimT.ZoomSeconds, 0.02f);
+	AimBlend = FMath::FInterpTo(AimBlend, bRifleAim ? 1.f : 0.f, DeltaSeconds, ZoomSpeed);
+	Boom->SocketOffset = FMath::Lerp(M.ShoulderOffset, AimT.ShoulderOffset, AimBlend) + FVector(0.f, 0.f, LandDip);
 	// Downed: the boom lifts above the rubble and pulls back, so the player sees themselves and the street (a boom at
 	// knee height in a rubble pile went black).
 	const float BoomZ = FMath::FInterpTo(Boom->GetRelativeLocation().Z, bDowned ? M.DownedBoomHeightCm : 40.f, DeltaSeconds, 4.f);
 	Boom->SetRelativeLocation(FVector(0.f, 0.f, BoomZ));
-	Boom->TargetArmLength = FMath::FInterpTo(Boom->TargetArmLength, bDowned ? M.DownedArmLength : M.ArmLength, DeltaSeconds, 4.f);
-	const bool bSprintKick = bSprinting && !bCameraRaised && GetVelocity().Size2D() > M.WalkSpeed;
-	ThirdCam->SetFieldOfView(FMath::FInterpTo(ThirdCam->FieldOfView, M.ThirdPersonFOV + (bSprintKick ? M.SprintFOVKick : 0.f), DeltaSeconds, 6.f));
+	Boom->TargetArmLength = bDowned ? FMath::FInterpTo(Boom->TargetArmLength, M.DownedArmLength, DeltaSeconds, 4.f)
+		: FMath::FInterpTo(Boom->TargetArmLength, FMath::Lerp(M.ArmLength, AimT.ArmLength, AimBlend), DeltaSeconds, FMath::Max(4.f, ZoomSpeed));
+	const bool bSprintKick = bSprinting && !bCameraRaised && !bRifleAim && GetVelocity().Size2D() > M.WalkSpeed;
+	const float HipFOV = M.ThirdPersonFOV + (bSprintKick ? M.SprintFOVKick : 0.f);
+	ThirdCam->SetFieldOfView(FMath::FInterpTo(ThirdCam->FieldOfView, bRifleAim ? AimT.AimFOV : HipFOV, DeltaSeconds, bRifleAim ? ZoomSpeed : FMath::Max(6.f, ZoomSpeed)));
+	// The owner sends its aim pitch for the others' aim pose (at most ~15 Hz while aiming, only when it moved).
+	if (bRifleAim && IsLocallyControlled())
+	{
+		const float Pitch = FRotator::NormalizeAxis(GetControlRotation().Pitch);
+		AimPitch = Pitch;
+		if (GetWorld()->GetRealTimeSeconds() >= NextAimPitchSend && FMath::Abs(Pitch - SentAimPitch) > 1.f)
+		{
+			NextAimPitchSend = GetWorld()->GetRealTimeSeconds() + 1.f / 15.f;
+			SentAimPitch = Pitch;
+			ServerAimPitch(Pitch);
+		}
+	}
 }
 
 void ADCCharacter::Tick(float DeltaSeconds)
