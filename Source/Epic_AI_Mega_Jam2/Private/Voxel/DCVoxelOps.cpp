@@ -774,7 +774,7 @@ namespace DCVoxelOps
 	 *  merged in lot order), terrain over them dropped, then the pieces settle. Strike and Fell run it on every lot they
 	 *  touched; Chip only on the lots the host listed in StructureLots. */
 	template <typename FLap>
-	void StructureTail(FDCVoxelSector& Sector, const TArray<int32>& Lots, const FIntVector& C, const FDCVoxelOpContext& Ctx, FDCVoxelOpResult& Out, FLap& Lap)
+	void StructureTail(FDCVoxelSector& Sector, const TArray<int32>& Lots, const FIntVector& C, const FDCVoxelOpContext& Ctx, FDCVoxelOpResult& Out, FLap& Lap, int32 CraterRadiusCm = 0)
 	{
 		// Towers are independent grids: their structure passes run in parallel, and the results merge in lot order
 		// (the same order on every machine), so the op stays deterministic.
@@ -797,10 +797,7 @@ namespace DCVoxelOps
 		{
 			DropTerrainOver(Sector, Sector.Towers[Lot], Ctx.Tuning->GroundLayers); // nothing left floating where a roof or a top was (lot order)
 		}
-		if (!bFell)
-		{
-			DropTerrainOverCrater(Sector, C, Carve.CraterRadiusCm, Ctx.Tuning->GroundLayers);
-		}
+		DropTerrainOverCrater(Sector, C, CraterRadiusCm, Ctx.Tuning->GroundLayers); // strikes: rubble over the crater rim drops in
 		Out.StructureMs = Lap();
 		for (FDCVoxelPiece& Piece : Out.Pieces)
 		{
@@ -881,7 +878,7 @@ namespace DCVoxelOps
 		// Props in the blast are gone, top to bottom (a sphere left their tops floating: review CP2).
 		Out.Carved += CarveColumn(Sector.Props, C, Carve.SphereRadiusCm, Sector.Props.ToLocal(FIntVector(0, 0, 4000)).Z);
 		Out.CarveMs = Lap();
-		StructureTail(Sector, Out.TouchedLots, C, Ctx, Out, Lap);
+		StructureTail(Sector, Out.TouchedLots, C, Ctx, Out, Lap, Carve.CraterRadiusCm);
 		return Out;
 	}
 
