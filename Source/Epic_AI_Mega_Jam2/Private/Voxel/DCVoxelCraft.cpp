@@ -486,8 +486,9 @@ namespace
 					{
 						return S;
 					}
-					const int32 W = FMath::Clamp(R.SignWidthVox, 3, B - 2);
-					S.U0 = Rng.RandRange(0, Bays - 1) * B + (B - W) / 2;
+					// On the pier between two bays (solid wall behind it, not a column of windows).
+					const int32 W = FMath::Clamp(R.SignWidthVox, 3, B / 3);
+					S.U0 = Rng.RandRange(1, Bays - 1) * B - W / 2;
 					S.U1 = S.U0 + W;
 					S.Z1 = Floors * B - B / 4;
 					S.Z0 = FMath::Max(B, S.Z1 - R.SignHeightVox);
@@ -573,7 +574,19 @@ namespace
 		const FIntVector B1 = F.Cell(Face, 0, S.U1 - 1, S.Z1 - 1);
 		Sign.BackMin = B0.ComponentMin(B1);
 		Sign.BackMax = B0.ComponentMax(B1) + FIntVector(1, 1, 1);
-		Sign.BackCells = (S.U1 - S.U0) * (S.Z1 - S.Z0);
+		// The backing actually there when the sign goes up (R23: a banner or crown band over recessed windows has less
+		// than its full area behind it), so a sign falls only when it lost a share of its real support.
+		Sign.BackCells = 0;
+		for (int32 Z = Sign.BackMin.Z; Z < Sign.BackMax.Z; ++Z)
+		{
+			for (int32 Y = Sign.BackMin.Y; Y < Sign.BackMax.Y; ++Y)
+			{
+				for (int32 X = Sign.BackMin.X; X < Sign.BackMax.X; ++X)
+				{
+					Sign.BackCells += W.IsSolid(FIntVector(X, Y, Z)) ? 1 : 0;
+				}
+			}
+		}
 	}
 	/** What a mount needs to place a building attachment (R2 props). */
 	struct FMountCtx
