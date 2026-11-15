@@ -131,6 +131,10 @@ struct FDCVoxelCarveDef
 	 *  strikes use less so the crew's own shots keep the body budget. */
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 PhysicsPieces = -1;
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 PhysicsFragments = -1;
+	/** R11 (human playtest): how hard this strike throws the blown-out voxel blocks: outward speed and upward lift as
+	 *  multiples of Tuning ShardSpeedCms / ShardUpCms (crumbs too). Speed only: no extra bodies, same budget. */
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float ShardSpeedScale = 1.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float ShardLiftScale = 1.f;
 };
 
 /** Engine tuning (R1). Integer where the result must match across machines. */

@@ -1463,6 +1463,9 @@ void ADCVoxelCity::QueueShards(const FDCVoxelOp& Op, const FDCVoxelOpResult& Res
 		return;
 	}
 	const FVector Center(Op.CenterCm);
+	const FDCVoxelCarveDef& Throw = OpCtx.CarveFor(Op.Stratagem); // R11: the strike's own throw strength
+	const float SpeedCms = Tn.ShardSpeedCms * Throw.ShardSpeedScale;
+	const float UpCms = Tn.ShardUpCms * Throw.ShardLiftScale;
 	FDCShardBurst& Burst = PendingShards.AddDefaulted_GetRef();
 	Burst.Start = Start;
 	const float GlowScale = Tn.VoxelMaterialGlowScale;
@@ -1475,8 +1478,8 @@ void ADCVoxelCity::QueueShards(const FDCVoxelOp& Op, const FDCVoxelOpResult& Res
 		const float EdgeCm = C.VoxelCm * FMath::Max(1.f, FMath::Pow(static_cast<float>(C.Count), 1.f / 3.f));
 		FDCDebrisSpawn D;
 		D.Transform = FTransform(FRotator(Rng.FRandRange(0, 360), Rng.FRandRange(0, 360), 0), P, FVector(EdgeCm / 100.f));
-		const float Speed = Tn.ShardSpeedCms * Rng.FRandRange(0.5f, 1.1f) / FMath::Sqrt(static_cast<float>(C.Block));
-		D.LinearVelocity = (Out + Rng.VRand() * 0.35f).GetSafeNormal() * Speed + FVector(0, 0, Rng.FRandRange(0.f, Tn.ShardUpCms));
+		const float Speed = SpeedCms * Rng.FRandRange(0.5f, 1.1f) / FMath::Sqrt(static_cast<float>(C.Block));
+		D.LinearVelocity = (Out + Rng.VRand() * 0.35f).GetSafeNormal() * Speed + FVector(0, 0, Rng.FRandRange(UpCms * 0.3f, UpCms));
 		D.AngularVelocityDeg = Rng.VRand() * 720.f;
 		// Lit voxels (windows, neon) keep their own colour and glow in the air (R26: emissive faces while falling);
 		// dull wall voxels fly as their rubble colour (critic: not window-coloured confetti).
@@ -1493,7 +1496,7 @@ void ADCVoxelCity::QueueShards(const FDCVoxelOp& Op, const FDCVoxelOpResult& Res
 		{
 			FDCCrumbSpawn& Cr = Burst.Crumbs.AddDefaulted_GetRef();
 			Cr.At = P + CrumbRng.VRand() * EdgeCm;
-			Cr.Velocity = (Out + CrumbRng.VRand() * 0.6f).GetSafeNormal() * Tn.ShardSpeedCms * CrumbRng.FRandRange(0.4f, 1.2f) + FVector(0, 0, CrumbRng.FRandRange(0.f, Tn.ShardUpCms));
+			Cr.Velocity = (Out + CrumbRng.VRand() * 0.6f).GetSafeNormal() * SpeedCms * CrumbRng.FRandRange(0.4f, 1.2f) + FVector(0, 0, CrumbRng.FRandRange(UpCms * 0.3f, UpCms));
 			Cr.SizeCm = C.VoxelCm * CrumbRng.RandRange(1, FMath::Max(1, Tn.CrumbClusterMax));
 			Cr.Color = D.Color;
 			Cr.Glow = bEmber ? D.Glow : D.Glow * Tn.CrumbGlowScale / FMath::Max(Tn.ShardGlowScale, 0.01f);
