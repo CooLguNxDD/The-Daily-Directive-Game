@@ -8,6 +8,7 @@
 #include "Engine/NetDriver.h"
 #include "Engine/World.h"
 #include "Features/IModularFeatures.h"
+#include "HAL/PlatformProcess.h"
 #include "HAL/PlatformTime.h"
 #include "UnrealClient.h"
 #include "Kismet/GameplayStatics.h"
@@ -161,9 +162,10 @@ void UDCOnline::Start(EDCOnlineIntent InIntent)
 	Options.DeviceModel = S.DeviceModel;
 	Options.DisplayName = S.DisplayName;
 	Options.BucketId = S.BucketId;
-	Options.CacheDirectory = FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir() / TEXT("EOSCache"));
-	IFileManager::Get().MakeDirectory(*Options.CacheDirectory, true);
 	Options.bFreshDevice = FParse::Param(FCommandLine::Get(), TEXT("dceosfreshdevice"));
+	// A second instance on the same PC (test runs) gets its own cache: EOS expects one cache directory per process.
+	Options.CacheDirectory = FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir() / (Options.bFreshDevice ? FString::Printf(TEXT("EOSCache_%u"), FPlatformProcess::GetCurrentProcessId()) : FString(TEXT("EOSCache"))));
+	IFileManager::Get().MakeDirectory(*Options.CacheDirectory, true);
 	const int32 This = Attempt;
 	TWeakObjectPtr<UDCOnline> Weak(this);
 	Transport->Login(Credentials, Options, [Weak, This](bool bOk, const FString& Message)
