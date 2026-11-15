@@ -66,3 +66,11 @@ art) is in the game.
 
 ## Store packs
 None are used. Store packs, if added later, stay local-only under `Content/_LocalPacks/` and get a row here.
+
+## Generated music (R14)
+| Track | Path | Tool | Notes |
+|-------|------|------|-------|
+| MenuNoir (title menu set (with MenuNoirB), front page) | `Content/DC/Audio/S_Music_MenuNoir.uasset` (loop source `Content/DC/Audio/Source/MenuNoir.wav`) | local ComfyUI ACE-Step 1.5 turbo (`ace_step_1.5_turbo_aio`, built-in nodes) via `tools/audio/gen_music.py`, seed 1401, 72 bpm, D Minor, 2026-11-14 | prompt in `tools/audio/tracks.json`; instrumental; looped by `tools/audio/make_loop.py` (16 bars, 53.3 s, equal-power seam crossfade, -20.0 dB RMS); imported by `tools/content/build_content.py` |
+| MenuNoirB (title menu set, reel, final cut, vote) | `Content/DC/Audio/S_Music_MenuNoirB.uasset` (loop source `Content/DC/Audio/Source/MenuNoirB.wav`) | local ComfyUI ACE-Step 1.5 turbo (`ace_step_1.5_turbo_aio`, built-in nodes) via `tools/audio/gen_music.py`, seed 1402, 66 bpm, G Minor, 2026-11-14 | prompt in `tools/audio/tracks.json`; instrumental; looped by `tools/audio/make_loop.py` (16 bars, 58.2 s, equal-power seam crossfade, -20.0 dB RMS); imported by `tools/content/build_content.py` |
+| Peaceful (sector Calm layer, draft) | `Content/DC/Audio/S_Music_Peaceful.uasset` (loop source `Content/DC/Audio/Source/Peaceful.wav`) | local ComfyUI ACE-Step 1.5 turbo (`ace_step_1.5_turbo_aio`, built-in nodes) via `tools/audio/gen_music.py`, seed 1403, 80 bpm, D Minor, 2026-11-14 | prompt in `tools/audio/tracks.json`; instrumental; looped by `tools/audio/make_loop.py` (20 bars, 60.0 s, equal-power seam crossfade, -24.92 dB RMS); imported by `tools/content/build_content.py` |
+| Fighting (sector Fight layer (combat intensity >= 0.4)) | `Content/DC/Audio/S_Music_Fighting.uasset` (loop source `Content/DC/Audio/Source/Fighting.wav`) | local ComfyUI ACE-Step 1.5 turbo (`ace_step_1.5_turbo_aio`, built-in nodes) via `tools/audio/gen_music.py`, seed 1404, 120 bpm, D Minor, 2026-11-14 | prompt in `tools/audio/tracks.json`; instrumental; looped by `tools/audio/make_loop.py` (32 bars, 64.0 s, equal-power seam crossfade, -18.0 dB RMS); imported by `tools/content/build_content.py` |
