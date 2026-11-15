@@ -20,7 +20,7 @@ UDCUnitAnimator::UDCUnitAnimator()
 	PrimaryComponentTick.bCanEverTick = false;
 }
 
-UDCUnitAnimator* UDCUnitAnimator::Attach(AActor& Unit, UProceduralMeshComponent& Mesh, const FDCEnemyDef& Def)
+UDCUnitAnimator* UDCUnitAnimator::Attach(AActor& Unit, UProceduralMeshComponent& MeshComp, const FDCEnemyDef& Def)
 {
 	const UDCTuning& T = UDCTuning::Get();
 	if (!DCUnitAnim::FindGait(T.UnitGaits, Def.Gait))
@@ -35,23 +35,23 @@ UDCUnitAnimator* UDCUnitAnimator::Attach(AActor& Unit, UProceduralMeshComponent&
 	}
 	UDCUnitAnimator* Anim = NewObject<UDCUnitAnimator>(&Unit, TEXT("UnitAnimator"));
 	Anim->RegisterComponent();
-	Anim->Mesh = &Mesh;
+	Anim->Mesh = &MeshComp;
 	Anim->GaitId = Def.Gait;
 	Anim->bSegmented = UnitMat != nullptr;
 	if (Anim->bSegmented)
 	{
 		const FDCVoxelMeshData& M = UnitMesh->Mesh;
-		Mesh.CreateMeshSection(0, M.Positions, M.Indices, M.Normals, M.UVs, UnitMesh->UV1, UnitMesh->UV2, {}, M.Colors, {}, false);
-		Mesh.SetMaterial(0, UnitMat);
+		MeshComp.CreateMeshSection(0, M.Positions, M.Indices, M.Normals, M.UVs, UnitMesh->UV1, UnitMesh->UV2, {}, M.Colors, {}, false);
+		MeshComp.SetMaterial(0, UnitMat);
 		// Limbs swing outside the rest-pose bounds (advisor a-28): keep them from culling at the screen edge.
-		Mesh.SetBoundsScale(1.5f);
+		MeshComp.SetBoundsScale(1.5f);
 		Anim->Roles = UnitMesh->Roles;
 	}
 	else
 	{
 		const FDCVoxelMeshData& M = UnitMesh->Mesh;
-		Mesh.CreateMeshSection(0, M.Positions, M.Indices, M.Normals, M.UVs, M.Colors, {}, false);
-		Mesh.SetMaterial(0, Cast<UMaterialInterface>(UDCVoxelSettings::Get().VoxelMaterial.TryLoad()));
+		MeshComp.CreateMeshSection(0, M.Positions, M.Indices, M.Normals, M.UVs, M.Colors, {}, false);
+		MeshComp.SetMaterial(0, Cast<UMaterialInterface>(UDCVoxelSettings::Get().VoxelMaterial.TryLoad()));
 		UE_LOG(LogTemp, Display, TEXT("DCANIM %s: %s unsegmented (parts %d, unit material %s)"), *Unit.GetName(), *Def.Model.ToString(),
 			UnitMesh->Roles.Num(), *T.UnitMaterial.ToString());
 	}

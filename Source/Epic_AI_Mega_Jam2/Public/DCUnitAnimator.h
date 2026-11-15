@@ -24,7 +24,7 @@ public:
 
 	/** A unit with a +UnitGaits row gets an animator; the mesh section goes on Mesh (segmented when the model has parts
 	 *  and the unit material loads, else the plain voxel mesh that still bobs, leans, falls and spawns). */
-	static UDCUnitAnimator* Attach(AActor& Unit, UProceduralMeshComponent& Mesh, const FDCEnemyDef& Def);
+	static UDCUnitAnimator* Attach(AActor& Unit, UProceduralMeshComponent& MeshComp, const FDCEnemyDef& Def);
 
 	/** Every frame: motion from the unit's own location (host or replicated), flinch from a health drop, attack from the
 	 *  replicated attack counter, death from !bAlive. */
@@ -37,7 +37,7 @@ public:
 	/** Seconds the death clip takes (0 = none): the unit bursts into crumbs after it. */
 	float DeathSeconds() const;
 	/** Plays a clip now if the state table lets it start (evidence flows drive states directly). */
-	void Play(EDCUnitClip Clip);
+	void Play(EDCUnitClip Next);
 	/** Evidence (-dcanimshot): hold this ground speed instead of the measured one (negative = measure). */
 	float ForcedSpeedCm = -1.f;
 	bool IsSegmented() const { return bSegmented; }
