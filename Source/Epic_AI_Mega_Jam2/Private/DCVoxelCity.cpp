@@ -1,4 +1,5 @@
 #include "DCVoxelCity.h"
+#include "Components/StaticMeshComponent.h"
 
 #include "Async/ParallelFor.h"
 #include "Materials/MaterialInstanceDynamic.h"
@@ -300,6 +301,60 @@ int32 ADCVoxelCity::StandingLotAt(const FVector& Where) const
 		}
 	}
 	return INDEX_NONE;
+}
+
+bool ADCVoxelCity::IsInsideBounds(const FVector& Where) const
+{
+	return BoundsHalfCm <= 0.f || (FMath::Abs(Where.X) < BoundsHalfCm && FMath::Abs(Where.Y) < BoundsHalfCm);
+}
+
+void ADCVoxelCity::ApplyBounds()
+{
+	// The ring sits BoundsMarginCm past this sector's plan (the terrain reaches TerrainMarginCm past it), centred on the
+	// sector origin like the terrain grid.
+	const FDCVoxelTuning& Tn = UDCVoxelSettings::Get().Tuning;
+	const float TerrainHalf = static_cast<float>(-Sector.Terrain.OriginCm.X);
+	BoundsHalfCm = FMath::Max(1000.f, TerrainHalf - Tn.TerrainMarginCm + Tn.BoundsMarginCm);
+	const float H = Tn.BoundsWallHeightCm;
+	if (BoundsWalls.Num() == 0)
+	{
+		for (int32 i = 0; i < 4; ++i)
+		{
+			UBoxComponent* Wall = NewObject<UBoxComponent>(this);
+			Wall->SetupAttachment(Root);
+			Wall->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+			Wall->SetCollisionObjectType(ECC_WorldStatic);
+			Wall->SetCollisionResponseToAllChannels(ECR_Block);
+			Wall->SetCollisionResponseToChannel(ECC_Visibility, ECR_Ignore); // shots and sight pass
+			Wall->SetCollisionResponseToChannel(ECC_Camera, ECR_Ignore); // the boom never snaps on it
+			Wall->SetHiddenInGame(true);
+			Wall->SetCanEverAffectNavigation(false);
+			Wall->RegisterComponent();
+			BoundsWalls.Add(Wall);
+		}
+		OuterGround = NewObject<UStaticMeshComponent>(this);
+		OuterGround->SetupAttachment(Root);
+		OuterGround->SetStaticMesh(DCAssets::Cube());
+		OuterGround->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		OuterGround->SetCastShadow(false);
+		const FDCVoxelMaterial* Street = UDCVoxelSettings::Get().Palette.FindByPredicate([&Tn](const FDCVoxelMaterial& M) { return M.Id == Tn.StreetMaterial; });
+		OuterGround->SetMaterial(0, DCAssets::MakeFlat(this, Street ? FLinearColor(Street->Color.R, Street->Color.G, Street->Color.B) : FLinearColor(0.02f, 0.02f, 0.025f)));
+		OuterGround->RegisterComponent();
+	}
+	const float Thick = 100.f;
+	const FVector2D Sides[] = {{1.f, 0.f}, {-1.f, 0.f}, {0.f, 1.f}, {0.f, -1.f}};
+	for (int32 i = 0; i < 4; ++i)
+	{
+		const FVector2D S = Sides[i];
+		BoundsWalls[i]->SetWorldLocation(FVector(S.X * (BoundsHalfCm + Thick), S.Y * (BoundsHalfCm + Thick), H * 0.5f - 500.f));
+		BoundsWalls[i]->SetBoxExtent(FVector(S.X != 0.f ? Thick : BoundsHalfCm + 2.f * Thick, S.Y != 0.f ? Thick : BoundsHalfCm + 2.f * Thick, H * 0.5f + 500.f));
+	}
+	// The plane's top sits a hair under the street so the terrain always draws over it; the cube mesh is 100 cm.
+	const float Ground = Tn.OuterGroundHalfCm;
+	OuterGround->SetWorldLocation(FVector(0.f, 0.f, -60.f));
+	OuterGround->SetWorldScale3D(FVector(Ground * 2.f / 100.f, Ground * 2.f / 100.f, 1.f));
+	UE_LOG(LogTemp, Display, TEXT("DCBOUNDS sector=%d ring half=%.0f cm (terrain half %.0f), walls %.0f cm tall, outer ground half %.0f cm, kill z %.0f"),
+		BuiltSector, BoundsHalfCm, TerrainHalf, H, Ground, Tn.KillZCm);
 }
 
 bool ADCVoxelCity::IsWalkBlocked(const FVector& Where) const
@@ -1894,8 +1949,9 @@ void ADCVoxelCity::TickFalling(float Now)
 				continue;
 			}
 		}
-		const float A = (WorldNow - Fading[i].Start) / Fade;
+		float A = (WorldNow - Fading[i].Start) / Fade;
 		UPrimitiveComponent* Mesh = Fading[i].Mesh.Get();
+		A = Mesh && Mesh->GetComponentLocation().Z < FadeTn.KillZCm ? 1.f : A; // R19: below the kill net: gone
 		if (A >= 1.f || !Mesh)
 		{
 			if (Mesh)
@@ -2498,6 +2554,7 @@ void ADCVoxelCity::Tick(float DeltaSeconds)
 			WithDoors += WalkMasks.IsValidIndex(Lot) && WalkMasks[Lot].bValid && WalkMasks[Lot].Portals.Num() > 0 ? 1 : 0;
 		}
 		UE_LOG(LogTemp, Display, TEXT("DCWALK masks built sector=%d towers=%d with doors=%d"), BuiltSector, Sector.Towers.Num(), WithDoors);
+		ApplyBounds();
 	}
 	double CommitMs = 0.0; // advisor CP26: the hitch log scopes the op's game-thread prepare and commit too
 	double NextOpMs = 0.0;

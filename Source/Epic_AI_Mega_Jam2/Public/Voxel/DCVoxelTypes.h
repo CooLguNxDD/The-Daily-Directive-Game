@@ -151,6 +151,21 @@ struct FDCVoxelTuning
 	/** Bottom terrain layers no crater carves (the street never opens onto the void). */
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 BedrockLayers = 1;
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 TerrainMarginCm = 2000;
+	/** R19 sector bounds (human playtest: players walked off the map). Each sector's ring sits BoundsMarginCm past its
+	 *  own city plan's half extent (so the bounds follow every sector's layout); invisible walls BoundsWallHeightCm tall
+	 *  block players, units and physics pieces there (not shots or the camera). The terrain band between the ring and
+	 *  the terrain edge is dressed: a barrier line (BarrierHeightCm, BarrierMaterial, a gap-free ring) and seeded rubble
+	 *  heaps outside it (EdgeRubbleChance per voxel column, up to EdgeRubbleMaxCm tall). Past the terrain a flat ground
+	 *  plane reaches OuterGroundHalfCm in the street colour so no void shows. Anything below KillZCm is returned
+	 *  (players to their last safe spot) or released (physics pieces). */
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 BoundsMarginCm = 800;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float BoundsWallHeightCm = 6000.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 BarrierHeightCm = 100;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") FName BarrierMaterial = TEXT("Kerb");
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float EdgeRubbleChance = 0.35f;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 EdgeRubbleMaxCm = 200;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float OuterGroundHalfCm = 90000.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float KillZCm = -1500.f;
 	/** Render cell edge (cm): storage chunks are grouped into one mesh component per cell. */
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 RenderCellCm = 960;
 	/** Ground materials by surface: street, lot paving, kerb line. */

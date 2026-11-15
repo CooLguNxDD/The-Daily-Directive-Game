@@ -182,6 +182,11 @@ private:
 	float SentAimPitch = 0.f;
 	float NextAimPitchSend = 0.f;
 	float AimBlend = 0.f;
+	/** R19 fall net (host). */
+	void UpdateFallNet();
+	FVector LastSafeSpot = FVector::ZeroVector;
+	bool bHasSafeSpot = false;
+	float NextSafeSample = 0.f;
 	UFUNCTION(Server, Reliable) void ServerSetSprint(bool bSprint);
 	UFUNCTION(Server, Unreliable) void ServerFire(FVector_NetQuantize Start, FVector_NetQuantizeNormal Dir);
 	UFUNCTION(Server, Reliable) void ServerReload();
