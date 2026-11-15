@@ -1,0 +1,11 @@
+# Wall mural (R23 wall mount): a great curling ocean wave painted in neon spray line art across an ink plate flat on the facade, quantized from
+# generated art (tools/voxel-forge/art/mural_wave.png, local ComfyUI Qwen-Image via fleet media). Two voxels deep.
+grid 10
+size 2 46 46
+slot plate Ink
+slot face NeonCyan
+slot edge NeonCyanEdge
+pivot 0 23 0
+box 0 0 0 1 46 46 plate
+box 1 0 0 2 46 46 plate
+image ../art/mural_wave.png 1 1 1 44 44 plate 0.08 face 0.2 edge
