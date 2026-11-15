@@ -190,6 +190,7 @@ private:
 	TWeakObjectPtr<UPrimitiveComponent> DissolveCamTarget;
 	float DissolveCamStart = -1.f;
 	int32 DissolveCamStep = 0;
+	FVector DissolveCamEye = FVector::ZeroVector;
 	int32 CollapseCamStep = -1;
 	int32 CollapseCamOp = 0;
 	FVector CollapseCamCenter = FVector::ZeroVector;

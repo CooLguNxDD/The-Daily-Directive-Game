@@ -2839,6 +2839,10 @@ void ADCVoxelCity::TickDissolveCam()
 	if (!Target || DissolveCamStep >= UE_ARRAY_COUNT(Stages) || A > 1.f)
 	{
 		PC->SetViewTargetWithBlend(PC->GetPawn(), 0.f);
+		if (ShotCamera)
+		{
+			ShotCamera->GetCameraComponent()->SetFieldOfView(60.f);
+		}
 		DissolveCamStep = -1; // once per run
 		return;
 	}
@@ -2848,8 +2852,14 @@ void ADCVoxelCity::TickDissolveCam()
 		ShotCamera->GetCameraComponent()->SetFieldOfView(60.f);
 	}
 	const FVector At = Target->Bounds.Origin;
-	// Above and back (three-quarter overhead): the pile lies on the street, neighbours do not block the view.
-	const FVector Eye = At + FVector(-0.55f, -0.45f, 1.f).GetSafeNormal() * FMath::Clamp(Target->Bounds.SphereRadius * 5.f, 600.f, 2500.f);
+	// From the player's own eye (a clear line: the player watched the strike), zoomed onto the piece with a narrow lens.
+	if (PC->GetViewTarget() != ShotCamera)
+	{
+		// Captured once, before the switch (afterwards the camera manager reports the shot camera itself).
+		DissolveCamEye = (PC->PlayerCameraManager ? PC->PlayerCameraManager->GetCameraLocation() : At + FVector(-1500.f, 0.f, 800.f)) + FVector(0.f, 0.f, 150.f);
+	}
+	const FVector Eye = DissolveCamEye;
+	ShotCamera->GetCameraComponent()->SetFieldOfView(FMath::Clamp(FMath::RadiansToDegrees(2.f * FMath::Atan(Target->Bounds.SphereRadius * 1.6f / FMath::Max(FVector::Dist(Eye, At), 1.f))), 8.f, 60.f));
 	ShotCamera->SetActorLocationAndRotation(Eye, (At - Eye).Rotation());
 	if (PC->GetViewTarget() != ShotCamera)
 	{

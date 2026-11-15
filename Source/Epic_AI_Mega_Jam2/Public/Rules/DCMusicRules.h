@@ -101,6 +101,9 @@ namespace DCMusicRules
 	/** The layer to play: escalates at once to the highest layer whose EnterAt <= Intensity; steps down only when the
 	 *  current layer held MinHoldSeconds and Intensity is at or below its ExitAt. Current = INDEX_NONE picks fresh. */
 	EPIC_AI_MEGA_JAM2_API int32 PickLayer(const TArray<FDCMusicLayer>& Layers, int32 Current, float Intensity, float HeldSeconds);
+	/** The seconds one sample advances: the real delta, capped at two sample periods, so the first sample after a
+	 *  long load (the ticker reports the whole stall) neither ends a playlist slot nor jumps the intensity. */
+	EPIC_AI_MEGA_JAM2_API float StepSeconds(const FDCMusicTuning& T, float DeltaSeconds);
 	/** The playlist slot after Slot (wraps; 0 for an empty list). */
 	EPIC_AI_MEGA_JAM2_API int32 NextSlot(int32 Slot, int32 Num);
 }
