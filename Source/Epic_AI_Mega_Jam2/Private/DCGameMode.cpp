@@ -388,6 +388,24 @@ void ADCGameMode::EnterSector(float Now)
 			C->HostRevive();
 			C->HostRefill();
 		}
+		// Evidence runs (-dccards=GunDrone+Sentry+...): every player holds these cards from the first sector, so the
+		// proof pass needs no draft. Never active otherwise.
+		FString ForcedCards;
+		if (GS->SectorIndex == 0 && FParse::Value(FCommandLine::Get(), TEXT("dccards="), ForcedCards))
+		{
+			TArray<FString> Ids;
+			ForcedCards.ParseIntoArray(Ids, TEXT("+"));
+			for (const FString& Id : Ids)
+			{
+				const FDCUpgradeDef* Card = T.FindUpgrade(FName(*Id));
+				if (Card && !PS->Upgrades.Contains(Card->Id))
+				{
+					PS->Upgrades.Add(Card->Id);
+					DCUpgrades::Apply(*GS, *PS, *Card);
+					UE_LOG(LogTemp, Display, TEXT("DCCARDS %s forced %s"), *PS->GetPlayerName(), *Card->Id.ToString());
+				}
+			}
+		}
 		DCUpgrades::SectorStart(*this, *PS); // R22: drones up, deploy and last-stand charges dealt
 		++PlayerIndex;
 	}
