@@ -1,0 +1,21 @@
+# Burnt cab (R23 wreck): the cab shell scorched to char with the roof sign knocked off, glass gone, sitting low.
+grid 5
+size 88 36 26
+slot body Rubble
+slot char Char
+slot ink Ink
+slot wheel Rubble
+box 2 2 3 86 34 13 body
+poly 13 21 body 20,3 62,3 72,18 62,33 20,33 14,18
+carve box 4 4 5 84 32 12
+box 4 4 4 84 32 5 ink
+carve box 26 4 14 60 32 21
+beam 30 4 14 30 4 21 0.9 body
+beam 56 4 14 56 4 21 0.9 body
+beam 30 32 14 30 32 21 0.9 body
+beam 56 32 14 56 32 21 0.9 body
+ellipsoid 18 3 3 6 3 4 wheel
+ellipsoid 70 33 3 6 3 4 wheel
+noise 0.12 13 body
+paint box 30 2 12 44 34 14 char
+paint box 62 10 10 70 26 14 char
