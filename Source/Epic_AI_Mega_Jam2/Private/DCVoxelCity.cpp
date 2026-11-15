@@ -2517,6 +2517,7 @@ bool ADCVoxelCity::TickBodies(const TSharedPtr<FFalling>& Shared, float Dt)
 
 void ADCVoxelCity::OnBodyHit(UPrimitiveComponent* HitComp, AActor* Other, UPrimitiveComponent* OtherComp, FVector NormalImpulse, const FHitResult& Hit)
 {
+	DC_FRAME_SCOPE("BodyHit"); // runs in the engine's physics event dispatch, outside the City tick scope
 	const TWeakPtr<FFalling>* Found = Bodies.Find(HitComp);
 	const TSharedPtr<FFalling> F = Found ? Found->Pin() : nullptr;
 	FFalling::FFrag* Fr = F ? F->Frags.FindByPredicate([HitComp](const FFalling::FFrag& X) { return X.Body == HitComp; }) : nullptr;
