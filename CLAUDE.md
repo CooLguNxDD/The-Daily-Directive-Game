@@ -73,7 +73,7 @@ Unreal Engine 5.9 jam game. Engine: `L:/unreal/UE_5.9` (registered source build,
   `StructureTail`). A `Chip` op lists spheres (`Chips[]`, tower lot or `PropGrid`) and optional `StructureLots` (base
   bite on the shooters' side, then the structure pass; committed two-phase like a strike). Chip-only ops skip the
   street snapshot, keep the surface cache, throw crumbs (never shard bodies) and fold on replay.
-- Evidence flags: `-dcchips` (host: chips on while the data default is off), `-dcchipfire` (pilot: sustained fire at
+- Chips are ON in the shipped data (`Tuning=` `ChipsEnabled=True`). Evidence flags: `-dcchips` / `-dcchips=0` (host: force chips on / off, the on/off frame-time pair), `-dcchipfire` (pilot: sustained fire at
   the nearest tower's wall foot for 60 s, fixed-pose `chipfire_*` frames, `DEMO chipfire` hash lines); logs `DCCHIP`
   (host ops; on clients `DCCHIP check ... match=host` once idle at the newest chip entry and its host hash arrived).
 

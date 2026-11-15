@@ -898,6 +898,9 @@ void ADCVoxelCity::PrewarmPieces(int32 PerFrame)
 
 void ADCVoxelCity::Clear()
 {
+	// R19 (advisor a-47): no ring until ApplyBounds builds this sector's (0 = no ring for the fall net, the spawn clamp
+	// and the enemy check); the old sector's ring pulled the new spawn back at sector start (r14-solo-d935978).
+	BoundsHalfCm = 0.f;
 	if (Crumbs)
 	{
 		Crumbs->ClearAll();
