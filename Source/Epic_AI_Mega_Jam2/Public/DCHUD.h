@@ -32,6 +32,8 @@ public:
 	/** Size of S drawn by Text at PixelScale (= Scale * TextBoost * UiScale). */
 	void TextSize(UFont* Font, const FString& S, float PixelScale, float& OutW, float& OutH) const;
 	void Box(float X, float Y, float W, float H, const FLinearColor& C);
+	/** R25: the active hint card (DCPlayerController::GetActiveHint), drawn over every phase. */
+	void DrawHint();
 	void Frame(float X, float Y, float W, float H, float T, const FLinearColor& C);
 	float Sx(float X) const { return X * UiScale; }
 	/** Draws a clickable button (a HUD hit box named Id); returns bEnabled. */

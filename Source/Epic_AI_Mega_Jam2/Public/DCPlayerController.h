@@ -63,6 +63,9 @@ public:
 	bool bOutfitSent = false;
 	bool bBuilderOpen = false;
 	bool bSettingsOpen = false;
+	/** R25 tutorial page open, and whether its PLAY button starts the solo run (offered before the first run). */
+	bool bHowToOpen = false;
+	bool bHowToThenSolo = false;
 	FName AwaitingKey;
 	FDCOutfit BuilderOutfit;
 	int32 BuilderSlot = 0;
@@ -109,6 +112,11 @@ public:
 
 	// Menu (local).
 	void MenuSolo();
+	void TickHints(float DeltaSeconds);
+	FName ActiveHint;
+	double HintUntilReal = 0.0;
+	double NextHintPollReal = 0.0;
+	float HintSectorSeconds = 0.f;
 	void MenuHost();
 	void MenuJoin(const FString& Address);
 	/** R26 internet co-op (UDCOnline): host with a join code / join by code; both fall back to LAN/IP with a message. */
@@ -149,6 +157,15 @@ public:
 	// Photographer builder (R23), a title-menu screen with a live turntable; saves through the save manager (R24).
 	/** Settings screen (R24): rows by id, each a handler that steps its value, applies it and saves. */
 	void OpenSettings() { bSettingsOpen = true; MenuMode = 254; }
+	/** R25: the "How to play" page; opening it once stops the menu button shining (saved). */
+	void OpenHowTo();
+	void CloseHowTo() { bHowToOpen = false; bHowToThenSolo = false; MenuMode = 254; }
+	/** The page's PLAY button: the solo run it was offered before. */
+	void HowToPlaySolo();
+	bool IsHowToThenSolo() const { return bHowToThenSolo; }
+	/** R25 hint card on screen (none = no card), seconds left, and real seconds since this sector began. */
+	const struct FDCHintDef* GetActiveHint() const;
+	float GetHintSectorSeconds() const { return HintSectorSeconds; }
 	void CloseSettings() { bSettingsOpen = false; MenuMode = 254; }
 	void SettingsStep(FName Row, int32 Step);
 	/** Key rebinding (R24): the next key pressed is saved for Action, the input mapping rebuilt. */
