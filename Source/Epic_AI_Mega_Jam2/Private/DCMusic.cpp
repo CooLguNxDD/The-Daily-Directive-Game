@@ -22,7 +22,9 @@ namespace
 {
 	/** A layered sibling's level while another layer plays: inaudible (-80 dB) but above the engine's "zero means stop"
 	 *  rule for AdjustVolume, so it keeps playing in time. */
-	constexpr float SilentLevel = 1e-4f;
+	// 1e-3 (-60 dB): the engine treats |v| <= 1e-4 as zero and fades the deck out and STOPS it (helper h-39,
+	// AudioComponent.cpp IsNearlyZero), so "silent siblings keep time" never worked at 1e-4.
+	constexpr float SilentLevel = 1e-3f;
 }
 
 UDCMusicSubsystem* UDCMusicSubsystem::Get(const UObject* WorldContext)
@@ -76,6 +78,7 @@ bool UDCMusicSubsystem::Start(const UObject* WorldContext)
 		// Silent layers keep running (in time) and the score outranks any SFX flood for a voice.
 		Sound->VirtualizationMode = EVirtualizationMode::PlayWhenSilent;
 		Sound->Priority = T.Music.Priority;
+		Sound->bBypassVolumeScaleForPriority = true; // a silent sibling layer keeps its voice (advisor a-40)
 		Sounds.Add(Track.Id, Sound);
 	}
 	if (Sounds.Num() == 0)

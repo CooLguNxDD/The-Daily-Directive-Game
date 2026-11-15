@@ -1,4 +1,6 @@
 #include "DCAudio.h"
+#include "Engine/Engine.h"
+#include "AudioDevice.h"
 #include "Misc/App.h"
 #include "DCFrameScopes.h"
 #include "DCSave.h"
@@ -290,6 +292,7 @@ void UDCAudioSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 		USoundBase* Remix = Mix.Sound.IsNull() ? nullptr : Cast<USoundBase>(Mix.Sound.TryLoad());
 		if (Remix)
 		{
+			Remix->bBypassVolumeScaleForPriority = true; // a far strike must not lose its voice to a near click (a-40)
 			MixSounds.Add(Mix.Cue, Remix);
 		}
 		if (!Mix.Sound.IsNull())
@@ -311,6 +314,27 @@ void UDCAudioSubsystem::Deinitialize()
 bool UDCAudioSubsystem::FlushQueue(float DeltaSeconds)
 {
 	DC_FRAME_SCOPE("SoundQueue");
+	const double NowReal = FPlatformTime::Seconds();
+	for (int32 i = LiveShots.Num() - 1; i >= 0; --i)
+	{
+		UAudioComponent* C = LiveShots[i].Key.Get();
+		if (C && NowReal < LiveShots[i].Value)
+		{
+			continue;
+		}
+		if (C)
+		{
+			C->Stop();
+		}
+		LiveShots.RemoveAtSwap(i, EAllowShrinking::No);
+	}
+	if (RecordStart >= 0.0 && NowReal >= NextVoicesLog)
+	{
+		NextVoicesLog = NowReal + 1.0;
+		const FAudioDevice* Device = GEngine ? GEngine->GetMainAudioDeviceRaw() : nullptr;
+		UE_LOG(LogTemp, Display, TEXT("DCAUDIO voices t=%.1f active_sources=%d max_channels=%d synth_shots=%d"), NowReal - RecordStart,
+			Device ? Device->GetNumActiveSources() : -1, Device ? Device->GetMaxChannels() : -1, LiveShots.Num());
+	}
 	if (Queue.Num() == 0)
 	{
 		return true;
@@ -379,13 +403,14 @@ void UDCAudioSubsystem::Start(const FDCSoundRequest& R)
 		UE_LOG(LogTemp, Display, TEXT("DCAUDIO start %s via=%s vol=%.2f pitch=%.2f 2d=%d ducked=%d"), *R.Cue.ToString(), *Sound->GetName(), Volume, R.Pitch, R.b2D ? 1 : 0,
 			Real < DuckUntil && Priority < DuckPriority ? 1 : 0);
 	}
-	if (R.b2D)
+	// R13/R14 cutout (advisor a-40, audio-8f17486): a generator-less procedural source never reports finished, so every
+	// synth one-shot held a voice for good; past AudioMaxChannels (~37 s into a fight) the engine dropped the music and the
+	// remixed boom. Synth plays get a component that is stopped when its PCM ends, which frees the voice before reuse.
+	UAudioComponent* Shot = R.b2D ? UGameplayStatics::SpawnSound2D(World, Sound, Volume, R.Pitch)
+		: UGameplayStatics::SpawnSoundAtLocation(World, Sound, R.Location, FRotator::ZeroRotator, Volume, R.Pitch, 0.f, Attenuation);
+	if (Shot && Wave)
 	{
-		UGameplayStatics::PlaySound2D(World, Sound, Volume, R.Pitch);
-	}
-	else
-	{
-		UGameplayStatics::PlaySoundAtLocation(World, Sound, R.Location, Volume, R.Pitch, 0.f, Attenuation);
+		LiveShots.Add({Shot, FPlatformTime::Seconds() + CueSeconds(R.Cue) / FMath::Max(R.Pitch, 0.1f) + 0.05});
 	}
 }
 

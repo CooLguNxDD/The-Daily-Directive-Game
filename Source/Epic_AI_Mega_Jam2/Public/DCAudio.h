@@ -50,6 +50,9 @@ private:
 	TArray<FDCSoundVoice> Voices;
 	UPROPERTY() TArray<TObjectPtr<class USoundWaveProcedural>> PoolWaves;
 	TArray<double> PoolFreeAt;
+	/** Synth one-shots still sounding: component and the real time it is stopped (frees the voice, a-40). */
+	TArray<TPair<TWeakObjectPtr<class UAudioComponent>, double>> LiveShots;
+	double NextVoicesLog = 0.0;
 	TMap<FName, TArray<int32>> PoolOf;
 	FTSTicker::FDelegateHandle FlushHandle;
 	int32 Dropped = 0;
