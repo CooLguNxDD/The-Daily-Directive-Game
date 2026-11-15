@@ -52,6 +52,17 @@ Unreal Engine 5.9 jam game. Engine: `L:/unreal/UE_5.9` (registered source build,
 - Evidence: `-dcanimshot=<dir>` (side lineup, frames per state, `-dcanimkinds=A+B+C`, `-dcanimshotquit`),
   `-dcanimswarm=N` (+`-dcanimoff`) for DCANIMPERF lines.
 
+## Card kinds (R22, final run)
+- Draft cards beyond unlocks and gear: `+Upgrades` rows whose `Effect` has hooks in `DCUpgrades.cpp` (registry of
+  Apply + optional SectorStart / Interact / Downed): `Companion` (drones each sector, `Companion=`, `Count=`), `Deploy`
+  (Interact sets a turret down, `Count=` charges per sector), `LastStand` (going down calls the `Unlock=` stratagem on
+  the spot). Pool `Support` shows as FIELD SUPPORT. Strike and support cards stay `UnlockStratagem` rows: Carpet Bomb
+  uses the `Spiral` pattern, Paratrooper Squad the `Reinforce` call effect (`SupportFaction`, `SupportCount`).
+- Companions: `+Companions` rows (`Rules/DCCompanionRules`: mover registry Orbit/Fixed, target pick, deploy ground);
+  one pooled actor `ADCCompanion` (`DCCompanion.cpp`, pool `UDCCompanions`, `CompanionPrewarm`/`CompanionPoolMax`):
+  host targets and damages, every machine places its copy from the replicated owner/anchor, shots multicast.
+  Models `tools/voxel-forge/recipes/companion_{drone,sentry}.vfr`. Logs: `DCCOMPANION`, `DCREINFORCE`, `DCLASTSTAND`.
+
 ## Editor MCP
 - Epic's MCP server (`ModelContextProtocol` + `AllToolsets` in the `.uproject`) serves `unreal-mcp` on `http://127.0.0.1:23444/mcp` (auto-start and port in the per-user `Saved/Config/WindowsEditor/EditorPerProjectUserSettings.ini`; `.mcp.json` and the other client configs point there).
 - Claude Code: the `unreal-mcp` skill of the `unreal-engine-skills-for-claude-code` plugin. Start a session with `cats game-dev` from the monorepo root.

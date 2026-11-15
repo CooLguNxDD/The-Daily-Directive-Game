@@ -14,6 +14,7 @@
 #include "DCVoxelCity.h"
 #include "DCVoxelFx.h"
 #include "Engine/DamageEvents.h"
+#include "GameFramework/Controller.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "Net/UnrealNetwork.h"
@@ -205,7 +206,10 @@ void ADCCompanion::HostShoot(const FDCCompanionDef& Def, const FVector& From, fl
 		}
 	}
 	FCollisionQueryParams Params(SCENE_QUERY_STAT(DCCompanionShot), false, this);
-	Params.AddIgnoredActor(OwnerState ? OwnerState->GetPawn() : nullptr);
+	if (const APawn* OwnerPawn = OwnerState ? OwnerState->GetPawn() : nullptr)
+	{
+		Params.AddIgnoredActor(OwnerPawn);
+	}
 	// The nearest few in range, first clear line wins (a wall between keeps the companion quiet this beat).
 	for (int32 Try = 0; Try < 3; ++Try)
 	{
