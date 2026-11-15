@@ -102,6 +102,7 @@ void UDCCrumbField::SpawnNow(const FDCCrumbSpawn& S)
 	C.Size = S.SizeCm;
 	C.Born = Clock;
 	C.Life = Tn.CrumbLifeSeconds * Rng.FRandRange(0.6f, 1.2f);
+	C.Gone = FMath::Max(Tn.CrumbShrinkSeconds, 0.01f) * (1.f + Rng.FRandRange(-1.f, 1.f) * FMath::Clamp(Tn.DissolveDurationJitter, 0.f, 0.9f));
 	C.bAlive = true;
 	const FTransform Xf(FQuat::Identity, C.Pos, FVector(C.Size / CubeCm));
 	if (B.FreeInstances.Num() > 0)
@@ -183,7 +184,7 @@ void UDCCrumbField::TickComponent(float DeltaTime, ELevelTick TickType, FActorCo
 			continue;
 		}
 		const float Age = Clock - C.Born;
-		if (Age >= C.Life + Tn.CrumbShrinkSeconds)
+		if (Age >= C.Life + C.Gone)
 		{
 			Kill(i);
 			continue;
@@ -212,7 +213,7 @@ void UDCCrumbField::TickComponent(float DeltaTime, ELevelTick TickType, FActorCo
 			continue; // lying still: nothing to update
 		}
 		// R15: past its life a crumb dissolves (noise with a warm edge) at full size; without the dissolve material it shrinks.
-		const float Gone = Age > C.Life ? FMath::Clamp((Age - C.Life) / FMath::Max(Tn.CrumbShrinkSeconds, 0.01f), 0.f, 1.f) : 0.f;
+		const float Gone = Age > C.Life ? FMath::Clamp((Age - C.Life) / C.Gone, 0.f, 1.f) : 0.f;
 		const FQuat Rot = C.bResting ? FQuat(FVector::UpVector, FMath::DegreesToRadians(C.AngleDeg)) : FQuat(C.SpinAxis, FMath::DegreesToRadians(C.AngleDeg));
 		FBucket& B = Buckets[C.Bucket];
 		B.Ism->UpdateInstanceTransform(C.Instance, FTransform(Rot, C.Pos, FVector(C.Size * (B.bDissolve ? 1.f : 1.f - Gone) / CubeCm)), true, false, true);
