@@ -86,6 +86,9 @@ private:
 	FVector SpawnLocation = FVector::ZeroVector;
 	bool bHaveSpawn = false;
 	double OnboardDoneReal = -1.0;
+	/** Quest tracker: when the current scoop was first seen filed (its line fades after Look.ScoopFiledSeconds). */
+	double ScoopFiledReal = -1.0;
+	int32 ScoopFiledIndex = INDEX_NONE;
 
 	/** Ink grit for stamps: a code-made mask of speckles and worn edges, drawn in paper over the stamp ink (R5). */
 	class UTexture2D* StampGrit();

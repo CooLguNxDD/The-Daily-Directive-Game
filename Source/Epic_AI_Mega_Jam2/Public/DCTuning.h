@@ -344,6 +344,14 @@ struct FDCLookTuning
 	/** R25 hint card top as a fraction of the screen height: in play (right side, under the photo preview) and during
 	 *  the draft (centred under the three cards, which are drawn over the HUD). */
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float HintCardY = 0.45f;
+	/** HUD quest tracker (human 15:10): HQ order and scoop stacked top-left under the score line, nothing in the centre
+	 *  third but the reticle, the photo stamp and the sector card. Units are 1080p pixels (scaled like the rest). */
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float QuestTrackerX = 24.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float QuestTrackerY = 104.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float QuestTrackerWidth = 440.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float QuestRowGap = 66.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float QuestTextScale = 0.62f;
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float ScoopFiledSeconds = 3.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float HintCardDraftY = 0.715f;
 	UPROPERTY(EditAnywhere, Config, Category = "Look") FLinearColor Street = FLinearColor(0.08f, 0.07f, 0.07f);
 	UPROPERTY(EditAnywhere, Config, Category = "Look") TArray<FLinearColor> BuildingColors;

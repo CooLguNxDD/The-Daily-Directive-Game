@@ -870,24 +870,8 @@ void ADCHUD::DrawOnboarding(ADCCharacter& Me)
 			return;
 		}
 	}
-	const float W = Canvas->ClipX;
-	if (Me.IsCameraRaised())
-	{
-		// Viewfinder up: only the next step, one small line near the bottom edge, never across the subject (critic).
-		if (Next)
-		{
-			// One line above the LMB SNAP / WINDING label (H - Bar - 110): they overlapped (self-critic CP21).
-			const float Bar = FMath::Max(0.f, (Canvas->ClipY - W * 9.f / 16.f) * 0.5f);
-			Text(FString::Printf(TEXT("%d/%d  %s"), Done + 1, Steps.Num(), *Next->Prompt), W * 0.5f, Canvas->ClipY - Bar - Sx(165.f), Ink, 0.6f, true);
-		}
-		return;
-	}
-	// Low centre, above the viewfinder prompts (they overlapped LMB SNAP): a glass plate with light type.
-	const float Y = Canvas->ClipY - Sx(330.f);
-	Box(W * 0.5f - Sx(430.f), Y - Sx(6.f), Sx(860.f), Sx(78.f), Paper);
-	Box(W * 0.5f - Sx(430.f), Y - Sx(6.f), Sx(5.f), Sx(78.f), Ink);
-	Text(TEXT("ORDERS: SHOOT THE DESTRUCTION. PHOTOS PAY FOR BIGGER BOMBS."), W * 0.5f, Y, Ink, 0.65f, true);
-	Text(Next ? FString::Printf(TEXT("%d/%d  %s"), Done + 1, Steps.Num(), *Next->Prompt) : FString(TEXT("YOU ARE A WAR PHOTOGRAPHER NOW. GET CLOSER.")), W * 0.5f, Y + Sx(32.f), Ink, 0.75f, true);
+	// Human 15:10: the centre orders/controls strip is gone (the How to play page and the hint cards teach the controls);
+	// the steps still advance for the callouts that read them.
 }
 
 void ADCHUD::DrawDowned(ADCCharacter& Me)
@@ -982,10 +966,12 @@ void ADCHUD::DrawObjective(ADCGameState& GS, ADCCharacter& Me)
 		{EDCObjectiveStage::Failed, TEXT("OBJECTIVE FAILED")},
 	};
 	const FString* Line = Lines.Find(O->Stage);
-	const float X = Sx(24.f), Y = Sx(104.f);
+	// Quest tracker row 1 (human 15:10): the HQ order, top-left under the score line (Look.QuestTracker*).
+	const FDCLookTuning& Q = UDCTuning::Get().Look;
+	const float X = Sx(Q.QuestTrackerX), Y = Sx(Q.QuestTrackerY);
 	Box(X - Sx(4.f), Y, Sx(4.f), Sx(44.f), Gold);
-	Text(TEXT("OBJECTIVE"), X + Sx(8.f), Y, FLinearColor(1.f, 1.f, 1.f, 0.7f), 0.5f);
-	Text(Line ? *Line : FString(), X + Sx(8.f), Y + Sx(16.f), O->Stage == EDCObjectiveStage::Failed ? Red : Gold, 0.72f);
+	Text(TEXT("HQ ORDER  <>"), X + Sx(8.f), Y, FLinearColor(1.f, 1.f, 1.f, 0.7f), 0.5f);
+	Text(Line ? *Line : FString(), X + Sx(8.f), Y + Sx(16.f), O->Stage == EDCObjectiveStage::Failed ? Red : Gold, Q.QuestTextScale + 0.1f);
 	FVector At;
 	if (!O->Waypoint(Me.GetActorLocation(), At))
 	{
@@ -1013,27 +999,44 @@ void ADCHUD::DrawObjective(ADCGameState& GS, ADCCharacter& Me)
 
 void ADCHUD::DrawScoop(ADCGameState& GS)
 {
+	// Quest tracker row 2 (human 15:10): the active scoop as a side quest under the HQ order (text, reward, countdown
+	// bar); "SCOOP FILED BY X" stays in place for Look.ScoopFiledSeconds, then fades. Never in the centre third.
 	const TArray<FDCScoopDef>& Scoops = UDCTuning::Get().Scoops;
 	const FDCScoopState& Scoop = GS.Scoop;
 	if (!Scoops.IsValidIndex(Scoop.Index))
 	{
 		return;
 	}
-	const float W = Canvas->ClipX;
+	const FDCLookTuning& Q = UDCTuning::Get().Look;
+	const float X = Sx(Q.QuestTrackerX), Y = Sx(Q.QuestTrackerY + Q.QuestRowGap), Wd = Sx(Q.QuestTrackerWidth);
 	const float Left = Scoop.EndTime - GS.Now();
 	if (Scoop.bDone)
 	{
-		Text(FString::Printf(TEXT("SCOOP FILED BY %s"), *Scoop.CompletedBy.ToUpper()), W * 0.5f, Sx(196.f), Gold, 0.7f, true);
+		if (ScoopFiledIndex != Scoop.Index || ScoopFiledReal < 0.0)
+		{
+			ScoopFiledIndex = Scoop.Index;
+			ScoopFiledReal = RealNow;
+		}
+		const float Fade = 1.f - FMath::Clamp(static_cast<float>(RealNow - ScoopFiledReal) - Q.ScoopFiledSeconds, 0.f, 1.f);
+		if (Fade > 0.f)
+		{
+			Box(X - Sx(4.f), Y, Sx(4.f), Sx(44.f), FLinearColor(Gold.R, Gold.G, Gold.B, Fade));
+			Text(TEXT("SIDE QUEST"), X + Sx(8.f), Y, FLinearColor(1.f, 1.f, 1.f, 0.7f * Fade), 0.5f);
+			Text(FString::Printf(TEXT("SCOOP FILED BY %s"), *Scoop.CompletedBy.ToUpper()), X + Sx(8.f), Y + Sx(16.f), FLinearColor(Gold.R, Gold.G, Gold.B, Fade), Q.QuestTextScale);
+		}
 		return;
 	}
+	ScoopFiledReal = -1.0;
 	if (Left <= 0.f)
 	{
 		return;
 	}
+	const FDCScoopDef& Def = Scoops[Scoop.Index];
 	const float Pulse = 0.75f + 0.25f * FMath::Sin(RealNow * 6.f);
-	// An HQ scoop is a headline, not a danger: magenta-edged glass, light type (red stays for danger).
-	Box(W * 0.5f - Sx(420.f), Sx(150.f), Sx(840.f), Sx(80.f), FLinearColor(Paper.R, Paper.G, Paper.B, 0.85f));
-	Frame(W * 0.5f - Sx(420.f), Sx(150.f), Sx(840.f), Sx(80.f), Sx(3.f), FLinearColor(Magenta.R, Magenta.G, Magenta.B, Pulse));
-	Text(Scoops[Scoop.Index].Text.ToString().ToUpper(), W * 0.5f, Sx(156.f), Ink, 0.75f, true);
-	Text(FString::Printf(TEXT("%.0fs  |  REWARD: %d POINTS + SUPPLY POD"), Left, Scoops[Scoop.Index].RewardPoints), W * 0.5f, Sx(194.f), Gold, 0.6f, true);
+	Box(X - Sx(4.f), Y, Sx(4.f), Sx(56.f), FLinearColor(Magenta.R, Magenta.G, Magenta.B, Pulse));
+	Text(FString::Printf(TEXT("SIDE QUEST  |  %d PTS + SUPPLY POD"), Def.RewardPoints), X + Sx(8.f), Y, FLinearColor(1.f, 1.f, 1.f, 0.7f), 0.5f);
+	Text(Def.Text.ToString().ToUpper(), X + Sx(8.f), Y + Sx(16.f), Ink, Q.QuestTextScale);
+	const float Span = FMath::Max(Def.Seconds, 1.f);
+	Box(X + Sx(8.f), Y + Sx(48.f), Wd - Sx(8.f), Sx(4.f), FLinearColor(Ink.R, Ink.G, Ink.B, 0.2f));
+	Box(X + Sx(8.f), Y + Sx(48.f), (Wd - Sx(8.f)) * FMath::Clamp(Left / Span, 0.f, 1.f), Sx(4.f), Magenta);
 }
