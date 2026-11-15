@@ -596,6 +596,14 @@ UMaterialInterface* ADCVoxelCity::VoxelMaterialFor(int32 VoxelCm)
 	Mid->SetScalarParameterValue(TEXT("EdgeDark"), Tn.VoxelEdgeDark);
 	Mid->SetScalarParameterValue(TEXT("Jitter"), Tn.VoxelJitter);
 	Mid->SetScalarParameterValue(TEXT("Wetness"), Wetness);
+	// Ground roughness (human 15:30): puddle patches gloss, asphalt between them stays rough (data, FDCVoxelTuning).
+	const TPair<const TCHAR*, float> Ground[] = {{TEXT("GroundPuddleScaleCm"), Tn.GroundPuddleScaleCm}, {TEXT("GroundPuddleFineCm"), Tn.GroundPuddleFineCm},
+		{TEXT("GroundPuddleCover"), Tn.GroundPuddleCover}, {TEXT("GroundRoughMin"), Tn.GroundRoughMin}, {TEXT("GroundRoughMax"), Tn.GroundRoughMax},
+		{TEXT("GroundPuddleRough"), Tn.GroundPuddleRough}};
+	for (const TPair<const TCHAR*, float>& G : Ground)
+	{
+		Mid->SetScalarParameterValue(G.Key, G.Value);
+	}
 	Mid->SetScalarParameterValue(TEXT("FormFloor"), Tn.FormFloor);
 	Mid->SetVectorParameterValue(TEXT("FormSky"), Tn.FormSky);
 	Mid->SetVectorParameterValue(TEXT("FormGround"), Tn.FormGround);

@@ -214,8 +214,35 @@ return Base * Shade * (1.0 - 0.38 * Wet);
 """
 
 VOXEL_ROUGH_HLSL = r"""
-// Surface wetness (R18): up faces gloss as they get wet (rain), walls stay matte.
-return lerp(0.9, 0.2, saturate(Normal.z) * Wetness); // R25: wet streets mirror the neon (the night sky is dark)
+// Ground roughness (human 15:30): up faces are rough asphalt (RoughMin..RoughMax, jittered per voxel cell) and only
+// puddle patches gloss when wet: a two-octave value-noise mask on LocalPos.xy (PuddleScaleCm, PuddleFineCm) covering
+// PuddleCover of the ground, down to PuddleRough. Walls stay matte. Neon still mirrors in the puddles.
+float Up = saturate(Normal.z);
+float3 Cell = floor(LocalPos / max(VoxelCm, 1.0) - Normal * 0.5);
+float H = frac(sin(dot(Cell, float3(12.9898, 78.233, 37.719))) * 43758.5453);
+float2 Q = LocalPos.xy / max(PuddleScaleCm, 1.0);
+float2 I = floor(Q);
+float2 F = frac(Q);
+F = F * F * (3.0 - 2.0 * F);
+float A = frac(sin(dot(I, float2(127.1, 311.7))) * 43758.5453);
+float B = frac(sin(dot(I + float2(1, 0), float2(127.1, 311.7))) * 43758.5453);
+float C = frac(sin(dot(I + float2(0, 1), float2(127.1, 311.7))) * 43758.5453);
+float D = frac(sin(dot(I + float2(1, 1), float2(127.1, 311.7))) * 43758.5453);
+float N1 = lerp(lerp(A, B, F.x), lerp(C, D, F.x), F.y);
+float2 Q2 = LocalPos.xy / max(PuddleFineCm, 1.0);
+float2 I2 = floor(Q2);
+float2 F2 = frac(Q2);
+F2 = F2 * F2 * (3.0 - 2.0 * F2);
+float A2 = frac(sin(dot(I2, float2(269.5, 183.3))) * 43758.5453);
+float B2 = frac(sin(dot(I2 + float2(1, 0), float2(269.5, 183.3))) * 43758.5453);
+float C2 = frac(sin(dot(I2 + float2(0, 1), float2(269.5, 183.3))) * 43758.5453);
+float D2 = frac(sin(dot(I2 + float2(1, 1), float2(269.5, 183.3))) * 43758.5453);
+float N2 = lerp(lerp(A2, B2, F2.x), lerp(C2, D2, F2.x), F2.y);
+float Mask = 0.7 * N1 + 0.3 * N2;
+float Puddle = smoothstep(1.0 - PuddleCover, 1.0 - PuddleCover + 0.12, Mask) * Up * saturate(Wetness);
+float Ground = lerp(RoughMin, RoughMax, H);
+float Dry = lerp(0.9, Ground, Up);
+return lerp(Dry, PuddleRough, Puddle);
 """
 
 
@@ -345,13 +372,25 @@ def build_voxel_material(name="M_DCVoxel", dissolve=False, unit=False):
     rough.set_editor_property("output_type", unreal.CustomMaterialOutputType.CMOT_FLOAT1)
     rough.set_editor_property("description", "Wetness")
     rinputs = []
-    for n in ["Normal", "Wetness"]:
+    ground = [("PuddleScaleCm", 450.0), ("PuddleFineCm", 50.0), ("PuddleCover", 0.35), ("RoughMin", 0.6), ("RoughMax", 0.8), ("PuddleRough", 0.15)]
+    for n in ["Normal", "Wetness", "LocalPos", "VoxelCm"] + [g for g, _ in ground]:
         ci = unreal.CustomInput()
         ci.set_editor_property("input_name", n)
         rinputs.append(ci)
     rough.set_editor_property("inputs", rinputs)
     lib.connect_material_expressions(nrm, "", rough, "Normal")
     lib.connect_material_expressions(wet, "", rough, "Wetness")
+    lib.connect_material_expressions(lp, "", rough, "LocalPos")
+    vcm = lib.create_material_expression(mat, unreal.MaterialExpressionScalarParameter, -1100, 850)
+    vcm.set_editor_property("parameter_name", "VoxelCm")
+    vcm.set_editor_property("default_value", 10.0)
+    lib.connect_material_expressions(vcm, "", rough, "VoxelCm")
+    # Human 15:30: the ground numbers are material parameters set from data (FDCVoxelTuning Ground*).
+    for i, (n, v) in enumerate(ground):
+        prm = lib.create_material_expression(mat, unreal.MaterialExpressionScalarParameter, -1100, 950 + i * 90)
+        prm.set_editor_property("parameter_name", "Ground" + n)
+        prm.set_editor_property("default_value", v)
+        lib.connect_material_expressions(prm, "", rough, n)
     # Lit glass and neon (R25 look sweep): a glowing voxel's body darkens with its glow, so signs and windows read as
     # light sources (emission + bloom halo) instead of paint the moon and sign lights bleach to pastel.
     body_dark = lib.create_material_expression(mat, unreal.MaterialExpressionScalarParameter, -850, 1050)

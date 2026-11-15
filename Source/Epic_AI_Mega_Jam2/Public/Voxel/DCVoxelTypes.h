@@ -220,6 +220,13 @@ struct FDCVoxelTuning
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float VoxelEdgeWidth = 0.08f;
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float VoxelEdgeDark = 0.35f;
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float VoxelJitter = 0.12f;
+	/** Ground roughness (human 15:30): asphalt roughness range per voxel cell, puddle mask scales and cover, puddle gloss. */
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float GroundPuddleScaleCm = 450.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float GroundPuddleFineCm = 50.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float GroundPuddleCover = 0.35f;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float GroundRoughMin = 0.6f;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float GroundRoughMax = 0.8f;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float GroundPuddleRough = 0.15f;
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float SightStepCm = 25.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float SightSkipNearCm = 60.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float SightSkipFarCm = 250.f;
