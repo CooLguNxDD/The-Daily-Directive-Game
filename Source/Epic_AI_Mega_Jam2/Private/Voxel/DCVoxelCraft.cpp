@@ -677,6 +677,22 @@ namespace
 						return 0;
 					}
 					const int32 U = FMath::Clamp(FMath::RoundToInt32(A.U * Len), Half, Len - Half);
+					// R23: never over another wall mount. The facade's own relief stands at most 4 voxels proud (ledges,
+					// ribs, sills), so anything solid 5+ voxels out in this mount's footprint is an earlier mount: skip.
+					const FIntVector S = ModelVox(M, C.Vcm);
+					for (const int32 Dp : {5, FMath::Clamp(S.X, 5, 8)})
+					{
+						for (int32 Du = -S.Y / 2; Du < S.Y - S.Y / 2; Du += 2)
+						{
+							for (int32 Dz = 0; Dz < S.Z; Dz += 2)
+							{
+								if (C.World.IsSolid(F.Cell(Face, -Dp, U + Du, Z + Dz)))
+								{
+									return 0;
+								}
+							}
+						}
+					}
 					Base = F.Cell(Face, -1, U, Z);
 					Turns = MountFaceTurns[Face];
 					return DCVoxelCraft::StampModel(C.World, M, C.Vcm, Base, Turns, C.Ctx, true);
