@@ -393,10 +393,12 @@ namespace DCMenu
 				KeyArt.DrawAs = ESlateBrushDrawType::Image;
 			}
 		}
+		// The ESC menu (human 16:05) overlays play: a dim veil instead of the paper backdrop and the key art.
+		const bool bOverPlay = PC->IsPauseOpen();
 		TSharedRef<SOverlay> Root = SNew(SOverlay);
 		Root->AddSlot().HAlign(HAlign_Fill).VAlign(VAlign_Fill)
-			[SNew(SBorder).BorderImage(FCoreStyle::Get().GetBrush("WhiteBrush")).BorderBackgroundColor(Paper)];
-		if (KeyArt.GetResourceObject())
+			[SNew(SBorder).BorderImage(FCoreStyle::Get().GetBrush("WhiteBrush")).BorderBackgroundColor(bOverPlay ? FLinearColor(0.f, 0.f, 0.f, 0.45f) : Paper)];
+		if (KeyArt.GetResourceObject() && !bOverPlay)
 		{
 			Root->AddSlot().HAlign(HAlign_Fill).VAlign(VAlign_Fill)[SNew(SScaleBox).Stretch(EStretch::ScaleToFill)[SNew(SImage).Image(&KeyArt)]];
 		}
