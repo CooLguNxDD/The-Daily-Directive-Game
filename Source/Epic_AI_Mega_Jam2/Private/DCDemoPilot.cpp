@@ -1332,6 +1332,12 @@ void ADCDemoPilot::AddWaitPhase(EDCRunPhase Phase, float Timeout)
 
 void ADCDemoPilot::TickDefend()
 {
+	// -dcmovetest (advisor a-55): the pilot's defence (slot taps, backpedal) would mix into the measured movement.
+	static const bool bMoveTest = FParse::Param(FCommandLine::Get(), TEXT("dcmovetest"));
+	if (bMoveTest)
+	{
+		return;
+	}
 	const ADCCharacter* Me = Cast<ADCCharacter>(GetWorld()->GetFirstPlayerController() ? GetWorld()->GetFirstPlayerController()->GetPawn() : nullptr);
 	const ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>();
 	ADCEnemy* Nearest = nullptr;
