@@ -1,0 +1,23 @@
+# Parked cab (R23 vehicle): wedge ink-blue saloon, dark glass, a warm roof sign and dim tail strip. Faces +x.
+grid 5
+size 88 36 32
+slot body InkBlue
+slot glass WindowOff
+slot wheel Ink
+slot lamp Lamp
+slot sign Window
+slot trim Trim
+box 2 2 5 86 34 15 body
+poly 15 24 body 20,3 62,3 72,18 62,33 20,33 14,18
+box 24 4 16 60 32 23 glass
+carve box 4 4 7 84 32 14
+box 4 4 6 84 32 7 body
+ellipsoid 18 3 5 6 3 5 wheel
+ellipsoid 18 33 5 6 3 5 wheel
+ellipsoid 70 3 5 6 3 5 wheel
+ellipsoid 70 33 5 6 3 5 wheel
+box 36 12 24 48 24 28 trim
+box 37 13 25 47 23 27 sign
+box 85 6 10 86 12 13 lamp
+box 85 24 10 86 30 13 lamp
+paint box 2 2 9 86 34 10 trim

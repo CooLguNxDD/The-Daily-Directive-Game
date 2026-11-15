@@ -1,0 +1,9 @@
+dcvox 1
+name grate
+grid_cm 5
+size 10 24 1
+pivot 5 12 0
+slots Steel Asphalt
+solid 240
+rle
+22*1 6*2 4*1 6*2 24*1 6*2 4*1 6*2 24*1 6*2 4*1 6*2 24*1 6*2 4*1 6*2 24*1 6*2 4*1 6*2 42*1

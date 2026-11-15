@@ -118,5 +118,10 @@ namespace DCVoxelCraft
 	EPIC_AI_MEGA_JAM2_API void CraftCity(const FDCCityPlan& Plan, const FDCVoxelCraftContext& Ctx, TArray<FDCVoxelTower>& OutTowers);
 
 	/** Solid voxels of one layer inside a box. */
+	/** R23 data checks: a recipe's Roof, SignKind and every Facade/Base bay char resolve in the craft registries. */
+	EPIC_AI_MEGA_JAM2_API bool IsRoofKind(FName Roof);
+	EPIC_AI_MEGA_JAM2_API bool IsSignKind(FName Sign);
+	EPIC_AI_MEGA_JAM2_API bool IsBayKind(TCHAR Bay);
+
 	EPIC_AI_MEGA_JAM2_API int32 CountLayer(const FDCVoxelWorld& World, const FIntVector& Min, const FIntVector& Max, int32 Z);
 }

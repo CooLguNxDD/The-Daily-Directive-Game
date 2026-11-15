@@ -1,0 +1,20 @@
+# Bus shelter (R23 street): steel frame, dark glass back panel, a lit cyan ad panel at one end, a bench. Faces +x.
+grid 5
+size 22 56 50
+slot frame Steel
+slot glass WindowOff
+slot roof Ink
+slot ad NeonCyan
+slot adedge NeonCyanEdge
+slot seat InkBrown
+beam 2 2 0 2 2 46 0.8 frame
+beam 2 54 0 2 54 46 0.8 frame
+beam 18 2 0 18 2 46 0.8 frame
+beam 18 54 0 18 54 46 0.8 frame
+box 0 0 46 22 56 49 roof
+box 2 3 4 3 53 44 glass
+box 3 49 4 18 53 44 adedge
+box 3 50 5 18 52 43 ad
+box 6 8 10 12 44 12 seat
+box 6 8 0 8 10 10 frame
+box 6 42 0 8 44 10 frame

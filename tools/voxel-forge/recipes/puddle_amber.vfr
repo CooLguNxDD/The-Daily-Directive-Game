@@ -1,0 +1,9 @@
+# Puddle with a warm lamp glint (R23 ground cover), the amber twin of puddle_cyan.
+grid 5
+size 40 28 1
+slot water WindowOff
+slot glint WindowDim
+ellipsoid 20 14 0 19 13 1 water
+ellipsoid 30 16 0 7 6 1 water
+paint ellipsoid 14 12 0 4 2 1 glint
+paint box 24 15 0 28 16 1 glint

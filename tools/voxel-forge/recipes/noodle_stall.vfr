@@ -1,0 +1,31 @@
+# Noodle stall (R23 street, OldTown): an open counter under a ribbed awning, a warm lantern string, steam pot, two
+# stools. Original design. Faces +x (the counter opens to +x).
+grid 5
+size 36 30 56
+slot body InkBrown
+slot top Trim
+slot warm Window
+slot cloth InkBlue
+slot lamp Lamp
+slot steel Steel
+slot pole Ink
+box 4 2 0 22 28 18 body
+box 3 1 18 24 29 20 top
+paint box 21 3 4 22 27 16 warm
+cyl 10 9 20 25 3 steel
+cyl 10 20 20 23 2.5 steel
+beam 3 2 0 3 2 44 0.8 pole
+beam 3 28 0 3 28 44 0.8 pole
+beam 23 2 0 23 2 44 0.8 pole
+beam 23 28 0 23 28 44 0.8 pole
+box 0 0 44 30 30 46 cloth
+box 28 0 42 32 30 44 cloth
+box 32 0 40 35 30 42 cloth
+paint box 0 0 45 30 30 46 pole
+box 27 4 37 30 7 40 lamp
+box 27 13 37 30 16 40 lamp
+box 27 22 37 30 25 40 lamp
+cyl 30 8 0 8 2 steel
+cyl 30 8 8 9 3 pole
+cyl 30 20 0 8 2 steel
+cyl 30 20 8 9 3 pole

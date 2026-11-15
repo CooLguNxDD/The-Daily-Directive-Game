@@ -1,0 +1,12 @@
+# Parking meter pair (R23 street): two thin posts with ink heads and a dim cyan read-out each. Faces +x.
+grid 5
+size 6 16 26
+slot post Steel
+slot head Ink
+slot screen NeonCyan
+cyl 3 3 0 18 0.9 post
+cyl 3 13 0 18 0.9 post
+box 1 1 18 5 5 25 head
+box 1 11 18 5 15 25 head
+paint box 4 2 21 5 4 23 screen
+paint box 4 12 21 5 14 23 screen
