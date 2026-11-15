@@ -470,6 +470,11 @@ TEXTURES = {
     "T_Card_gunrun": "card-gunrun.png",
     "T_Card_cluster": "card-cluster.png",
     "T_Card_bunker": "card-bunker.png",
+    "T_Card_carpet": "card-carpet.png",
+    "T_Card_drone": "card-drone.png",
+    "T_Card_turret": "card-turret.png",
+    "T_Card_reinforce": "card-reinforce.png",
+    "T_Card_deadman": "card-deadman.png",
     "T_PaperGrain": "tex-paper.png",
     "T_StampGrit": "tex-stampgrit.png",
 }

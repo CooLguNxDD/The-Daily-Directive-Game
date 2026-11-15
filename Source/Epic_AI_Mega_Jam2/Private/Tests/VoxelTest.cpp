@@ -503,7 +503,8 @@ bool FDCVoxelDataTest::RunTest(const FString&)
 			TestTrue(FString::Printf(TEXT("supply call %s refills ammo for a crew radius"), *S.Id.ToString()), S.SupplyAmmo > 0 && S.SupplyCrewRadiusCm > 0.f);
 			continue;
 		}
-		TestTrue(FString::Printf(TEXT("stratagem %s has a carve row"), *S.Id.ToString()), V.Carves.ContainsByPredicate([&S](const FDCVoxelCarveDef& C) { return C.Stratagem == S.Id; }));
+		// Other call effects (R22 Reinforce: a drop pod and a squad) carve nothing either; blasts (Effect=Strike) do.
+		TestTrue(FString::Printf(TEXT("stratagem %s has a carve row"), *S.Id.ToString()), S.Effect != TEXT("Strike") || V.Carves.ContainsByPredicate([&S](const FDCVoxelCarveDef& C) { return C.Stratagem == S.Id; }));
 	}
 	// Palette discipline (R6): no voxel material is propaganda red; red stays for danger.
 	for (const FDCVoxelMaterial& M : V.Palette)
