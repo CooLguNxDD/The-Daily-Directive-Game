@@ -21,6 +21,8 @@ namespace DCAssets
 
 	/** Flat colour, optional glow (emissive = Color * Glow; needs the project's M_DCFlat). */
 	EPIC_AI_MEGA_JAM2_API UMaterialInstanceDynamic* MakeFlat(UObject* Outer, const FLinearColor& Color, float Glow = 0.f);
+	/** R15: M_DCFlatDissolve with the dissolve look from the voxel tuning; null when that material is not built. */
+	EPIC_AI_MEGA_JAM2_API UMaterialInstanceDynamic* MakeFlatDissolve(UObject* Outer, const FLinearColor& Color, float Glow = 0.f);
 	/** Unlit: only Color * Glow shows (no sun on it), so a danger red stays the palette red. Same parameters as MakeFlat. */
 	EPIC_AI_MEGA_JAM2_API UMaterialInstanceDynamic* MakeFlatUnlit(UObject* Outer, const FLinearColor& Color, float Glow = 1.f);
 	EPIC_AI_MEGA_JAM2_API void SetFlat(UMaterialInstanceDynamic* Mid, const FLinearColor& Color, float Glow);

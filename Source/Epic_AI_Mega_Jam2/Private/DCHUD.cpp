@@ -297,7 +297,13 @@ void ADCHUD::DrawCrosshair(ADCCharacter& Me)
 {
 	const float Cx = Canvas->ClipX * 0.5f, Cy = Canvas->ClipY * 0.5f;
 	const FLinearColor C(1, 1, 1, 0.9f);
-	const float Gap = Sx(Me.GetSlot() == EDCSlot::Rifle ? 8.f : 4.f), Len = Sx(10.f);
+	// R16: aiming draws a tight, clear crosshair with a centre dot.
+	const bool bAim = Me.IsRifleAiming();
+	const float Gap = Sx(bAim ? UDCTuning::Get().Aim.CrosshairGap : (Me.GetSlot() == EDCSlot::Rifle ? 8.f : 4.f)), Len = Sx(bAim ? 8.f : 10.f);
+	if (bAim)
+	{
+		Box(Cx - Sx(1.5f), Cy - Sx(1.5f), Sx(3.f), Sx(3.f), C);
+	}
 	DrawLine(Cx - Gap - Len, Cy, Cx - Gap, Cy, C, 2.f);
 	DrawLine(Cx + Gap, Cy, Cx + Gap + Len, Cy, C, 2.f);
 	DrawLine(Cx, Cy - Gap - Len, Cx, Cy - Gap, C, 2.f);

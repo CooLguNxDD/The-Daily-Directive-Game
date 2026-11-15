@@ -13,6 +13,10 @@ Creates (or rebuilds):
                                  (lit windows, signs) + a faint moon-facing form floor (FormFloor, FormSky,
                                  FormGround, MoonDir); colours come from the voxel palette in
                                  Config/DefaultGame.ini, so the material holds no colour of its own
+  /Game/DC/Materials/M_DCVoxelDissolve, M_DCFlatDissolve - R15 masked twins of M_DCVoxel / M_DCFlat for blocks and
+                                 crumbs being cleared away: a world-space value-noise dissolve with a faint warm edge
+                                 (DissolveEdgeColor, DissolveEdgeGlow, DissolveEdge, DissolveNoiseCm). The amount comes
+                                 from custom primitive data 0 (pieces) or per-instance custom data 0 (crumb instances)
   /Game/DC/Materials/M_DCInkOutline - post material: ink lines where depth or normal jumps (Sobel-style cross of
                                  four taps); Strength comes from the post stack's Outline field, the rest from Look tuning
   /Game/DC/Fonts/FF_*            - OFL font faces (R7) from Content/DC/Fonts/Source/*.ttf, inline data; the game
@@ -50,10 +54,77 @@ def keep(path):
     return False
 
 
-def build_flat_material():
-    if keep(f"{MAT_DIR}/M_DCFlat"):
+DISSOLVE_HLSL = """
+float3 p = WorldPos / max(NoiseCm, 1.0);
+float3 i = floor(p);
+float3 f = frac(p);
+f = f * f * (3.0 - 2.0 * f);
+float n = 0.0;
+for (int c = 0; c < 8; c++)
+{
+    float3 o = float3(c & 1, (c >> 1) & 1, (c >> 2) & 1);
+    float h = frac(sin(dot(i + o, float3(127.1, 311.7, 74.7))) * 43758.5453);
+    float3 w = lerp(1.0 - f, f, o);
+    n += h * w.x * w.y * w.z;
+}
+float d = saturate(Dissolve);
+float m = n - d * 1.02;
+float mask = (d <= 0.0 || m >= 0.0) ? 1.0 : 0.0;
+float edge = (d > 0.0 && m >= 0.0) ? saturate(1.0 - m / max(EdgeWidth, 0.001)) : 0.0;
+return float2(mask, edge);
+"""
+
+
+def add_dissolve(mat, emissive_src, dissolve_src, x, y):
+    """R15: masked noise dissolve on a material whose emissive output is emissive_src; dissolve_src drives the amount."""
+    mat.set_editor_property("blend_mode", unreal.BlendMode.BLEND_MASKED)
+    wp = lib.create_material_expression(mat, unreal.MaterialExpressionWorldPosition, x - 300, y)
+    custom = lib.create_material_expression(mat, unreal.MaterialExpressionCustom, x, y)
+    custom.set_editor_property("code", DISSOLVE_HLSL)
+    custom.set_editor_property("output_type", unreal.CustomMaterialOutputType.CMOT_FLOAT2)
+    custom.set_editor_property("description", "Dissolve")
+    inputs = []
+    for n in ["WorldPos", "Dissolve", "NoiseCm", "EdgeWidth"]:
+        ci = unreal.CustomInput()
+        ci.set_editor_property("input_name", n)
+        inputs.append(ci)
+    custom.set_editor_property("inputs", inputs)
+    lib.connect_material_expressions(wp, "", custom, "WorldPos")
+    lib.connect_material_expressions(dissolve_src, "", custom, "Dissolve")
+    for i, (n, v, pin) in enumerate([("DissolveNoiseCm", 18.0, "NoiseCm"), ("DissolveEdge", 0.12, "EdgeWidth")]):
+        prm = lib.create_material_expression(mat, unreal.MaterialExpressionScalarParameter, x - 300, y + 100 + i * 90)
+        prm.set_editor_property("parameter_name", n)
+        prm.set_editor_property("default_value", v)
+        lib.connect_material_expressions(prm, "", custom, pin)
+    mask = lib.create_material_expression(mat, unreal.MaterialExpressionComponentMask, x + 250, y)
+    mask.set_editor_property("r", True)
+    lib.connect_material_expressions(custom, "", mask, "")
+    lib.connect_material_property(mask, "", unreal.MaterialProperty.MP_OPACITY_MASK)
+    edge = lib.create_material_expression(mat, unreal.MaterialExpressionComponentMask, x + 250, y + 100)
+    edge.set_editor_property("g", True)
+    lib.connect_material_expressions(custom, "", edge, "")
+    col = lib.create_material_expression(mat, unreal.MaterialExpressionVectorParameter, x, y + 300)
+    col.set_editor_property("parameter_name", "DissolveEdgeColor")
+    col.set_editor_property("default_value", unreal.LinearColor(1.0, 0.45, 0.15, 1.0))
+    glow = lib.create_material_expression(mat, unreal.MaterialExpressionScalarParameter, x, y + 420)
+    glow.set_editor_property("parameter_name", "DissolveEdgeGlow")
+    glow.set_editor_property("default_value", 3.0)
+    edge_col = lib.create_material_expression(mat, unreal.MaterialExpressionMultiply, x + 450, y + 200)
+    lib.connect_material_expressions(edge, "", edge_col, "A")
+    lib.connect_material_expressions(col, "", edge_col, "B")
+    edge_glow = lib.create_material_expression(mat, unreal.MaterialExpressionMultiply, x + 600, y + 250)
+    lib.connect_material_expressions(edge_col, "", edge_glow, "A")
+    lib.connect_material_expressions(glow, "", edge_glow, "B")
+    total = lib.create_material_expression(mat, unreal.MaterialExpressionAdd, x + 750, y + 200)
+    lib.connect_material_expressions(emissive_src, "", total, "A")
+    lib.connect_material_expressions(edge_glow, "", total, "B")
+    lib.connect_material_property(total, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
+
+
+def build_flat_material(name="M_DCFlat", dissolve=False):
+    if keep(f"{MAT_DIR}/{name}"):
         return
-    mat = fresh(MAT_DIR, "M_DCFlat", unreal.Material, unreal.MaterialFactoryNew())
+    mat = fresh(MAT_DIR, name, unreal.Material, unreal.MaterialFactoryNew())
     color = lib.create_material_expression(mat, unreal.MaterialExpressionVectorParameter, -600, 0)
     color.set_editor_property("parameter_name", "Color")
     color.set_editor_property("default_value", unreal.LinearColor(0.6, 0.55, 0.45, 1.0))
@@ -68,11 +139,16 @@ def build_flat_material():
     lib.connect_material_property(color, "", unreal.MaterialProperty.MP_BASE_COLOR)
     lib.connect_material_property(mul, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
     lib.connect_material_property(rough, "", unreal.MaterialProperty.MP_ROUGHNESS)
+    if dissolve:
+        # Crumb instances: the amount is per-instance custom data 0 (DCCrumbField sets it while a crumb clears).
+        amount = lib.create_material_expression(mat, unreal.MaterialExpressionPerInstanceCustomData, -600, 600)
+        amount.set_editor_property("data_index", 0)
+        add_dissolve(mat, mul, amount, -300, 600)
     mat.set_editor_property("used_with_instanced_static_meshes", True)
     mat.set_editor_property("used_with_skeletal_mesh", False)
     lib.recompile_material(mat)
-    eal.save_asset(f"{MAT_DIR}/M_DCFlat")
-    unreal.log("build_content: M_DCFlat saved")
+    eal.save_asset(f"{MAT_DIR}/{name}")
+    unreal.log(f"build_content: {name} saved")
 
 
 def build_flat_unlit_material():
@@ -150,10 +226,10 @@ return Albedo * lerp(Ground.rgb, Sky.rgb, K * K) * FormFloor;
 """
 
 
-def build_voxel_material():
-    if keep(f"{MAT_DIR}/M_DCVoxel"):
+def build_voxel_material(name="M_DCVoxel", dissolve=False):
+    if keep(f"{MAT_DIR}/{name}"):
         return
-    mat = fresh(MAT_DIR, "M_DCVoxel", unreal.Material, unreal.MaterialFactoryNew())
+    mat = fresh(MAT_DIR, name, unreal.Material, unreal.MaterialFactoryNew())
     vc = lib.create_material_expression(mat, unreal.MaterialExpressionVertexColor, -1100, 0)
     # Vertex colours carry sRGB bytes (dark ink tones keep their precision); decode to linear here.
     pw = lib.create_material_expression(mat, unreal.MaterialExpressionPower, -850, 0)
@@ -248,9 +324,16 @@ def build_voxel_material():
     lib.connect_material_expressions(form, "", emissive_all, "B")
     lib.connect_material_property(emissive_all, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
     lib.connect_material_property(rough, "", unreal.MaterialProperty.MP_ROUGHNESS)
+    if dissolve:
+        # Clearing pieces: the amount is custom primitive data 0 (ADCVoxelCity sets it per piece while it fades).
+        amount = lib.create_material_expression(mat, unreal.MaterialExpressionScalarParameter, -850, 1800)
+        amount.set_editor_property("parameter_name", "Dissolve")
+        amount.set_editor_property("use_custom_primitive_data", True)
+        amount.set_editor_property("primitive_data_index", 0)
+        add_dissolve(mat, emissive_all, amount, -400, 1800)
     lib.recompile_material(mat)
-    eal.save_asset(f"{MAT_DIR}/M_DCVoxel")
-    unreal.log("build_content: M_DCVoxel saved")
+    eal.save_asset(f"{MAT_DIR}/{name}")
+    unreal.log(f"build_content: {name} saved")
 
 
 def build_outline_material():
@@ -390,8 +473,10 @@ def build_map():
 
 
 build_flat_material()
+build_flat_material("M_DCFlatDissolve", dissolve=True)
 build_flat_unlit_material()
 build_voxel_material()
+build_voxel_material("M_DCVoxelDissolve", dissolve=True)
 build_outline_material()
 import_textures()
 import_fonts()

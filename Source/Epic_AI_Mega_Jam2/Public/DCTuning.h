@@ -15,7 +15,36 @@
 #include "Rules/DCPostStack.h"
 #include "Rules/DCRunRules.h"
 #include "Rules/DCWeather.h"
+#include "Rules/DCSoundQueue.h"
 #include "DCTuning.generated.h"
+
+/** R16 aiming with a gun (hold Aim: right mouse / left trigger), one feature, tuned while playing (Aim= in DefaultGame.ini). */
+USTRUCT(BlueprintType)
+struct FDCAimTuning
+{
+	GENERATED_BODY()
+	/** Third-person field of view while aiming (the hip view uses Move.ThirdPersonFOV). */
+	UPROPERTY(EditAnywhere, Config, Category = "Aim") float AimFOV = 55.f;
+	/** Seconds the zoom (FOV, boom, shoulder) takes to settle in and out. */
+	UPROPERTY(EditAnywhere, Config, Category = "Aim") float ZoomSeconds = 0.18f;
+	/** Boom length and shoulder offset while aiming: tighter over the shoulder. */
+	UPROPERTY(EditAnywhere, Config, Category = "Aim") float ArmLength = 150.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Aim") FVector ShoulderOffset = FVector(0.f, 55.f, 60.f);
+	UPROPERTY(EditAnywhere, Config, Category = "Aim") float MoveSpeed = 300.f;
+	/** Spread multiplier while aiming (the moving-spread scale no longer applies). */
+	UPROPERTY(EditAnywhere, Config, Category = "Aim") float SpreadScale = 0.35f;
+	/** Crosshair gap (px at 1080p) while aiming; the hip gap is 8. */
+	UPROPERTY(EditAnywhere, Config, Category = "Aim") float CrosshairGap = 3.f;
+	/** Aim pose: upper-body pitch follows the aim, split over the spine bones, clamped. */
+	UPROPERTY(EditAnywhere, Config, Category = "Aim") float MaxPitchDegrees = 60.f;
+	/** Spine chain the pitch is split over (parent first) and each bone's share; the axis is in component space
+	 *  (mannequin faces +Y, so pitch turns about X; flip the sign here if the frame shows it bending the wrong way). */
+	UPROPERTY(EditAnywhere, Config, Category = "Aim") TArray<FName> PitchBones = {TEXT("spine_01"), TEXT("spine_02"), TEXT("spine_03"), TEXT("spine_04"), TEXT("spine_05")};
+	UPROPERTY(EditAnywhere, Config, Category = "Aim") TArray<float> PitchShares = {0.15f, 0.2f, 0.2f, 0.2f, 0.25f};
+	UPROPERTY(EditAnywhere, Config, Category = "Aim") FVector PitchAxis = FVector(1.f, 0.f, 0.f);
+	UPROPERTY(EditAnywhere, Config, Category = "Aim") float PoseBlendSpeed = 10.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Aim") float PitchFollowSpeed = 18.f;
+};
 
 USTRUCT(BlueprintType)
 struct FDCMoveTuning
@@ -213,6 +242,14 @@ struct FDCCameraTuning
 	UPROPERTY(EditAnywhere, Config, Category = "Camera") int32 ShotsPerSector = 15;
 	UPROPERTY(EditAnywhere, Config, Category = "Camera") float WindOnSeconds = 0.7f;
 	UPROPERTY(EditAnywhere, Config, Category = "Camera") float DrawSeconds = 0.45f;
+	/** R17 calmer camera under attack: unit hits add to their own capped shake channel (strike and collapse shake keep the
+	 *  blast channel), at most one hit shake per HitShakeMinIntervalSeconds, decaying smoothly; the hurt flash, sound and
+	 *  flinch fire at most once per FlinchMinIntervalSeconds. The shake moves the camera, never the aim. */
+	UPROPERTY(EditAnywhere, Config, Category = "Camera") float HitTraumaPerHit = 0.12f;
+	UPROPERTY(EditAnywhere, Config, Category = "Camera") float HitTraumaCap = 0.32f;
+	UPROPERTY(EditAnywhere, Config, Category = "Camera") float HitTraumaDecayPerSecond = 0.9f;
+	UPROPERTY(EditAnywhere, Config, Category = "Camera") float HitShakeMinIntervalSeconds = 0.3f;
+	UPROPERTY(EditAnywhere, Config, Category = "Camera") float FlinchMinIntervalSeconds = 0.6f;
 	UPROPERTY(EditAnywhere, Config, Category = "Camera") float ViewfinderFOVWide = 70.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Camera") float ViewfinderFOVTight = 25.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Camera") float ZoomStep = 6.f;
@@ -834,6 +871,7 @@ public:
 	UPROPERTY(EditAnywhere, Config, Category = "Assets") FDCAssetTuning Assets;
 	UPROPERTY(EditAnywhere, Config, Category = "Photo") FDCPhotoTuning Photo;
 	UPROPERTY(EditAnywhere, Config, Category = "Move") FDCMoveTuning Move;
+	UPROPERTY(EditAnywhere, Config, Category = "Aim") FDCAimTuning Aim;
 	UPROPERTY(EditAnywhere, Config, Category = "Rifle") FDCRifleTuning Rifle;
 	/** R8 player weapons (slot 1). Empty = the rifle from Rifle= alone. */
 	UPROPERTY(EditAnywhere, Config, Category = "Weapon") TArray<FDCWeaponDef> Weapons;
@@ -841,6 +879,9 @@ public:
 	UPROPERTY(EditAnywhere, Config, Category = "Sky") TArray<FDCSkyPropDef> SkyProps;
 	/** Sound cues written as data (weapons, strikes), beside the code synth cues. */
 	UPROPERTY(EditAnywhere, Config, Category = "Sound") TArray<FDCSoundRecipe> SoundRecipes;
+	/** R13 sound classes (voice and start budgets, priority, pitch range, level, merge window) and the shared mix limits. */
+	UPROPERTY(EditAnywhere, Config, Category = "Sound") TArray<FDCSoundClassDef> SoundClasses;
+	UPROPERTY(EditAnywhere, Config, Category = "Sound") FDCSoundMixTuning SoundMix;
 	UPROPERTY(EditAnywhere, Config, Category = "Camera") FDCCameraTuning Camera;
 	UPROPERTY(EditAnywhere, Config, Category = "Economy") FDCEconomyTuning Economy;
 	UPROPERTY(EditAnywhere, Config, Category = "City") FDCCityTuning City;
