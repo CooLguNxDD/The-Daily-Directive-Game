@@ -49,6 +49,7 @@ int32 UDCCrumbField::BucketFor(const FLinearColor& InColor, float Glow)
 	FBucket& B = Buckets.AddDefaulted_GetRef();
 	B.Ism = Ism;
 	B.bDissolve = Dissolve != nullptr;
+	UE_CLOG(!Dissolve, LogTemp, Warning, TEXT("DCDISSOLVE fallback crumb bucket %d: no dissolve material (crumbs pop at the end, never shrink)"), Buckets.Num() - 1);
 	BucketByKey.Add(Key, Buckets.Num() - 1);
 	return Buckets.Num() - 1;
 }
@@ -214,11 +215,11 @@ void UDCCrumbField::TickComponent(float DeltaTime, ELevelTick TickType, FActorCo
 		{
 			continue; // lying still: nothing to update
 		}
-		// R15: past its life a crumb dissolves (noise with a warm edge) at full size; without the dissolve material it shrinks.
+		// R15: past its life a crumb dissolves (noise with a warm edge) at full size; it never shrinks (human 13:35).
 		const float Gone = Age > C.Life ? FMath::Clamp((Age - C.Life) / C.Gone, 0.f, 1.f) : 0.f;
 		const FQuat Rot = C.bResting ? FQuat(FVector::UpVector, FMath::DegreesToRadians(C.AngleDeg)) : FQuat(C.SpinAxis, FMath::DegreesToRadians(C.AngleDeg));
 		FBucket& B = Buckets[C.Bucket];
-		B.Ism->UpdateInstanceTransform(C.Instance, FTransform(Rot, C.Pos, FVector(C.Size * (B.bDissolve ? 1.f : 1.f - Gone) / CubeCm)), true, false, true);
+		B.Ism->UpdateInstanceTransform(C.Instance, FTransform(Rot, C.Pos, FVector(C.Size / CubeCm)), true, false, true);
 		if (B.bDissolve)
 		{
 			B.Ism->SetCustomDataValue(C.Instance, 0, Gone, false);

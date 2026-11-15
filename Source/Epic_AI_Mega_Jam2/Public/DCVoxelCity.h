@@ -203,12 +203,17 @@ private:
 		float Scale = 1.f;
 	};
 	TArray<FDCFading> Fading;
-	/** R15: swap a fading piece (and its attached leaves) to the dissolve twin of its voxel material; false when the
-	 *  dissolve material is not built (the fade falls back to the shrink). */
-	bool StartDissolve(UPrimitiveComponent* Mesh);
+	/** R15: swap a fading piece (and its attached leaves) to a dissolve material; nothing ever shrinks (human 13:35). */
+	void StartDissolve(UPrimitiveComponent* Mesh);
 	void SetDissolve(UPrimitiveComponent* Mesh, float Amount);
 	UMaterialInterface* DissolveMaterialFor(int32 VoxelCm);
+	/** The piece's own voxel-size dissolve twin; a mesh outside the piece pool (or a size with no twin) takes any built
+	 *  twin (counted as substituted), else the flat dissolve; null only when no dissolve material exists (fallback). */
+	UMaterialInterface* FadeMaterialFor(UPrimitiveComponent* Mesh);
 	UPROPERTY() TMap<int32, TObjectPtr<class UMaterialInstanceDynamic>> DissolveMIDs;
+	UPROPERTY() TObjectPtr<class UMaterialInstanceDynamic> FlatDissolveMID;
+	int32 DissolveSubstituted = 0;
+	int32 DissolveFallbacks = 0;
 	/** -dccollapsecam evidence camera (step -1 = off). */
 	void TickCollapseCam();
 	/** -dcdissolvecam=<dir> evidence (R15): frames the first dissolving piece up close at three stages, once. */

@@ -847,26 +847,44 @@ UMaterialInterface* ADCVoxelCity::DissolveMaterialFor(int32 VoxelCm)
 	return Mid;
 }
 
-bool ADCVoxelCity::StartDissolve(UPrimitiveComponent* Mesh)
+UMaterialInterface* ADCVoxelCity::FadeMaterialFor(UPrimitiveComponent* Mesh)
 {
 	UProceduralMeshComponent* Proc = Cast<UProceduralMeshComponent>(Mesh);
 	const int32* Cm = Proc ? PieceCm.Find(Proc) : nullptr;
-	UMaterialInterface* Mat = Cm ? DissolveMaterialFor(*Cm) : nullptr;
-	if (!Mat)
+	if (UMaterialInterface* Own = Cm ? DissolveMaterialFor(*Cm) : nullptr)
 	{
-		return false;
+		return Own;
 	}
-	Mesh->SetMaterial(0, Mat);
+	++DissolveSubstituted;
+	for (const TPair<int32, TObjectPtr<UMaterialInstanceDynamic>>& Twin : DissolveMIDs)
+	{
+		if (Twin.Value)
+		{
+			return Twin.Value;
+		}
+	}
+	if (!FlatDissolveMID)
+	{
+		FlatDissolveMID = DCAssets::MakeFlatDissolve(this, FLinearColor(0.06f, 0.06f, 0.07f), 0.f);
+	}
+	DissolveFallbacks += FlatDissolveMID ? 0 : 1;
+	return FlatDissolveMID;
+}
+
+void ADCVoxelCity::StartDissolve(UPrimitiveComponent* Mesh)
+{
+	if (UMaterialInterface* Mat = FadeMaterialFor(Mesh))
+	{
+		Mesh->SetMaterial(0, Mat);
+	}
 	for (USceneComponent* Child : Mesh->GetAttachChildren())
 	{
-		UProceduralMeshComponent* Leaf = Cast<UProceduralMeshComponent>(Child);
-		const int32* LeafCm = Leaf ? PieceCm.Find(Leaf) : nullptr;
-		if (UMaterialInterface* LeafMat = LeafCm ? DissolveMaterialFor(*LeafCm) : nullptr)
+		UPrimitiveComponent* Leaf = Cast<UPrimitiveComponent>(Child);
+		if (UMaterialInterface* LeafMat = Leaf ? FadeMaterialFor(Leaf) : nullptr)
 		{
 			Leaf->SetMaterial(0, LeafMat);
 		}
 	}
-	return true;
 }
 
 void ADCVoxelCity::SetDissolve(UPrimitiveComponent* Mesh, float Amount)
@@ -2257,8 +2275,8 @@ void ADCVoxelCity::TickFalling(float Now)
 			DissolveLogScale = FVector2D(FMath::Min(DissolveLogScale.X, Fading[i].Scale), FMath::Max(DissolveLogScale.Y, Fading[i].Scale));
 			if (WorldNow >= DissolveLogNext)
 			{
-				UE_LOG(LogTemp, Display, TEXT("DCDISSOLVE timing pieces=%d delay %.2f..%.2f s duration x%.2f..x%.2f (seeded by rest position)"), DissolveLogN,
-					DissolveLogDelay.X, DissolveLogDelay.Y, DissolveLogScale.X, DissolveLogScale.Y);
+				UE_LOG(LogTemp, Display, TEXT("DCDISSOLVE timing pieces=%d delay %.2f..%.2f s duration x%.2f..x%.2f (seeded by rest position) substituted=%d fallback=%d"), DissolveLogN,
+					DissolveLogDelay.X, DissolveLogDelay.Y, DissolveLogScale.X, DissolveLogScale.Y, DissolveSubstituted, DissolveFallbacks);
 				DissolveLogNext = WorldNow + 1.f;
 				DissolveLogN = 0;
 				DissolveLogDelay = FVector2D(1e9f, -1e9f);
@@ -2278,9 +2296,13 @@ void ADCVoxelCity::TickFalling(float Now)
 			Fading.RemoveAtSwap(i);
 			continue;
 		}
-		// R15: the piece dissolves (noise, warm edge) where it lies; without the dissolve material it shrinks as before.
+		// R15: the piece dissolves (noise, warm edge) where it lies; it never shrinks (human 13:35: no shrink path).
 		const bool bWasDissolving = Fading[i].bDissolving;
-		Fading[i].bDissolving = Fading[i].bDissolving || (A > 0.f && StartDissolve(Mesh));
+		if (!bWasDissolving && A > 0.f)
+		{
+			StartDissolve(Mesh);
+			Fading[i].bDissolving = true;
+		}
 		if (!bWasDissolving && Fading[i].bDissolving && DissolveCamStart < 0.f && Fading[i].Body.IsValid())
 		{
 			DissolveCamTarget = Mesh;
@@ -2289,10 +2311,6 @@ void ADCVoxelCity::TickFalling(float Now)
 		if (Fading[i].bDissolving)
 		{
 			SetDissolve(Mesh, A);
-		}
-		else if (Fading[i].Body.IsValid())
-		{
-			Mesh->SetRelativeScale3D(FVector(FMath::Max(1.f - A, 0.01f))); // leaves shrink with their chunk
 		}
 	}
 	for (int32 i = Falling.Num() - 1; i >= 0; --i)
