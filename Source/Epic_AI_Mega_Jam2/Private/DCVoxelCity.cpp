@@ -703,6 +703,7 @@ UProceduralMeshComponent* ADCVoxelCity::NewPiece(int32 VoxelCm)
 	Piece->bUseAsyncCooking = true;
 	Piece->SetupAttachment(Root);
 	Piece->SetCollisionProfileName(TEXT("NoCollision"));
+	Piece->SetGenerateOverlapEvents(false); // R13: moves with its body every frame
 	Piece->SetCastShadow(true);
 	Piece->RegisterComponent();
 	Piece->SetMaterial(0, VoxelMaterialFor(VoxelCm));
@@ -1960,6 +1961,7 @@ UBoxComponent* ADCVoxelCity::AcquireBox()
 	Box->SetCollisionResponseToChannel(ECC_Camera, ECR_Ignore);
 	Box->SetCollisionResponseToChannel(ECC_Visibility, ECR_Ignore); // photos and rifle traces see the shared state
 	Box->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	Box->SetGenerateOverlapEvents(false); // R13 (advisor a-21): ~440 moving bodies, nobody listens for overlaps
 	Box->SetHiddenInGame(true);
 	Box->RegisterComponent();
 	Box->OnComponentHit.AddDynamic(this, &ADCVoxelCity::OnBodyHit);
