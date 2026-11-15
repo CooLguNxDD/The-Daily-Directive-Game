@@ -1,0 +1,47 @@
+{
+  "_doc": "R13 remix source manifest: one row per remixed cue. make_sfx.py renders each Seed with EzAudio on the local ComfyUI (comfy.py audio), picks the seed whose loudness envelope best fits a hit then a falling tail (Shape), trims to Seconds from the onset, fades the last FadeSeconds, sets the loudest 300 ms to TargetRmsDb (the synth original's level, so one +CueMix trim fits both) (peak under -1 dBFS) and writes Content/DC/Audio/Source/Sfx_<Cue>.wav, imported as S_Sfx_<Cue>. +CueMix in Config/DefaultGame.ini points the cue at it. Tool input only.",
+  "sfx": [
+    {
+      "Cue": "Detonation",
+      "Prompt": "one massive explosion, a deep heavy boom followed by a long low rumbling tail that slowly fades out, far away over a city at night, no music, no voices",
+      "Render": 7,
+      "Seconds": 4.5,
+      "FadeSeconds": 1.5,
+      "TargetRmsDb": -12.0,
+      "Seeds": [
+        1311,
+        1321,
+        1331,
+        1341
+      ]
+    },
+    {
+      "Cue": "Collapse",
+      "Prompt": "a concrete tower collapsing, heavy crumbling rubble and debris falling, deep rumble, dust and small stones settling at the end, no music, no voices",
+      "Render": 7,
+      "Seconds": 4.5,
+      "FadeSeconds": 1.5,
+      "TargetRmsDb": -21.0,
+      "Seeds": [
+        1312,
+        1322,
+        1332,
+        1342
+      ]
+    },
+    {
+      "Cue": "Creak",
+      "Prompt": "a deep low groan of a steel and concrete building straining under its weight, slow creak, no music, no voices",
+      "Render": 4,
+      "Seconds": 2.0,
+      "FadeSeconds": 0.6,
+      "TargetRmsDb": -17.0,
+      "Seeds": [
+        1313,
+        1323,
+        1333,
+        1343
+      ]
+    }
+  ]
+}

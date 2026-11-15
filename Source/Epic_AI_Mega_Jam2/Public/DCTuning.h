@@ -16,6 +16,7 @@
 #include "Rules/DCRunRules.h"
 #include "Rules/DCWeather.h"
 #include "Rules/DCMusicRules.h"
+#include "Rules/DCCueMix.h"
 #include "Rules/DCSoundQueue.h"
 #include "DCTuning.generated.h"
 
@@ -881,6 +882,8 @@ public:
 	/** Sound cues written as data (weapons, strikes), beside the code synth cues. */
 	UPROPERTY(EditAnywhere, Config, Category = "Sound") TArray<FDCSoundRecipe> SoundRecipes;
 	/** R14 music: the player's mix and intensity reading, the track files, the combat layers and what each phase plays. */
+	/** R13 remix: per-cue level trims and remixed recordings (+CueMix rows), inside the cue's sound class. */
+	UPROPERTY(EditAnywhere, Config, Category = "Sound") TArray<FDCCueMix> CueMix;
 	UPROPERTY(EditAnywhere, Config, Category = "Music") FDCMusicTuning Music;
 	UPROPERTY(EditAnywhere, Config, Category = "Music") TArray<FDCMusicTrack> MusicTracks;
 	UPROPERTY(EditAnywhere, Config, Category = "Music") TArray<FDCMusicLayer> MusicLayers;

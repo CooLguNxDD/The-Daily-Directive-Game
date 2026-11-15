@@ -22,6 +22,7 @@ Creates (or rebuilds):
   /Game/DC/Fonts/FF_*            - OFL font faces (R7) from Content/DC/Fonts/Source/*.ttf, inline data; the game
                                  builds runtime fonts from them by role (Assets.FontFaces in Config/DefaultGame.ini)
   /Game/DC/Audio/S_Music_*      - R14 looping music from Content/DC/Audio/Source/<Id>.wav (tools/audio/tracks.json rows)
+  /Game/DC/Audio/S_Sfx_*        - R13 remixed one-shot cues from Content/DC/Audio/Source/Sfx_<Cue>.wav (tools/audio/sfx.json)
 Existing assets are kept; set DC_REBUILD=1 to rebuild them (DC_REBUILD_ONLY=M_DCInkOutline,T_MenuKeyArt rebuilds those).
 Everything else (city, strikes, enemies, HUD, SFX) is code and Config/DefaultGame.ini.
 """
@@ -498,6 +499,37 @@ def import_music():
         unreal.log(f"build_content: {name} imported from {src}")
 
 
+SFX_JSON = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "audio", "sfx.json")
+
+
+def import_sfx():
+    """R13 remix: every tools/audio/sfx.json row whose master exists (tools/audio/make_sfx.py) becomes a one-shot
+    USoundWave S_Sfx_<Cue>; a +CueMix row with Sound= points the cue at it."""
+    with open(SFX_JSON, encoding="utf-8") as f:
+        rows = json.load(f)["sfx"]
+    for row in rows:
+        name = f"S_Sfx_{row['Cue']}"
+        path = f"{AUDIO_DIR}/{name}"
+        src = os.path.normpath(os.path.join(AUDIO_SOURCE, f"Sfx_{row['Cue']}.wav"))
+        if keep(path) or not os.path.exists(src):
+            continue
+        task = unreal.AssetImportTask()
+        task.set_editor_property("filename", src)
+        task.set_editor_property("destination_path", AUDIO_DIR)
+        task.set_editor_property("destination_name", name)
+        task.set_editor_property("automated", True)
+        task.set_editor_property("replace_existing", True)
+        task.set_editor_property("save", False)
+        tools.import_asset_tasks([task])
+        wave = unreal.load_asset(path)
+        if not isinstance(wave, unreal.SoundWave):
+            unreal.log_error(f"build_content: {src} did not import as a SoundWave ({wave})")
+            continue
+        wave.set_editor_property("looping", False)
+        eal.save_asset(path)
+        unreal.log(f"build_content: {name} imported from {src}")
+
+
 def build_map():
     path = f"{MAP_DIR}/L_City"
     if eal.does_asset_exist(path):
@@ -517,5 +549,6 @@ build_outline_material()
 import_textures()
 import_fonts()
 import_music()
+import_sfx()
 build_map()
 unreal.log("build_content: done")
