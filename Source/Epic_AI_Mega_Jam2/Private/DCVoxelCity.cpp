@@ -1015,7 +1015,7 @@ void ADCVoxelCity::FinishInFlight()
 	TSharedPtr<FQueuedOp> Done = InFlight;
 	InFlight.Reset();
 	SurfaceCache.Reset();
-	const double F0 = FPlatformTime::Seconds(); // R13: the commit split for DCHITCH (op vs the caller's OnDone)
+	const double CommitT0 = FPlatformTime::Seconds(); // R13: the commit split for DCHITCH (op vs the caller's OnDone)
 	if (Done->bPrepared)
 	{
 		bHoldUploads = false;
@@ -1027,13 +1027,13 @@ void ADCVoxelCity::FinishInFlight()
 	{
 		FinishOp(Done->Op, Done->Result, Done->bAnimate, Done->ApplyMs, Done->Hash, true);
 	}
-	const double F1 = FPlatformTime::Seconds();
+	const double CommitT1 = FPlatformTime::Seconds();
 	if (Done->OnDone)
 	{
 		Done->OnDone(Done->Result, Done->Hash);
 	}
-	LastCommitOpMs = (F1 - F0) * 1000.0;
-	LastOnDoneMs = (FPlatformTime::Seconds() - F1) * 1000.0;
+	LastCommitOpMs = (CommitT1 - CommitT0) * 1000.0;
+	LastOnDoneMs = (FPlatformTime::Seconds() - CommitT1) * 1000.0;
 }
 
 void ADCVoxelCity::FinishOp(const FDCVoxelOp& Op, FDCVoxelOpResult& Result, bool bAnimate, float ApplyMs, uint32 Hash, bool bOffThread)
