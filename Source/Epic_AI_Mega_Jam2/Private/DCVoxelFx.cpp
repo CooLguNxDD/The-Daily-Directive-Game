@@ -32,7 +32,11 @@ void ADCVoxelFx::BeginPlay()
 		Ism->SetCastShadow(K.Glow <= 0.f);
 		Ism->RegisterComponent();
 		Ism->SetStaticMesh(DCAssets::Cube());
-		Ism->SetMaterial(0, DCAssets::MakeFlat(this, K.Color, K.Glow));
+		// R15 (human 13:35, advisor a-48): puffs dissolve in their tail at full size (flat dissolve, custom data 0 = amount)
+		// instead of shrinking into a point; a kind without the dissolve material pops out at the end.
+		UMaterialInstanceDynamic* Dissolve = DCAssets::MakeFlatDissolve(this, K.Color, K.Glow);
+		Ism->SetMaterial(0, Dissolve ? Dissolve : DCAssets::MakeFlat(this, K.Color, K.Glow));
+		Ism->SetNumCustomDataFloats(Dissolve ? 1 : 0);
 		TArray<FTransform> Hidden;
 		Hidden.Init(FTransform(FQuat::Identity, FVector(0, 0, -100000.f), FVector::ZeroVector), FMath::Max(K.Pool, 1));
 		Ism->AddInstances(Hidden, false);
@@ -184,6 +188,7 @@ void ADCVoxelFx::Tick(float WorldDeltaSeconds)
 	}
 	const TArray<FDCFxKind>& Kinds = UDCVoxelSettings::Get().FxKinds;
 	TArray<FTransform> Xf;
+	TArray<float> Tail;
 	// Puffs shrink away near the local camera: a smoke cube never fills the lens (CP4 frames: the view went brown).
 	const APlayerController* PC = GetWorld()->GetFirstPlayerController();
 	const bool bHaveEye = PC && PC->PlayerCameraManager;
@@ -195,6 +200,7 @@ void ADCVoxelFx::Tick(float WorldDeltaSeconds)
 		TArray<FPuff>& List = Puffs[k];
 		List.RemoveAll([Now](const FPuff& P) { return Now - P.Born >= P.Life; });
 		Xf.Reset();
+		Tail.Reset();
 		const float DragK = FMath::Clamp(1.f - K.Drag * DeltaSeconds, 0.f, 1.f);
 		for (FPuff& P : List)
 		{
@@ -202,11 +208,12 @@ void ADCVoxelFx::Tick(float WorldDeltaSeconds)
 			P.Pos += (P.Vel + Wind) * DeltaSeconds;
 			P.Spin += P.SpinRate * DeltaSeconds;
 			const float U = FMath::Clamp((Now - P.Born) / P.Life, 0.f, 1.f);
-			// Pop in, grow toward the end size, shrink away in the last fifth: chunky, never a fade.
-			const float Pop = FMath::Min(U * 8.f, 1.f) * FMath::Min((1.f - U) * 5.f, 1.f);
+			// Pop in, grow toward the end size, dissolve away in the last fifth at full size (never shrink to a point).
+			const float Pop = FMath::Min(U * 8.f, 1.f);
 			const float Near = bHaveEye ? FMath::Clamp((FVector::Dist(P.Pos, Eye) - Tn.FxNearHideCm) / FMath::Max(Tn.FxNearFadeCm, 1.f), 0.f, 1.f) : 1.f;
 			const float Size = FMath::Lerp(K.SizeStart, K.SizeEnd, U) * Pop * Near;
 			Xf.Add(FTransform(K.Stretch > 1.f ? FRotator::ZeroRotator : P.Spin, P.Pos, FVector(Size / 100.f, Size / 100.f, Size * K.Stretch / 100.f)));
+			Tail.Add(FMath::Clamp((U - 0.8f) * 5.f, 0.f, 1.f));
 		}
 		const int32 Live = Xf.Num();
 		const int32 Touch = FMath::Min(FMath::Max(Live, Shown[k]), Meshes[k]->GetInstanceCount());
@@ -219,6 +226,14 @@ void ADCVoxelFx::Tick(float WorldDeltaSeconds)
 			Xf.Add(FTransform(FQuat::Identity, FVector(0, 0, -100000.f), FVector::ZeroVector));
 		}
 		Xf.SetNum(Touch);
+		if (Meshes[k]->NumCustomDataFloats > 0)
+		{
+			// Instances are compacted every frame: rewrite every touched slot so a reused one never starts dissolved.
+			for (int32 i = 0; i < Touch; ++i)
+			{
+				Meshes[k]->SetCustomDataValue(i, 0, i < Live ? Tail[i] : 0.f, false);
+			}
+		}
 		Meshes[k]->BatchUpdateInstancesTransforms(0, Xf, true, true, true);
 		Shown[k] = Live;
 	}
