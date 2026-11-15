@@ -92,6 +92,7 @@ void UDCAnimShowcase::StartSwarm(int32 Count)
 	FString KindList = TEXT("Trooper,Swarmer,Shambler,Raider,Soldier,Skitter");
 	FParse::Value(FCommandLine::Get(), TEXT("dcanimkinds="), KindList);
 	TArray<FString> Kinds;
+	KindList.ReplaceInline(TEXT("+"), TEXT(",")); // the command line flag uses + (FParse::Value stops at a comma)
 	KindList.ParseIntoArray(Kinds, TEXT(","));
 	Center = PC->GetPawn()->GetActorLocation();
 	Center.Z = City->SurfaceZCm(Center);
@@ -172,6 +173,7 @@ void UDCAnimShowcase::Start()
 	FString KindList = TEXT("Trooper,Swarmer,Shambler,Raider,Soldier,Skitter");
 	FParse::Value(FCommandLine::Get(), TEXT("dcanimkinds="), KindList);
 	TArray<FString> Kinds;
+	KindList.ReplaceInline(TEXT("+"), TEXT(",")); // the command line flag uses + (FParse::Value stops at a comma)
 	KindList.ParseIntoArray(Kinds, TEXT(","));
 	Center = PC->GetPawn()->GetActorLocation();
 	Center.Z = City->SurfaceZCm(Center);

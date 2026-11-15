@@ -49,7 +49,7 @@ Unreal Engine 5.9 jam game. Engine: `L:/unreal/UE_5.9` (registered source build,
   `UDCUnitAnimator` (`DCUnitAnimator.cpp`: local on every machine from motion, health and the replicated `AttackSeq`;
   quaternions per segment into custom primitive data 1..28); material `M_DCVoxelUnit` (build_content.py, WPO turns
   each segment about its joint from UV1/UV2). Segments are voxel-forge `part` lines. Death clip plays, then crumbs.
-- Evidence: `-dcanimshot=<dir>` (side lineup, frames per state, `-dcanimkinds=`, `-dcanimshotquit`),
+- Evidence: `-dcanimshot=<dir>` (side lineup, frames per state, `-dcanimkinds=A+B+C`, `-dcanimshotquit`),
   `-dcanimswarm=N` (+`-dcanimoff`) for DCANIMPERF lines.
 
 ## Editor MCP

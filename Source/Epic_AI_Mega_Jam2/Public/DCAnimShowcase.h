@@ -1,4 +1,4 @@
-// R20 evidence only (-dcanimshot=<dir>): a side-view lineup of one unit per animated kind (-dcanimkinds=A,B,..), held
+// R20 evidence only (-dcanimshot=<dir>): a side-view lineup of one unit per animated kind (-dcanimkinds=A+B+..), held
 // in place (no AI, no damage) and stepped through spawn, idle, walk, run, attack, flinch and death on a fixed camera,
 // with frames at fixed times (a still never proves motion: frames across time per state).
 // -dcanimswarm=N (perf): N units of those kinds in rings round the player, held in place and animated at real time
