@@ -189,3 +189,9 @@ is kept from the run records (Glass Box modifier): what was decided, why, and wh
   masts beyond the skyline (`+SkyProps`), and ground weather per profile (rain splashes, dark street steam).
 - Frame time A/B (editor -game, 1600x900, seed 7, demo pilot, back to back): median 13.4 / 13.5 ms with the ground layer
   and sky props, 14.0 ms without; p95 about 15.6 ms both ways; the render thread dominates either way.
+- Packaged build of this lane (full gate tier: package and DCSMOKE pass): the packaged exe runs the weapon tour (each
+  weapon switched with Q and fired) and the three new strikes, and builds the sky props (DCSKY meshes=14). Its frame
+  time (median 34.7 ms) was measured while two other lanes' packaged games shared the machine, so it is not a budget
+  number; the editor A/B above is the like-for-like check. One packaged run with both `-dcshots` and
+  `-dccollapsecam` crashed in the RHI thread copying an 8x8 back buffer into a screenshot; without `-dccollapsecam`
+  the same run finished.
