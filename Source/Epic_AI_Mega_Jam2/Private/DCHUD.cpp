@@ -168,7 +168,11 @@ void ADCHUD::DrawHint()
 		return;
 	}
 	const FDCLookTuning& Look = UDCTuning::Get().Look;
-	const float W = Sx(580.f), X = Canvas->ClipX - W - Sx(40.f), Y = Canvas->ClipY * 0.45f;
+	const ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>();
+	const bool bDraft = GS && GS->Phase == EDCRunPhase::Draft;
+	const float W = Sx(580.f);
+	const float X = bDraft ? (Canvas->ClipX - W) * 0.5f : Canvas->ClipX - W - Sx(40.f);
+	const float Y = Canvas->ClipY * (bDraft ? Look.HintCardDraftY : Look.HintCardY);
 	TArray<FString> Words;
 	H->Text.ParseIntoArray(Words, TEXT(" "));
 	TArray<FString> Lines;

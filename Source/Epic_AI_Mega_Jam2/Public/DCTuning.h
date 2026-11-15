@@ -341,6 +341,10 @@ struct FDCLookTuning
 	/** R25: the "How to play" button's first-launch shine and the hint card accent (noir accent cyan), and the pulse rate. */
 	UPROPERTY(EditAnywhere, Config, Category = "Look") FLinearColor HowToShineColor = FLinearColor(0.1f, 0.85f, 1.f, 1.f);
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float HowToShineHz = 0.8f;
+	/** R25 hint card top as a fraction of the screen height: in play (right side, under the photo preview) and during
+	 *  the draft (centred under the three cards, which are drawn over the HUD). */
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float HintCardY = 0.45f;
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float HintCardDraftY = 0.715f;
 	UPROPERTY(EditAnywhere, Config, Category = "Look") FLinearColor Street = FLinearColor(0.08f, 0.07f, 0.07f);
 	UPROPERTY(EditAnywhere, Config, Category = "Look") TArray<FLinearColor> BuildingColors;
 	UPROPERTY(EditAnywhere, Config, Category = "Look") FLinearColor Accent = FLinearColor(0.85f, 0.05f, 0.03f);
