@@ -14,8 +14,9 @@ USTRUCT()
 struct FDCSettingsSave
 {
 	GENERATED_BODY()
-	/** 2 (human 16:03): MusicVolume and SfxVolume added; an older save loads them at their defaults. */
-	UPROPERTY() int32 Version = 2;
+	/** Version 1 still: MusicVolume and SfxVolume (human 16:03) are new fields that load at their 1.0 defaults from any
+	 *  older save; the loader's known version is 1 (a bump needs the loader and SaveTest updated together). */
+	UPROPERTY() int32 Version = 1;
 	UPROPERTY() float MasterVolume = 1.f;
 	UPROPERTY() float MusicVolume = 1.f;
 	UPROPERTY() float SfxVolume = 1.f;
