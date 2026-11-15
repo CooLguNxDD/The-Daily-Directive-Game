@@ -410,8 +410,17 @@ void ADCPlayerController::BuilderRandom()
 
 FString ADCPlayerController::GetBuilderPresetName() const
 {
-	const TArray<FDCOutfitPreset>& Presets = UDCTuning::Get().OutfitPresets;
-	return Presets.IsValidIndex(BuilderPresetIndex) ? Presets[BuilderPresetIndex].DisplayName.ToString() : FString();
+	// Named only while the outfit is still that preset: any part, swatch or glow change (or a loaded code) clears it.
+	const UDCTuning& T = UDCTuning::Get();
+	if (!T.OutfitPresets.IsValidIndex(BuilderPresetIndex))
+	{
+		return FString();
+	}
+	const FDCOutfitPreset& Preset = T.OutfitPresets[BuilderPresetIndex];
+	FDCOutfit Worn;
+	FString Error;
+	const bool bStill = DCOutfit::FromPreset(Preset, T.OutfitSlots, T.OutfitParts, T.OutfitSwatches, T.OutfitGlows, Worn, Error) && Worn == BuilderOutfit;
+	return bStill ? Preset.DisplayName.ToString() : FString();
 }
 
 void ADCPlayerController::BuilderImport(const FString& Code)
