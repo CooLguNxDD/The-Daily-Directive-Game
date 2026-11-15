@@ -1,0 +1,17 @@
+# Outfit gear (R18): a folded tripod strapped across the back (the part row rolls it), three steel legs, ink head,
+# accent straps and a glowing bubble level.
+name outfit_tripod
+grid 5
+size 3 4 20
+slot leg Steel
+slot head Ink
+slot strap SwatchAccent
+slot level SwatchGlow
+box 1 0 1 2 1 18 leg
+box 1 3 1 2 4 18 leg
+box 0 1 0 1 3 17 leg
+box 0 0 17 3 4 20 head
+paint box 0 0 6 3 4 7 strap
+paint box 0 0 12 3 4 13 strap
+box 2 1 18 3 3 19 level
+pivot 0 2 10

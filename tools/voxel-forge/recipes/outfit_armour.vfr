@@ -1,0 +1,19 @@
+# Outfit body (R18): light armour, an angular chest plate over the torso, steel pauldrons, accent spine stripe and
+# a glowing status light. Torso frame as outfit_vest (pivot 4 5 0 on spine_03).
+name outfit_armour
+grid 5
+size 9 10 11
+slot plate SwatchMain
+slot steel Steel
+slot stripe SwatchAccent
+slot light SwatchGlow
+shell 0 0 1 8 10 10 1 plate
+carve box 1 1 1 7 9 9
+carve box 2 3 9 6 7 10
+poly 3 9 plate 7,1 8,0 9,2 9,8 8,10 7,9
+box 1 0 9 7 3 11 steel
+box 1 7 9 7 10 11 steel
+box 0 0 1 8 10 2 steel
+paint box 8 4 3 9 6 9 stripe
+box 8 1 7 9 2 8 light
+pivot 4 5 0

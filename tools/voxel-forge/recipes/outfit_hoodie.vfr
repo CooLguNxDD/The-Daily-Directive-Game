@@ -1,0 +1,16 @@
+# Outfit body (R18): a hoodie over the torso, hood bunched at the back of the neck, kangaroo pocket in the accent,
+# glowing drawstrings. Torso frame as outfit_vest (pivot 4 5 0 on spine_03).
+name outfit_hoodie
+grid 5
+size 8 10 12
+slot cloth SwatchMain
+slot pocket SwatchAccent
+slot string SwatchGlow
+shell 0 0 0 8 10 11 1 cloth
+carve box 1 1 0 7 9 10
+carve box 2 3 10 6 7 11
+ellipsoid 1 5 10.5 1.5 3 1.5 cloth
+paint box 7 2 2 8 8 5 pocket
+box 7 3 6 8 4 10 string
+box 7 6 6 8 7 10 string
+pivot 4 5 0
