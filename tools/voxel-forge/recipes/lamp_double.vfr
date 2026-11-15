@@ -1,0 +1,13 @@
+# Double street lamp (R23 street): a tall ink post with two curved arms and warm heads either side. Faces +x.
+grid 5
+size 30 8 96
+slot post Ink
+slot lamp Lamp
+slot base Trim
+box 13 2 0 17 6 3 base
+cyl 15 4 3 90 1.4 post
+beam 15 4 86 6 4 92 1 post
+beam 15 4 86 24 4 92 1 post
+box 2 2 88 7 6 91 lamp
+box 23 2 88 28 6 91 lamp
+pivot 15 4 0
