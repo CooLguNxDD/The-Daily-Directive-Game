@@ -54,6 +54,12 @@ private:
 	FTSTicker::FDelegateHandle FlushHandle;
 	int32 Dropped = 0;
 	int32 MergedCount = 0;
+	/** R13 remix (h-audio +CueMix rows): remixed recordings loaded once at Initialize, played instead of the synth wave. */
+	UPROPERTY() TMap<FName, TObjectPtr<class USoundBase>> MixSounds;
+	/** Ducking state: until DuckUntil (real seconds), plays of classes below DuckPriority are scaled by DuckScale. */
+	double DuckUntil = 0.0;
+	int32 DuckPriority = 0;
+	float DuckScale = 1.f;
 
 	TMap<FName, TSharedPtr<TArray<uint8>>> Bank;
 	UPROPERTY() TObjectPtr<USoundAttenuation> Attenuation;

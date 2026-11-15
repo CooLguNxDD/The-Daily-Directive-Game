@@ -1,19 +1,26 @@
-# Outfit camera (R18): a cine camera: boxy body, a long steel lens barrel ending in an open matte box, two accent film
-# reels standing on top (the magazine), a steel top handle and a glowing tally light.
+# Outfit camera (R18): a cine camera: boxy body, two big accent film reels standing on top (the magazine), a raised
+# steel carry handle over the front, a long steel lens barrel ending in an open matte box with a barn-door flap, a
+# viewfinder eyepiece at the back and a glowing tally light.
 name outfit_cinecam
 grid 5
-size 11 5 9
+size 12 5 11
 slot body Ink
 slot lens Steel
 slot reel SwatchAccent
 slot tally SwatchGlow
-box 0 0 0 6 5 4 body
-beam 6 2.5 2 9 2.5 2 1.2 lens
+box 1 0 0 7 5 4 body
+box 0 1 2 1 4 4 lens
+beam 7 2.5 2 9 2.5 2 1.2 lens
 box 9 0 0 11 5 4 body
 carve box 9 1 1 11 4 3
-ellipsoid 1.6 2.5 6.4 1.6 1 1.7 reel
-ellipsoid 4.6 2.5 6.4 1.6 1 1.7 reel
-box 1 2 4 6 3 5 lens
-box 2 2 5 5 3 6 lens
-box 5 0 3 6 1 4 tally
-pivot 3 2 0
+box 11 0 4 12 5 5 body
+ellipsoid 2.2 2.5 7.4 2.2 1 2.2 reel
+ellipsoid 6.2 2.5 6.8 1.8 1 1.8 reel
+carve ellipsoid 2.2 2.5 7.4 0.6 1 0.6
+carve ellipsoid 6.2 2.5 6.8 0.5 1 0.5
+box 3 2 4 6 3 5 lens
+box 8 2 4 9 3 7 lens
+box 8 2 7 11 3 8 lens
+box 10 2 6 11 3 7 lens
+box 6 0 3 7 1 4 tally
+pivot 4 2 0

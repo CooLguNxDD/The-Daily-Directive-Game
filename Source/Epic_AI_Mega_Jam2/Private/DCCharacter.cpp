@@ -1635,6 +1635,30 @@ void ADCCharacter::UpdateView(float DeltaSeconds)
 	}
 }
 
+void ADCCharacter::UpdateFallNet()
+{
+	// R19 (host): remember the last spot where this player stood on the ground inside the sector bounds; anyone below
+	// the kill net (fell through a crater edge or past the ring) is put back there, velocity cleared. Never destroyed.
+	const ADCVoxelCity* City = ADCVoxelCity::Get(this);
+	const UCharacterMovementComponent* Move = GetCharacterMovement();
+	const FVector At = GetActorLocation();
+	if (Move && Move->IsMovingOnGround() && (!City || City->IsInsideBounds(At)) && GetWorld()->GetTimeSeconds() >= NextSafeSample)
+	{
+		NextSafeSample = GetWorld()->GetTimeSeconds() + 0.5f;
+		LastSafeSpot = At;
+		bHasSafeSpot = true;
+	}
+	const bool bOut = City && City->GetBoundsHalfCm() > 0.f && (FMath::Abs(At.X) > City->GetBoundsHalfCm() + 300.f || FMath::Abs(At.Y) > City->GetBoundsHalfCm() + 300.f);
+	if (At.Z >= UDCVoxelSettings::Get().Tuning.KillZCm && !bOut)
+	{
+		return;
+	}
+	const FVector Back = bHasSafeSpot ? LastSafeSpot + FVector(0, 0, 60.f) : FVector(0, 0, 200.f);
+	TeleportTo(Back, GetActorRotation(), false, true);
+	GetCharacterMovement()->Velocity = FVector::ZeroVector;
+	UE_LOG(LogTemp, Display, TEXT("DCKILLZ %s returned from %s to %s (%s)"), *GetName(), *At.ToCompactString(), *Back.ToCompactString(), bOut ? TEXT("past the ring") : TEXT("below the net"));
+}
+
 void ADCCharacter::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
@@ -1650,6 +1674,7 @@ void ADCCharacter::Tick(float DeltaSeconds)
 	{
 		UpdateRevive(DeltaSeconds);
 		RecordPose();
+		UpdateFallNet();
 		// Health regen by crew size (data, default none): only standing players, only after a quiet spell.
 		const FDCMoveTuning& Mv = UDCTuning::Get().Move;
 		const AGameStateBase* RegenGS = GetWorld()->GetGameState();

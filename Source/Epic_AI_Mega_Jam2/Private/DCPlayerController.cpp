@@ -1,4 +1,6 @@
 #include "DCPlayerController.h"
+#include "UObject/UObjectGlobals.h"
+#include "DCUnits.h"
 #include "DCCharacter.h"
 #include "DCEnvironment.h"
 #include "GameFramework/GameUserSettings.h"
@@ -412,8 +414,17 @@ void ADCPlayerController::BuilderRandom()
 
 FString ADCPlayerController::GetBuilderPresetName() const
 {
-	const TArray<FDCOutfitPreset>& Presets = UDCTuning::Get().OutfitPresets;
-	return Presets.IsValidIndex(BuilderPresetIndex) ? Presets[BuilderPresetIndex].DisplayName.ToString() : FString();
+	// Named only while the outfit is still that preset: any part, swatch or glow change (or a loaded code) clears it.
+	const UDCTuning& T = UDCTuning::Get();
+	if (!T.OutfitPresets.IsValidIndex(BuilderPresetIndex))
+	{
+		return FString();
+	}
+	const FDCOutfitPreset& Preset = T.OutfitPresets[BuilderPresetIndex];
+	FDCOutfit Worn;
+	FString Error;
+	const bool bStill = DCOutfit::FromPreset(Preset, T.OutfitSlots, T.OutfitParts, T.OutfitSwatches, T.OutfitGlows, Worn, Error) && Worn == BuilderOutfit;
+	return bStill ? Preset.DisplayName.ToString() : FString();
 }
 
 void ADCPlayerController::BuilderImport(const FString& Code)
@@ -529,9 +540,22 @@ void ADCPlayerController::TickPerf()
 	PerfRenderMsSum += FPlatformTime::ToMilliseconds(GRenderThreadTime);
 	if (FrameMs > 50.f)
 	{
-		// Which thread stalled: game, render, GPU (previous frame's timings, the closest the engine keeps).
-		UE_LOG(LogTemp, Display, TEXT("DCSPIKE frame_ms=%.1f game_ms=%.1f render_ms=%.1f gpu_ms=%.1f"), FrameMs, FPlatformTime::ToMilliseconds(GGameThreadTime),
-			FPlatformTime::ToMilliseconds(GRenderThreadTime), FPlatformTime::ToMilliseconds(RHIGetGPUFrameCycles()));
+		// Which thread stalled: game, render, GPU (previous frame's timings, the closest the engine keeps). Advisor a-25:
+		// every spike classifies itself (run phase, city loading, falling pieces, live units, viewport, seconds since GC).
+		static double LastGc = -1.0;
+		static const bool bGcHooked = [] { FCoreUObjectDelegates::GetPostGarbageCollect().AddLambda([] { LastGc = FPlatformTime::Seconds(); }); return true; }();
+		const ADCGameState* GS = GetWorld() ? GetWorld()->GetGameState<ADCGameState>() : nullptr;
+		const ADCVoxelCity* SpikeCity = ADCVoxelCity::Get(this);
+		const UDCUnits* Units = UDCUnits::Get(this);
+		FVector2D View = FVector2D::ZeroVector;
+		if (GEngine && GEngine->GameViewport)
+		{
+			GEngine->GameViewport->GetViewportSize(View);
+		}
+		UE_LOG(LogTemp, Display, TEXT("DCSPIKE frame_ms=%.1f game_ms=%.1f render_ms=%.1f gpu_ms=%.1f phase=%d loading=%d falling=%d units=%d view=%.0fx%.0f since_gc=%.1f"), FrameMs, FPlatformTime::ToMilliseconds(GGameThreadTime),
+			FPlatformTime::ToMilliseconds(GRenderThreadTime), FPlatformTime::ToMilliseconds(RHIGetGPUFrameCycles()), GS ? static_cast<int32>(GS->Phase) : -1,
+			SpikeCity && (SpikeCity->IsCrafting() || !SpikeCity->IsLoaded()) ? 1 : 0, SpikeCity ? SpikeCity->GetFallingCount() : 0, Units ? Units->All().Num() : 0,
+			View.X, View.Y, bGcHooked && LastGc > 0.0 ? FPlatformTime::Seconds() - LastGc : -1.0);
 	}
 	if (const ADCVoxelCity* City = ADCVoxelCity::Get(this))
 	{
@@ -622,7 +646,7 @@ void ADCPlayerController::TickBuilderFlow()
 	auto Then = [&](double Gap, TFunction<void()> Fn) { At += Gap; BuilderSteps.Add({At, MoveTemp(Fn)}); };
 	const UDCTuning& Tune = UDCTuning::Get();
 	// The turntable holds still for these frames: three-quarter front, gear from behind (it is worn on the back).
-	const TMap<FName, float> SlotYaw = {{TEXT("Head"), 25.f}, {TEXT("Body"), 25.f}, {TEXT("Gear"), 145.f}, {TEXT("Camera"), 40.f}};
+	const TMap<FName, float> SlotYaw = {{TEXT("Head"), 25.f}, {TEXT("Body"), 25.f}, {TEXT("Gear"), 145.f}, {TEXT("Camera"), 5.f}};
 	auto Face = [this](float Yaw) { if (OutfitPreview) { OutfitPreview->Face(Yaw); } };
 	// The turntable's own render target as well: window screenshots drop out when the window stops presenting.
 	auto Turntable = [this](const FString& Name) { if (OutfitPreview) { OutfitPreview->SaveImage(Dir / TEXT("turntable") / Name); } };

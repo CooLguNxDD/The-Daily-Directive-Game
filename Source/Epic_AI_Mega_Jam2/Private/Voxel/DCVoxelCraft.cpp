@@ -686,6 +686,32 @@ namespace DCVoxelCraft
 				Out.Data.Set(FIntVector(Hi.X - 1, Y, Z + 1), Kerb);
 			}
 		}
+		// R19: the sector's edge. A barrier ring on the bounds line, rubble heaps in the band outside it (seeded from
+		// the cell, the same on every machine): the street visibly ends before the terrain does.
+		const int32 Ring = FMath::Clamp((FMath::RoundToInt32(Plan.HalfExtent) + T.BoundsMarginCm) / Vcm, 1, N / 2 - 1);
+		const int32 Lo = N / 2 - Ring, Hi = N / 2 + Ring;
+		const uint8 Barrier = Ctx.MaterialId(T.BarrierMaterial);
+		const uint8 Rubble = Ctx.MaterialId(TEXT("Rubble"));
+		const int32 BarrierCells = FMath::Max(1, T.BarrierHeightCm / Vcm);
+		const int32 RubbleCells = FMath::Max(1, T.EdgeRubbleMaxCm / Vcm);
+		for (int32 Y = 0; Y < N; ++Y)
+		{
+			for (int32 X = 0; X < N; ++X)
+			{
+				const bool bRing = ((X == Lo || X == Hi) && Y >= Lo && Y <= Hi) || ((Y == Lo || Y == Hi) && X >= Lo && X <= Hi);
+				const bool bOutside = X < Lo || X > Hi || Y < Lo || Y > Hi;
+				if (bRing)
+				{
+					Out.Data.FillBox(FIntVector(X, Y, Layers), FIntVector(X + 1, Y + 1, Layers + BarrierCells), Barrier);
+					continue;
+				}
+				const uint32 H = HashCombine(GetTypeHash(X * 73856093), GetTypeHash(Y * 19349663)) % 10000u;
+				if (bOutside && H < static_cast<uint32>(T.EdgeRubbleChance * 10000.f))
+				{
+					Out.Data.FillBox(FIntVector(X, Y, Layers), FIntVector(X + 1, Y + 1, Layers + 1 + static_cast<int32>(H % RubbleCells)), Rubble);
+				}
+			}
+		}
 	}
 
 	void CraftRubbleZones(FDCVoxelGrid& Out, const FDCCityPlan& Plan, const FDCVoxelCraftContext& Ctx)

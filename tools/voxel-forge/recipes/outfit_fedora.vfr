@@ -1,14 +1,21 @@
-# Outfit head (R18): a noir fedora, wide brim at the brow, a crown with a dented top, accent band.
+# Outfit head (R18): a noir fedora: a low pinched crown, a wide brim all round that curls up at the back and sides
+# and snaps down at the front, accent band.
 # Head frame: the head fills x 3..8, y 3..7, z 0..5 (pivot 5 5 0).
 name outfit_fedora
 grid 5
-size 11 10 8
+size 12 12 7
 slot felt SwatchMain
 slot band SwatchAccent
-cyl 5.5 5 4 5 4.6 felt
-carve box 3 3 4 8 7 5
-cyl 5.5 5 5 7 2.9 felt
-cyl 5.5 5 7 8 2.3 felt
-carve box 4 4 7 8 5 8
-paint cyl 5.5 5 5 6 2.9 band
-pivot 5 5 0
+cyl 5.5 6 4 5 5.4 felt
+cyl 5.5 6 5 6 5.4 felt
+carve cyl 5.5 6 5 6 4.4
+carve box 7 0 5 12 12 6
+box 9 3 3 12 9 4 felt
+carve box 9 3 4 12 9 5
+carve box 3 4 4 8 8 5
+cyl 5.5 6 5 7 2.9 felt
+carve box 4 5.5 6 8 6.5 7
+carve box 7 4 6 9 5 7
+carve box 7 7 6 9 8 7
+paint cyl 5.5 6 5 6 2.9 band
+pivot 5 6 0
