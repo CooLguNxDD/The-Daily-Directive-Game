@@ -1,0 +1,17 @@
+# Parasol stall (R23 market): a folding table of trinkets under a wide dark parasol with a cyan fringe and a warm bulb.
+grid 5
+size 44 44 50
+slot pole Steel
+slot shade InkBlue
+slot fringe NeonCyan
+slot table InkBrown
+slot goods Trim
+slot bulb Lamp
+cyl 22 22 0 44 0.9 pole
+cone 22 22 40 48 21 2 shade
+carve cone 22 22 40 46 19 1
+paint cyl 22 22 40 41 21.5 fringe
+box 10 14 0 34 30 13 table
+carve box 12 16 0 32 28 11
+box 12 16 13 32 28 15 goods
+box 21 21 36 24 24 39 bulb

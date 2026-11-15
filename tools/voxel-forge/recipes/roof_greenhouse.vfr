@@ -1,0 +1,16 @@
+# Rooftop greenhouse (R23 roof): a steel-ribbed glass hut glowing faintly cool, rows of dark plants inside.
+grid 10
+size 28 18 16
+slot rib Steel
+slot glass WindowCool
+slot plant Olive
+box 0 0 0 28 18 1 rib
+shell 0 0 1 28 18 12 1 glass
+poly 12 16 glass 0,0 28,0 28,18 0,18
+carve poly 12 15 1,1 27,1 27,17 1,17
+box 0 0 1 1 18 16 rib
+box 9 0 1 10 18 16 rib
+box 18 0 1 19 18 16 rib
+box 27 0 1 28 18 16 rib
+box 2 3 1 26 6 4 plant
+box 2 12 1 26 15 4 plant
