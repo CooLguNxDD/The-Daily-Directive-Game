@@ -122,8 +122,9 @@ namespace DCMenu
 		};
 
 		TSharedRef<SVerticalBox> Column = SNew(SVerticalBox);
-		Column->AddSlot().AutoHeight().HAlign(HAlign_Center)[Label(TEXT("DIRECTOR'S CUT"), 64, Ink)];
-		Column->AddSlot().AutoHeight().HAlign(HAlign_Center)[Label(TEXT("FRONT PAGE"), 40, Ink)];
+		// The game is THE DAILY DIRECTIVE (human 15:15): the title in the newspaper's blackletter masthead face.
+		Column->AddSlot().AutoHeight().HAlign(HAlign_Center)
+			[SNew(STextBlock).Text(FText::FromString(TEXT("The Daily Directive"))).Font(DCFonts::Slate(TEXT("Masthead"), 60)).ColorAndOpacity(Ink).Justification(ETextJustify::Center)];
 		// The builder (mode 3, R18) needs the height for its rows: no tagline and no key hints there.
 		const bool bBuilderPage = Mode == 3;
 		if (!bBuilderPage)
