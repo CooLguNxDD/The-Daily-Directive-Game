@@ -50,6 +50,9 @@ namespace
 				{ const int32 Half = FMath::Max(1, B / 20); const bool bSlot = FMath::Abs(O - B / 3) <= Half || FMath::Abs(O - 2 * B / 3) <= Half; return bSlot && H >= B / 10 && H < B - B / 10 ? EOpening::Window : EOpening::Solid; }},
 			{TEXT('X'), [](int32 O, int32 H, int32 B, int32, int32)
 				{ return O >= B / 12 && O < B - B / 12 && H >= 2 && H < B * 3 / 4 ? EOpening::Window : EOpening::Solid; }},
+			// R23: an open bay (a building under construction): only a column at each bay edge and the floor slab stay.
+			{TEXT('O'), [](int32 O, int32 H, int32 B, int32, int32)
+				{ return O >= B / 8 && O < B - B / 8 && H >= 1 ? EOpening::Open : EOpening::Solid; }},
 		};
 		return Table;
 	}
