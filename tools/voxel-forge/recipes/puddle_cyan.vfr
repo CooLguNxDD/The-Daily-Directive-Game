@@ -1,0 +1,12 @@
+# Street puddle (R12 ground cover): a flat dark-blue sheen with a few streaks of reflected cyan neon (dim NeonCyan,
+# never the bright edge colour). One voxel high, lies on the asphalt. Long axis +x (along the street).
+grid 5
+size 44 26 1
+slot water WindowOff
+slot glint NeonCyan
+ellipsoid 22 13 0 21 12 1 water
+noise 0.35 3 water
+ellipsoid 22 13 0 18 10 1 water
+paint box 14 9 0 30 10 1 glint
+paint box 18 15 0 26 16 1 glint
+paint box 25 11 0 33 12 1 glint

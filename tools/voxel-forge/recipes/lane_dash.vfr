@@ -1,0 +1,6 @@
+# Lane marking (R12 decal): one worn centre-line dash in road paint, flat on the asphalt. Long axis +x.
+grid 5
+size 60 3 1
+slot paint Paint
+box 0 0 0 60 3 1 paint
+noise 0.18 8 paint

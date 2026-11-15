@@ -1,0 +1,10 @@
+# Scorch mark (R12 decal, Ruins): a blast-blackened patch with a few cooling embers (Char glow, sparse). Flat.
+grid 5
+size 40 40 1
+slot soot Rubble
+slot ember Char
+ellipsoid 20 20 0 19 17 1 soot
+noise 0.4 9 soot
+paint box 18 18 0 20 20 1 ember
+paint box 24 15 0 25 16 1 ember
+paint box 13 23 0 14 24 1 ember
