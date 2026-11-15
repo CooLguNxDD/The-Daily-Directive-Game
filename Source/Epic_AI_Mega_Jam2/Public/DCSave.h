@@ -24,6 +24,8 @@ struct FDCSettingsSave
 	/** Post scalability preset index (0 low .. 2 high) and window mode. */
 	UPROPERTY() int32 Quality = 2;
 	UPROPERTY() bool bFullscreen = false;
+	/** HDR display output (human 16:52), off by default; a new field, so older saves load it off (version stays 1). */
+	UPROPERTY() bool bHdrOutput = false;
 	/** Rebound actions: action name -> key name (empty = the defaults). */
 	UPROPERTY() TMap<FString, FString> KeyBindings;
 	/** R25 tutorial: hints off, the "How to play" page opened once (its button stops shining), hints already shown. */

@@ -95,6 +95,24 @@ UDCInputSet* ADCPlayerController::GetInputSet()
 	return InputSet;
 }
 
+namespace
+{
+	/** HDR display output (human 16:52): only where the display supports it; nits from data. */
+	bool HdrSupported()
+	{
+		return GEngine && GEngine->GetGameUserSettings() && GEngine->GetGameUserSettings()->SupportsHDRDisplayOutput();
+	}
+
+	void ApplyHdr(bool bOn)
+	{
+		if (HdrSupported())
+		{
+			GEngine->GetGameUserSettings()->EnableHDRDisplayOutput(bOn, UDCTuning::Get().Run.HdrDisplayNits);
+			UE_LOG(LogTemp, Display, TEXT("DCHDR output %s (%d nits)"), bOn ? TEXT("on") : TEXT("off"), UDCTuning::Get().Run.HdrDisplayNits);
+		}
+	}
+}
+
 void ADCPlayerController::BeginPlay()
 {
 	Super::BeginPlay();
@@ -107,6 +125,10 @@ void ADCPlayerController::BeginPlay()
 		{
 			GEngine->GetGameUserSettings()->SetFullscreenMode(EWindowMode::WindowedFullscreen);
 			GEngine->GetGameUserSettings()->ApplySettings(false);
+		}
+		if (Save->Settings.bHdrOutput && IsLocalController())
+		{
+			ApplyHdr(true); // saved HDR output
 		}
 	}
 	if (!IsLocalController())
@@ -210,6 +232,7 @@ void ADCPlayerController::SettingsStep(FName Row, int32 Step)
 		{TEXT("Quality"), [](ADCPlayerController&, FDCSettingsSave& S, int32 D) { S.Quality = FMath::Clamp(S.Quality + D, 0, 2); }},
 		{TEXT("Window"), [](ADCPlayerController&, FDCSettingsSave& S, int32) { S.bFullscreen = !S.bFullscreen; }},
 		{TEXT("Hints"), [](ADCPlayerController&, FDCSettingsSave& S, int32) { S.bHintsOff = !S.bHintsOff; }},
+		{TEXT("Hdr"), [](ADCPlayerController&, FDCSettingsSave& S, int32) { S.bHdrOutput = HdrSupported() && !S.bHdrOutput; ApplyHdr(S.bHdrOutput); }},
 	};
 	if (const FStep* Fn = Steps.Find(Row))
 	{
@@ -430,6 +453,7 @@ FString ADCPlayerController::SettingsValue(FName Row) const
 		{TEXT("Quality"), QualityNames[FMath::Clamp(S.Quality, 0, 2)]},
 		{TEXT("Window"), S.bFullscreen ? FString(TEXT("FULLSCREEN")) : FString(TEXT("WINDOWED"))},
 		{TEXT("Hints"), S.bHintsOff ? FString(TEXT("OFF")) : FString(TEXT("ON"))},
+		{TEXT("Hdr"), !HdrSupported() ? UDCTuning::Get().Run.HdrUnsupportedLabel : (S.bHdrOutput ? UDCTuning::Get().Run.HdrOnLabel : UDCTuning::Get().Run.HdrOffLabel)},
 	};
 	const FString* V = Values.Find(Row);
 	return V ? *V : FString();

@@ -910,6 +910,11 @@ struct FDCRunTuning
 	UPROPERTY(EditAnywhere, Config, Category = "Run") float HintAfterCardSeconds = 2.5f;
 	/** Settings volume sliders (Master, Music, SFX): the slider step (0..1). */
 	UPROPERTY(EditAnywhere, Config, Category = "Run") float VolumeStep = 0.05f;
+	/** HDR OUTPUT setting (human 16:52): the display nits passed to EnableHDRDisplayOutput, and the row's labels. */
+	UPROPERTY(EditAnywhere, Config, Category = "Run") int32 HdrDisplayNits = 1000;
+	UPROPERTY(EditAnywhere, Config, Category = "Run") FString HdrOnLabel = TEXT("ON");
+	UPROPERTY(EditAnywhere, Config, Category = "Run") FString HdrOffLabel = TEXT("OFF");
+	UPROPERTY(EditAnywhere, Config, Category = "Run") FString HdrUnsupportedLabel = TEXT("NOT SUPPORTED ON THIS DISPLAY");
 	/** R1 frame time (advisor a-33): -dcperf logs a DCSPIKE line with its frame-scope owners for any frame longer than this (ms; 33 = a frame under 30 fps). */
 	UPROPERTY(EditAnywhere, Config, Category = "Run") float PerfSpikeMs = 33.f;
 	/** Solo (R12): how long a downed player has to finish the self-revive hold before the run fails. */
