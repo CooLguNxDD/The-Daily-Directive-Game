@@ -50,6 +50,11 @@ bool FDCMusicRulesTest::RunTest(const FString&)
 	TestEqual(TEXT("holds its minimum time"), DCMusicRules::PickLayer(L, 1, 0.05f, 3.f), 1);
 	TestEqual(TEXT("steps down after the hold"), DCMusicRules::PickLayer(L, 1, 0.05f, 9.f), 0);
 	TestEqual(TEXT("no layers, nothing"), DCMusicRules::PickLayer(TArray<FDCMusicLayer>(), INDEX_NONE, 0.5f, 0.f), static_cast<int32>(INDEX_NONE));
+	FDCMusicTuning Hz;
+	Hz.SampleHz = 4.f;
+	TestEqual(TEXT("a normal step passes"), DCMusicRules::StepSeconds(Hz, 0.25f), 0.25f, 1e-4f);
+	TestEqual(TEXT("a load stall is capped at two sample periods"), DCMusicRules::StepSeconds(Hz, 49.f), 0.5f, 1e-4f);
+	TestEqual(TEXT("a negative step is zero"), DCMusicRules::StepSeconds(Hz, -1.f), 0.f);
 	TestEqual(TEXT("playlist wraps"), DCMusicRules::NextSlot(1, 2), 0);
 	TestEqual(TEXT("empty playlist stays at 0"), DCMusicRules::NextSlot(3, 0), 0);
 	return true;

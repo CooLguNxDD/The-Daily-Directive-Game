@@ -100,7 +100,7 @@ bool UDCMusicSubsystem::Tick(float DeltaSeconds)
 	const ADCGameState* GS = World ? World->GetGameState<ADCGameState>() : nullptr;
 	if (GS)
 	{
-		Sample(*World, *GS, DeltaSeconds);
+		Sample(*World, *GS, DCMusicRules::StepSeconds(UDCTuning::Get().Music, DeltaSeconds));
 	}
 	return true;
 }
