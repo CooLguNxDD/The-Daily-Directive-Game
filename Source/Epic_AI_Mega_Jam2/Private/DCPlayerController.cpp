@@ -27,6 +27,7 @@
 #include "DCGameState.h"
 #include "DCInput.h"
 #include "DCLanBeacon.h"
+#include "DCOnline.h"
 #include "DCMenu.h"
 #include "DCPlayerState.h"
 #include "Rules/DCPhotoRules.h"
@@ -936,7 +937,7 @@ void ADCPlayerController::UpdateReel()
 void ADCPlayerController::UpdateMenu()
 {
 	const ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>();
-	const bool bWant = GS && GS->Phase == EDCRunPhase::Lobby && (!FParse::Param(FCommandLine::Get(), TEXT("dcdemo")) || FCString::Strifind(FCommandLine::Get(), TEXT("dcmenuflow=")));
+	const bool bWant = GS && GS->Phase == EDCRunPhase::Lobby && (!FParse::Param(FCommandLine::Get(), TEXT("dcdemo")) || FCString::Strifind(FCommandLine::Get(), TEXT("dcmenuflow=")) || FCString::Strifind(FCommandLine::Get(), TEXT("dceosshot=")));
 	const uint8 Base = MenuModeFor(*this);
 	// Title-menu pages (page table, first open one wins): builder 3, settings 4, how to play 5 (R25).
 	const TPair<bool, uint8> Pages[] = {{bBuilderOpen, 3}, {bSettingsOpen, 4}, {bHowToOpen, 5}};
@@ -945,7 +946,9 @@ void ADCPlayerController::UpdateMenu()
 	// The title menu listens for LAN hosts and rebuilds when the list changes.
 	UDCLanBeacon* Beacon = GetGameInstance()->GetSubsystem<UDCLanBeacon>();
 	TArray<FDCLanHost> Hosts = Mode == 0 && Beacon ? Beacon->GetHosts() : TArray<FDCLanHost>();
-	FString HostsKey;
+	// The online status (R26) rebuilds the menu too: login progress, the join code, a fallback message.
+	const UDCOnline* Online = UDCOnline::Get(this);
+	FString HostsKey = Online ? Online->MenuKey() : FString();
 	for (const FDCLanHost& H : Hosts)
 	{
 		HostsKey += H.Address + TEXT("/") + FString::FromInt(H.Players) + TEXT(";");
@@ -1031,6 +1034,10 @@ void ADCPlayerController::MenuSolo()
 		OpenHowTo();
 		bHowToThenSolo = true;
 		return;
+	}
+	if (UDCOnline* Online = UDCOnline::Get(this))
+	{
+		Online->UseIp();
 	}
 	UGameplayStatics::OpenLevel(this, FName(*UGameplayStatics::GetCurrentLevelName(this)), true, TEXT("solo"));
 }
@@ -1118,6 +1125,10 @@ void ADCPlayerController::TickHints(float DeltaSeconds)
 
 void ADCPlayerController::MenuHost()
 {
+	if (UDCOnline* Online = UDCOnline::Get(this))
+	{
+		Online->UseIp();
+	}
 	UGameplayStatics::OpenLevel(this, FName(*UGameplayStatics::GetCurrentLevelName(this)), true, TEXT("listen"));
 }
 
@@ -1132,7 +1143,27 @@ void ADCPlayerController::MenuJoin(const FString& Address)
 	{
 		Target += FString::Printf(TEXT(":%d"), UDCTuning::Get().Run.Port);
 	}
+	if (UDCOnline* Online = UDCOnline::Get(this))
+	{
+		Online->UseIp();
+	}
 	ClientTravel(Target, TRAVEL_Absolute);
+}
+
+void ADCPlayerController::MenuHostOnline()
+{
+	if (UDCOnline* Online = UDCOnline::Get(this))
+	{
+		Online->Host();
+	}
+}
+
+void ADCPlayerController::MenuJoinCode(const FString& Code)
+{
+	if (UDCOnline* Online = UDCOnline::Get(this))
+	{
+		Online->Join(Code);
+	}
 }
 
 void ADCPlayerController::MenuQuit()

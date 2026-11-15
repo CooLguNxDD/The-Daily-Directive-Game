@@ -8,6 +8,7 @@
 #include "DCAudio.h"
 #include "DCGameState.h"
 #include "DCLanBeacon.h"
+#include "DCOnline.h"
 #include "DCPlayerController.h"
 #include "DCTuning.h"
 #include "Engine/World.h"
@@ -156,6 +157,30 @@ namespace DCMenu
 					[Button(TEXT("HOW TO PLAY"), Click(&ADCPlayerController::OpenHowTo), bShine ? Glow : Gold)]];
 			}
 			Column->AddSlot().AutoHeight().HAlign(HAlign_Center)[Button(TEXT("HOST CO-OP (1-4)"), Click(&ADCPlayerController::MenuHost))];
+			// R26 internet co-op (behind the online switch): host over EOS with a join code, or join by a friend's code.
+			UDCOnline* Online = UDCOnline::Get(PC);
+			if (Online && Online->IsSwitchOn())
+			{
+				Column->AddSlot().AutoHeight().HAlign(HAlign_Center)[Button(TEXT("HOST ONLINE (JOIN CODE)"), Click(&ADCPlayerController::MenuHostOnline))];
+				TSharedRef<SEditableTextBox> CodeBox = SNew(SEditableTextBox).HintText(FText::FromString(TEXT("CODE"))).Font(Font(20, "Regular")).Justification(ETextJustify::Center);
+				Column->AddSlot().AutoHeight().HAlign(HAlign_Center).Padding(0, 6, 0, 0)
+				[
+					SNew(SHorizontalBox)
+					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[SNew(SBox).WidthOverride(200.f).HeightOverride(44.f)[CodeBox]]
+					+ SHorizontalBox::Slot().AutoWidth()[Button(TEXT("JOIN BY CODE"), [Weak, CodeBox]()
+					{
+						if (ADCPlayerController* P = Weak.Get())
+						{
+							DCAudio::Play2D(P, TEXT("UIClick"));
+							P->MenuJoinCode(CodeBox->GetText().ToString());
+						}
+					})]
+				];
+			}
+			if (Online && !Online->GetStatus().IsEmpty())
+			{
+				Column->AddSlot().AutoHeight().HAlign(HAlign_Center).Padding(0, 4, 0, 0)[Label(Online->GetStatus(), 13, Gold)];
+			}
 			Column->AddSlot().AutoHeight().HAlign(HAlign_Center)[Button(TEXT("YOUR PHOTOGRAPHER"), Click(&ADCPlayerController::OpenBuilder))];
 			Column->AddSlot().AutoHeight().HAlign(HAlign_Center)[Button(TEXT("SETTINGS"), Click(&ADCPlayerController::OpenSettings))];
 			Column->AddSlot().AutoHeight().HAlign(HAlign_Center).Padding(0, 14, 0, 0)[Label(TEXT("JOIN A FRIEND: HOST IP"), 14, Ink)];
@@ -190,6 +215,12 @@ namespace DCMenu
 		[&]()
 		{
 			Column->AddSlot().AutoHeight().HAlign(HAlign_Center)[Label(FString::Printf(TEXT("HOSTING. FRIENDS JOIN: %s (port %d)"), *LocalAddress(), Port), 20, Ink)];
+			// R26: the online join code (or why the host fell back to the network).
+			if (const UDCOnline* Online = UDCOnline::Get(PC); Online && !Online->GetStatus().IsEmpty())
+			{
+				const bool bCode = Online->GetState() == EDCOnlineState::Hosting && !Online->GetCode().IsEmpty() && Online->GetStatus().Contains(Online->GetCode());
+				Column->AddSlot().AutoHeight().HAlign(HAlign_Center).Padding(0, 6)[Label(Online->GetStatus(), bCode ? 30 : 15, Gold)];
+			}
 			Column->AddSlot().AutoHeight().HAlign(HAlign_Center).Padding(0, 6)[Label(TEXT("Players in the lobby are listed below. Start when everyone is in."), 14, Ink)];
 			Column->AddSlot().AutoHeight().HAlign(HAlign_Center)[Button(TEXT("START RUN"), Click(&ADCPlayerController::RequestStartRun))];
 			Column->AddSlot().AutoHeight().HAlign(HAlign_Center)[Button(TEXT("QUIT"), Click(&ADCPlayerController::MenuQuit), Ink)];

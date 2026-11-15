@@ -92,6 +92,23 @@ Unreal Engine 5.9 jam game. Engine: `L:/unreal/UE_5.9` (registered source build,
   rolling each district: use with `-dcseed=N -dcstartsector=S`); plan PNGs headless: `UnrealEditor-Cmd <uproject>
   -run=DCCityPreview -seed=N -out=<dir>`.
 
+## Internet co-op over EOS (R26, final run)
+- Behind a switch: `[/Script/Epic_AI_Mega_Jam2.DCOnlineSettings]` in `Config/DefaultGame.ini` (`bEnabled`, code alphabet
+  and length, bucket, menu `Messages`). Nothing online starts until a player presses HOST ONLINE or JOIN BY CODE; solo,
+  LAN and the gate never create an EOS platform, and `GameNetDriver` stays `IpNetDriver` (test `Online.Switch`).
+- Game side `UDCOnline` (`DCOnline.cpp`, pure parts `Rules/DCOnlineRules`): reads the credentials, runs the flow, swaps
+  `GameNetDriver` to `NetDriverEOS` only after a login, falls back to LAN/IP with a menu message on any failure.
+- Transport `Source/DCOnlineEos/` (LoadingPhase None, loaded on demand; registers `IDCOnlineTransport` id `EOS` as a
+  modular feature, `DCOnlineTransport.h`): EOS Connect device-id login (no Epic account; OSS EOS is not used, it has no
+  device-id login), one EOS session per host with attributes `DCCODE` (join code) and `DCHOST` (host product user id),
+  the engine's `FSocketSubsystemEOS` (Epic relay for NAT). Plugins `EOSShared` + `SocketSubsystemEOS` are enabled.
+- Credentials: gitignored `Config/Custom/EOS.ini` (UAT never stages `Config/Custom/` into a pak). Template
+  `tools/eos/EOS.template.ini`; `tools/eos/stage_eos_ini.sh <local ini> [<project or packaged project dir>]` copies it
+  (never prints a value). A shipped package needs it in `<pkg>/Windows/Epic_AI_Mega_Jam2/Config/Custom/EOS.ini`.
+- Evidence: `tools/eos/eos_coop_proof.sh online|fallback <pkg> <out> [<local ini>]`; flags `-dceoshost`,
+  `-dceosjoin=<code|@file>`, `-dceoscodeout=<file>`, `-dceosshot=<png>`, `-dceosfreshdevice` (second instance on the same
+  PC: device ids are per Windows user), `-dceoscreds=<path>`, `-dceosoff`. Logs `DCEOS`.
+
 ## Editor MCP
 - Epic's MCP server (`ModelContextProtocol` + `AllToolsets` in the `.uproject`) serves `unreal-mcp` on `http://127.0.0.1:23444/mcp` (auto-start and port in the per-user `Saved/Config/WindowsEditor/EditorPerProjectUserSettings.ini`; `.mcp.json` and the other client configs point there).
 - Claude Code: the `unreal-mcp` skill of the `unreal-engine-skills-for-claude-code` plugin. Start a session with `cats game-dev` from the monorepo root.

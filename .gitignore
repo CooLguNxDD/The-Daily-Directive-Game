@@ -20,3 +20,7 @@ Content/_LocalPacks/
 Content/Developers/
 Content/Collections/
 Content/_LocalPacks/
+
+# R26 EOS credentials: local only (tools/eos/stage_eos_ini.sh copies them here and into a package). Never committed.
+Config/Custom/
+EOS.local.ini

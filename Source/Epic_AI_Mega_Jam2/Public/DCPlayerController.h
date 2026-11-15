@@ -119,6 +119,9 @@ public:
 	float HintSectorSeconds = 0.f;
 	void MenuHost();
 	void MenuJoin(const FString& Address);
+	/** R26 internet co-op (UDCOnline): host with a join code / join by code; both fall back to LAN/IP with a message. */
+	void MenuHostOnline();
+	void MenuJoinCode(const FString& Code);
 	void MenuQuit();
 
 	/** Host to the owning client: send these photo images so every machine can show them in the reel and vote. */

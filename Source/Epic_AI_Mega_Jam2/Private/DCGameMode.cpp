@@ -10,6 +10,7 @@
 #include "DCGameState.h"
 #include "DCHUD.h"
 #include "DCLanBeacon.h"
+#include "DCOnline.h"
 #include "DCOrbitalStrike.h"
 #include "DCPlayerController.h"
 #include "DCPlayerState.h"
@@ -89,7 +90,8 @@ void ADCGameMode::BeginPlay()
 	GS->RunSeed = RequestedSeed != 0 ? RequestedSeed : FMath::RandRange(1000, 999999);
 	GS->VoxelOps.Reset();
 	BuildCity(0); // the lobby's backdrop is the first sector
-	if (GetNetMode() == NM_ListenServer)
+	const UDCOnline* Online = UDCOnline::Get(this);
+	if (GetNetMode() == NM_ListenServer && !(Online && Online->IsCarrying())) // an online (EOS) host has no IP listener to announce
 	{
 		if (UDCLanBeacon* Beacon = GetGameInstance()->GetSubsystem<UDCLanBeacon>())
 		{
