@@ -1,24 +1,25 @@
-# Outfit body (R18): a puffy bomber jacket: rounded body bulging over a gathered (inset) accent waistband, puffed
-# shoulders, accent U collar, steel zip, a glowing sleeve patch. Torso frame as outfit_vest (pivot 4 5 0 on spine_03).
+# Outfit body (R18): a cropped, puffy bomber jacket: a thick top-heavy body ending above the hips on a gathered
+# (inset) accent waistband, puffed shoulders standing out past the torso, a big accent collar, steel zip, a glowing
+# sleeve patch. Shorter and wider at the top than the hoodie.
+# Torso inside x 2..9, y 2..10 (pivot 5 6 0 on spine_03).
 name outfit_bomber
 grid 5
-size 9 10 12
+size 11 12 12
 slot jacket SwatchMain
 slot rib SwatchAccent
 slot zip Steel
 slot patch SwatchGlow
-box 0 0 2 9 10 11 jacket
-carve box 0 0 2 1 1 11
-carve box 8 0 2 9 1 11
-carve box 0 9 2 1 10 11
-carve box 8 9 2 9 10 11
-ellipsoid 4.5 1.2 9.4 3.8 1.4 1.8 jacket
-ellipsoid 4.5 8.8 9.4 3.8 1.4 1.8 jacket
-box 1 1 0 8 9 2 rib
-carve box 1 1 0 8 9 10
-carve box 2 2 0 7 8 2
-box 1 2 10 7 8 12 rib
-carve box 2 3 10 7 7 12
-paint box 8 4 2 9 6 10 zip
-paint box 3 0 7 6 1 9 patch
-pivot 4 5 0
+box 0 0 3 11 12 11 jacket
+carve box 0 0 3 1 1 11
+carve box 10 0 3 11 1 11
+carve box 0 11 3 1 12 11
+carve box 10 11 3 11 12 11
+ellipsoid 5.5 1.3 9.4 4.5 1.4 2 jacket
+ellipsoid 5.5 10.7 9.4 4.5 1.4 2 jacket
+box 1 1 1 10 11 3 rib
+carve box 2 2 0 9 10 10
+box 1 2 10 8 10 12 rib
+carve box 3 4 10 10 8 12
+paint box 10 5 3 11 7 10 zip
+paint box 4 0 7 7 1 10 patch
+pivot 5 6 0
