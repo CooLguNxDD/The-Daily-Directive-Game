@@ -11,6 +11,7 @@
 #include "EngineUtils.h"
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
+#include "Voxel/DCVoxelModel.h"
 #include "Voxel/DCVoxelSettings.h"
 
 namespace
@@ -74,6 +75,37 @@ void ADCVoxelCity::HostChip(const FHitResult& Hit, const FDCWeaponDef& Weapon, c
 	DCChipRules::AddHit(ChipLedger, Grid, Center, Tn.ChipBucketCm, Weapon.ChipDamage, Hp, Weapon.ChipRadiusCm, Tn.ChipMaxPending);
 }
 
+void ADCVoxelCity::SetChipProps(const FDCCityPlan& Plan)
+{
+	// Every plan prop with a model: foot at its location, reach = the farthest model corner from the pivot (any quarter
+	// turn), top = its height above the pivot, broken past its layer's ChipBreakPercent of its voxels.
+	const UDCVoxelSettings& V = UDCVoxelSettings::Get();
+	const int32 Vcm = FMath::Max(1, V.Tuning.PropVoxelCm);
+	ChipLedger.Props.Reset();
+	ChipLedger.BreakDue.Reset();
+	for (const FDCPropPlan& P : Plan.Props)
+	{
+		const FDCVoxelModel* M = DCVoxelModels::Parsed(P.Model);
+		const FDCPropLayer* Layer = V.PropLayers.FindByPredicate([&P](const FDCPropLayer& L) { return L.Id == P.Layer; });
+		if (!M)
+		{
+			continue;
+		}
+		int32 Solid = 0;
+		for (const uint8 C : M->Cells)
+		{
+			Solid += C != 0 ? 1 : 0;
+		}
+		const int32 Rx = FMath::Max(M->Pivot.X, M->Size.X - M->Pivot.X);
+		const int32 Ry = FMath::Max(M->Pivot.Y, M->Size.Y - M->Pivot.Y);
+		FDCChipProp& Out = ChipLedger.Props.AddDefaulted_GetRef();
+		Out.FootCm = DCVoxelMath::ToCm(P.Location);
+		Out.RadiusCm = FMath::CeilToInt32(FMath::Sqrt(static_cast<float>(Rx * Rx + Ry * Ry))) * Vcm;
+		Out.TopCm = Out.FootCm.Z + (M->Size.Z - M->Pivot.Z) * Vcm;
+		Out.BreakAt = Layer && Layer->ChipBreakPercent > 0 ? FMath::Max(1, Solid * Layer->ChipBreakPercent / 100) : 0;
+	}
+}
+
 void ADCVoxelCity::TickChips()
 {
 	const FDCVoxelTuning& Tn = UDCVoxelSettings::Get().Tuning;
@@ -98,11 +130,12 @@ void ADCVoxelCity::TickChips()
 	const float OpTime = GS->VoxelOps.Last().Time;
 	const FVector From(Op.CenterCm);
 	bChipOpOut = true;
-	UE_LOG(LogTemp, Display, TEXT("DCCHIP host op=%d chips=%d structure=%d pending=%d"), Seq, Op.Chips.Num(), bStructure ? Op.StructureLots[0] : -1, ChipLedger.Pending.Num());
+	UE_LOG(LogTemp, Display, TEXT("DCCHIP host op=%d chips=%d structure=%d breakprops=%d pending=%d"), Seq, Op.Chips.Num(), bStructure ? Op.StructureLots[0] : -1, Op.BreakProps.Num(),
+		ChipLedger.Pending.Num());
 	TWeakObjectPtr<ADCGameState> WeakGS(GS);
 	TWeakObjectPtr<ADCVoxelCity> WeakCity(this);
 	const int32 Build = BuiltId;
-	ApplyOpAsync(GS->VoxelOps.Last(), true, [WeakGS, WeakCity, Seq, Build, From, OpTime](const FDCVoxelOpResult& Result, uint32 Hash)
+	ApplyOpAsync(GS->VoxelOps.Last(), true, [WeakGS, WeakCity, Seq, Build, From, OpTime, Chips = Op.Chips](const FDCVoxelOpResult& Result, uint32 Hash)
 	{
 		ADCGameState* State = WeakGS.Get();
 		ADCVoxelCity* City = WeakCity.Get();
@@ -114,6 +147,13 @@ void ADCVoxelCity::TickChips()
 		for (const FIntPoint& C : Result.ChipCarved)
 		{
 			DCChipRules::Credit(City->ChipLedger, C.X, C.Y);
+		}
+		for (int32 i = 0; i < Chips.Num() && i < Result.ChipVoxels.Num(); ++i)
+		{
+			if (Chips[i].Grid == DCVoxelOps::PropGrid && Result.ChipVoxels[i] > 0)
+			{
+				DCChipRules::CreditProp(City->ChipLedger, DCChipRules::PropAt(City->ChipLedger, Chips[i].CenterCm), Result.ChipVoxels[i]);
+			}
 		}
 		if (FDCVoxelOp* Rec = State->VoxelOps.FindByPredicate([Seq](const FDCVoxelOp& O) { return O.Seq == Seq; }))
 		{
@@ -138,7 +178,7 @@ void ADCVoxelCity::QueueChipCrumbs(const FDCVoxelOp& Op, const FDCVoxelOpResult&
 	// physics body (chips are frequent; the shard bodies stay for strikes). Cosmetic and local.
 	const FDCVoxelTuning& Tn = UDCVoxelSettings::Get().Tuning;
 	const int32 PerChip = FMath::RoundToInt32(Tn.ChipCrumbs * FMath::Clamp(1.f - Tn.CrumbLoadCut * BodyLoad(), 0.f, 1.f) * ADCEnvironment::EffectScaleOf(this));
-	if (Result.ShardClusters.Num() == 0 || PerChip <= 0)
+	if (Result.ShardClusters.Num() == 0)
 	{
 		return;
 	}
@@ -150,7 +190,21 @@ void ADCVoxelCity::QueueChipCrumbs(const FDCVoxelOp& Op, const FDCVoxelOpResult&
 		const bool bLit = Colors.IsValidIndex(C.Material) && Colors[C.Material].A > 0;
 		const uint8 Rub = !bLit && OpCtx.RubbleOf.IsValidIndex(C.Material) && OpCtx.RubbleOf[C.Material] != 0 ? OpCtx.RubbleOf[C.Material] : C.Material;
 		const FColor Col = Colors.IsValidIndex(Rub) ? Colors[Rub] : FColor(30, 30, 40, 0);
-		for (int32 i = 0; i < PerChip; ++i)
+		if (C.bPiece)
+		{
+			// A broken prop's piece: one pooled debris block about its slice's size, knocked up and out (it flakes into
+			// crumbs at the end of its life, R15).
+			const float EdgeCm = C.VoxelCm * FMath::Clamp(FMath::Pow(static_cast<float>(C.Count), 1.f / 3.f), 1.f, 12.f);
+			FDCDebrisSpawn D;
+			D.Transform = FTransform(FRotator(Rng.FRandRange(0, 360), Rng.FRandRange(0, 360), 0), C.Pos, FVector(EdgeCm / 100.f));
+			D.LinearVelocity = Rng.VRand() * Tn.ShardSpeedCms * 0.35f + FVector(0, 0, Rng.FRandRange(Tn.ShardUpCms * 0.3f, Tn.ShardUpCms * 0.8f));
+			D.AngularVelocityDeg = Rng.VRand() * 360.f;
+			D.Color = FLinearColor::FromSRGBColor(FColor(Col.R, Col.G, Col.B, 255));
+			D.Glow = Col.A / 255.f * Tn.VoxelMaterialGlowScale * Tn.ShardGlowScale;
+			D.LifeSeconds = Tn.ShardLifeSeconds * Rng.FRandRange(0.7f, 1.1f);
+			Burst.Spawns.Add(D);
+		}
+		for (int32 i = 0; i < PerChip * (C.bPiece ? 3 : 1); ++i)
 		{
 			FDCCrumbSpawn& Cr = Burst.Crumbs.AddDefaulted_GetRef();
 			Cr.At = C.Pos + Rng.VRand() * C.VoxelCm;

@@ -133,6 +133,8 @@ private:
 	FDCPendingPiece PendingFor(const FDCVoxelOp& Op) const;
 	/** Host: its bodies of a piece came to rest; append and apply the Rest op (poses snapped to cm and axis frames). */
 	void HostRest(FFalling& F);
+	/** R24 host: the sector's street props as the chip ledger tracks them (foot, reach, top, break count). */
+	void SetChipProps(const FDCCityPlan& Plan);
 	/** R24 host: sends the due Chip op (DCChipRules::Flush) and applies it like any op. */
 	void TickChips();
 	/** Grid of a city cell component (its tag): a tower lot, DCVoxelOps::PropGrid, or INDEX_NONE (terrain, other). */

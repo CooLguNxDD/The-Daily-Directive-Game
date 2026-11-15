@@ -999,6 +999,7 @@ void ADCVoxelCity::Build(int32 RunSeed, int32 SectorIndex, int32 BuildId, bool b
 	{
 		Craft.Models.Add(Model, DCVoxelModels::Parsed(Model)); // file reads stay on the game thread
 	}
+	SetChipProps(Plan); // R24: what the host's chips can break
 	const FDCSeasonDef* Season = SeasonFor(RunSeed, SectorIndex);
 	const float SnowCover = Season ? Season->SnowCover : -1.f;
 	const int32 Seed = DCCityRules::SectorSeed(RunSeed, SectorIndex);
@@ -1160,6 +1161,7 @@ void ADCVoxelCity::StartNextOp()
 		FDCVoxelOp& Into = InFlight->Op;
 		const FDCVoxelOp& Next = QueuedOps[0].Op;
 		Into.Chips.Append(Next.Chips);
+		Into.BreakProps.Append(Next.BreakProps); // removals only: their union is the same in any order
 		Into.Seq = Next.Seq;
 		Into.Time = Next.Time;
 		Into.ResultHash = Next.ResultHash; // compared after the last folded op

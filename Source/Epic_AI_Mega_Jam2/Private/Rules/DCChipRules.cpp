@@ -1,5 +1,7 @@
 #include "Rules/DCChipRules.h"
 
+#include "Voxel/DCVoxelOps.h"
+
 FDCChipParams FDCChipParams::From(const FDCVoxelTuning& Tuning)
 {
 	FDCChipParams P;
@@ -16,6 +18,8 @@ FDCChipParams FDCChipParams::From(const FDCVoxelTuning& Tuning)
 
 void FDCChipLedger::Reset()
 {
+	Props.Reset();
+	BreakDue.Reset();
 	Damage.Reset();
 	Pending.Reset();
 	Tokens.Reset();
@@ -111,13 +115,23 @@ namespace DCChipRules
 				Due = bReady && (Due == INDEX_NONE || It.Key < Due) ? It.Key : Due;
 			}
 		}
-		if (L.Pending.Num() == 0 && Due == INDEX_NONE)
+		if (L.Pending.Num() == 0 && Due == INDEX_NONE && L.BreakDue.Num() == 0)
 		{
 			return false;
 		}
 		Out.Kind = TEXT("Chip");
 		Out.Chips.Reset();
 		Out.StructureLots.Reset();
+		Out.BreakProps.Reset();
+		while (L.BreakDue.Num() > 0 && Out.BreakProps.Num() < FDCChipLedger::MaxBreaksPerOp)
+		{
+			const FDCChipProp& Prop = L.Props[L.BreakDue[0]];
+			FDCVoxelChip& Col = Out.BreakProps.AddDefaulted_GetRef();
+			Col.Grid = DCVoxelOps::PropGrid;
+			Col.CenterCm = FIntVector(Prop.FootCm.X, Prop.FootCm.Y, Prop.TopCm);
+			Col.RadiusCm = Prop.RadiusCm;
+			L.BreakDue.RemoveAt(0);
+		}
 		Out.Lot = INDEX_NONE;
 		// Chips in arrival order, while they fit the entry cap and the render cell budget (a cell already in the op is
 		// free); a chip on a new cell past the budget waits for the next window.
@@ -161,6 +175,10 @@ namespace DCChipRules
 		{
 			Out.CenterCm = Out.Chips[0].CenterCm;
 		}
+		else if (Out.BreakProps.Num() > 0)
+		{
+			Out.CenterCm = Out.BreakProps[0].CenterCm;
+		}
 		L.NextFlush = Now + P.WindowSeconds;
 		return true;
 	}
@@ -170,6 +188,40 @@ namespace DCChipRules
 		if (Lot >= 0 && Voxels > 0)
 		{
 			L.Lots.FindOrAdd(Lot).Voxels += Voxels;
+		}
+	}
+
+	int32 PropAt(const FDCChipLedger& L, const FIntVector& Cm, int32 SlackCm)
+	{
+		int32 Best = INDEX_NONE;
+		int64 BestD = MAX_int64;
+		for (int32 i = 0; i < L.Props.Num(); ++i)
+		{
+			const FDCChipProp& P = L.Props[i];
+			const int64 Dx = Cm.X - P.FootCm.X, Dy = Cm.Y - P.FootCm.Y;
+			const int64 D = Dx * Dx + Dy * Dy;
+			const int64 Reach = P.RadiusCm + SlackCm;
+			if (!P.bBroken && D <= Reach * Reach && Cm.Z <= P.TopCm + SlackCm && D < BestD)
+			{
+				Best = i;
+				BestD = D;
+			}
+		}
+		return Best;
+	}
+
+	void CreditProp(FDCChipLedger& L, int32 Index, int32 Voxels)
+	{
+		if (!L.Props.IsValidIndex(Index) || Voxels <= 0)
+		{
+			return;
+		}
+		FDCChipProp& P = L.Props[Index];
+		P.Chipped += Voxels;
+		if (!P.bBroken && P.BreakAt > 0 && P.Chipped >= P.BreakAt)
+		{
+			P.bBroken = true;
+			L.BreakDue.Add(Index);
 		}
 	}
 }

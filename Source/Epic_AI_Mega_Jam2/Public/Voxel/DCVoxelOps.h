@@ -59,6 +59,8 @@ struct EPIC_AI_MEGA_JAM2_API FDCShardCluster
 	uint8 Material = 0;
 	int32 Block = 1;
 	float VoxelCm = 10.f;
+	/** R24: a broken prop's piece (a pooled debris block), not grit. */
+	bool bPiece = false;
 };
 
 struct EPIC_AI_MEGA_JAM2_API FDCVoxelOpResult
@@ -81,6 +83,8 @@ struct EPIC_AI_MEGA_JAM2_API FDCVoxelOpResult
 	/** R24 Chip ops: voxels each chip removed from a tower, as (lot, voxels) in chip order (the host's structure
 	 *  trigger counts them). Never hashed. */
 	TArray<FIntPoint> ChipCarved;
+	/** R24 Chip ops: voxels each entry of Op.Chips removed, in order (the host credits props with them). */
+	TArray<int32> ChipVoxels;
 	/** Where the op's time went (ms): carve and bite, structure pass, settle (evidence for the impact hitch, R13). */
 	float CarveMs = 0.f;
 	float StructureMs = 0.f;

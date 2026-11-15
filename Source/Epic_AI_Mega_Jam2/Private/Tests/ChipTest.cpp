@@ -258,3 +258,58 @@ bool FDCChipTriggerTest::RunTest(const FString&)
 }
 
 #endif
+
+#if WITH_DEV_AUTOMATION_TESTS
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDCChipPropBreakTest, "Epic_AI_Mega_Jam2.Chips.PropBreaksAtThreshold", ChipFlags)
+bool FDCChipPropBreakTest::RunTest(const FString&)
+{
+	const FDCVoxelOpContext Ctx = UDCVoxelSettings::Get().OpContext(UDCTuning::Get().City.BlockSizeCm);
+	// Ledger: a prop of 400 voxels that breaks at 35 % (140): chips below that wear it, the one past it lists it once.
+	FDCChipLedger L;
+	FDCChipProp& Lamp = L.Props.AddDefaulted_GetRef();
+	Lamp.FootCm = FIntVector(100, 200, 0);
+	Lamp.RadiusCm = 20;
+	Lamp.TopCm = 200;
+	Lamp.BreakAt = 140;
+	FDCChipProp& Bench = L.Props.AddDefaulted_GetRef();
+	Bench.FootCm = FIntVector(600, 200, 0);
+	Bench.RadiusCm = 40;
+	Bench.TopCm = 60;
+	Bench.BreakAt = 0; // never breaks
+	TestEqual(TEXT("a chip on the lamp finds the lamp"), DCChipRules::PropAt(L, FIntVector(110, 205, 150)), 0);
+	TestEqual(TEXT("a chip over the lamp's top finds nothing"), DCChipRules::PropAt(L, FIntVector(110, 205, 400)), INDEX_NONE);
+	TestEqual(TEXT("a chip on the bench finds the bench"), DCChipRules::PropAt(L, FIntVector(610, 190, 30)), 1);
+	DCChipRules::CreditProp(L, 0, 100);
+	TestEqual(TEXT("under the threshold: not due"), L.BreakDue.Num(), 0);
+	DCChipRules::CreditProp(L, 0, 50);
+	TestEqual(TEXT("past the threshold: due"), L.BreakDue.Num(), 1);
+	DCChipRules::CreditProp(L, 0, 50);
+	DCChipRules::CreditProp(L, 1, 5000);
+	TestEqual(TEXT("due once, and a prop with no break percent never breaks"), L.BreakDue.Num(), 1);
+	FDCChipParams P;
+	FDCVoxelOp Op;
+	TestTrue(TEXT("a due break sends an op"), DCChipRules::Flush(L, 0.f, P, false, 0.f, Op));
+	TestTrue(TEXT("the op breaks the lamp: its foot, top and reach"), Op.BreakProps.Num() == 1 && Op.BreakProps[0].CenterCm == FIntVector(100, 200, 200) && Op.BreakProps[0].RadiusCm == 20);
+	TestEqual(TEXT("a broken prop takes no more chips"), DCChipRules::PropAt(L, FIntVector(110, 205, 150)), INDEX_NONE);
+
+	// Op: the column clears the prop (and nothing past its top or reach) on every machine alike, in pieces.
+	auto Grid = [](FDCVoxelSector& S)
+	{
+		S.Props.VoxelCm = 5;
+		S.Props.OriginCm = FIntVector(-1000, -1000, 0);
+		const FIntVector Foot = S.Props.ToLocal(FIntVector(100, 200, 0));
+		S.Props.Data.FillBox(Foot - FIntVector(2, 2, 0), Foot + FIntVector(2, 2, 40), 1); // the lamp: 20 cm square, 2 m
+		S.Props.Data.FillBox(Foot + FIntVector(-1, -1, 60), Foot + FIntVector(1, 1, 62), 2); // a cable above its top
+	};
+	FDCVoxelSector A, B;
+	Grid(A);
+	Grid(B);
+	const FDCVoxelOpResult R = DCVoxelOps::Run(A, Op, Ctx, FDCPendingPiece());
+	DCVoxelOps::Run(B, Op, Ctx, FDCPendingPiece());
+	TestEqual(TEXT("both machines break it the same"), A.Hash(), B.Hash());
+	TestEqual(TEXT("the lamp is gone"), R.Carved, 16 * 40);
+	TestTrue(TEXT("the cable over it stays"), A.Props.Data.CountSolid() == 4 * 2);
+	TestTrue(TEXT("it flies apart as pieces"), R.ShardClusters.Num() == 6 && R.ShardClusters[0].bPiece);
+	return true;
+}
+#endif

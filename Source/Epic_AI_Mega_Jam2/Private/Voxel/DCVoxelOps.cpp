@@ -844,11 +844,13 @@ namespace DCVoxelOps
 			const bool bTower = Sector.Towers.IsValidIndex(Chip.Grid);
 			if (!bTower && Chip.Grid != PropGrid)
 			{
+				Out.ChipVoxels.Add(0);
 				continue; // an unknown grid is skipped on every machine alike
 			}
 			FDCVoxelGrid& Grid = bTower ? Sector.Towers[Chip.Grid].Grid : Sector.Props;
 			Removed.Reset();
 			const int32 Carved = CarveSphere(Grid, Chip.CenterCm, FMath::Clamp(Chip.RadiusCm, 1, ChipMaxRadiusCm), 0, &Removed);
+			Out.ChipVoxels.Add(Carved);
 			if (Carved == 0)
 			{
 				continue;
@@ -868,6 +870,35 @@ namespace DCVoxelOps
 			Cl.Count = Carved;
 			Cl.Material = Removed[0].Value;
 			Cl.VoxelCm = Grid.VoxelCm;
+		}
+		// Broken props: their column clears top to bottom; the voxels fly as a few pieces and grit (cosmetic).
+		for (const FDCVoxelChip& Prop : Op.BreakProps)
+		{
+			Removed.Reset();
+			const int32 Top = Sector.Props.ToLocal(FIntVector(Prop.CenterCm.X, Prop.CenterCm.Y, FMath::Clamp(Prop.CenterCm.Z, 0, 4000))).Z + 1; // CenterCm.Z: the prop's top
+			const int32 Carved = CarveColumn(Sector.Props, Prop.CenterCm, FMath::Clamp(Prop.RadiusCm, 1, ChipMaxRadiusCm), Top, &Removed);
+			Out.Carved += Carved;
+			constexpr int32 PiecesPerProp = 6;
+			for (int32 k = 0; k < PiecesPerProp && Removed.Num() > 0; ++k)
+			{
+				// Slice k of the removed voxels (they come out in grid order: bottom to top), as one piece at its mean.
+				const int32 From = Removed.Num() * k / PiecesPerProp, To = Removed.Num() * (k + 1) / PiecesPerProp;
+				if (To <= From)
+				{
+					continue;
+				}
+				FVector Sum = FVector::ZeroVector;
+				for (int32 i = From; i < To; ++i)
+				{
+					Sum += FVector(Sector.Props.CenterCm(Removed[i].Key));
+				}
+				FDCShardCluster& Cl = Out.ShardClusters.AddDefaulted_GetRef();
+				Cl.Pos = Sum / (To - From);
+				Cl.Count = To - From;
+				Cl.Material = Removed[From].Value;
+				Cl.VoxelCm = Sector.Props.VoxelCm;
+				Cl.bPiece = true;
+			}
 		}
 		Out.CarveMs = Lap();
 		TArray<int32> Lots;

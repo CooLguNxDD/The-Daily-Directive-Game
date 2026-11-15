@@ -467,6 +467,8 @@ struct FDCPropLayer
 	UPROPERTY(EditAnywhere, Config, Category = "District") FName BeadMaterial;
 	UPROPERTY(EditAnywhere, Config, Category = "District") float BeadEveryCm = 0.f;
 	UPROPERTY(EditAnywhere, Config, Category = "District") FName PoleMaterial;
+	/** R24: a prop of this layer breaks apart once weapon chips took this percent of its voxels (0 = never breaks). */
+	UPROPERTY(EditAnywhere, Config, Category = "District") int32 ChipBreakPercent = 35;
 };
 
 /** District rules for one sector (R16): the street grid, which lot kinds the PCG rules roll, the landmark, the sight
@@ -591,4 +593,7 @@ struct FDCVoxelOp
 	 *  pass after them (the host lists a lot once enough of it was shot away, CenterCm = where the chips came from). */
 	UPROPERTY() TArray<FDCVoxelChip> Chips;
 	UPROPERTY() TArray<int32> StructureLots;
+	/** Props shot past their break fraction: each entry clears a column of the prop grid (CenterCm X/Y = the prop's
+	 *  foot, CenterCm Z = its top, RadiusCm = its reach) and the prop flies apart as pieces and crumbs. */
+	UPROPERTY() TArray<FDCVoxelChip> BreakProps;
 };

@@ -33,8 +33,27 @@ struct EPIC_AI_MEGA_JAM2_API FDCChipLot
 	float LastStructure = -1e9f;
 };
 
+/** A street prop the host tracks (from the city plan): where it stands, how far it reaches, and how much of it the
+ *  chips took. */
+struct EPIC_AI_MEGA_JAM2_API FDCChipProp
+{
+	/** Foot (X, Y) and top (Z), sector cm. */
+	FIntVector FootCm = FIntVector::ZeroValue;
+	int32 TopCm = 0;
+	int32 RadiusCm = 0;
+	/** Chipped voxels that break it (its voxel count x the layer's ChipBreakPercent; 0 = never breaks). */
+	int32 BreakAt = 0;
+	int32 Chipped = 0;
+	bool bBroken = false;
+};
+
 struct EPIC_AI_MEGA_JAM2_API FDCChipLedger
 {
+	/** Street props of the sector (set at build); BreakDue: indices past BreakAt, not yet sent. */
+	TArray<FDCChipProp> Props;
+	TArray<int32> BreakDue;
+	/** Broken props per op at most (each clears a column). */
+	static constexpr int32 MaxBreaksPerOp = 2;
 	/** Damage per (grid, bucket x, y, z); a bucket that chips starts over. Bounded: cleared when it grows past
 	 *  MaxBuckets (old wear is forgotten, never memory). */
 	TMap<FIntVector4, float> Damage;
@@ -67,4 +86,10 @@ namespace DCChipRules
 
 	/** The host's applied Chip op removed Voxels from Lot (FDCVoxelOpResult::ChipCarved). */
 	EPIC_AI_MEGA_JAM2_API void Credit(FDCChipLedger& L, int32 Lot, int32 Voxels);
+
+	/** The prop a prop-grid chip at Cm belongs to: the nearest unbroken prop whose reach (plus SlackCm) holds it and
+	 *  whose top is above it. INDEX_NONE when none (a cable, a wreck). */
+	EPIC_AI_MEGA_JAM2_API int32 PropAt(const FDCChipLedger& L, const FIntVector& Cm, int32 SlackCm = 10);
+	/** A chip took Voxels from prop Index: past its BreakAt it is due (Flush lists it in BreakProps once). */
+	EPIC_AI_MEGA_JAM2_API void CreditProp(FDCChipLedger& L, int32 Index, int32 Voxels);
 }
