@@ -617,16 +617,21 @@ void ADCPlayerController::TickBuilderFlow()
 	double At = 16.5;
 	auto Then = [&](double Gap, TFunction<void()> Fn) { At += Gap; BuilderSteps.Add({At, MoveTemp(Fn)}); };
 	const UDCTuning& Tune = UDCTuning::Get();
+	// The turntable holds still for these frames: three-quarter front, gear from behind (it is worn on the back).
+	const TMap<FName, float> SlotYaw = {{TEXT("Head"), 25.f}, {TEXT("Body"), 25.f}, {TEXT("Gear"), 145.f}, {TEXT("Camera"), 40.f}};
+	auto Face = [this](float Yaw) { if (OutfitPreview) { OutfitPreview->Face(Yaw); } };
 	for (int32 Slot = 0; Slot < Tune.OutfitSlots.Num(); ++Slot)
 	{
 		const TArray<const FDCOutfitPart*> Parts = DCOutfit::PartsOf(Tune.OutfitSlots[Slot], Tune.OutfitParts);
+		const float Yaw = SlotYaw.FindRef(Tune.OutfitSlots[Slot]);
 		for (int32 i = 0; i < Parts.Num(); ++i)
 		{
 			const FString Name = FString::Printf(TEXT("r18_%s_%02d_%s.png"), *Tune.OutfitSlots[Slot].ToString().ToLower(), i, *Parts[i]->Id.ToString().ToLower());
-			Then(0.4, [this, Slot, i]() { BuilderOutfit.Parts[Slot] = static_cast<uint8>(i); BuilderOutfit.Glow = static_cast<uint8>(Slot % FMath::Max(UDCTuning::Get().OutfitGlows.Num(), 1)); BuilderChanged(TEXT("")); });
+			Then(0.4, [this, Slot, i, Yaw, Face]() { BuilderOutfit.Parts[Slot] = static_cast<uint8>(i); BuilderOutfit.Glow = static_cast<uint8>(Slot % FMath::Max(UDCTuning::Get().OutfitGlows.Num(), 1)); BuilderChanged(TEXT("")); Face(Yaw); });
 			Then(1.2, [&, Name]() { Shot(Name); });
 		}
 	}
+	Then(0.1, [Face]() { Face(25.f); });
 	for (int32 i = 0; i < Tune.OutfitPresets.Num(); ++i)
 	{
 		const FString Name = FString::Printf(TEXT("r18_preset_%s.png"), *Tune.OutfitPresets[i].Id.ToString().ToLower());
@@ -652,6 +657,7 @@ void ADCPlayerController::TickBuilderFlow()
 		UE_LOG(LogTemp, Display, TEXT("DCBUILDERFLOW old code DC1-04010-20000-0503F -> %s (%s)"), *DCOutfit::Encode(BuilderOutfit), *BuilderMessage);
 	});
 	Then(1.2, [&]() { Shot(TEXT("r18_old_code_loaded.png")); });
+	Then(0.1, [Face]() { Face(-1.f); });
 	Then(0.4, [this]()
 	{
 		// A friend's photographer: another valid outfit (every slot cycled, other swatches), encoded and pasted back.
