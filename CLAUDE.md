@@ -62,6 +62,11 @@ Unreal Engine 5.9 jam game. Engine: `L:/unreal/UE_5.9` (registered source build,
   one pooled actor `ADCCompanion` (`DCCompanion.cpp`, pool `UDCCompanions`, `CompanionPrewarm`/`CompanionPoolMax`):
   host targets and damages, every machine places its copy from the replicated owner/anchor, shots multicast.
   Models `tools/voxel-forge/recipes/companion_{drone,sentry}.vfr`. Logs: `DCCOMPANION`, `DCREINFORCE`, `DCLASTSTAND`.
+- Call-in list (human 15:58): a card the player uses has `CallIn=` (None | Active | Status, registry in
+  `DCUpgrades.cpp`) and `CallStratagem=`, a `+Stratagems` row with `Effect="Card"`, `Card=<upgrade id>` (`bStatus`,
+  `CallRangeCm`). Active cards get Count charges per sector, spent by the entry (GameMode call effect `Card` ->
+  `DCUpgrades::CallCard` -> the effect's `Call` hook); charges replicate (`ADCPlayerState::CardCharges`). Passive cards
+  draw as icons on quest tracker row 3. Test `Content.Strikes` pins the contract; evidence `-dccallin`, logs `DCCALLIN`.
 
 ## Weapon chips (R24, final run)
 - Every weapon hit wears the city (advisor a-37): `+Weapons` rows carry `ChipDamage`, `ChipRadiusCm`, `ChipsPerSecond`;
