@@ -803,6 +803,25 @@ struct FDCHowToSection
 	UPROPERTY(EditAnywhere, Config, Category = "Run") TArray<FString> Lines;
 };
 
+/** R27 reel camera shot: one angle of a clip's camera sequence. Kind names a framing in the reel director's registry
+ *  (Orbit = the behind-the-shoulder sweep, Overview = high angled view onto the action, LowHero, SideTrack); Weight is
+ *  its share of the clip; BlendFraction (of the clip) eases in from the previous angle (0 = hard cut). */
+USTRUCT(BlueprintType)
+struct FDCReelShot
+{
+	GENERATED_BODY()
+	UPROPERTY(EditAnywhere, Config, Category = "Run") FName Kind;
+	UPROPERTY(EditAnywhere, Config, Category = "Run") float Weight = 1.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Run") float BlendFraction = 0.f;
+	/** Overview: eye offset from the action; LowHero/SideTrack/Orbit use DistanceCm and HeightCm about the body. */
+	UPROPERTY(EditAnywhere, Config, Category = "Run") FVector Offset = FVector::ZeroVector;
+	UPROPERTY(EditAnywhere, Config, Category = "Run") float DistanceCm = 520.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Run") float HeightCm = 140.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Run") float LookUpCm = 0.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Run") float SweepDeg = 0.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Run") float Fov = 70.f;
+};
+
 /** R25 hint card: shown once, at the first moment its trigger (Id, a key of the DCHints registry) holds. */
 USTRUCT(BlueprintType)
 struct FDCHintDef
@@ -1007,6 +1026,8 @@ public:
 	UPROPERTY(EditAnywhere, Config, Category = "Run") TArray<FString> FrontPageCopy;
 	/** R28 front page footer (+FooterParts rows, data order); tokens LEAD CREW S POINTS QUOTAS QUOTASOF ORDERS ORDERSOF SEED. */
 	UPROPERTY(EditAnywhere, Config, Category = "Run") TArray<FDCFooterPart> FooterParts;
+	/** R27 reel: every clip plays through these angles in order (shares of the clip by Weight); empty = one Orbit. */
+	UPROPERTY(EditAnywhere, Config, Category = "Run") TArray<FDCReelShot> ReelCameraShots;
 	/** Post-process layer stack (R19): every layer of the scene and the photo look; code only sets weights by id. */
 	UPROPERTY(EditAnywhere, Config, Category = "Post") TArray<FDCPostLayer> PostLayers;
 	UPROPERTY(EditAnywhere, Config, Category = "Post") TArray<FDCPostPreset> PostPresets;

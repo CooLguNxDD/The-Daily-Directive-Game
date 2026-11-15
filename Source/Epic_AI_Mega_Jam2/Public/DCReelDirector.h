@@ -84,6 +84,10 @@ private:
 	bool bReportedStaged = false;
 	TArray<FDCBlastRecord> PendingBlasts;
 	int32 StagedIndex = -1;
+	/** R27: the angle on screen (for the cut log and the -dcreelshots frames) and the clip it belongs to. */
+	int32 ShotOnScreen = -1;
+	int32 ShotClip = -1;
+	int32 ShotFramed = -1;
 	float WindowStart = 0.f;
 	float ShotTime = 0.f;
 	bool bRunning = false;

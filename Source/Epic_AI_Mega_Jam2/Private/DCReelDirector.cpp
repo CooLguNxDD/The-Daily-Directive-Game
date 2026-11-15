@@ -29,6 +29,10 @@
 #include "EngineUtils.h"
 #include "GameFramework/PlayerController.h"
 #include "Rules/DCCityPlan.h"
+#include "UnrealClient.h"
+#include "Misc/CommandLine.h"
+#include "Misc/Parse.h"
+#include "Misc/Paths.h"
 
 namespace
 {
@@ -38,6 +42,53 @@ namespace
 	constexpr float OrbitHeightCm = 140.f;
 	constexpr float OrbitSweepDeg = 40.f;
 	constexpr float RunSpeedThreshold = 60.f;
+
+	/** R27 framing registry: a shot kind turns (body, facing, photo subject, progress inside the shot) into an eye and a
+	 *  look-at point. A new angle is a new entry plus a +ReelCameraShots row. */
+	struct FShotCtx
+	{
+		FVector Body;
+		float Yaw;
+		FVector Subject;
+	};
+	using FShotFn = void (*)(const FShotCtx&, const FDCReelShot&, float, FVector&, FVector&);
+
+	void ShotOrbit(const FShotCtx& C, const FDCReelShot& S, float U, FVector& Eye, FVector& Look)
+	{
+		// The original reel angle: from behind the shoulder, sweeping round to the side as the moment arrives.
+		Eye = C.Body + FRotator(0.f, C.Yaw + 180.f - 35.f + S.SweepDeg * U, 0.f).Vector() * S.DistanceCm + FVector(0, 0, S.HeightCm);
+		Look = FMath::Lerp(C.Body, C.Subject, 0.35f);
+	}
+
+	void ShotOverview(const FShotCtx& C, const FDCReelShot& S, float, FVector& Eye, FVector& Look)
+	{
+		// The high angled view the evidence captures use (-dccollapsecam numbers), centred on the action.
+		const FVector Centre = FMath::Lerp(C.Body, C.Subject, 0.6f);
+		Eye = Centre + S.Offset;
+		Look = Centre + FVector(0, 0, S.LookUpCm);
+	}
+
+	void ShotLowHero(const FShotCtx& C, const FDCReelShot& S, float U, FVector& Eye, FVector& Look)
+	{
+		// Low in front of the photographer, looking up past them toward the strike.
+		Eye = C.Body + FRotator(0.f, C.Yaw + 25.f + S.SweepDeg * U, 0.f).Vector() * S.DistanceCm + FVector(0, 0, S.HeightCm);
+		Look = FMath::Lerp(C.Body + FVector(0, 0, S.LookUpCm), C.Subject, 0.15f);
+	}
+
+	void ShotSideTrack(const FShotCtx& C, const FDCReelShot& S, float U, FVector& Eye, FVector& Look)
+	{
+		// Beside the photographer, moving with them, the subject in the background.
+		Eye = C.Body + FRotator(0.f, C.Yaw + 90.f + S.SweepDeg * U, 0.f).Vector() * S.DistanceCm + FVector(0, 0, S.HeightCm);
+		Look = FMath::Lerp(C.Body + FVector(0, 0, S.LookUpCm), C.Subject, 0.2f);
+	}
+
+	const TMap<FName, FShotFn>& ShotKinds()
+	{
+		static const TMap<FName, FShotFn> Kinds = {
+			{TEXT("Orbit"), &ShotOrbit}, {TEXT("Overview"), &ShotOverview}, {TEXT("LowHero"), &ShotLowHero}, {TEXT("SideTrack"), &ShotSideTrack},
+		};
+		return Kinds;
+	}
 
 	FDCPoseSample SamplePose(const TArray<FDCPoseSample>& Poses, float T)
 	{
@@ -322,22 +373,80 @@ void ADCReelDirector::TickCamera(float ClipTime, float Progress)
 		return;
 	}
 	const FDCPoseSample Pose = SamplePose(Clip.Poses, ClipTime);
-	const FVector Body = FVector(Pose.Location) + FVector(0, 0, 60.f);
-	// Behind-the-scenes orbit: from behind the shoulder, sweeping round to the side as the moment arrives.
-	const float Yaw = Pose.Yaw + 180.f - 35.f + OrbitSweepDeg * Progress;
-	FVector Eye = Body + FRotator(0.f, Yaw, 0.f).Vector() * OrbitDistanceCm + FVector(0, 0, OrbitHeightCm);
-	if (const ADCVoxelCity* City = ADCVoxelCity::Get(this))
+	const FShotCtx Ctx{FVector(Pose.Location) + FVector(0, 0, 60.f), Pose.Yaw, Subject};
+	// R27: the clip plays as a sequence of angles (data rows, shares of the clip by Weight); empty data = one orbit.
+	FDCReelShot DefaultOrbit;
+	DefaultOrbit.Kind = TEXT("Orbit");
+	DefaultOrbit.DistanceCm = OrbitDistanceCm;
+	DefaultOrbit.HeightCm = OrbitHeightCm;
+	DefaultOrbit.SweepDeg = OrbitSweepDeg;
+	const TArray<FDCReelShot>& Rows = UDCTuning::Get().ReelCameraShots;
+	const TArray<FDCReelShot> Shots = Rows.Num() > 0 ? Rows : TArray<FDCReelShot>{DefaultOrbit};
+	float Total = 0.f;
+	for (const FDCReelShot& S : Shots)
 	{
-		// Never film from under the street or inside a tower (a buried eye saw only the fog and the ring from below).
-		Eye.Z = FMath::Max(Eye.Z, City->SurfaceZCm(Eye) + 150.f);
-		for (int32 Step = 0; Step < 12 && City->IsSolidAt(Eye); ++Step)
-		{
-			Eye = FMath::Lerp(Eye, Body + FVector(0, 0, 250.f), 0.25f);
-		}
+		Total += FMath::Max(S.Weight, 0.f);
 	}
-	const FVector Look = FMath::Lerp(Body, Subject, 0.35f);
-	Camera->SetWorldLocationAndRotation(Eye, (Look - Eye).Rotation());
-	Camera->SetFieldOfView(70.f);
+	Total = FMath::Max(Total, 0.01f);
+	const float P = FMath::Clamp(Progress, 0.f, 1.f);
+	int32 Index = Shots.Num() - 1;
+	float Start = 0.f;
+	for (int32 i = 0; i < Shots.Num(); ++i)
+	{
+		const float Share = FMath::Max(Shots[i].Weight, 0.f) / Total;
+		if (P < Start + Share || i == Shots.Num() - 1)
+		{
+			Index = i;
+			break;
+		}
+		Start += Share;
+	}
+	const float Len = FMath::Max(FMath::Max(Shots[Index].Weight, 0.f) / Total, 0.01f);
+	auto Frame = [this, &Ctx](const FDCReelShot& S, float U, FVector& Eye, FVector& Look)
+	{
+		const FShotFn* Fn = ShotKinds().Find(S.Kind);
+		(Fn ? *Fn : &ShotOrbit)(Ctx, S, U, Eye, Look);
+		if (const ADCVoxelCity* City = ADCVoxelCity::Get(this))
+		{
+			// Never film from under the street or inside a tower (a buried eye saw only the fog and the ring from below).
+			Eye.Z = FMath::Max(Eye.Z, City->SurfaceZCm(Eye) + 60.f);
+			for (int32 Step = 0; Step < 12 && City->IsSolidAt(Eye); ++Step)
+			{
+				Eye = FMath::Lerp(Eye, Ctx.Body + FVector(0, 0, 250.f), 0.25f);
+			}
+		}
+	};
+	FVector Eye, Look;
+	Frame(Shots[Index], FMath::Clamp((P - Start) / Len, 0.f, 1.f), Eye, Look);
+	FQuat Rot = (Look - Eye).Rotation().Quaternion();
+	float Fov = Shots[Index].Fov;
+	const float Blend = Shots[Index].BlendFraction;
+	if (Index > 0 && Blend > 0.f && P - Start < Blend)
+	{
+		// A quick blend from where the previous angle ended (BlendFraction 0 = a hard cut).
+		FVector PrevEye, PrevLook;
+		Frame(Shots[Index - 1], 1.f, PrevEye, PrevLook);
+		const float A = FMath::SmoothStep(0.f, 1.f, (P - Start) / Blend);
+		Eye = FMath::Lerp(PrevEye, Eye, A);
+		Rot = FQuat::Slerp((PrevLook - PrevEye).Rotation().Quaternion(), Rot, A);
+		Fov = FMath::Lerp(Shots[Index - 1].Fov, Fov, A);
+	}
+	Camera->SetWorldLocationAndRotation(Eye, Rot.Rotator());
+	Camera->SetFieldOfView(Fov);
+	if (ShotClip != StagedIndex || ShotOnScreen != Index)
+	{
+		ShotClip = StagedIndex;
+		ShotOnScreen = Index;
+		ShotFramed = -1;
+		UE_LOG(LogTemp, Display, TEXT("DCREEL shot clip=%d angle %d/%d kind=%s at progress %.2f"), StagedIndex, Index + 1, Shots.Num(), *Shots[Index].Kind.ToString(), P);
+	}
+	// -dcreelshots=<dir> evidence: one frame per angle, half way through it (after any blend).
+	FString ShotDir;
+	if (ShotFramed != Index && (P - Start) / Len >= 0.5f && FParse::Value(FCommandLine::Get(), TEXT("dcreelshots="), ShotDir))
+	{
+		ShotFramed = Index;
+		FScreenshotRequest::RequestScreenshot(FPaths::Combine(ShotDir, FString::Printf(TEXT("reel_clip%d_angle%d_%s.png"), StagedIndex, Index + 1, *Shots[Index].Kind.ToString())), true, false);
+	}
 }
 
 float ADCReelDirector::ContentTime() const
