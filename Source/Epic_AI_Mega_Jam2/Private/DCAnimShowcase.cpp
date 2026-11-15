@@ -222,9 +222,36 @@ void UDCAnimShowcase::Start()
 		UE_LOG(LogTemp, Display, TEXT("DCANIMSHOT unit %s at %s animator=%d segmented=%d"), *Kinds[i], *At.ToCompactString(),
 			E->GetAnimator() ? 1 : 0, E->GetAnimator() && E->GetAnimator()->IsSegmented() ? 1 : 0);
 	}
+	// Lay the line out by measured size (a Walker is many times a Soldier: frames machines2 showed only its legs), then
+	// fit the camera to the whole line and the tallest unit at the 16:9 capture's 70 degree horizontal field of view.
+	const float Fov = 70.f;
+	TArray<float> Widths;
+	float LineLen = 0.f;
+	float Tallest = 300.f;
+	for (const ADCEnemy* E : Units)
+	{
+		const FBox B = E->GetComponentsBoundingBox(true);
+		const FVector Ext = B.IsValid ? B.GetExtent() : FVector(100.f);
+		Widths.Add(FMath::Max(Spacing, 2.f * FMath::Max(Ext.X, Ext.Y) + 80.f));
+		LineLen += Widths.Last();
+		Tallest = FMath::Max(Tallest, B.IsValid ? B.Max.Z - Center.Z : 300.f);
+	}
+	float Cursor = -0.5f * LineLen;
+	for (int32 i = 0; i < Units.Num(); ++i)
+	{
+		FVector At = Center + LineDir * (Cursor + 0.5f * Widths[i]);
+		At.Z = City->SurfaceZCm(At) + (Units[i]->GetActorLocation().Z - City->SurfaceZCm(Units[i]->GetActorLocation()));
+		Units[i]->SetActorLocation(At);
+		Cursor += Widths[i];
+	}
+	const float TanH = FMath::Tan(FMath::DegreesToRadians(0.5f * Fov));
+	const float FitDist = FMath::Max(0.55f * LineLen / TanH, 0.6f * Tallest / (TanH * 9.f / 16.f));
+	const float Dist = FMath::Max(CamDist * 1.15f, FitDist);
+	UE_LOG(LogTemp, Display, TEXT("DCANIMSHOT framing line %.0f cm tallest %.0f cm camera %.0f cm"), LineLen, Tallest, Dist);
 	// Frame from the street to above the flyers (critic c-30: the swarmer at hover height was cropped overhead).
-	const FVector Eye = Center + CamDir * CamDist * 1.15f + FVector(0.f, 0.f, 180.f);
-	MakeCapture(Eye, Center + FVector(0.f, 0.f, 150.f), 70.f, true);
+	const float EyeZ = FMath::Max(180.f, 0.45f * Tallest);
+	const FVector Eye = Center + CamDir * Dist + FVector(0.f, 0.f, EyeZ);
+	MakeCapture(Eye, Center + FVector(0.f, 0.f, FMath::Max(150.f, 0.45f * Tallest)), Fov, true);
 	// Evidence only: no HUD (no fill light either: the night exposure turns any lit ink unit white, frames anim2/3).
 	if (PC->GetHUD())
 	{

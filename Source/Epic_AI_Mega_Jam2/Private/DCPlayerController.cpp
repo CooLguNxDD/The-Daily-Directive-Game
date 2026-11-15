@@ -14,6 +14,9 @@
 #include "Framework/Application/SlateApplication.h"
 #include "Misc/App.h"
 #include "RHI.h"
+#include "Tasks/Task.h"
+#include "RenderingThread.h"
+#include "RHIGPUReadback.h"
 #include "DCVoxelCity.h"
 
 #include "DCAudio.h"
@@ -527,6 +530,10 @@ void ADCPlayerController::Tick(float DeltaSeconds)
 	Super::Tick(DeltaSeconds);
 	// Runs on every copy: the client uploads, and the host-side copy of a remote player relays down to it.
 	PumpSends();
+	if (PendingPrints.Num() > 0)
+	{
+		PumpPrints();
+	}
 }
 
 void ADCPlayerController::TickPerf()
@@ -1158,56 +1165,139 @@ void ADCPlayerController::ServerVote_Implementation(int32 PhotoId)
 
 // ---------------------------------------------------------------- album
 
+// R1 frame time: the shutter used to read the float capture back on the game thread (a render flush and a GPU wait,
+// then develop + halftone on the game thread). Now the copy is queued behind the capture on the render thread, polled
+// there, and a worker develops and prints; the game thread only uploads the finished print (PumpPrints).
+struct FDCPrintJob
+{
+	TUniquePtr<FRHIGPUTextureReadback> Readback; // render thread only
+	int32 Width = 0;
+	int32 Height = 0;
+	uint32 Seed = 0;
+	FDCPrintTuning Print;
+	std::atomic<bool> bPolling{false};
+	std::atomic<bool> bDone{false};
+	TArray<FColor> Pixels; // written by the worker before bDone
+};
+
 void ADCPlayerController::AddLocalPhoto(int32 PhotoId, UTextureRenderTarget2D* Image, const FDCPhotoGrade& Preview, const FDCShotView& View, float ShotTime)
 {
 	DC_FRAME_SCOPE("PhotoPrint");
 	FDCLocalPhoto& Photo = Album.AddDefaulted_GetRef();
 	Photo.PhotoId = PhotoId;
-	Photo.Image = Image;
+	Photo.Image = Image; // the raw capture shows until the print replaces it (a few frames)
 	// Print it (R5): read the capture back once at the shutter, levels + halftone + grain + border on the CPU, and
 	// show and upload the print from then on.
 	FTextureRenderTargetResource* Resource = Image ? Image->GameThread_GetRenderTargetResource() : nullptr;
 	const FDCPrintTuning& PrintT = UDCTuning::Get().Camera.Print;
-	bool bRead = false;
 	if (Resource && Image->RenderTargetFormat == RTF_RGBA16f)
 	{
 		// Float capture (advisor CP21): metered and developed before the print, no 8-bit stretch of a dark frame.
-		TArray<FLinearColor> Linear;
+		TSharedPtr<FDCPrintJob, ESPMode::ThreadSafe> Job = MakeShared<FDCPrintJob, ESPMode::ThreadSafe>();
+		Job->Readback = MakeUnique<FRHIGPUTextureReadback>(TEXT("DCPhotoPrint"));
+		Job->Width = Image->SizeX;
+		Job->Height = Image->SizeY;
+		Job->Seed = static_cast<uint32>(PhotoId);
+		Job->Print = PrintT;
+		ENQUEUE_RENDER_COMMAND(DCPhotoCopy)([Job, Resource](FRHICommandListImmediate& RHICmdList)
 		{
-			DC_FRAME_SCOPE("PhotoReadback");
-			bRead = Resource->ReadLinearColorPixels(Linear) && Linear.Num() == Image->SizeX * Image->SizeY;
-		}
-		if (bRead)
-		{
-			DC_FRAME_SCOPE("PhotoDevelop");
-			DCNewsprint::Develop(Linear, Image->SizeX, Image->SizeY, PrintT, Photo.Pixels);
-		}
+			FRHITexture* Tex = Resource->GetRenderTargetTexture();
+			RHICmdList.Transition(FRHITransitionInfo(Tex, ERHIAccess::Unknown, ERHIAccess::CopySrc));
+			Job->Readback->EnqueueCopy(RHICmdList, Tex);
+			RHICmdList.Transition(FRHITransitionInfo(Tex, ERHIAccess::CopySrc, ERHIAccess::SRVMask)); // the HUD shows the raw capture until the print lands
+		});
+		PendingPrints.Add(PhotoId, Job);
 	}
 	else if (Resource)
 	{
-		bRead = Resource->ReadPixels(Photo.Pixels);
-	}
-	if (bRead && Photo.Pixels.Num() == Image->SizeX * Image->SizeY)
-	{
-		Photo.Width = Image->SizeX;
-		Photo.Height = Image->SizeY;
-		DC_FRAME_SCOPE("PhotoHalftone");
-		DCNewsprint::Print(Photo.Pixels, Photo.Width, Photo.Height, PrintT, static_cast<uint32>(PhotoId));
-		UTexture2D* Print = UTexture2D::CreateTransient(Photo.Width, Photo.Height, PF_B8G8R8A8);
-		if (Print)
+		TArray<FColor> Pixels;
+		if (Resource->ReadPixels(Pixels) && Pixels.Num() == Image->SizeX * Image->SizeY)
 		{
-			void* Mip = Print->GetPlatformData()->Mips[0].BulkData.Lock(LOCK_READ_WRITE);
-			FMemory::Memcpy(Mip, Photo.Pixels.GetData(), Photo.Pixels.Num() * sizeof(FColor));
-			Print->GetPlatformData()->Mips[0].BulkData.Unlock();
-			Print->SRGB = true;
-			Print->UpdateResource();
-			Photo.Image = Print;
+			DCNewsprint::Print(Pixels, Image->SizeX, Image->SizeY, PrintT, static_cast<uint32>(PhotoId));
+			FinishPrint(PhotoId, MoveTemp(Pixels), Image->SizeX, Image->SizeY);
 		}
 	}
 	Photo.Grade = Preview;
 	Photo.View = View;
 	Photo.ShotTime = ShotTime;
 	Photo.TakenReal = GetWorld()->GetRealTimeSeconds();
+}
+
+void ADCPlayerController::PumpPrints()
+{
+	DC_FRAME_SCOPE("PhotoPump");
+	for (auto It = PendingPrints.CreateIterator(); It; ++It)
+	{
+		TSharedPtr<FDCPrintJob, ESPMode::ThreadSafe> Job = It.Value();
+		if (Job->bDone.load())
+		{
+			FinishPrint(It.Key(), MoveTemp(Job->Pixels), Job->Width, Job->Height);
+			It.RemoveCurrent();
+			continue;
+		}
+		if (Job->bPolling.exchange(true))
+		{
+			continue; // a poll is already queued on the render thread
+		}
+		ENQUEUE_RENDER_COMMAND(DCPhotoPoll)([Job](FRHICommandListImmediate&)
+		{
+			if (!Job->Readback || !Job->Readback->IsReady())
+			{
+				Job->bPolling = false;
+				return;
+			}
+			int32 RowPitch = 0;
+			const FFloat16Color* Src = static_cast<const FFloat16Color*>(Job->Readback->Lock(RowPitch));
+			TArray<FFloat16Color> Raw;
+			Raw.SetNumUninitialized(Job->Width * Job->Height);
+			for (int32 Y = 0; Src && Y < Job->Height; ++Y)
+			{
+				FMemory::Memcpy(&Raw[Y * Job->Width], Src + static_cast<int64>(Y) * RowPitch, Job->Width * sizeof(FFloat16Color));
+			}
+			Job->Readback->Unlock();
+			Job->Readback.Reset();
+			UE::Tasks::Launch(UE_SOURCE_LOCATION, [Job, Raw = MoveTemp(Raw)]
+			{
+				TArray<FLinearColor> Linear;
+				Linear.SetNumUninitialized(Raw.Num());
+				for (int32 i = 0; i < Raw.Num(); ++i)
+				{
+					Linear[i] = Raw[i].GetFloats();
+				}
+				TArray<FColor> Out;
+				DCNewsprint::Develop(Linear, Job->Width, Job->Height, Job->Print, Out);
+				if (Out.Num() == Job->Width * Job->Height)
+				{
+					DCNewsprint::Print(Out, Job->Width, Job->Height, Job->Print, Job->Seed);
+				}
+				Job->Pixels = MoveTemp(Out);
+				Job->bDone = true;
+			});
+		});
+	}
+}
+
+void ADCPlayerController::FinishPrint(int32 PhotoId, TArray<FColor>&& Pixels, int32 Width, int32 Height)
+{
+	FDCLocalPhoto* Photo = Album.FindByPredicate([PhotoId](const FDCLocalPhoto& P) { return P.PhotoId == PhotoId; });
+	if (!Photo || Pixels.Num() != Width * Height || Width <= 0)
+	{
+		return;
+	}
+	DC_FRAME_SCOPE("PhotoUpload");
+	Photo->Pixels = MoveTemp(Pixels);
+	Photo->Width = Width;
+	Photo->Height = Height;
+	UTexture2D* Print = UTexture2D::CreateTransient(Width, Height, PF_B8G8R8A8);
+	if (Print)
+	{
+		void* Mip = Print->GetPlatformData()->Mips[0].BulkData.Lock(LOCK_READ_WRITE);
+		FMemory::Memcpy(Mip, Photo->Pixels.GetData(), Photo->Pixels.Num() * sizeof(FColor));
+		Print->GetPlatformData()->Mips[0].BulkData.Unlock();
+		Print->SRGB = true;
+		Print->UpdateResource();
+		Photo->Image = Print;
+	}
 }
 
 void ADCPlayerController::ConfirmLocalPhoto(int32 PhotoId, const FDCPhotoGrade& Grade)

@@ -129,6 +129,9 @@ private:
 	void UpdateAutoVote();
 	bool bAutoVoted = false;
 	void PumpSends();
+	/** R1 frame time: finishes prints whose capture was read back and developed off the game thread. */
+	void PumpPrints();
+	void FinishPrint(int32 PhotoId, TArray<FColor>&& Pixels, int32 Width, int32 Height);
 	void HostReceivedPhoto(int32 PhotoId, const TArray<uint8>& Bytes);
 	void StoreImage(int32 PhotoId, const TArray<uint8>& Bytes);
 	void Reassemble(int32 PhotoId, int32 Index, int32 Count, const TArray<uint8>& Bytes, bool bOnHost);
@@ -196,6 +199,8 @@ private:
 	UPROPERTY() TMap<int32, TObjectPtr<UTexture>> Library;
 	TMap<int32, TArray<TArray<uint8>>> Incoming;
 	TArray<FDCPhotoSend> Outgoing;
+	/** Prints in flight (render-thread readback, then a worker develops and prints): photo id -> job. */
+	TMap<int32, TSharedPtr<struct FDCPrintJob, ESPMode::ThreadSafe>> PendingPrints;
 	TArray<int32> LocalPicks;
 	TSharedPtr<SWidget> MenuWidget;
 	UPROPERTY() TObjectPtr<class ADCReelDirector> Director;
