@@ -281,6 +281,105 @@ void UDCAudioSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 	Attenuation->Attenuation.AttenuationShape = EAttenuationShape::Sphere;
 	Attenuation->Attenuation.AttenuationShapeExtents = FVector(1500.f, 0.f, 0.f);
 	Attenuation->Attenuation.FalloffDistance = 14000.f;
+	FlushHandle = FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateUObject(this, &UDCAudioSubsystem::FlushQueue));
+}
+
+void UDCAudioSubsystem::Deinitialize()
+{
+	FTSTicker::GetCoreTicker().RemoveTicker(FlushHandle);
+	Queue.Reset();
+	Super::Deinitialize();
+}
+
+bool UDCAudioSubsystem::FlushQueue(float DeltaSeconds)
+{
+	if (Queue.Num() == 0)
+	{
+		return true;
+	}
+	const UDCTuning& T = UDCTuning::Get();
+	TArray<FDCSoundRequest> Plays;
+	TArray<FDCSoundDropped> Drops;
+	DCSoundQueue::Flush(T.SoundClasses, T.SoundMix, FPlatformTime::Seconds(), [this](FName Cue) { return CueSeconds(Cue); }, Queue, Voices, Plays, Drops);
+	for (const FDCSoundRequest& R : Plays)
+	{
+		Start(R);
+	}
+	for (const FDCSoundDropped& D : Drops)
+	{
+		const bool bMerged = D.Why == EDCSoundDrop::Merged;
+		(bMerged ? MergedCount : Dropped) += 1;
+		if (RecordStart >= 0.0 || !bMerged)
+		{
+			UE_LOG(LogTemp, Display, TEXT("DCAUDIO %s %s after %d frames (dropped %d, merged %d so far)"), bMerged ? TEXT("merged") : TEXT("drop"), *D.Request.Cue.ToString(), D.Request.WaitedFrames, Dropped, MergedCount);
+		}
+	}
+	return true;
+}
+
+void UDCAudioSubsystem::Start(const FDCSoundRequest& R)
+{
+	const UGameInstance* GI = GetGameInstance();
+	const UWorld* World = GI ? GI->GetWorld() : nullptr;
+	if (!World)
+	{
+		return;
+	}
+	const TArray<FDCSoundClassDef>& Classes = UDCTuning::Get().SoundClasses;
+	const int32 Ci = DCSoundQueue::ClassOf(Classes, R.Cue);
+	LogCue(World, R.Cue, R.b2D ? nullptr : &R.Location);
+	USoundWaveProcedural* Wave = AcquireWave(R.Cue, R.Pitch, Classes.IsValidIndex(Ci) ? Classes[Ci].Priority : 50);
+	if (!Wave)
+	{
+		UE_LOG(LogTemp, Display, TEXT("DCAUDIO drop %s: wave pool full"), *R.Cue.ToString());
+		return;
+	}
+	if (R.b2D)
+	{
+		UGameplayStatics::PlaySound2D(World, Wave, R.Volume, R.Pitch);
+	}
+	else
+	{
+		UGameplayStatics::PlaySoundAtLocation(World, Wave, R.Location, R.Volume, R.Pitch, 0.f, Attenuation);
+	}
+}
+
+USoundWaveProcedural* UDCAudioSubsystem::AcquireWave(FName Cue, float Pitch, int32 Priority)
+{
+	// One small pool of procedural waves per cue: a procedural wave plays one source at a time, so a wave is refilled
+	// and reused only after its last play ended (plus a guard); no NewObject per play once the pool is warm.
+	const TSharedPtr<TArray<uint8>>* Data = Bank.Find(Cue);
+	if (!Data)
+	{
+		return nullptr;
+	}
+	const FDCSoundMixTuning& Mix = UDCTuning::Get().SoundMix;
+	const double Now = FPlatformTime::Seconds();
+	TArray<int32>& Pool = PoolOf.FindOrAdd(Cue);
+	int32 Pick = INDEX_NONE;
+	for (const int32 i : Pool)
+	{
+		Pick = Pick == INDEX_NONE && PoolFreeAt[i] <= Now ? i : Pick;
+	}
+	if (Pick == INDEX_NONE)
+	{
+		if (Pool.Num() >= FMath::Max(1, Mix.PoolPerCue))
+		{
+			return nullptr;
+		}
+		Pick = PoolWaves.Add(MakeWave(Cue));
+		PoolFreeAt.Add(0.0);
+		Pool.Add(Pick);
+	}
+	else
+	{
+		PoolWaves[Pick]->ResetAudio();
+		PoolWaves[Pick]->QueueAudio((*Data)->GetData(), (*Data)->Num());
+	}
+	USoundWaveProcedural* Wave = PoolWaves[Pick];
+	Wave->Priority = static_cast<float>(Priority) / 25.f; // the engine culls lower priority first past AudioMaxChannels
+	PoolFreeAt[Pick] = Now + CueSeconds(Cue) / FMath::Max(Pitch, 0.1f) + Mix.ReuseGuardSeconds;
+	return Wave;
 }
 
 float UDCAudioSubsystem::CueSeconds(FName Cue) const
@@ -342,19 +441,18 @@ void UDCAudioSubsystem::LogCue(const UObject* WorldContext, FName Cue, const FVe
 
 void UDCAudioSubsystem::PlayAt(const UObject* WorldContext, FName Cue, const FVector& Location, float Volume, float Pitch)
 {
-	LogCue(WorldContext, Cue, &Location);
-	if (USoundWaveProcedural* Wave = MakeWave(Cue))
+	// R13: queued; FlushQueue merges, budgets and starts it this frame or a few frames later.
+	if (Bank.Contains(Cue))
 	{
-		UGameplayStatics::PlaySoundAtLocation(WorldContext, Wave, Location, Volume, Pitch, 0.f, Attenuation);
+		Queue.Add({Cue, Location, false, Volume, Pitch});
 	}
 }
 
 void UDCAudioSubsystem::Play2D(const UObject* WorldContext, FName Cue, float Volume, float Pitch)
 {
-	LogCue(WorldContext, Cue, nullptr);
-	if (USoundWaveProcedural* Wave = MakeWave(Cue))
+	if (Bank.Contains(Cue))
 	{
-		UGameplayStatics::PlaySound2D(WorldContext, Wave, Volume, Pitch);
+		Queue.Add({Cue, FVector::ZeroVector, true, Volume, Pitch});
 	}
 }
 
