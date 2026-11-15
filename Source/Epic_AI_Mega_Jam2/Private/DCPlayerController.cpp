@@ -1,5 +1,7 @@
 #include "DCPlayerController.h"
 #include "DCFrameScopes.h"
+#include "DCHints.h"
+#include "Algo/Find.h"
 #include "UObject/UObjectGlobals.h"
 #include "DCUnits.h"
 #include "DCCharacter.h"
@@ -203,6 +205,7 @@ void ADCPlayerController::SettingsStep(FName Row, int32 Step)
 		{TEXT("Mouse"), [](ADCPlayerController& P, FDCSettingsSave&, int32 D) { P.SetSensitivity(P.GetSensitivity() * (D > 0 ? 1.15f : 1.f / 1.15f)); }},
 		{TEXT("Quality"), [](ADCPlayerController&, FDCSettingsSave& S, int32 D) { S.Quality = FMath::Clamp(S.Quality + D, 0, 2); }},
 		{TEXT("Window"), [](ADCPlayerController&, FDCSettingsSave& S, int32) { S.bFullscreen = !S.bFullscreen; }},
+		{TEXT("Hints"), [](ADCPlayerController&, FDCSettingsSave& S, int32) { S.bHintsOff = !S.bHintsOff; }},
 	};
 	if (const FStep* Fn = Steps.Find(Row))
 	{
@@ -307,6 +310,7 @@ FString ADCPlayerController::SettingsValue(FName Row) const
 		{TEXT("Mouse"), FString::Printf(TEXT("%.2f"), GetSensitivity())},
 		{TEXT("Quality"), QualityNames[FMath::Clamp(S.Quality, 0, 2)]},
 		{TEXT("Window"), S.bFullscreen ? FString(TEXT("FULLSCREEN")) : FString(TEXT("WINDOWED"))},
+		{TEXT("Hints"), S.bHintsOff ? FString(TEXT("OFF")) : FString(TEXT("ON"))},
 	};
 	const FString* V = Values.Find(Row);
 	return V ? *V : FString();
@@ -530,6 +534,7 @@ void ADCPlayerController::Tick(float DeltaSeconds)
 	Super::Tick(DeltaSeconds);
 	// Runs on every copy: the client uploads, and the host-side copy of a remote player relays down to it.
 	PumpSends();
+	TickHints(DeltaSeconds);
 	if (PendingPrints.Num() > 0)
 	{
 		PumpPrints();
@@ -933,7 +938,10 @@ void ADCPlayerController::UpdateMenu()
 	const ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>();
 	const bool bWant = GS && GS->Phase == EDCRunPhase::Lobby && (!FParse::Param(FCommandLine::Get(), TEXT("dcdemo")) || FCString::Strifind(FCommandLine::Get(), TEXT("dcmenuflow=")));
 	const uint8 Base = MenuModeFor(*this);
-	const uint8 Mode = !bWant ? 255 : (Base == 0 && bBuilderOpen ? 3 : (Base == 0 && bSettingsOpen ? 4 : Base));
+	// Title-menu pages (page table, first open one wins): builder 3, settings 4, how to play 5 (R25).
+	const TPair<bool, uint8> Pages[] = {{bBuilderOpen, 3}, {bSettingsOpen, 4}, {bHowToOpen, 5}};
+	const TPair<bool, uint8>* Open = Base == 0 ? Algo::FindByPredicate(Pages, [](const TPair<bool, uint8>& P) { return P.Key; }) : nullptr;
+	const uint8 Mode = !bWant ? 255 : (Open ? Open->Value : Base);
 	// The title menu listens for LAN hosts and rebuilds when the list changes.
 	UDCLanBeacon* Beacon = GetGameInstance()->GetSubsystem<UDCLanBeacon>();
 	TArray<FDCLanHost> Hosts = Mode == 0 && Beacon ? Beacon->GetHosts() : TArray<FDCLanHost>();
@@ -1016,7 +1024,86 @@ void ADCPlayerController::UpdateCursor()
 
 void ADCPlayerController::MenuSolo()
 {
+	const UDCSaveSubsystem* Save = UDCSaveSubsystem::Get(this);
+	if (Save && !Save->Settings.bHowToPlaySeen && !bHowToOpen)
+	{
+		// R25: the first run is offered the "How to play" page first; its PLAY button starts the run.
+		OpenHowTo();
+		bHowToThenSolo = true;
+		return;
+	}
 	UGameplayStatics::OpenLevel(this, FName(*UGameplayStatics::GetCurrentLevelName(this)), true, TEXT("solo"));
+}
+
+void ADCPlayerController::OpenHowTo()
+{
+	bHowToOpen = true;
+	MenuMode = 254;
+	if (UDCSaveSubsystem* Save = UDCSaveSubsystem::Get(this))
+	{
+		if (!Save->Settings.bHowToPlaySeen && !FParse::Param(FCommandLine::Get(), TEXT("dcfreshhints")))
+		{
+			Save->Settings.bHowToPlaySeen = true; // the menu button stops shining for good
+			Save->SaveSettings();
+		}
+		Save->Settings.bHowToPlaySeen = true;
+	}
+	UE_LOG(LogTemp, Display, TEXT("DCHOWTO opened"));
+}
+
+void ADCPlayerController::HowToPlaySolo()
+{
+	bHowToOpen = false;
+	bHowToThenSolo = false;
+	MenuSolo();
+}
+
+const FDCHintDef* ADCPlayerController::GetActiveHint() const
+{
+	return ActiveHint.IsNone() ? nullptr : UDCTuning::Get().Hints.FindByPredicate([this](const FDCHintDef& H) { return H.Id == ActiveHint; });
+}
+
+void ADCPlayerController::TickHints(float DeltaSeconds)
+{
+	// R25: one card at a time, each hint once per save, at the first poll its trigger holds (data order = priority).
+	UDCSaveSubsystem* Save = UDCSaveSubsystem::Get(this);
+	const ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>();
+	if (!Save || !GS || !IsLocalController())
+	{
+		return;
+	}
+	static const bool bFresh = [Save] { if (FParse::Param(FCommandLine::Get(), TEXT("dcfreshhints"))) { Save->Settings.HintsSeen.Reset(); Save->Settings.bHowToPlaySeen = false; } return true; }();
+	(void)bFresh;
+	HintSectorSeconds = GS->Phase == EDCRunPhase::Sector ? HintSectorSeconds + DeltaSeconds : 0.f;
+	const double Real = FPlatformTime::Seconds();
+	const UDCTuning& T = UDCTuning::Get();
+	if (!ActiveHint.IsNone() && (Real >= HintUntilReal || WasInputKeyJustPressed(FKey(*T.Run.HintDismissKey)) || Save->Settings.bHintsOff))
+	{
+		UE_LOG(LogTemp, Display, TEXT("DCHINT %s closed (%s)"), *ActiveHint.ToString(), Real >= HintUntilReal ? TEXT("time") : TEXT("dismissed"));
+		ActiveHint = NAME_None;
+	}
+	if (!ActiveHint.IsNone() || Save->Settings.bHintsOff || Real < NextHintPollReal)
+	{
+		return;
+	}
+	NextHintPollReal = Real + FMath::Max(T.Run.HintPollSeconds, 0.05f);
+	for (const FDCHintDef& H : T.Hints)
+	{
+		if (Save->Settings.HintsSeen.Contains(H.Id) || !DCHints::Holds(H.Id, *this))
+		{
+			continue;
+		}
+		ActiveHint = H.Id;
+		HintUntilReal = Real + H.Seconds;
+		Save->Settings.HintsSeen.Add(H.Id);
+		if (!FParse::Param(FCommandLine::Get(), TEXT("dcfreshhints")))
+		{
+			Save->SaveSettings();
+		}
+		UE_LOG(LogTemp, Display, TEXT("DCHINT %s shown: %s"), *H.Id.ToString(), *H.Title);
+		DCAudio::Play2D(this, TEXT("UIClick"), 0.6f);
+		break;
+	}
 }
 
 void ADCPlayerController::MenuHost()

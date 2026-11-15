@@ -155,6 +155,43 @@ void ADCHUD::DrawHUD()
 	{
 		(this->**Draw)(*GS, Me);
 	}
+	DrawHint();
+}
+
+void ADCHUD::DrawHint()
+{
+	// R25 hint card: right side, under the objective lines, never in the crosshair; one at a time, dismiss key shown.
+	const ADCPlayerController* PC = Cast<ADCPlayerController>(PlayerOwner);
+	const FDCHintDef* H = PC ? PC->GetActiveHint() : nullptr;
+	if (!H)
+	{
+		return;
+	}
+	const FDCLookTuning& Look = UDCTuning::Get().Look;
+	const float W = Sx(430.f), X = Canvas->ClipX - W - Sx(40.f), Y = Canvas->ClipY * 0.36f;
+	TArray<FString> Words;
+	H->Text.ParseIntoArray(Words, TEXT(" "));
+	TArray<FString> Lines;
+	FString Line;
+	for (const FString& Word : Words)
+	{
+		if (Line.Len() + Word.Len() > 40)
+		{
+			Lines.Add(Line);
+			Line.Reset();
+		}
+		Line += (Line.IsEmpty() ? TEXT("") : TEXT(" ")) + Word;
+	}
+	Lines.Add(Line);
+	const float Hgt = Sx(64.f) + Lines.Num() * Sx(24.f);
+	Box(X, Y, W, Hgt, FLinearColor(0.02f, 0.02f, 0.03f, 0.82f));
+	Box(X, Y, Sx(5.f), Hgt, Look.HowToShineColor);
+	Text(H->Title.ToUpper(), X + Sx(18.f), Y + Sx(10.f), Look.HowToShineColor, 0.7f);
+	for (int32 i = 0; i < Lines.Num(); ++i)
+	{
+		Text(Lines[i], X + Sx(18.f), Y + Sx(42.f) + i * Sx(24.f), FLinearColor(0.85f, 0.85f, 0.8f, 1.f), 0.5f);
+	}
+	Text(FString::Printf(TEXT("[%s] DISMISS   HINTS CAN BE TURNED OFF IN SETTINGS"), *UDCTuning::Get().Run.HintDismissKey), X + Sx(18.f), Y + Hgt - Sx(20.f), FLinearColor(0.55f, 0.55f, 0.55f, 1.f), 0.38f);
 }
 
 void ADCHUD::DrawSector(ADCGameState& GS, ADCCharacter* Me)

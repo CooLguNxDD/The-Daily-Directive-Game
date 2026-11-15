@@ -338,6 +338,9 @@ struct FDCLookTuning
 {
 	GENERATED_BODY()
 	UPROPERTY(EditAnywhere, Config, Category = "Look") FLinearColor Ground = FLinearColor(0.32f, 0.28f, 0.22f);
+	/** R25: the "How to play" button's first-launch shine and the hint card accent (noir accent cyan), and the pulse rate. */
+	UPROPERTY(EditAnywhere, Config, Category = "Look") FLinearColor HowToShineColor = FLinearColor(0.1f, 0.85f, 1.f, 1.f);
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float HowToShineHz = 0.8f;
 	UPROPERTY(EditAnywhere, Config, Category = "Look") FLinearColor Street = FLinearColor(0.08f, 0.07f, 0.07f);
 	UPROPERTY(EditAnywhere, Config, Category = "Look") TArray<FLinearColor> BuildingColors;
 	UPROPERTY(EditAnywhere, Config, Category = "Look") FLinearColor Accent = FLinearColor(0.85f, 0.05f, 0.03f);
@@ -787,6 +790,27 @@ struct FDCScoopDef
 	UPROPERTY(EditAnywhere, Config, Category = "Run") int32 RewardPoints = 300;
 };
 
+/** R25 tutorial: one section of the "How to play" page (title over a few short lines). */
+USTRUCT(BlueprintType)
+struct FDCHowToSection
+{
+	GENERATED_BODY()
+	UPROPERTY(EditAnywhere, Config, Category = "Run") FString Title;
+	UPROPERTY(EditAnywhere, Config, Category = "Run") TArray<FString> Lines;
+};
+
+/** R25 hint card: shown once, at the first moment its trigger (Id, a key of the DCHints registry) holds. */
+USTRUCT(BlueprintType)
+struct FDCHintDef
+{
+	GENERATED_BODY()
+	UPROPERTY(EditAnywhere, Config, Category = "Run") FName Id;
+	UPROPERTY(EditAnywhere, Config, Category = "Run") FString Title;
+	UPROPERTY(EditAnywhere, Config, Category = "Run") FString Text;
+	/** On screen this long unless dismissed. */
+	UPROPERTY(EditAnywhere, Config, Category = "Run") float Seconds = 7.f;
+};
+
 USTRUCT(BlueprintType)
 struct FDCRunTuning
 {
@@ -794,6 +818,12 @@ struct FDCRunTuning
 	UPROPERTY(EditAnywhere, Config, Category = "Run") float DraftSeconds = 25.f;
 	/** R21: cards dealt per draft hand (from every pool, rarity-weighted). */
 	UPROPERTY(EditAnywhere, Config, Category = "Run") int32 DraftHandSize = 3;
+	/** R25 hints: trigger poll rate, the ranges their triggers read, and the key that dismisses a card. */
+	UPROPERTY(EditAnywhere, Config, Category = "Run") float HintPollSeconds = 0.25f;
+	UPROPERTY(EditAnywhere, Config, Category = "Run") float HintEnemyRangeCm = 4500.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Run") int32 HintLowAmmoRounds = 25;
+	UPROPERTY(EditAnywhere, Config, Category = "Run") float HintStrikeAfterSeconds = 10.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Run") FString HintDismissKey = TEXT("H");
 	/** R1 frame time (advisor a-33): -dcperf logs a DCSPIKE line with its frame-scope owners for any frame longer than this (ms; 33 = a frame under 30 fps). */
 	UPROPERTY(EditAnywhere, Config, Category = "Run") float PerfSpikeMs = 33.f;
 	/** Solo (R12): how long a downed player has to finish the self-revive hold before the run fails. */
@@ -944,6 +974,9 @@ public:
 	UPROPERTY(EditAnywhere, Config, Category = "Input") TArray<FDCKeyBinding> Bindings;
 	UPROPERTY(EditAnywhere, Config, Category = "Run") FDCRunTuning Run;
 	UPROPERTY(EditAnywhere, Config, Category = "Run") TArray<FDCUpgradeDef> Upgrades;
+	/** R25 tutorial page sections and one-time hint cards (data order = priority). */
+	UPROPERTY(EditAnywhere, Config, Category = "Run") TArray<FDCHowToSection> HowToPlay;
+	UPROPERTY(EditAnywhere, Config, Category = "Run") TArray<FDCHintDef> Hints;
 	/** R22 card companions (drones, turrets) and their actor pool (prewarmed at sector start, never above the max). */
 	UPROPERTY(EditAnywhere, Config, Category = "Run") TArray<FDCCompanionDef> Companions;
 	UPROPERTY(EditAnywhere, Config, Category = "Run") int32 CompanionPrewarm = 4;
