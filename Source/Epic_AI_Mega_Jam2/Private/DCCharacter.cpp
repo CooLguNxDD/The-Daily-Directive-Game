@@ -648,6 +648,12 @@ void ADCCharacter::UpdateRifleLoco()
 	{
 		return;
 	}
+	// Human 15:50 (ship blocker): the rifle walk/jog clips carry root motion, and a montage's root motion drove the capsule
+	// (the pawn walked on by itself, WASD and sprint lost). Movement is the character movement's job: never root motion.
+	if (AnimInstance->RootMotionMode != ERootMotionMode::IgnoreRootMotion)
+	{
+		AnimInstance->SetRootMotionMode(ERootMotionMode::IgnoreRootMotion);
+	}
 	UAnimSequenceBase* Want = nullptr;
 	const bool bRifleUp = Slot == EDCSlot::Rifle && !bDowned && GetWorld()->GetTimeSeconds() >= LocoBlockedUntil;
 	const FVector Flat(GetVelocity().X, GetVelocity().Y, 0.f);

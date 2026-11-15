@@ -645,6 +645,33 @@ void ADCDemoPilot::SideCam(bool bOn)
 	}
 }
 
+void ADCDemoPilot::AddMoveTest()
+{
+	// Each step presses real Enhanced Input actions; the log line reads the pawn's ground speed afterwards. After a
+	// release the speed must fall to ~0 (no root motion walking on); sprint must reach the sprint speed.
+	auto Log = [this](const TCHAR* Label)
+	{
+		const APawn* Me = GetWorld()->GetFirstPlayerController() ? GetWorld()->GetFirstPlayerController()->GetPawn() : nullptr;
+		const FVector V = Me ? Me->GetVelocity() : FVector::ZeroVector;
+		const FVector F = Me ? Me->GetActorForwardVector() : FVector::ForwardVector;
+		const FVector R = Me ? Me->GetActorRightVector() : FVector::RightVector;
+		UE_LOG(LogDCDemo, Display, TEXT("DCMOVE %s speed=%.0f forward=%.0f right=%.0f"), Label, FVector(V.X, V.Y, 0.f).Size(), FVector::DotProduct(V, F), FVector::DotProduct(V, R));
+	};
+	Add(0.f, [this] { const ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>(); return GS && GS->Phase == EDCRunPhase::Sector; }, 120.f);
+	for (const TCHAR* SlotAction : {TEXT("Slot1"), TEXT("Slot3")})
+	{
+		const FString Tag = SlotAction == FString(TEXT("Slot1")) ? TEXT("rifle") : TEXT("camera");
+		Add(0.6f, [this, SlotAction] { Tap(SlotAction); return true; });
+		Add(0.8f, [this, Log, Tag] { Log(*(Tag + TEXT("_still"))); Press(TEXT("Move"), FVector(0, 1, 0)); return true; });
+		Add(0.8f, [this, Log, Tag] { Log(*(Tag + TEXT("_w_held"))); Release(TEXT("Move")); return true; });
+		Add(0.8f, [this, Log, Tag] { Log(*(Tag + TEXT("_w_released"))); Press(TEXT("Move"), FVector(1, 0, 0)); return true; });
+		Add(0.8f, [this, Log, Tag] { Log(*(Tag + TEXT("_d_held"))); Release(TEXT("Move")); return true; });
+		Add(0.8f, [this, Log, Tag] { Log(*(Tag + TEXT("_d_released"))); Press(TEXT("Move"), FVector(0, 1, 0)); Press(TEXT("Sprint")); return true; });
+		Add(1.2f, [this, Log, Tag] { Log(*(Tag + TEXT("_sprint_held"))); Release(TEXT("Sprint")); Release(TEXT("Move")); return true; });
+		Add(1.0f, [this, Log, Tag] { Log(*(Tag + TEXT("_sprint_released"))); return true; });
+	}
+}
+
 void ADCDemoPilot::AddAim()
 {
 	// R16 evidence (-dcaim): rifle out, hold the real Aim action: frames hip vs aimed (zoom, tight crosshair), aim up and
@@ -1605,6 +1632,10 @@ void ADCDemoPilot::BuildScript()
 		if (Sector == 0 && FParse::Param(FCommandLine::Get(), TEXT("dcaim")))
 		{
 			AddAim();
+		}
+		if (Sector == 0 && FParse::Param(FCommandLine::Get(), TEXT("dcmovetest")))
+		{
+			AddMoveTest();
 		}
 		if (Sector == 0 && FParse::Param(FCommandLine::Get(), TEXT("dcswarmed")))
 		{

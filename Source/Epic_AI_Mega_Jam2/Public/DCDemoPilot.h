@@ -58,6 +58,8 @@ private:
 	int32 ChipLot = INDEX_NONE;
 	void AddBounds();
 	void AddAim();
+	/** -dcmovetest (human 15:50): real Move/Sprint input with the rifle, then the camera: DCMOVE speed lines after each. */
+	void AddMoveTest();
 	void LogAim(const TCHAR* Tag);
 	void AddSwarmed();
 	void AddIndoors();
