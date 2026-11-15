@@ -989,6 +989,31 @@ void ADCDemoPilot::AddRifleOnly()
 	});
 }
 
+void ADCDemoPilot::AddWeaponTour()
+{
+	// R8 evidence (-dcweapontour): on the gun slot, Q (the real Cycle input) switches to every weapon in turn; each is
+	// drawn, fired for a moment at the tower and framed, then Q wraps back to the first. Logs DEMO weapon lines.
+	for (int32 w = 1; w <= UDCTuning::Get().NumWeapons(); ++w)
+	{
+		Add(0.6f, [this] { Tap(TEXT("Slot1")); Tap(TEXT("Cycle")); return true; });
+		if (w == UDCTuning::Get().NumWeapons())
+		{
+			break; // wrapped to the first weapon
+		}
+		Add(0.8f, [this] { if (Tower.IsValid()) { AimAt(Tower->GetActorLocation() + FVector(0, 0, 300)); } Press(TEXT("Fire")); return true; });
+		Add(0.35f, [this]
+		{
+			const APlayerController* PC = GetWorld()->GetFirstPlayerController();
+			const ADCCharacter* Me = PC ? Cast<ADCCharacter>(PC->GetPawn()) : nullptr;
+			const FString Id = Me ? Me->ActiveWeapon().Id.ToString() : TEXT("none");
+			UE_LOG(LogDCDemo, Display, TEXT("DEMO weapon index=%d id=%s ammo=%d reserve=%d"), Me ? Me->GetWeaponIndex() : -1, *Id, Me ? Me->GetAmmo() : -1, Me ? Me->GetReserve() : -1);
+			Shot(TEXT("weapon_") + Id);
+			return true;
+		});
+		Add(0.5f, [this] { Release(TEXT("Fire")); return true; });
+	}
+}
+
 void ADCDemoPilot::AddCueRoll()
 {
 	// Listening evidence (-dccueroll): every cue in the bank once, alone over a muted music bed, then the music.
@@ -1045,6 +1070,10 @@ void ADCDemoPilot::BuildScript()
 	Add(0.3f, [this] { Press(TEXT("Fire")); return true; });
 	Add(0.5f, [this] { Shot(TEXT("rifle")); return true; });
 	Add(0.6f, [this] { Release(TEXT("Fire")); return true; });
+	if (FParse::Param(FCommandLine::Get(), TEXT("dcweapontour")))
+	{
+		AddWeaponTour();
+	}
 
 	if (FParse::Param(FCommandLine::Get(), TEXT("dcwatchwalker")))
 	{

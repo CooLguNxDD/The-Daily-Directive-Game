@@ -40,6 +40,8 @@ private:
 
 	void AddCueRoll();
 	void AddRifleOnly();
+	/** R8 evidence: switch through every weapon with the real Cycle input, fire and frame each. */
+	void AddWeaponTour();
 	void BuildScript();
 	void AddCycle(const FString& Name);
 	void AddObjectiveRun(const FString& S);
