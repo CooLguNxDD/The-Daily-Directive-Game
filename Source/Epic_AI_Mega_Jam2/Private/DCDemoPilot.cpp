@@ -21,6 +21,7 @@
 #include "DCPlayerController.h"
 #include "DCPlayerState.h"
 #include "DCTuning.h"
+#include "DCUpgrades.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "EnhancedInputSubsystems.h"
@@ -958,6 +959,75 @@ void ADCDemoPilot::AddChipFire()
 	});
 }
 
+void ADCDemoPilot::AddCallIn()
+{
+	// Call-in cards evidence (-dccallin, human 15:58): the host hands this player the sentry, drone and switch cards,
+	// frames the strike list (a strike, the supply drop, TRIPOD SENTRY x2, ESCORT DRONE x1, DEAD MAN'S SWITCH ARMED),
+	// then Q picks the sentry, the real Fire action places it 8 m ahead, Q picks the drone and Fire launches it.
+	Add(0.f, [this] { const ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>(); return GS && GS->Phase == EDCRunPhase::Sector; }, 120.f);
+	Add(1.0f, [this]
+	{
+		APlayerController* PC = GetWorld()->GetFirstPlayerController();
+		ADCPlayerState* PS = PC ? PC->GetPlayerState<ADCPlayerState>() : nullptr;
+		ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>();
+		ADCGameMode* GM = GetWorld()->GetAuthGameMode<ADCGameMode>();
+		if (!PS || !GS || !GM)
+		{
+			return false;
+		}
+		for (const TCHAR* Id : {TEXT("Sentry"), TEXT("GunDrone"), TEXT("DeadMansSwitch")})
+		{
+			if (const FDCUpgradeDef* Def = UDCTuning::Get().FindUpgrade(Id))
+			{
+				PS->Upgrades.AddUnique(Def->Id);
+				DCUpgrades::Apply(*GS, *PS, *Def);
+			}
+		}
+		DCUpgrades::SectorStart(*GM, *PS);
+		UE_LOG(LogDCDemo, Display, TEXT("DEMO callin granted: list=%d sentry=%d drone=%d switch=%d"), PS->OwnedStratagems.Num(), PS->CardCharges(TEXT("Sentry")), PS->CardCharges(TEXT("GunDrone")), PS->CardCharges(TEXT("DeadMansSwitch")));
+		return true;
+	});
+	Add(0.6f, [this] { Tap(TEXT("Slot2")); return true; });
+	Add(0.8f, [this] { Shot(TEXT("callin_list")); return true; });
+	for (const TCHAR* Wanted : {TEXT("SentryCall"), TEXT("DroneCall")})
+	{
+		for (int32 i = 0; i < 8; ++i)
+		{
+			Add(0.3f, [this, Wanted]
+			{
+				const APlayerController* PC = GetWorld()->GetFirstPlayerController();
+				const ADCCharacter* Me = PC ? Cast<ADCCharacter>(PC->GetPawn()) : nullptr;
+				if (Me && Me->GetSelectedStratagem() != FName(Wanted))
+				{
+					Tap(TEXT("Cycle"));
+				}
+				return true;
+			});
+		}
+		Add(0.3f, [this, Wanted]
+		{
+			const APawn* Me = GetWorld()->GetFirstPlayerController() ? GetWorld()->GetFirstPlayerController()->GetPawn() : nullptr;
+			if (Me)
+			{
+				SupplyAt = Me->GetActorLocation() + Me->GetActorForwardVector() * 800.f - FVector(0, 0, 90.f);
+				AimAt(SupplyAt);
+			}
+			Shot(FString::Printf(TEXT("callin_%s_aim"), Wanted));
+			return true;
+		});
+		Add(0.3f, [this, Wanted] { Tap(TEXT("Fire")); UE_LOG(LogDCDemo, Display, TEXT("DEMO callin %s fired at %s"), Wanted, *SupplyAt.ToCompactString()); return true; });
+		Add(1.5f, [this, Wanted]
+		{
+			const APlayerController* PC = GetWorld()->GetFirstPlayerController();
+			const ADCPlayerState* PS = PC ? PC->GetPlayerState<ADCPlayerState>() : nullptr;
+			Shot(FString::Printf(TEXT("callin_%s_done"), Wanted));
+			UE_LOG(LogDCDemo, Display, TEXT("DEMO callin %s after: sentry=%d drone=%d"), Wanted, PS ? PS->CardCharges(TEXT("Sentry")) : -1, PS ? PS->CardCharges(TEXT("GunDrone")) : -1);
+			return true;
+		});
+	}
+	Add(0.5f, [this] { Shot(TEXT("callin_list_after")); Tap(TEXT("Slot1")); return true; });
+}
+
 void ADCDemoPilot::AddSupplyCall()
 {
 	// R7 evidence (-dcsupply): spend the rifle's magazine, then Slot2 + Q until the Supply Drop is selected, call it 6 m
@@ -1333,7 +1403,8 @@ void ADCDemoPilot::AddWaitPhase(EDCRunPhase Phase, float Timeout)
 void ADCDemoPilot::TickDefend()
 {
 	// -dcmovetest (advisor a-55): the pilot's defence (slot taps, backpedal) would mix into the measured movement.
-	static const bool bMoveTest = FParse::Param(FCommandLine::Get(), TEXT("dcmovetest"));
+	// -dccallin too: its Q taps must pick the card entries, not the defence's slot choice.
+	static const bool bMoveTest = FParse::Param(FCommandLine::Get(), TEXT("dcmovetest")) || FParse::Param(FCommandLine::Get(), TEXT("dccallin"));
 	if (bMoveTest)
 	{
 		return;
@@ -1654,6 +1725,10 @@ void ADCDemoPilot::BuildScript()
 		if (Sector == 0 && FParse::Param(FCommandLine::Get(), TEXT("dcsupply")))
 		{
 			AddSupplyCall();
+		}
+		if (Sector == 0 && FParse::Param(FCommandLine::Get(), TEXT("dccallin")))
+		{
+			AddCallIn();
 		}
 		// Before the first strike: a clean street, inside the crew grace.
 		if (Sector == 0 && FParse::Param(FCommandLine::Get(), TEXT("dclineup")))

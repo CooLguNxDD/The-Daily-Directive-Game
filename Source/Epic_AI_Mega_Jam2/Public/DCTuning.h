@@ -248,6 +248,12 @@ struct FDCStratagemDef
 	UPROPERTY(EditAnywhere, Config, Category = "Strike") int32 SupportCount = 0;
 	UPROPERTY(EditAnywhere, Config, Category = "Strike") float SupportSpreadCm = 400.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Strike") float SupportDelaySeconds = 1.6f;
+	/** Call-in cards (human 15:58): the owned +Upgrades card whose charges this list entry spends (Effect="Card"), a
+	 *  status entry that only shows the card is held (bStatus: never selected or called), and the furthest the card's
+	 *  placement may land from the caller (0 = the strike range; the host clamps the aim point to it). */
+	UPROPERTY(EditAnywhere, Config, Category = "Strike") FName Card;
+	UPROPERTY(EditAnywhere, Config, Category = "Strike") bool bStatus = false;
+	UPROPERTY(EditAnywhere, Config, Category = "Strike") float CallRangeCm = 0.f;
 };
 
 USTRUCT(BlueprintType)
@@ -350,6 +356,9 @@ struct FDCLookTuning
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float QuestTrackerY = 104.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float QuestTrackerWidth = 440.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float QuestRowGap = 66.f;
+	/** Passive cards (gear, mutators) as small icons on quest tracker row 3 (human 15:58): icon size and gap. */
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float PassiveIconSize = 34.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float PassiveIconGap = 6.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float QuestTextScale = 0.62f;
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float ScoopFiledSeconds = 3.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float HintCardDraftY = 0.715f;
@@ -790,6 +799,11 @@ struct FDCUpgradeDef
 	/** Toasts to the owner: at sector start and when the card acts. {N} = charges left. Empty = none. */
 	UPROPERTY(EditAnywhere, Config, Category = "Run") FString ReadyToast;
 	UPROPERTY(EditAnywhere, Config, Category = "Run") FString UseToast;
+	/** Call-in list (human 15:58), by id in DCUpgrades' call-in registry: None = passive (a small icon under the quest
+	 *  tracker), Active = the CallStratagem entry in the strike list spends this card's charges (dealt Count per sector),
+	 *  Status = the CallStratagem entry only shows that the card is held. */
+	UPROPERTY(EditAnywhere, Config, Category = "Run") FName CallIn;
+	UPROPERTY(EditAnywhere, Config, Category = "Run") FName CallStratagem;
 };
 
 /** An HQ Scoop template (R8): a photo condition with a time limit. */

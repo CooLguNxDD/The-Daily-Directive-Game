@@ -338,13 +338,28 @@ void ADCCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompone
 		{TEXT("Interact"), ETriggerEvent::Started, &ADCCharacter::OnInteract},
 		{TEXT("Interact"), ETriggerEvent::Completed, &ADCCharacter::OnInteractEnd},
 	};
+	ReleaseFns.Reset();
 	for (const FBindRow& Row : Rows)
 	{
 		if (const UInputAction* Action = Set->Find(Row.Action))
 		{
 			Input->BindAction(Action, Row.Event, this, Row.Fn);
 		}
+		if (Row.Event == ETriggerEvent::Completed)
+		{
+			ReleaseFns.Add(Row.Fn);
+		}
 	}
+}
+
+void ADCCharacter::ReleaseHeldInput()
+{
+	const FInputActionInstance None;
+	for (void (ADCCharacter::*Fn)(const FInputActionInstance&) : ReleaseFns)
+	{
+		(this->*Fn)(None);
+	}
+	UE_LOG(LogTemp, Display, TEXT("DCPAUSE released held input (%d handlers) sprint=%d fire=%d"), ReleaseFns.Num(), bSprinting ? 1 : 0, bTriggerHeld ? 1 : 0);
 }
 
 void ADCCharacter::OnMove(const FInputActionInstance& I)
@@ -562,8 +577,20 @@ void ADCCharacter::NextStratagem()
 	{
 		return;
 	}
+	// Status entries (a held Dead Man's Switch) show in the list but are never picked.
+	const UDCTuning& T = UDCTuning::Get();
+	const int32 Num = PS->OwnedStratagems.Num();
 	const int32 Index = PS->OwnedStratagems.IndexOfByKey(SelectedStratagem);
-	SelectedStratagem = PS->OwnedStratagems[(Index + 1) % PS->OwnedStratagems.Num()];
+	for (int32 Step = 1; Step <= Num; ++Step)
+	{
+		const FName Next = PS->OwnedStratagems[(Index + Step + Num) % Num];
+		const FDCStratagemDef* Def = T.FindStratagem(Next);
+		if (Def && !Def->bStatus)
+		{
+			SelectedStratagem = Next;
+			break;
+		}
+	}
 	DCAudio::Play2D(this, TEXT("UIClick"));
 }
 
@@ -960,8 +987,14 @@ void ADCCharacter::PrimaryStratagem()
 {
 	const ADCPlayerState* PS = GetPlayerState<ADCPlayerState>();
 	const FDCStratagemDef* Def = UDCTuning::Get().FindStratagem(SelectedStratagem);
-	if (!PS || !Def || !bStrikeAimValid)
+	if (!PS || !Def || !bStrikeAimValid || Def->bStatus)
 	{
+		return;
+	}
+	if (!Def->Card.IsNone() && PS->CardCharges(Def->Card) <= 0)
+	{
+		Toast(FString::Printf(TEXT("%s: NONE LEFT THIS SECTOR"), *Def->DisplayName.ToString().ToUpper()));
+		DCAudio::Play2D(this, TEXT("DryFire"));
 		return;
 	}
 	if (PS->Points < Def->Cost)
@@ -985,7 +1018,7 @@ void ADCCharacter::ServerCallStrike_Implementation(FName StratagemId, FVector_Ne
 	ADCPlayerState* PS = GetPlayerState<ADCPlayerState>();
 	const FDCStratagemDef* Def = UDCTuning::Get().FindStratagem(StratagemId);
 	ADCGameMode* GM = GetWorld()->GetAuthGameMode<ADCGameMode>();
-	if (!PS || !Def || !GM || !GM->IsCombatLive() || bDowned || Slot != EDCSlot::Stratagem || !PS->OwnsStratagem(StratagemId))
+	if (!PS || !Def || !GM || !GM->IsCombatLive() || bDowned || Slot != EDCSlot::Stratagem || !PS->OwnsStratagem(StratagemId) || Def->bStatus)
 	{
 		return;
 	}

@@ -54,6 +54,7 @@ private:
 	void DrawObjective(ADCGameState& GS, ADCCharacter& Me);
 	void DrawTerritory(ADCGameState& GS, ADCCharacter& Me);
 	void DrawScoop(ADCGameState& GS);
+	void DrawPassiveCards(ADCGameState& GS, ADCCharacter& Me);
 	void DrawCrosshair(ADCCharacter& Me);
 	void DrawViewfinder(ADCCharacter& Me);
 	void DrawStrikeInfo(ADCCharacter& Me);

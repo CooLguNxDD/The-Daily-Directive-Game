@@ -1479,11 +1479,29 @@ namespace
 		}), FMath::Max(Def.TelegraphSeconds + Def.SupportDelaySeconds, 0.01f), false);
 		return true;
 	}
+	/** Call-in cards (human 15:58): the entry spends a charge of the owned card it names (Def.Card); the aim point is
+	 *  clamped to the entry's CallRangeCm around the caller, then the card's own Call hook places or launches. */
+	bool EffectCard(ADCGameMode& GM, const FDCStratagemDef& Def, const FVector& Target, AController* Caller)
+	{
+		ADCCharacter* Player = Caller ? Cast<ADCCharacter>(Caller->GetPawn()) : nullptr;
+		ADCPlayerState* PS = Caller ? Caller->GetPlayerState<ADCPlayerState>() : nullptr;
+		if (!Player || !PS)
+		{
+			return false;
+		}
+		const FVector From = Player->GetActorLocation();
+		const FVector2D Offset(Target - From);
+		const float Range = Def.CallRangeCm > 0.f ? Def.CallRangeCm : Offset.Size();
+		const FVector2D Clamped = Offset.GetClampedToMaxSize(Range);
+		const FVector At(From.X + Clamped.X, From.Y + Clamped.Y, Target.Z);
+		return DCUpgrades::CallCard(GM, *PS, *Player, Def.Card, At);
+	}
 	const TMap<FName, FCallEffectFn>& CallEffects()
 	{
 		static const TMap<FName, FCallEffectFn> Map = {
 			{TEXT("Supply"), &EffectSupply},
 			{TEXT("Reinforce"), &EffectReinforce},
+			{TEXT("Card"), &EffectCard},
 		};
 		return Map;
 	}

@@ -50,6 +50,7 @@ private:
 	void AddClashShot(const FString& S);
 	void AddLineupShot();
 	void AddSupplyCall();
+	void AddCallIn();
 	void AddRunFire();
 	/** R24 evidence (-dcchipfire): sustained fire at one tower wall; fixed-pose frames before, during and after. */
 	void AddChipFire();

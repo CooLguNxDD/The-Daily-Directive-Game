@@ -23,4 +23,9 @@ namespace DCUpgrades
 	EPIC_AI_MEGA_JAM2_API bool Interact(ADCGameMode& GM, ADCPlayerState& PS, ADCCharacter& Player);
 	/** Host, the player went down: each owned card's Downed hook. */
 	EPIC_AI_MEGA_JAM2_API void Downed(ADCGameMode& GM, ADCPlayerState& PS, ADCCharacter& Player);
+	/** Host, the player called a card's entry in the call-in list (a +Stratagems row with Effect="Card") at Target:
+	 *  the owned card's Call hook acts and spends a charge. False = refused (not owned, no charge, bad ground). */
+	EPIC_AI_MEGA_JAM2_API bool CallCard(ADCGameMode& GM, ADCPlayerState& PS, ADCCharacter& Player, FName CardId, const FVector& Target);
+	/** A FDCUpgradeDef::CallIn value the call-in registry knows (None, Active, Status). */
+	EPIC_AI_MEGA_JAM2_API bool IsKnownCallIn(FName CallIn);
 }

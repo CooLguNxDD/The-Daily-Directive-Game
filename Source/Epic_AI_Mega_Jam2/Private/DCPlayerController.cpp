@@ -269,6 +269,10 @@ void ADCPlayerController::SetPauseOpen(bool bOpen)
 	{
 		bOpen ? Me->DisableInput(this) : Me->EnableInput(this);
 	}
+	if (ADCCharacter* Mine = Cast<ADCCharacter>(GetPawn()); Mine && bOpen)
+	{
+		Mine->ReleaseHeldInput(); // disabled input never delivers the release: clear sprint, fire, aim now (a-56)
+	}
 	if (!bOpen && PlayerInput)
 	{
 		PlayerInput->FlushPressedKeys(); // nothing held on close: no running on, no firing
@@ -966,11 +970,11 @@ void ADCPlayerController::PlayerTick(float DeltaTime)
 		static double PauseShotStart = -1.0;
 		static int32 PauseShotStep = 0;
 		const ADCGameState* PS_GS = GetWorld()->GetGameState<ADCGameState>();
-		if (bPauseShot && PS_GS && PS_GS->Phase == EDCRunPhase::Sector && PauseShotStep < 5)
+		if (bPauseShot && PS_GS && PS_GS->Phase == EDCRunPhase::Sector && PauseShotStep < 8)
 		{
 			const double Real = FPlatformTime::Seconds();
 			PauseShotStart = PauseShotStart < 0.0 ? Real + 20.0 : PauseShotStart;
-			const double At[] = {0.0, 2.0, 3.0, 5.0, 6.0};
+			const double At[] = {0.0, 2.0, 3.0, 5.0, 6.0, 7.0, 9.0, 10.0};
 			if (Real >= PauseShotStart + At[PauseShotStep])
 			{
 				const TFunction<void()> Steps[] = {
@@ -978,6 +982,9 @@ void ADCPlayerController::PlayerTick(float DeltaTime)
 					[] { FScreenshotRequest::RequestScreenshot(FPaths::Combine(PauseShot, TEXT("esc_menu.png")), true, false); },
 					[this] { PauseAction(TEXT("Settings")); },
 					[] { FScreenshotRequest::RequestScreenshot(FPaths::Combine(PauseShot, TEXT("esc_settings.png")), true, false); },
+					[this] { SetPauseOpen(false); },
+					[this] { SetPauseOpen(true); PauseAction(TEXT("HowTo")); },
+					[] { FScreenshotRequest::RequestScreenshot(FPaths::Combine(PauseShot, TEXT("esc_howto.png")), true, false); },
 					[this] { SetPauseOpen(false); },
 				};
 				Steps[PauseShotStep]();

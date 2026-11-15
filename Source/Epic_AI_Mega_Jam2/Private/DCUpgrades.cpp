@@ -13,6 +13,7 @@ namespace
 	using FSectorFn = void (*)(ADCGameMode&, ADCPlayerState&, const FDCUpgradeDef&);
 	using FInteractFn = bool (*)(ADCGameMode&, ADCPlayerState&, ADCCharacter&, const FDCUpgradeDef&);
 	using FDownedFn = void (*)(ADCGameMode&, ADCPlayerState&, ADCCharacter&, const FDCUpgradeDef&);
+	using FCallFn = bool (*)(ADCGameMode&, ADCPlayerState&, ADCCharacter&, const FDCUpgradeDef&, const FVector&);
 
 	/** One card kind: what the pick does at once, and optional hooks later in the run (null = none). */
 	struct FEffectHooks
@@ -21,6 +22,8 @@ namespace
 		FSectorFn SectorStart = nullptr;
 		FInteractFn Interact = nullptr;
 		FDownedFn Downed = nullptr;
+		/** Call-in list (human 15:58): the card's entry was called at a target point (spends a charge when it acts). */
+		FCallFn Call = nullptr;
 	};
 
 	void Toast(ADCPlayerState& PS, const FString& Template, int32 Left)
@@ -86,13 +89,39 @@ namespace
 		Toast(PS, Def.ReadyToast, Def.Count);
 	}
 
-	/** R22 sentry turret: Interact sets one down ahead of the player while a charge is left (the host checks ground). */
-	bool DeployCompanion(ADCGameMode& GM, ADCPlayerState& PS, ADCCharacter& Player, const FDCUpgradeDef& Def)
+	/** R22 sentry turret: set one down while a charge is left (the host checks ground). Interact places it ahead of the
+	 *  player (Aim null), the call-in list at the called point. */
+	bool DeployAt(ADCGameMode& GM, ADCPlayerState& PS, ADCCharacter& Player, const FDCUpgradeDef& Def, const FVector* Aim)
 	{
 		int32& Left = PS.HostCardCharges.FindOrAdd(Def.Id);
 		const FDCCompanionDef* Kind = UDCTuning::Get().FindCompanion(Def.Companion);
 		UDCCompanions* Pool = UDCCompanions::Get(&GM);
-		if (Left <= 0 || !Kind || !Pool || !Pool->HostDeploy(Player, PS, *Kind))
+		if (Left <= 0 || !Kind || !Pool || !Pool->HostDeploy(Player, PS, *Kind, Aim))
+		{
+			return false;
+		}
+		--Left;
+		Toast(PS, Def.UseToast, Left);
+		return true;
+	}
+
+	bool DeployCompanion(ADCGameMode& GM, ADCPlayerState& PS, ADCCharacter& Player, const FDCUpgradeDef& Def)
+	{
+		return DeployAt(GM, PS, Player, Def, nullptr);
+	}
+
+	bool CallDeploy(ADCGameMode& GM, ADCPlayerState& PS, ADCCharacter& Player, const FDCUpgradeDef& Def, const FVector& Target)
+	{
+		return DeployAt(GM, PS, Player, Def, &Target);
+	}
+
+	/** Gun drone on call: one charge launches one drone of the row's Companion kind (Count charges per sector). */
+	bool CallCompanion(ADCGameMode& GM, ADCPlayerState& PS, ADCCharacter&, const FDCUpgradeDef& Def, const FVector&)
+	{
+		int32& Left = PS.HostCardCharges.FindOrAdd(Def.Id);
+		const FDCCompanionDef* Kind = UDCTuning::Get().FindCompanion(Def.Companion);
+		UDCCompanions* Pool = UDCCompanions::Get(&GM);
+		if (Left <= 0 || !Kind || !Pool || Pool->HostLaunchOrbiters(PS, *Kind, 1) == 0)
 		{
 			return false;
 		}
@@ -124,9 +153,20 @@ namespace
 			{TEXT("Gear"), {&Gear}},
 			{TEXT("Fisheye"), {&Fisheye}},
 			{TEXT("Mutator"), {&Mutator}},
-			{TEXT("Companion"), {&Gear, &LaunchCompanions}},
-			{TEXT("Deploy"), {&Gear, &DealCharges, &DeployCompanion}},
+			{TEXT("Companion"), {&Gear, &LaunchCompanions, nullptr, nullptr, &CallCompanion}},
+			{TEXT("Deploy"), {&Gear, &DealCharges, &DeployCompanion, nullptr, &CallDeploy}},
 			{TEXT("LastStand"), {&Gear, &DealCharges, nullptr, &LastStand}},
+		};
+		return Map;
+	}
+
+	/** Call-in modes by id (FDCUpgradeDef::CallIn): an Active card is dealt Count charges at sector start, which its list
+	 *  entry spends, instead of its effect's own sector-start hook (the gun drone no longer launches by itself). None and
+	 *  Status keep the effect's hook. A new mode is a new entry. */
+	const TMap<FName, FSectorFn>& CallInSectorStart()
+	{
+		static const TMap<FName, FSectorFn> Map = {
+			{TEXT("Active"), &DealCharges},
 		};
 		return Map;
 	}
@@ -159,7 +199,32 @@ namespace DCUpgrades
 			return false;
 		}
 		Hooks->Apply(GS, PS, Def);
+		if (!Def.CallIn.IsNone() && UDCTuning::Get().FindStratagem(Def.CallStratagem))
+		{
+			PS.OwnedStratagems.AddUnique(Def.CallStratagem); // the card's entry in the call-in list (slot 2, Q)
+		}
 		return true;
+	}
+
+	bool IsKnownCallIn(FName CallIn)
+	{
+		static const TArray<FName> Modes = {NAME_None, TEXT("Active"), TEXT("Status")};
+		return Modes.Contains(CallIn);
+	}
+
+	bool CallCard(ADCGameMode& GM, ADCPlayerState& PS, ADCCharacter& Player, FName CardId, const FVector& Target)
+	{
+		const FDCUpgradeDef* Def = UDCTuning::Get().FindUpgrade(CardId);
+		const FEffectHooks* Hooks = Def ? Effects().Find(Def->Effect) : nullptr;
+		if (!Hooks || !Hooks->Call || !PS.Upgrades.Contains(CardId) || PS.HostCardCharges.FindRef(CardId) <= 0)
+		{
+			UE_LOG(LogTemp, Display, TEXT("DCCALLIN %s %s refused (owned=%d left=%d)"), *PS.GetPlayerName(), *CardId.ToString(), PS.Upgrades.Contains(CardId) ? 1 : 0, PS.HostCardCharges.FindRef(CardId));
+			return false;
+		}
+		const bool bActed = Hooks->Call(GM, PS, Player, *Def, Target);
+		PS.SyncCardCharges();
+		UE_LOG(LogTemp, Display, TEXT("DCCALLIN %s %s at %s acted=%d left=%d"), *PS.GetPlayerName(), *CardId.ToString(), *Target.ToCompactString(), bActed ? 1 : 0, PS.HostCardCharges.FindRef(CardId));
+		return bActed;
 	}
 
 	bool IsKnownEffect(FName Effect)
@@ -171,12 +236,15 @@ namespace DCUpgrades
 	{
 		PS.HostCardCharges.Reset();
 		ForOwned(PS, [&](const FEffectHooks& H, const FDCUpgradeDef& Def) {
-			if (H.SectorStart)
+			const FSectorFn* Override = CallInSectorStart().Find(Def.CallIn);
+			const FSectorFn Fn = Override ? *Override : H.SectorStart;
+			if (Fn)
 			{
-				H.SectorStart(GM, PS, Def);
+				Fn(GM, PS, Def);
 			}
 			return true;
 		});
+		PS.SyncCardCharges();
 	}
 
 	bool Interact(ADCGameMode& GM, ADCPlayerState& PS, ADCCharacter& Player)
@@ -186,6 +254,7 @@ namespace DCUpgrades
 			bActed = H.Interact && H.Interact(GM, PS, Player, Def);
 			return !bActed; // the first card that acts takes the press
 		});
+		PS.SyncCardCharges();
 		return bActed;
 	}
 
@@ -198,5 +267,6 @@ namespace DCUpgrades
 			}
 			return true;
 		});
+		PS.SyncCardCharges();
 	}
 }

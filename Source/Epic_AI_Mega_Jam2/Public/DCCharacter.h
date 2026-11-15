@@ -118,7 +118,13 @@ public:
 	float ShakeLogMax = 0.f;
 	float ShakeLogNext = 0.f;
 
+	/** Local: run every release (Completed) handler of the input table once, so no held flag (sprint, fire, aim,
+	 *  crouch, interact) outlives disabled input such as the ESC menu (advisor a-56). */
+	void ReleaseHeldInput();
+
 private:
+	/** The input table's Completed handlers, collected while binding (one owner: the table). */
+	TArray<void (ADCCharacter::*)(const FInputActionInstance&)> ReleaseFns;
 	// Input handlers (bound by action name from the input table).
 	void OnMove(const FInputActionInstance& I);
 	void OnLook(const FInputActionInstance& I);
