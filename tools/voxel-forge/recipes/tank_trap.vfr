@@ -1,0 +1,8 @@
+# Tank trap (R12, Ruins): three crossed steel girders, a sharp angular silhouette (a threat to vehicles).
+grid 5
+size 20 20 18
+slot steel Steel
+slot rust InkBrown
+beam 2 2 0 18 18 16 1.3 steel
+beam 18 2 0 2 18 16 1.3 steel
+beam 10 1 16 10 19 1 1.3 rust

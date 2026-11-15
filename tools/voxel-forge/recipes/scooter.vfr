@@ -1,0 +1,16 @@
+# Parked scooter (R12, OldTown): low ink frame, two wheels, a seat and a small warm headlamp. Faces +x.
+grid 5
+size 26 6 20
+slot frame InkBlue
+slot wheel Ink
+slot seat InkBrown
+slot steel Steel
+slot lamp Lamp
+beam 4 3 4 4 3 4 3.5 wheel
+beam 21 3 4 21 3 4 3.5 wheel
+box 4 1 4 20 5 8 frame
+box 6 1 8 13 5 11 seat
+beam 20 3 5 23 3 15 0.8 steel
+box 21 1 15 25 5 17 steel
+box 24 2 13 26 4 15 lamp
+pivot 13 3 0

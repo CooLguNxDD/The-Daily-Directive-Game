@@ -71,6 +71,9 @@ public:
 	float GetHealth() const { return Health; }
 	int32 GetAmmo() const { return Ammo; }
 	int32 GetReserve() const { return Reserve; }
+	/** R8: the weapon in the gun slot (index into UDCTuning::Weapons) and its row. */
+	int32 GetWeaponIndex() const { return WeaponIndex; }
+	const struct FDCWeaponDef& ActiveWeapon() const;
 	float GetZoomFOV() const { return LensFOV(); }
 	/** Viewfinder FOV: the wheel zoom plus lens gear (Fisheye ExtraFOV). */
 	float LensFOV() const;
@@ -131,6 +134,14 @@ private:
 	void PrimaryCamera();
 
 	void SelectSlot(EDCSlot NewSlot);
+	// R8 weapons (DCWeapons.cpp): per-weapon magazines, the switch, the forge model on the gun prop.
+	void InitWeapons();
+	void SelectWeapon(int32 Index);
+	void NextWeapon();
+	void NextStratagem();
+	void ApplyWeaponModel();
+	UFUNCTION(Server, Reliable) void ServerSetWeapon(uint8 Index);
+	UFUNCTION() void OnRep_Weapon();
 	void FireRifleOnce();
 	void DoReload();
 	void PlayRifleFx(const FVector& Start, const FVector& End);
@@ -166,7 +177,7 @@ private:
 	UFUNCTION(Client, Reliable) void ClientPhotoGraded(int32 PhotoId, FDCPhotoGrade Grade);
 	UFUNCTION(Client, Reliable) void ClientToast(const FString& Text);
 	UFUNCTION(Client, Reliable) void ClientCue(FName Cue);
-	UFUNCTION(Client, Reliable) void ClientSyncAmmo(int32 NewAmmo, int32 NewReserve);
+	UFUNCTION(Client, Reliable) void ClientSyncAmmo(int32 NewAmmo, int32 NewReserve, uint8 ForWeapon);
 	UFUNCTION(NetMulticast, Unreliable) void MulticastRifleFx(FVector_NetQuantize Start, FVector_NetQuantize End);
 	UFUNCTION(NetMulticast, Unreliable) void MulticastShutterFx();
 	UFUNCTION() void OnRep_Slot();
@@ -202,6 +213,15 @@ private:
 	void UpdateRifleLoco();
 
 	UPROPERTY(ReplicatedUsing = OnRep_Slot) EDCSlot Slot = EDCSlot::Rifle;
+	/** R8: the weapon in the gun slot, replicated so everyone sees its model and tracer. */
+	UPROPERTY(ReplicatedUsing = OnRep_Weapon) uint8 WeaponIndex = 0;
+	/** The host's own copy of the owner's weapon (a listen host's local switch must not move the host counters). */
+	uint8 HostWeapon = 0;
+	/** Magazine (X) and reserve (Y) of every weapon not in hand: owner-local and host copies. */
+	TArray<FIntPoint> WeaponStash;
+	TArray<FIntPoint> HostWeaponStash;
+	/** The forge model of the weapon in hand, riding on RifleMesh. */
+	UPROPERTY() TObjectPtr<class UProceduralMeshComponent> GunVox;
 	/** The slot whose draw motion last played on this machine. */
 	EDCSlot DrawnSlot = EDCSlot::Rifle;
 	UPROPERTY(Replicated) bool bCameraRaised = false;

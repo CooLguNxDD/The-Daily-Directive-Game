@@ -1,4 +1,5 @@
 #include "DCGameMode.h"
+#include "Rules/DCStrikePattern.h"
 #include "Voxel/DCVoxelSettings.h"
 
 #include "DCBuilding.h"
@@ -1417,9 +1418,13 @@ void ADCGameMode::CallStrike(const FDCStratagemDef& Def, const FVector& Target, 
 	}
 	const ADCGameState* GS = GetGameState<ADCGameState>();
 	FRandomStream Rng(GetTypeHash(Target) ^ GS->RunSeed);
+	// R12: the blast layout is a registry entry named by the stratagem row (Pattern, Rules/DCStrikePattern.h).
+	const APawn* CallerPawn = Caller ? Caller->GetPawn() : nullptr;
+	const FVector2D Along = CallerPawn ? FVector2D(Target - CallerPawn->GetActorLocation()).GetSafeNormal() : FVector2D(1.f, 0.f);
 	for (int32 i = 0; i < FMath::Max(Def.Blasts, 1); ++i)
 	{
-		const FVector2D Scatter = i == 0 ? FVector2D::ZeroVector : FVector2D(Rng.FRandRange(-1.f, 1.f), Rng.FRandRange(-1.f, 1.f)).GetSafeNormal() * Rng.FRandRange(0.3f, 1.f) * Def.BlastScatterCm;
+		const DCStrikePattern::FLayout Layout{i, FMath::Max(Def.Blasts, 1), Def.BlastScatterCm, Along.IsNearlyZero() ? FVector2D(1.f, 0.f) : Along};
+		const FVector2D Scatter = DCStrikePattern::Offset(Def.Pattern, Layout, Rng);
 		const FTransform Xf(FVector(Target.X + Scatter.X, Target.Y + Scatter.Y, Target.Z));
 		ADCOrbitalStrike* Strike = GetWorld()->SpawnActorDeferred<ADCOrbitalStrike>(ADCOrbitalStrike::StaticClass(), Xf);
 		Strike->Init(Def.Id, GS->Now() + Def.TelegraphSeconds + i * Def.BlastSpacing, Caller);

@@ -481,7 +481,9 @@ void ADCHUD::DrawStatus(ADCGameState& GS, ADCCharacter& Me)
 	Text(FString::Printf(TEXT("LIVES %d"), GS.CrewLives), Sx(240.f), H - Sx(88.f), GS.CrewLives > 0 ? Ink : Red, 0.55f, false);
 
 	// Slot bar: 1 rifle, 2 strike, 3 camera.
-	static const TCHAR* Names[] = {TEXT("1 RIFLE"), TEXT("2 STRIKE"), TEXT("3 CAMERA")};
+	// R8: the gun slot names the weapon in hand (the row's short HUD label).
+	const FString GunLabel = FString::Printf(TEXT("1 %s"), *Me.ActiveWeapon().HudLabel);
+	const TCHAR* Names[] = {*GunLabel, TEXT("2 STRIKE"), TEXT("3 CAMERA")};
 	for (int32 i = 0; i < 3; ++i)
 	{
 		const bool bActive = static_cast<int32>(Me.GetSlot()) == i;
@@ -498,7 +500,7 @@ void ADCHUD::DrawStatus(ADCGameState& GS, ADCCharacter& Me)
 	if (Me.GetSlot() == EDCSlot::Rifle)
 	{
 		const int32 Ammo = Me.GetAmmo();
-		const FLinearColor AC = Ammo > T.Rifle.LowAmmoWarning ? Ink : Red;
+		const FLinearColor AC = Ammo > Me.ActiveWeapon().Stats.LowAmmoWarning ? Ink : Red;
 		Box(W - Sx(214.f), H - Sx(104.f), Sx(190.f), Sx(80.f), Paper);
 		Box(W - Sx(214.f), H - Sx(104.f), Sx(5.f), Sx(80.f), Ink);
 		Text(FString::Printf(TEXT("%d"), Ammo), W - Sx(200.f), H - Sx(100.f), AC, 2.f);
@@ -732,7 +734,7 @@ void ADCHUD::TrackOnboarding(ADCCharacter& Me)
 		SpawnLocation = Me.GetActorLocation();
 	}
 	bDidMove |= FVector::Dist2D(SpawnLocation, Me.GetActorLocation()) > 400.f;
-	bDidShoot |= Me.GetAmmo() < UDCTuning::Get().Rifle.MagazineSize;
+	bDidShoot |= Me.GetAmmo() < Me.ActiveWeapon().Stats.MagazineSize;
 	const ADCPlayerState* PS = Me.GetPlayerState<ADCPlayerState>();
 	bDidStrike |= PS && PS->CooldownIds.Num() > 0;
 	bDidRaise |= Me.IsCameraRaised();

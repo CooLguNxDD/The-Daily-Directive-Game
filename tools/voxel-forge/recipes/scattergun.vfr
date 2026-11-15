@@ -1,0 +1,18 @@
+# Scattergun (R8): short, fat and close-range. Double steel barrels over a pump grip, a chunky receiver and a
+# brown stock. Rounded parts (cyl beams): a friendly tool. 5 cm voxels like the rifle.
+name scattergun
+grid 5
+size 17 4 6
+slot body Ink
+slot wood InkBrown
+slot steel Steel
+box 0 1 1 4 3 4 wood
+box 0 1 0 2 3 2 wood
+box 3 0 1 9 4 5 body
+box 5 1 0 7 3 2 body
+beam 9 1 4 16 1 4 1 steel
+beam 9 2 4 16 2 4 1 steel
+box 9 0 2 13 4 4 wood
+box 15 0 3 16 4 5 steel
+box 4 1 5 6 3 6 steel
+pivot 6 2 2

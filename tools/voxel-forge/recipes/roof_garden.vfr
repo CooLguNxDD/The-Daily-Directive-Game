@@ -1,0 +1,15 @@
+# Rooftop garden box (R12 rooftop detail): a raised bed of dark shrubs and a small warm string lamp. 10 cm grid.
+grid 10
+size 16 10 8
+slot box Trim
+slot soil InkBrown
+slot bush Olive
+slot lamp Lamp
+box 0 0 0 16 10 3 box
+box 1 1 2 15 9 3 soil
+ellipsoid 4 5 4 3 4 2 bush
+ellipsoid 11 5 4 4 4 2.5 bush
+noise 0.3 9 bush
+box 0 0 7 16 1 8 lamp
+box 0 0 3 1 1 8 box
+box 15 0 3 16 1 8 box

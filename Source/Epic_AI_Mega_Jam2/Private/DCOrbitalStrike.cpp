@@ -212,7 +212,7 @@ void ADCOrbitalStrike::TickTelegraph(float Now, const FDCStratagemDef& Def)
 	const float U = FMath::Clamp((Now - Start) / FMath::Max(Def.TelegraphSeconds, 0.01f), 0.f, 1.f);
 	// The beam narrows from a broad sighting column to a thin lance as it charges (art bible: thin red beams).
 	const FDCLookTuning& BeamLook = UDCTuning::Get().Look;
-	const float Width = FMath::Lerp(BeamLook.BeamWidthStartCm, BeamLook.BeamWidthEndCm, FMath::Pow(U, 0.7f)) / 100.f;
+	const float Width = FMath::Lerp(BeamLook.BeamWidthStartCm, BeamLook.BeamWidthEndCm, FMath::Pow(U, 0.7f)) / 100.f * Def.BeamWidthScale;
 	const float Pulse = 0.5f + 0.5f * FMath::Sin(Now * FMath::Lerp(6.f, 40.f, U));
 	Beam->SetRelativeScale3D(FVector(Width, Width, BeamHeightCm / 100.f));
 	DCAssets::SetFlat(BeamMat, Def.BeamColor, FMath::Lerp(1.f, UDCTuning::Get().Look.BeamGlowPeak, U * U) * (0.7f + 0.3f * Pulse)); // red, not blown to pink
@@ -231,11 +231,11 @@ void ADCOrbitalStrike::TickTelegraph(float Now, const FDCStratagemDef& Def)
 	if (!bChargePlayed && U > 0.f && Def.TelegraphSeconds - (Now - Start) <= 3.2f)
 	{
 		bChargePlayed = true;
-		DCAudio::PlayAt(this, TEXT("LaserCharge"), GetActorLocation(), 1.f, 3.2f / FMath::Max(DetonateTime - Now, 0.5f));
+		DCAudio::PlayAt(this, Def.ChargeSound, GetActorLocation(), 1.f, 3.2f / FMath::Max(DetonateTime - Now, 0.5f));
 	}
 	if (Now >= NextBeepTime)
 	{
-		DCAudio::PlayAt(this, TEXT("Telegraph"), GetActorLocation(), 0.8f, 1.f + U * 0.5f);
+		DCAudio::PlayAt(this, Def.BeepSound, GetActorLocation(), 0.8f, 1.f + U * 0.5f);
 		NextBeepTime = Now + FMath::Lerp(0.5f, 0.07f, FMath::Pow(U, 1.5f));
 	}
 }
@@ -281,8 +281,8 @@ void ADCOrbitalStrike::DetonateLocal(const FDCStratagemDef& Def)
 			Env->Flash(Def.BloomPeak * Proximity, 3.f * Proximity);
 		}
 	}
-	DCAudio::PlayAt(this, TEXT("Detonation"), Here, 1.f, FMath::FRandRange(0.9f, 1.05f));
-	DCAudio::Play2D(this, TEXT("Detonation"), 0.35f * Proximity, 0.8f);
+	DCAudio::PlayAt(this, Def.BlastSound, Here, 1.f, Def.BlastPitch * FMath::FRandRange(0.9f, 1.05f));
+	DCAudio::Play2D(this, Def.BlastSound, 0.35f * Proximity, 0.8f * Def.BlastPitch);
 	FireCubes->SetVisibility(true);
 	Shock->SetVisibility(false); // the filled shock disc read as a white bar edge-on (critic); the voxel core carries the peak
 	Ring->SetVisibility(false);

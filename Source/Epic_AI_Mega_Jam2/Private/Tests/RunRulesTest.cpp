@@ -186,7 +186,8 @@ bool FDCRunDataTest::RunTest(const FString&)
 	TestEqual(TEXT("R10: three draft pools"), PerPool.Num(), 3);
 	for (const TPair<FName, int32>& Pool : PerPool)
 	{
-		TestEqual(FString::Printf(TEXT("R10: pool %s has three options"), *Pool.Key.ToString()), Pool.Value, 3);
+		// R12 (final run): a pool may hold more than three; the draft offers three of the open ones (DraftOffer PerPool).
+		TestTrue(FString::Printf(TEXT("R10: pool %s has at least three options"), *Pool.Key.ToString()), Pool.Value >= 3);
 	}
 	TestTrue(TEXT("R8: about five scoop templates"), T.Scoops.Num() >= 5);
 	TestEqual(TEXT("R9: three sectors"), T.Sectors.Num(), 3);

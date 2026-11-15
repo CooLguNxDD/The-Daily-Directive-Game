@@ -141,6 +141,7 @@ void ADCCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLife
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	DOREPLIFETIME(ADCCharacter, Slot);
+	DOREPLIFETIME(ADCCharacter, WeaponIndex);
 	DOREPLIFETIME(ADCCharacter, bCameraRaised);
 	DOREPLIFETIME(ADCCharacter, bSprinting);
 	DOREPLIFETIME(ADCCharacter, Health);
@@ -207,19 +208,8 @@ void ADCCharacter::BeginPlay()
 	RifleMesh->SetMaterial(0, DCAssets::MakeFlat(this, FLinearColor(0.08f, 0.08f, 0.07f)));
 	RifleMesh->SetRelativeLocation(FVector(-10.f, 30.f, 0.f));
 	RifleMesh->SetRelativeRotation(FRotator(0.f, 90.f, 0.f));
-	if (const FDCVoxelMeshData* Gun = DCVoxelModels::Mesh(T.Assets.RifleModel))
-	{
-		// The forge rifle replaces the cube; it rides on the rifle prop, so hand and holster placement still apply.
-		RifleMesh->SetStaticMesh(nullptr);
-		UProceduralMeshComponent* RifleVox = NewObject<UProceduralMeshComponent>(this, TEXT("RifleVox"));
-		RifleVox->SetupAttachment(RifleMesh);
-		RifleVox->SetUsingAbsoluteScale(true); // the prop squashes its cube by scale; the model keeps its own proportions
-		RifleVox->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-		RifleVox->RegisterComponent();
-		RifleVox->CreateMeshSection(0, Gun->Positions, Gun->Indices, Gun->Normals, Gun->UVs, Gun->Colors, {}, false);
-		RifleVox->SetMaterial(0, Cast<UMaterialInterface>(UDCVoxelSettings::Get().VoxelMaterial.TryLoad()));
-		RifleVox->SetRelativeLocationAndRotation(T.Assets.RifleModelLocation, T.Assets.RifleModelRotation);
-	}
+	// R8: the forge model of the weapon in hand replaces the cube (InitWeapons, DCWeapons.cpp); it rides on the rifle
+	// prop, so hand and holster placement still apply.
 	PhotoCamMesh->AttachToComponent(GetMesh(), FAttachmentTransformRules::SnapToTargetNotIncludingScale, Hand);
 	PhotoCamMesh->SetStaticMesh(DCAssets::Cube());
 	PhotoCamMesh->SetMaterial(0, DCAssets::MakeFlat(this, FLinearColor(0.024f, 0.552f, 0.687f), 0.6f));
@@ -257,8 +247,7 @@ void ADCCharacter::BeginPlay()
 	MuzzleFlash->SetStaticMesh(DCAssets::Sphere());
 	MuzzleFlash->SetMaterial(0, DCAssets::MakeFlat(this, FLinearColor(1.f, 0.7f, 0.3f), 120.f));
 
-	Ammo = HostAmmo = T.Rifle.MagazineSize;
-	Reserve = HostReserve = T.Rifle.StartReserve;
+	InitWeapons();
 	if (HasAuthority())
 	{
 		Health = T.Move.MaxHealth;
@@ -507,7 +496,7 @@ void ADCCharacter::OnReload(const FInputActionInstance&) { DoReload(); }
 
 void ADCCharacter::DoReload()
 {
-	const FDCRifleTuning& R = UDCTuning::Get().Rifle;
+	const FDCRifleTuning& R = ActiveWeapon().Stats;
 	if (Slot != EDCSlot::Rifle || IsReloading() || Reserve <= 0 || Ammo >= R.MagazineSize || bDowned)
 	{
 		return;
@@ -517,7 +506,15 @@ void ADCCharacter::DoReload()
 	ServerReload();
 }
 
-void ADCCharacter::OnSlot1(const FInputActionInstance&) { SelectSlot(EDCSlot::Rifle); }
+void ADCCharacter::OnSlot1(const FInputActionInstance&)
+{
+	if (Slot == EDCSlot::Rifle)
+	{
+		NextWeapon(); // R8: 1 again switches the weapon in the gun slot
+		return;
+	}
+	SelectSlot(EDCSlot::Rifle);
+}
 void ADCCharacter::OnSlot2(const FInputActionInstance&) { SelectSlot(EDCSlot::Stratagem); }
 void ADCCharacter::OnSlot3(const FInputActionInstance&) { SelectSlot(EDCSlot::Camera); }
 
@@ -529,9 +526,9 @@ void ADCCharacter::OnZoom(const FInputActionInstance& I)
 		Director->ZoomTake(Wheel);
 		return;
 	}
-	if (Slot == EDCSlot::Stratagem && !bCameraRaised)
+	if (Slot != EDCSlot::Camera && !bCameraRaised)
 	{
-		OnCycle(I);
+		OnCycle(I); // the wheel cycles the slot's list (weapons, stratagems); it zooms only the camera
 		return;
 	}
 	const FDCCameraTuning& C = UDCTuning::Get().Camera;
@@ -545,6 +542,15 @@ void ADCCharacter::OnZoom(const FInputActionInstance& I)
 }
 
 void ADCCharacter::OnCycle(const FInputActionInstance&)
+{
+	// What cycles is per slot (R8): the gun slot switches weapons, every other slot the stratagem.
+	using FCycleFn = void (ADCCharacter::*)();
+	static const TMap<EDCSlot, FCycleFn> Cycles = {{EDCSlot::Rifle, &ADCCharacter::NextWeapon}};
+	const FCycleFn* Fn = Cycles.Find(Slot);
+	(this->*(Fn ? *Fn : &ADCCharacter::NextStratagem))();
+}
+
+void ADCCharacter::NextStratagem()
 {
 	const ADCPlayerState* PS = GetPlayerState<ADCPlayerState>();
 	if (!PS || PS->OwnedStratagems.Num() == 0)
@@ -726,14 +732,15 @@ void ADCCharacter::PrimaryRifle()
 
 void ADCCharacter::FireRifleOnce()
 {
-	const FDCRifleTuning& R = UDCTuning::Get().Rifle;
+	const FDCWeaponDef& W = ActiveWeapon();
+	const FDCRifleTuning& R = W.Stats;
 	--Ammo;
 	NextFireTime = Now() + 1.f / FMath::Max(R.ShotsPerSecond, 0.1f);
 
 	FVector ViewLoc;
 	FRotator ViewRot;
 	GetController()->GetPlayerViewPoint(ViewLoc, ViewRot);
-	const float Spread = FMath::DegreesToRadians(R.SpreadDegrees * (GetVelocity().Size2D() > 50.f ? 1.6f : 1.f));
+	const float Spread = FMath::DegreesToRadians(R.SpreadDegrees * (GetVelocity().Size2D() > 50.f ? W.MoveSpreadScale : 1.f));
 	const FVector Dir = FMath::VRandCone(ViewRot.Vector(), Spread);
 	ServerFire(ViewLoc, Dir);
 
@@ -742,7 +749,7 @@ void ADCCharacter::FireRifleOnce()
 	AddControllerPitchInput(Kick);
 	AddControllerYawInput(FMath::FRandRange(-R.RecoilYawJitter, R.RecoilYawJitter));
 	RecoilPitch += Kick;
-	AddTrauma(0.06f);
+	AddTrauma(W.Trauma);
 
 	FHitResult Hit;
 	FCollisionQueryParams Params(SCENE_QUERY_STAT(DCRifleFx), false, this);
@@ -762,7 +769,8 @@ void ADCCharacter::FireRifleOnce()
 
 void ADCCharacter::ServerFire_Implementation(FVector_NetQuantize Start, FVector_NetQuantizeNormal Dir)
 {
-	const FDCRifleTuning& R = UDCTuning::Get().Rifle;
+	const FDCWeaponDef& W = UDCTuning::Get().Weapon(HostWeapon);
+	const FDCRifleTuning& R = W.Stats;
 	const float T = Now();
 	const float MinGap = 0.8f / FMath::Max(R.ShotsPerSecond, 0.1f);
 	if (bDowned || Slot != EDCSlot::Rifle || HostAmmo <= 0 || T < HostNextFireTime || FVector::Dist(Start, GetActorLocation()) > 800.f)
@@ -792,13 +800,26 @@ void ADCCharacter::ServerFire_Implementation(FVector_NetQuantize Start, FVector_
 			UE_LOG(LogTemp, Display, TEXT("DCRIFLE shots=%d enemyhits=%d lastother=%s health=%.0f ammo=%d"), Shots, EnemyHits, *LastOther, Health, HostAmmo);
 		}
 	}
-	if (bHit)
+	// R8: a scattergun's extra pellets spread around the aimed ray on the host (the host owns the hits).
+	bool bAnyHit = false;
+	bool bAnyKill = false;
+	const float PelletCone = FMath::DegreesToRadians(R.SpreadDegrees);
+	for (int32 p = 0; p < FMath::Clamp(W.Pellets, 1, 24); ++p)
 	{
-		if (ADCEnemy* Enemy = Cast<ADCEnemy>(Hit.GetActor()))
+		FHitResult PelletHit = Hit;
+		const FVector PelletDir = p == 0 ? FVector(Dir) : FMath::VRandCone(FVector(Dir), PelletCone);
+		const bool bPelletHit = p == 0 ? bHit : GetWorld()->LineTraceSingleByChannel(PelletHit, Start, Start + PelletDir * R.RangeCm, ECC_Visibility, Params);
+		ADCEnemy* Enemy = bPelletHit ? Cast<ADCEnemy>(PelletHit.GetActor()) : nullptr;
+		if (Enemy && Enemy->IsAlive())
 		{
-			UGameplayStatics::ApplyPointDamage(Enemy, R.Damage, Dir, Hit, GetController(), this, UDamageType::StaticClass());
-			ClientHitConfirm(!Enemy->IsAlive());
+			UGameplayStatics::ApplyPointDamage(Enemy, R.Damage, PelletDir, PelletHit, GetController(), this, UDamageType::StaticClass());
+			bAnyHit = true;
+			bAnyKill |= !Enemy->IsAlive();
 		}
+	}
+	if (bAnyHit)
+	{
+		ClientHitConfirm(bAnyKill);
 	}
 	MulticastRifleFx(RifleMesh->GetComponentLocation(), bHit ? Hit.ImpactPoint : End);
 }
@@ -827,8 +848,10 @@ void ADCCharacter::PlayRifleFx(const FVector& HostStart, const FVector& End)
 	Tracer->SetWorldLocationAndRotation(Mid, (End - Start).Rotation());
 	Tracer->SetWorldScale3D(FVector(Len / 100.f, 0.03f, 0.03f));
 	Tracer->SetVisibility(true);
-	TracerHideTime = GetWorld()->GetTimeSeconds() + 0.04f;
-	DCAudio::PlayAt(this, TEXT("Rifle"), Start, 0.9f, FMath::FRandRange(0.94f, 1.06f));
+	const FDCWeaponDef& W = ActiveWeapon();
+	Tracer->SetWorldScale3D(FVector(Len / 100.f, W.TracerWidth, W.TracerWidth));
+	TracerHideTime = GetWorld()->GetTimeSeconds() + W.TracerSeconds;
+	DCAudio::PlayAt(this, W.Sound, Start, W.SoundVolume, FMath::FRandRange(0.94f, 1.06f));
 }
 
 void ADCCharacter::ClientHitConfirm_Implementation(bool bKill)
@@ -840,7 +863,7 @@ void ADCCharacter::ClientHitConfirm_Implementation(bool bKill)
 
 void ADCCharacter::ServerReload_Implementation()
 {
-	const FDCRifleTuning& R = UDCTuning::Get().Rifle;
+	const FDCRifleTuning& R = UDCTuning::Get().Weapon(HostWeapon).Stats;
 	const int32 Take = FMath::Min(R.MagazineSize - HostAmmo, HostReserve);
 	HostAmmo += Take;
 	HostReserve -= Take;
@@ -848,7 +871,12 @@ void ADCCharacter::ServerReload_Implementation()
 	// The owner's count follows the host's once the reload would have finished (a slot change can cancel the
 	// owner's local reload; the host has already moved the rounds).
 	FTimerHandle Sync;
-	GetWorldTimerManager().SetTimer(Sync, FTimerDelegate::CreateWeakLambda(this, [this] { ClientSyncAmmo(HostAmmo, HostReserve); }), R.ReloadSeconds, false);
+	GetWorldTimerManager().SetTimer(Sync, FTimerDelegate::CreateWeakLambda(this, [this, Reloaded = HostWeapon] {
+		// The reloaded weapon's counts, even when the owner switched away since (R8).
+		const bool bInHand = Reloaded == HostWeapon || !HostWeaponStash.IsValidIndex(Reloaded);
+		const FIntPoint Counts = bInHand ? FIntPoint(HostAmmo, HostReserve) : HostWeaponStash[Reloaded];
+		ClientSyncAmmo(Counts.X, Counts.Y, bInHand ? HostWeapon : Reloaded);
+	}), R.ReloadSeconds, false);
 }
 
 // ---------------------------------------------------------------- stratagem
@@ -1227,8 +1255,13 @@ void ADCCharacter::ClientLastFrameSlowMo_Implementation(float Dilation, float Se
 }
 
 
-void ADCCharacter::ClientSyncAmmo_Implementation(int32 NewAmmo, int32 NewReserve)
+void ADCCharacter::ClientSyncAmmo_Implementation(int32 NewAmmo, int32 NewReserve, uint8 ForWeapon)
 {
+	if (ForWeapon != WeaponIndex && WeaponStash.IsValidIndex(ForWeapon))
+	{
+		WeaponStash[ForWeapon] = FIntPoint(NewAmmo, NewReserve); // a weapon not in hand (R8)
+		return;
+	}
 	Ammo = NewAmmo;
 	Reserve = NewReserve;
 	ReloadEndTime = -1.f;
@@ -1315,13 +1348,13 @@ void ADCCharacter::HostResupply(int32 Film, int32 AmmoAdd, float Heal)
 	{
 		return;
 	}
-	HostReserve += AmmoAdd;
+	HostReserve += FMath::RoundToInt(AmmoAdd * UDCTuning::Get().Weapon(HostWeapon).PodAmmoScale);
 	Health = FMath::Min(UDCTuning::Get().Move.MaxHealth, Health + Heal);
 	if (ADCPlayerState* PS = GetPlayerState<ADCPlayerState>())
 	{
 		PS->ShotsLeft += Film;
 	}
-	ClientSyncAmmo(HostAmmo, HostReserve);
+	ClientSyncAmmo(HostAmmo, HostReserve, HostWeapon);
 	ClientToast(FString::Printf(TEXT("SUPPLY POD: +%d FILM  +%d AMMO  +%.0f HEALTH"), Film, AmmoAdd, Heal));
 	ClientCue(TEXT("Pickup"));
 }
@@ -1365,10 +1398,18 @@ void ADCCharacter::HostRefill()
 {
 	const UDCTuning& T = UDCTuning::Get();
 	Health = T.Move.MaxHealth;
-	HostReserve = T.Rifle.StartReserve;
-	HostAmmo = T.Rifle.MagazineSize;
 	SelfRevivesLeft = 1;
-	ClientSyncAmmo(HostAmmo, HostReserve);
+	HostWeaponStash.SetNum(T.NumWeapons());
+	for (int32 w = 0; w < T.NumWeapons(); ++w)
+	{
+		// Every weapon refills (R8); the one in hand is the live counter, the rest sit in the stash.
+		const FDCRifleTuning& Full = T.Weapon(w).Stats;
+		const FIntPoint Counts(Full.MagazineSize, Full.StartReserve);
+		HostWeaponStash[w] = Counts;
+		HostAmmo = w == HostWeapon ? Counts.X : HostAmmo;
+		HostReserve = w == HostWeapon ? Counts.Y : HostReserve;
+		ClientSyncAmmo(Counts.X, Counts.Y, static_cast<uint8>(w));
+	}
 	if (ADCPlayerState* PS = GetPlayerState<ADCPlayerState>())
 	{
 		PS->ResetFilm(PS->FilmPerSector);
@@ -1550,7 +1591,7 @@ void ADCCharacter::Tick(float DeltaSeconds)
 	UpdateView(DeltaSeconds);
 	UpdateStrikeAim();
 
-	const FDCRifleTuning& R = UDCTuning::Get().Rifle;
+	const FDCRifleTuning& R = ActiveWeapon().Stats;
 	if (IsReloading() && Now() >= ReloadEndTime)
 	{
 		const int32 Take = FMath::Min(R.MagazineSize - Ammo, Reserve);

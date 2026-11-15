@@ -1,0 +1,17 @@
+# Propaganda loudspeaker pole (R12, Ministry): steel mast with three horn speakers and a red "on air" lamp is NOT
+# used (danger red is for danger): the horns are ink with a warm grille lamp. Faces +x.
+grid 5
+size 12 12 80
+slot mast Steel
+slot horn Ink
+slot grille Lamp
+cyl 6 6 0 70 1.2 mast
+cone 8 6 64 72 1.5 3.5 horn
+box 6 3 66 9 9 68 mast
+beam 6 6 68 11 6 68 2 horn
+beam 6 6 68 1 2 70 2 horn
+beam 6 6 68 1 10 70 2 horn
+box 11 5 67 12 7 69 grille
+box 0 1 69 1 3 71 grille
+box 0 9 69 1 11 71 grille
+cyl 6 6 0 2 3 horn
