@@ -74,7 +74,7 @@ float d = saturate(Dissolve);
 float m = n - d * 1.02;
 float mask = (d <= 0.0 || m >= 0.0) ? 1.0 : 0.0;
 float edge = (d > 0.0 && m >= 0.0) ? saturate(1.0 - m / max(EdgeWidth, 0.001)) : 0.0;
-return float2(mask, edge);
+return Which > 0.5 ? edge : mask;
 """
 
 
@@ -82,30 +82,36 @@ def add_dissolve(mat, emissive_src, dissolve_src, x, y):
     """R15: masked noise dissolve on a material whose emissive output is emissive_src; dissolve_src drives the amount."""
     mat.set_editor_property("blend_mode", unreal.BlendMode.BLEND_MASKED)
     wp = lib.create_material_expression(mat, unreal.MaterialExpressionWorldPosition, x - 300, y)
-    custom = lib.create_material_expression(mat, unreal.MaterialExpressionCustom, x, y)
-    custom.set_editor_property("code", DISSOLVE_HLSL)
-    custom.set_editor_property("output_type", unreal.CustomMaterialOutputType.CMOT_FLOAT2)
-    custom.set_editor_property("description", "Dissolve")
-    inputs = []
-    for n in ["WorldPos", "Dissolve", "NoiseCm", "EdgeWidth"]:
-        ci = unreal.CustomInput()
-        ci.set_editor_property("input_name", n)
-        inputs.append(ci)
-    custom.set_editor_property("inputs", inputs)
-    lib.connect_material_expressions(wp, "", custom, "WorldPos")
-    lib.connect_material_expressions(dissolve_src, "", custom, "Dissolve")
-    for i, (n, v, pin) in enumerate([("DissolveNoiseCm", 18.0, "NoiseCm"), ("DissolveEdge", 0.12, "EdgeWidth")]):
+    prms = []
+    for i, (n, v) in enumerate([("DissolveNoiseCm", 18.0), ("DissolveEdge", 0.12)]):
         prm = lib.create_material_expression(mat, unreal.MaterialExpressionScalarParameter, x - 300, y + 100 + i * 90)
         prm.set_editor_property("parameter_name", n)
         prm.set_editor_property("default_value", v)
-        lib.connect_material_expressions(prm, "", custom, pin)
-    mask = lib.create_material_expression(mat, unreal.MaterialExpressionComponentMask, x + 250, y)
-    mask.set_editor_property("r", True)
-    lib.connect_material_expressions(custom, "", mask, "")
+        prms.append(prm)
+    outs = []
+    # Two single-output Custom nodes (mask, edge): no ComponentMask (its channel flags did not take from Python and a
+    # float2 reached a Multiply: "Failed to compile Material", default material in game).
+    for k, (desc, which) in enumerate([("DissolveMask", 0.0), ("DissolveEdge", 1.0)]):
+        custom = lib.create_material_expression(mat, unreal.MaterialExpressionCustom, x, y + k * 160)
+        custom.set_editor_property("code", DISSOLVE_HLSL)
+        custom.set_editor_property("output_type", unreal.CustomMaterialOutputType.CMOT_FLOAT1)
+        custom.set_editor_property("description", desc)
+        inputs = []
+        for n in ["WorldPos", "Dissolve", "NoiseCm", "EdgeWidth", "Which"]:
+            ci = unreal.CustomInput()
+            ci.set_editor_property("input_name", n)
+            inputs.append(ci)
+        custom.set_editor_property("inputs", inputs)
+        lib.connect_material_expressions(wp, "", custom, "WorldPos")
+        lib.connect_material_expressions(dissolve_src, "", custom, "Dissolve")
+        lib.connect_material_expressions(prms[0], "", custom, "NoiseCm")
+        lib.connect_material_expressions(prms[1], "", custom, "EdgeWidth")
+        w = lib.create_material_expression(mat, unreal.MaterialExpressionConstant, x - 150, y + k * 160 + 60)
+        w.set_editor_property("r", which)
+        lib.connect_material_expressions(w, "", custom, "Which")
+        outs.append(custom)
+    mask, edge = outs
     lib.connect_material_property(mask, "", unreal.MaterialProperty.MP_OPACITY_MASK)
-    edge = lib.create_material_expression(mat, unreal.MaterialExpressionComponentMask, x + 250, y + 100)
-    edge.set_editor_property("g", True)
-    lib.connect_material_expressions(custom, "", edge, "")
     col = lib.create_material_expression(mat, unreal.MaterialExpressionVectorParameter, x, y + 300)
     col.set_editor_property("parameter_name", "DissolveEdgeColor")
     col.set_editor_property("default_value", unreal.LinearColor(1.0, 0.45, 0.15, 1.0))
