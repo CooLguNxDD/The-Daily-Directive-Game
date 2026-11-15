@@ -216,6 +216,123 @@ float ADCVoxelCity::ScanSurface(const FIntVector& C) const
 	return 0.f;
 }
 
+void ADCVoxelCity::RebuildWalkMask(int32 Lot)
+{
+	if (!Sector.Towers.IsValidIndex(Lot))
+	{
+		return;
+	}
+	WalkMasks.SetNum(Sector.Towers.Num());
+	const FDCVoxelTower& T = Sector.Towers[Lot];
+	FWalkMask& M = WalkMasks[Lot];
+	const bool bFallen = T.bFallen || (CommittedFallen.IsValidIndex(Lot) && CommittedFallen[Lot]);
+	M.bValid = !bFallen && T.Max.X > T.Min.X && T.Max.Y > T.Min.Y;
+	if (!M.bValid)
+	{
+		return;
+	}
+	using FChunk = FDCVoxelChunk;
+	const FDCVoxelTuning& Tn = UDCVoxelSettings::Get().Tuning;
+	const float Vcm = FMath::Max(static_cast<float>(T.Grid.VoxelCm), 1.f);
+	const int32 Z0 = FMath::CeilToInt32(Tn.WalkBandFromCm / Vcm);
+	const int32 Z1 = Z0 + FMath::Max(1, FMath::CeilToInt32(Tn.WalkBandHeightCm / Vcm));
+	M.Min = FIntPoint(T.Min.X, T.Min.Y);
+	M.Size = FIntPoint(T.Max.X - T.Min.X, T.Max.Y - T.Min.Y);
+	M.Open.Init(true, M.Size.X * M.Size.Y);
+	// Chunk by chunk (one map lookup per chunk): any solid voxel in the body band closes its column.
+	for (int32 CZ = Z0 >> FChunk::Bits; CZ <= (Z1 - 1) >> FChunk::Bits; ++CZ)
+	{
+		for (int32 CY = T.Min.Y >> FChunk::Bits; CY <= (T.Max.Y - 1) >> FChunk::Bits; ++CY)
+		{
+			for (int32 CX = T.Min.X >> FChunk::Bits; CX <= (T.Max.X - 1) >> FChunk::Bits; ++CX)
+			{
+				const FChunk* Chunk = T.Grid.Data.FindChunk(FIntVector(CX, CY, CZ));
+				if (!Chunk || Chunk->Solid == 0)
+				{
+					continue;
+				}
+				const int32 ZLo = FMath::Max(Z0, CZ * FChunk::Size), ZHi = FMath::Min(Z1, CZ * FChunk::Size + FChunk::Size);
+				const int32 YLo = FMath::Max(T.Min.Y, CY * FChunk::Size), YHi = FMath::Min(T.Max.Y, CY * FChunk::Size + FChunk::Size);
+				const int32 XLo = FMath::Max(T.Min.X, CX * FChunk::Size), XHi = FMath::Min(T.Max.X, CX * FChunk::Size + FChunk::Size);
+				for (int32 Y = YLo; Y < YHi; ++Y)
+				{
+					for (int32 X = XLo; X < XHi; ++X)
+					{
+						const int32 Bit = (Y - M.Min.Y) * M.Size.X + (X - M.Min.X);
+						for (int32 Z = ZLo; Z < ZHi && M.Open[Bit]; ++Z)
+						{
+							M.Open[Bit] = Chunk->V[FChunk::Index(X & FChunk::Mask, Y & FChunk::Mask, Z & FChunk::Mask)] == 0;
+						}
+					}
+				}
+			}
+		}
+	}
+	// Doors and breaches: open cells on the footprint's edge.
+	M.Portals.Reset();
+	for (int32 Y = 0; Y < M.Size.Y; ++Y)
+	{
+		for (int32 X = 0; X < M.Size.X; ++X)
+		{
+			const bool bEdge = X == 0 || Y == 0 || X == M.Size.X - 1 || Y == M.Size.Y - 1;
+			if (bEdge && M.Open[Y * M.Size.X + X])
+			{
+				M.Portals.Add(FIntPoint(X, Y));
+			}
+		}
+	}
+}
+
+int32 ADCVoxelCity::StandingLotAt(const FVector& Where) const
+{
+	const FIntVector Cm = DCVoxelMath::ToCm(Where);
+	for (int32 Lot = 0; Lot < WalkMasks.Num(); ++Lot)
+	{
+		const FWalkMask& M = WalkMasks[Lot];
+		if (!M.bValid || !Sector.Towers.IsValidIndex(Lot))
+		{
+			continue;
+		}
+		const FIntVector L = Sector.Towers[Lot].Grid.ToLocal(Cm);
+		if (L.X >= M.Min.X && L.Y >= M.Min.Y && L.X < M.Min.X + M.Size.X && L.Y < M.Min.Y + M.Size.Y)
+		{
+			return Lot;
+		}
+	}
+	return INDEX_NONE;
+}
+
+bool ADCVoxelCity::IsWalkBlocked(const FVector& Where) const
+{
+	const int32 Lot = StandingLotAt(Where);
+	if (Lot == INDEX_NONE)
+	{
+		return IsSolidAt(Where);
+	}
+	const FWalkMask& M = WalkMasks[Lot];
+	const FIntVector L = Sector.Towers[Lot].Grid.ToLocal(DCVoxelMath::ToCm(Where));
+	return !M.Open[(L.Y - M.Min.Y) * M.Size.X + (L.X - M.Min.X)];
+}
+
+bool ADCVoxelCity::NearestPortal(int32 Lot, const FVector& From, FVector& Out) const
+{
+	if (!WalkMasks.IsValidIndex(Lot) || !WalkMasks[Lot].bValid || WalkMasks[Lot].Portals.Num() == 0)
+	{
+		return false;
+	}
+	const FWalkMask& M = WalkMasks[Lot];
+	const FDCVoxelGrid& G = Sector.Towers[Lot].Grid;
+	float Best = TNumericLimits<float>::Max();
+	for (const FIntPoint& P : M.Portals)
+	{
+		const FVector At = G.ToWorld(FIntVector(M.Min.X + P.X, M.Min.Y + P.Y, 0)) + FVector(G.VoxelCm * 0.5f, G.VoxelCm * 0.5f, 0.f);
+		const float D = FVector::DistSquared2D(At, From);
+		Out = D < Best ? At : Out;
+		Best = FMath::Min(Best, D);
+	}
+	return true;
+}
+
 bool ADCVoxelCity::IsSightBlocked(const FVector& From, const FVector& To, const TArray<int32>& IgnoreLots) const
 {
 	if (BuiltSector == INDEX_NONE)
@@ -1026,6 +1143,15 @@ void ADCVoxelCity::FinishInFlight()
 	else
 	{
 		FinishOp(Done->Op, Done->Result, Done->bAnimate, Done->ApplyMs, Done->Hash, true);
+	}
+	// R6: the op's lots changed (breaches, falls): their walk masks follow, here, while no worker writes.
+	for (const int32 Lot : Done->Result.TouchedLots)
+	{
+		RebuildWalkMask(Lot);
+	}
+	for (const int32 Lot : Done->Result.FallenLots)
+	{
+		RebuildWalkMask(Lot);
 	}
 	const double CommitT1 = FPlatformTime::Seconds();
 	if (Done->OnDone)
@@ -2282,6 +2408,16 @@ void ADCVoxelCity::Tick(float DeltaSeconds)
 	// Two-phase ops: a planned op is held until its apply time (a strike's detonation), then committed.
 	const ADCGameState* State = GetWorld()->GetGameState<ADCGameState>();
 	double PrepMs = 0.0;
+	if (BuiltSector != INDEX_NONE && !bLoading && !InFlight.IsValid() && WalkMaskBuildId != BuiltId)
+	{
+		// R6: walk masks for the freshly built city (the build's workers are done, no op is writing).
+		WalkMaskBuildId = BuiltId;
+		WalkMasks.Reset();
+		for (int32 Lot = 0; Lot < Sector.Towers.Num(); ++Lot)
+		{
+			RebuildWalkMask(Lot);
+		}
+	}
 	double CommitMs = 0.0; // advisor CP26: the hitch log scopes the op's game-thread prepare and commit too
 	double NextOpMs = 0.0;
 	if (bStartOpNextTick)

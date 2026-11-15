@@ -210,6 +210,21 @@ namespace
 		return GS && GS->Phase == EDCRunPhase::Sector && GS->Now() - GS->SectorStartTime < UDCTuning::Get().FactionMix.CrewGraceSeconds;
 	}
 
+	// R6: a foe inside a standing tower that the unit is not in yet: walk to the tower's nearest door or breach first
+	// (a step past it, inside), then straight at the foe. Units of factions that stay out keep the direct goal.
+	FVector EntryGoal(const ADCEnemy& E, const FVector& Here, const FVector& Goal)
+	{
+		const ADCVoxelCity* City = ADCVoxelCity::Get(&E);
+		const FDCFactionDef* F = DCFactionRules::Find(UDCTuning::Get().Factions, E.GetFaction());
+		const int32 GoalLot = City && F && F->bEntersBuildings ? City->StandingLotAt(Goal) : INDEX_NONE;
+		FVector Door;
+		if (GoalLot == INDEX_NONE || City->StandingLotAt(Here) == GoalLot || !City->NearestPortal(GoalLot, Here, Door))
+		{
+			return Goal;
+		}
+		return FVector::Dist2D(Here, Door) > 150.f ? Door : Door + (Goal - Door).GetSafeNormal2D() * 200.f;
+	}
+
 	using FGoalFn = bool (*)(const ADCEnemy&, const FDCEnemyDef&, float, FVector&);
 	bool GoalPlayers(const ADCEnemy& E, const FDCEnemyDef& Def, float Now, FVector& Out)
 	{
@@ -322,7 +337,7 @@ namespace
 			else if (Dist > Hold)
 			{
 				const float Speed = Def.Speed * (Def.ShotRange > 0.f ? 1.f : Def.RushMultiplier);
-				E.GroundMove(At + E.SlotOffset(Def, To) * 0.3f, Speed, Dt, Def.HoverHeight);
+				E.GroundMove(EntryGoal(E, Here, At + E.SlotOffset(Def, To) * 0.3f), Speed, Dt, Def.HoverHeight);
 			}
 			else if (!To.IsNearlyZero())
 			{
@@ -592,6 +607,9 @@ void ADCEnemy::GroundMove(const FVector& Goal, float Speed, float DeltaSeconds, 
 	};
 	const ADCVoxelCity* City = ADCVoxelCity::Get(this);
 	const float GroundHere = City ? City->SurfaceZCm(Here) : 0.f;
+	// R6: factions that enter buildings step by the walk mask (doors, breaches) instead of a tower's solid box.
+	const FDCFactionDef* MyFaction = DCFactionRules::Find(UDCTuning::Get().Factions, GetFaction());
+	const bool bEnters = MyFaction && MyFaction->bEntersBuildings;
 	const float Step = Speed * DeltaSeconds;
 	// The first heading that does not walk into a wall wins: straight, then fanning out both ways (climbs rubble,
 	// never a tower face: a column top more than a step above is a wall).
@@ -602,7 +620,8 @@ void ADCEnemy::GroundMove(const FVector& Goal, float Speed, float DeltaSeconds, 
 		const FVector Next = Here + Dir * Step;
 		const FVector Probe = Here + Dir * FMath::Max(Step, 120.f);
 		const float Ground = City ? City->SurfaceZCm(Probe) : 0.f;
-		if (IntoCrew(Next) || Ground - GroundHere > 160.f || (City && City->IsSolidAt(FVector(Probe.X, Probe.Y, Ground + 120.f))))
+		const FVector BodyAt(Probe.X, Probe.Y, Ground + 120.f);
+		if (IntoCrew(Next) || Ground - GroundHere > 160.f || (City && (bEnters ? City->IsWalkBlocked(BodyAt) : City->IsSolidAt(BodyAt))))
 		{
 			continue;
 		}
@@ -652,7 +671,10 @@ void ADCEnemy::HostAttack(AActor* Victim, float Now)
 	{
 		// Shots need a clear line through the voxel city (host-only, at the attack rate, not per tick).
 		const ADCVoxelCity* City = ADCVoxelCity::Get(this);
-		if (City && City->IsSightBlocked(From, At, {}))
+		// R6: a shooter in the same building as its target sees through that building's own walls box.
+		const int32 SameLot = City ? City->StandingLotAt(At) : INDEX_NONE;
+		const TArray<int32> Ignore = SameLot != INDEX_NONE && City->StandingLotAt(From) == SameLot ? TArray<int32>{SameLot} : TArray<int32>();
+		if (City && City->IsSightBlocked(From, At, Ignore))
 		{
 			NextAttackTime = Now + 0.3f;
 			return;
