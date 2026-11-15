@@ -15,6 +15,7 @@
 #include "Misc/Parse.h"
 #include "UnrealClient.h"
 #include "Components/SceneCaptureComponent2D.h"
+#include "Engine/SceneCapture2D.h"
 #include "Engine/TextureRenderTarget2D.h"
 #include "EngineUtils.h"
 #include "HAL/FileManager.h"
@@ -221,15 +222,7 @@ void UDCAnimShowcase::Start()
 	}
 	const FVector Eye = Center + CamDir * CamDist + FVector(0.f, 0.f, 140.f);
 	MakeCapture(Eye, Center + FVector(0.f, 0.f, 90.f), 70.f, true);
-	// Evidence only: a fill light beside the camera (ink-dark units on a night street read as bare silhouettes) and
-	// no HUD over the frame.
-	if (APointLight* Fill = World->SpawnActor<APointLight>(APointLight::StaticClass(), FTransform(Center + CamDir * CamDist * 0.5f + FVector(0.f, 0.f, 350.f))))
-	{
-		Fill->PointLightComponent->SetIntensityUnits(ELightUnits::Candelas);
-		Fill->PointLightComponent->SetIntensity(1200.f);
-		Fill->PointLightComponent->SetAttenuationRadius(CamDist * 3.f);
-		Fill->PointLightComponent->SetCastShadows(false);
-	}
+	// Evidence only: no HUD (no fill light either: the night exposure turns any lit ink unit white, frames anim2/3).
 	if (PC->GetHUD())
 	{
 		PC->GetHUD()->bShowHUD = false;
@@ -240,14 +233,12 @@ void UDCAnimShowcase::Start()
 void UDCAnimShowcase::MakeCapture(const FVector& Eye, const FVector& LookAt, float Fov, bool bEveryFrame)
 {
 	UWorld* World = GetWorld();
-	Camera = World->SpawnActor<ACameraActor>(ACameraActor::StaticClass(), FTransform::Identity);
-	Camera->SetActorLocationAndRotation(Eye, (LookAt - Eye).Rotation());
+	ASceneCapture2D* Rig = World->SpawnActor<ASceneCapture2D>(ASceneCapture2D::StaticClass(), FTransform((LookAt - Eye).Rotation(), Eye));
 	Target = NewObject<UTextureRenderTarget2D>(this);
 	Target->RenderTargetFormat = RTF_RGBA8_SRGB;
 	Target->InitAutoFormat(1600, 900);
 	Target->UpdateResourceImmediate(true);
-	Capture = NewObject<USceneCaptureComponent2D>(Camera);
-	Capture->SetupAttachment(Camera->GetRootComponent());
+	Capture = Rig->GetCaptureComponent2D();
 	Capture->FOVAngle = Fov;
 	Capture->TextureTarget = Target;
 	Capture->CaptureSource = ESceneCaptureSource::SCS_FinalColorLDR;
@@ -256,7 +247,8 @@ void UDCAnimShowcase::MakeCapture(const FVector& Eye, const FVector& LookAt, flo
 	Capture->bCaptureEveryFrame = bEveryFrame;
 	Capture->bCaptureOnMovement = false;
 	Capture->bAlwaysPersistRenderingState = true;
-	Capture->RegisterComponent();
+	UE_LOG(LogTemp, Display, TEXT("DCANIMSHOT capture at %s looking %s (eye %s)"), *Capture->GetComponentLocation().ToCompactString(),
+		*Capture->GetComponentRotation().ToCompactString(), *Eye.ToCompactString());
 }
 
 void UDCAnimShowcase::WriteFrame(const FString& File)
@@ -275,6 +267,14 @@ void UDCAnimShowcase::WriteFrame(const FString& File)
 		}
 	}
 	Capture->CaptureScene();
+	if (NextShot == 0 || NextShot == 20)
+	{
+		for (const ADCEnemy* E : Units)
+		{
+			UE_LOG(LogTemp, Display, TEXT("DCANIMSHOT where %s at %s yaw %.0f (capture %s)"), E ? *E->GetKind().ToString() : TEXT("?"),
+				E ? *E->GetActorLocation().ToCompactString() : TEXT("-"), E ? E->GetActorRotation().Yaw : 0.f, *Capture->GetComponentLocation().ToCompactString());
+		}
+	}
 	IFileManager::Get().MakeDirectory(*FPaths::GetPath(File), true);
 	TUniquePtr<FArchive> Ar(IFileManager::Get().CreateFileWriter(*File));
 	const bool bOk = Ar && FImageUtils::ExportRenderTarget2DAsPNG(Target, *Ar);
