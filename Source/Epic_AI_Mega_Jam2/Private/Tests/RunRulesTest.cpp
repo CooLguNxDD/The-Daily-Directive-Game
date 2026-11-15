@@ -214,7 +214,7 @@ bool FDCRunDataTest::RunTest(const FString&)
 			TestNotNull(FString::Printf(TEXT("upgrade %s unlocks a defined stratagem"), *U.Id.ToString()), T.FindStratagem(U.Unlock));
 		}
 	}
-	TestEqual(TEXT("R10: three draft pools"), PerPool.Num(), 3);
+	TestTrue(TEXT("R10: at least three draft pools (R22 adds Support)"), PerPool.Num() >= 3);
 	for (const TPair<FName, int32>& Pool : PerPool)
 	{
 		// R12 (final run): a pool may hold more than three; the draft offers three of the open ones (DraftOffer PerPool).

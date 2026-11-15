@@ -26,6 +26,7 @@
 #include "DCPresentationClock.h"
 #include "DCReelDirector.h"
 #include "DCTuning.h"
+#include "DCUpgrades.h"
 #include "Interfaces/MovementBaseInterface.h"
 #include "Voxel/DCVoxelSettings.h"
 #include "Voxel/DCVoxelModel.h"
@@ -1431,7 +1432,18 @@ void ADCCharacter::OnRep_Downed()
 	}
 }
 
-void ADCCharacter::ServerSetReviving_Implementation(bool bHolding) { bHostReviveHeld = bHolding; }
+void ADCCharacter::ServerSetReviving_Implementation(bool bHolding)
+{
+	bHostReviveHeld = bHolding;
+	// R22 cards: a press while standing in a live sector also goes to the owned cards (a turret deploy). The deploy
+	// itself refuses near a downed teammate, so a revive keeps the key.
+	ADCGameMode* GM = GetWorld()->GetAuthGameMode<ADCGameMode>();
+	ADCPlayerState* PS = GetPlayerState<ADCPlayerState>();
+	if (bHolding && !bDowned && GM && PS && GM->IsCombatLive())
+	{
+		DCUpgrades::Interact(*GM, *PS, *this);
+	}
+}
 
 void ADCCharacter::HostRevive()
 {

@@ -15,6 +15,7 @@
 #include "DCPlayerState.h"
 #include "DCVoxelCity.h"
 #include "DCSupplyPod.h"
+#include "DCCompanion.h"
 #include "DCTuning.h"
 #include "DCUpgrades.h"
 #include "Engine/World.h"
@@ -280,6 +281,10 @@ void ADCGameMode::ClearCombat()
 		P->Destroy();
 	}
 	GetGameState<ADCGameState>()->Lures.Reset();
+	if (UDCCompanions* Companions = UDCCompanions::Get(this))
+	{
+		Companions->ReleaseAll(); // R22 drones and turrets go back to the pool between sectors
+	}
 }
 
 void ADCGameMode::ClearCity()
@@ -370,6 +375,10 @@ void ADCGameMode::EnterSector(float Now)
 	NextScoopTime = Now + T.Run.ScoopFirstSeconds;
 	NextRogueTime = Now + RogueInterval();
 
+	if (UDCCompanions* Companions = UDCCompanions::Get(this))
+	{
+		Companions->Prewarm(T.CompanionPrewarm);
+	}
 	int32 PlayerIndex = 0;
 	for (ADCPlayerState* PS : Players())
 	{
@@ -379,6 +388,7 @@ void ADCGameMode::EnterSector(float Now)
 			C->HostRevive();
 			C->HostRefill();
 		}
+		DCUpgrades::SectorStart(*this, *PS); // R22: drones up, deploy and last-stand charges dealt
 		++PlayerIndex;
 	}
 }
@@ -863,6 +873,10 @@ void ADCGameMode::TickPendingCollapses(float Now)
 void ADCGameMode::OnPlayerDowned(ADCCharacter* Player)
 {
 	LastDownTime = GetGameState<ADCGameState>()->Now(); // pressure relief: no pack right after a down
+	if (ADCPlayerState* DownPS = Player ? Player->GetPlayerState<ADCPlayerState>() : nullptr)
+	{
+		DCUpgrades::Downed(*this, *DownPS, *Player); // R22 Dead Man's Switch and other cards that act on a down
+	}
 	// Last Frame (R21): slow motion only for the dying player. Solo: the shared clock slows. Co-op: the dying
 	// player's own machine slows locally (ADCCharacter::ClientLastFrameSlowMo); everyone else keeps real time.
 	const FDCPhotoTuning& P = UDCTuning::Get().Photo;
@@ -1405,10 +1419,26 @@ namespace
 		UE_LOG(LogTemp, Display, TEXT("DCSUPPLY %s called at %s"), *Def.Id.ToString(), *Target.ToCompactString());
 		return true;
 	}
+	/** R22 call support: a drop pod lands on the target and a crew-friendly squad steps out of it (the faction
+	 *  director's squad spawn), unless the sector ended meanwhile. */
+	bool EffectReinforce(ADCGameMode& GM, const FDCStratagemDef& Def, const FVector& Target, AController* Caller)
+	{
+		ADCSupplyPod::DropLoad(GM.GetWorld(), Target, 0, 0, 0.f, 0.f, Def.TelegraphSeconds); // the pod they ride (empty)
+		const FName Faction = Def.SupportFaction;
+		const int32 Count = Def.SupportCount;
+		const float Spread = Def.SupportSpreadCm;
+		FTimerHandle Handle;
+		GM.GetWorldTimerManager().SetTimer(Handle, FTimerDelegate::CreateWeakLambda(&GM, [&GM, Faction, Count, Spread, Target]() {
+			const int32 Landed = GM.IsCombatLive() ? GM.HostSpawnSquad(Faction, Count, Target, Spread) : 0;
+			UE_LOG(LogTemp, Display, TEXT("DCREINFORCE %s squad landed=%d of %d at %s"), *Faction.ToString(), Landed, Count, *Target.ToCompactString());
+		}), FMath::Max(Def.TelegraphSeconds + Def.SupportDelaySeconds, 0.01f), false);
+		return true;
+	}
 	const TMap<FName, FCallEffectFn>& CallEffects()
 	{
 		static const TMap<FName, FCallEffectFn> Map = {
 			{TEXT("Supply"), &EffectSupply},
+			{TEXT("Reinforce"), &EffectReinforce},
 		};
 		return Map;
 	}

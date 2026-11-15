@@ -32,6 +32,12 @@ namespace DCStrikePattern
 			{TEXT("Ring"), [](const FLayout& L, FRandomStream&) {
 				const float Angle = L.Count > 1 ? UE_TWO_PI * (L.Index - 1) / (L.Count - 1) : 0.f;
 				return L.Index == 0 ? FVector2D::ZeroVector : FVector2D(FMath::Cos(Angle), FMath::Sin(Angle)) * L.SpanCm; }},
+			// R22 Carpet Bomb: the first on the target, the rest walking outward on a spiral (one and a half turns,
+			// starting along the line of fire) to the span.
+			{TEXT("Spiral"), [](const FLayout& L, FRandomStream&) {
+				const float U = L.Count > 1 ? static_cast<float>(L.Index) / (L.Count - 1) : 0.f;
+				const float Angle = FMath::Atan2(L.Along.Y, L.Along.X) + 3.f * UE_PI * U;
+				return FVector2D(FMath::Cos(Angle), FMath::Sin(Angle)) * U * L.SpanCm; }},
 		};
 		return Map;
 	}

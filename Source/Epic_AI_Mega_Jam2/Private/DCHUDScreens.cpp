@@ -38,6 +38,7 @@ namespace DCHudScreens
 			{TEXT("Stratagem"), TEXT("CINEMA STRATAGEM")},
 			{TEXT("Gear"), TEXT("CAMERA GEAR")},
 			{TEXT("Mutator"), TEXT("CITY MUTATOR")},
+			{TEXT("Support"), TEXT("FIELD SUPPORT")},
 		};
 		const FString* Found = Labels.Find(Pool);
 		return Found ? *Found : Pool.ToString().ToUpper();

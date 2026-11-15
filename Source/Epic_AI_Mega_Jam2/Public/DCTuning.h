@@ -19,6 +19,7 @@
 #include "Rules/DCCueMix.h"
 #include "Rules/DCSoundQueue.h"
 #include "Rules/DCUnitAnim.h"
+#include "Rules/DCCompanionRules.h"
 #include "DCTuning.generated.h"
 
 /** R16 aiming with a gun (hold Aim: right mouse / left trigger), one feature, tuned while playing (Aim= in DefaultGame.ini). */
@@ -236,6 +237,12 @@ struct FDCStratagemDef
 	UPROPERTY(EditAnywhere, Config, Category = "Strike") FName BlastSound = TEXT("Detonation");
 	UPROPERTY(EditAnywhere, Config, Category = "Strike") float BlastPitch = 1.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Strike") float BeamWidthScale = 1.f;
+	/** R22 Reinforce effect: a drop pod lands on the target and SupportCount units of SupportFaction (a crew-friendly
+	 *  +Factions row) step out SupportDelaySeconds after the telegraph, spread over SupportSpreadCm. */
+	UPROPERTY(EditAnywhere, Config, Category = "Strike") FName SupportFaction;
+	UPROPERTY(EditAnywhere, Config, Category = "Strike") int32 SupportCount = 0;
+	UPROPERTY(EditAnywhere, Config, Category = "Strike") float SupportSpreadCm = 400.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Strike") float SupportDelaySeconds = 1.6f;
 };
 
 USTRUCT(BlueprintType)
@@ -749,6 +756,13 @@ struct FDCUpgradeDef
 	UPROPERTY(EditAnywhere, Config, Category = "Run") float DominoDelaySeconds = 0.f;
 	/** HQ fires a free strike on a random standing tower this often (mutators). */
 	UPROPERTY(EditAnywhere, Config, Category = "Run") float RogueStrikeSeconds = 0.f;
+	/** R22 cards that act during a sector: the +Companions row they put up (Companion and Deploy effects), and Count =
+	 *  drones launched each sector (Companion) or charges dealt each sector (Deploy, LastStand). */
+	UPROPERTY(EditAnywhere, Config, Category = "Run") FName Companion;
+	UPROPERTY(EditAnywhere, Config, Category = "Run") int32 Count = 1;
+	/** Toasts to the owner: at sector start and when the card acts. {N} = charges left. Empty = none. */
+	UPROPERTY(EditAnywhere, Config, Category = "Run") FString ReadyToast;
+	UPROPERTY(EditAnywhere, Config, Category = "Run") FString UseToast;
 };
 
 /** An HQ Scoop template (R8): a photo condition with a time limit. */
@@ -925,6 +939,10 @@ public:
 	UPROPERTY(EditAnywhere, Config, Category = "Input") TArray<FDCKeyBinding> Bindings;
 	UPROPERTY(EditAnywhere, Config, Category = "Run") FDCRunTuning Run;
 	UPROPERTY(EditAnywhere, Config, Category = "Run") TArray<FDCUpgradeDef> Upgrades;
+	/** R22 card companions (drones, turrets) and their actor pool (prewarmed at sector start, never above the max). */
+	UPROPERTY(EditAnywhere, Config, Category = "Run") TArray<FDCCompanionDef> Companions;
+	UPROPERTY(EditAnywhere, Config, Category = "Run") int32 CompanionPrewarm = 4;
+	UPROPERTY(EditAnywhere, Config, Category = "Run") int32 CompanionPoolMax = 16;
 	/** R21 draft rarities (weights and card look). */
 	UPROPERTY(EditAnywhere, Config, Category = "Run") TArray<FDCCardRarity> CardRarities;
 	/** Photographer builder (R23): the slots in recipe order, the parts per slot, and the palette swatches. */
@@ -983,6 +1001,10 @@ public:
 	const FDCCardRarity* FindRarity(FName Id) const
 	{
 		return CardRarities.FindByPredicate([Id](const FDCCardRarity& R) { return R.Id == Id; });
+	}
+	const FDCCompanionDef* FindCompanion(FName Id) const
+	{
+		return Companions.FindByPredicate([Id](const FDCCompanionDef& D) { return D.Id == Id; });
 	}
 	const FDCUpgradeDef* FindUpgrade(FName Id) const
 	{

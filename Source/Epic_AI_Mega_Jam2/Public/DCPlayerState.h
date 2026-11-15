@@ -60,6 +60,9 @@ public:
 
 	bool HasGear(FName Id) const { return Gear.Contains(Id); }
 
+	/** R22 host-only charges per owned card id (turret deploys, last stands), dealt at each sector start. */
+	TMap<FName, int32> HostCardCharges;
+
 	/** Host: the press call sign every screen shows (R8). The engine's player name (the PC's network name on LAN
 	 *  or online subsystems) is never shown: GetPlayerName() returns this through GetPlayerNameCustom. */
 	void SetCallSign(const FString& InSign) { CallSign = InSign; ForceNetUpdate(); }
