@@ -290,6 +290,44 @@ namespace
 					}
 					return Top;
 				}},
+			// Beacon (R23 landmark crown): a broadcast mast of four corner posts tapering to a point, trim rings every
+			// few metres, a thin neon ring (the sign edge colour) every 5 m and a warm light at the tip.
+			{TEXT("Beacon"), [](FDCVoxelWorld& W, const FFaceFrame& F, int32 TopZ, const FCraftIds& Ids, FRandomStream&)
+				{
+					const int32 U = Ids.Unit;
+					const int32 Top = Parapet(W, F, TopZ, Ids);
+					const int32 Cx = (F.Min.X + F.Max.X) / 2, Cy = (F.Min.Y + F.Max.Y) / 2;
+					const int32 Base = FMath::Min(F.Max.X - F.Min.X, F.Max.Y - F.Min.Y) / 5;
+					const int32 H = 60 * U;
+					if (Base < 3 * U)
+					{
+						return Top;
+					}
+					for (int32 Dz = 0; Dz < H; ++Dz)
+					{
+						const int32 R = FMath::Max(U, Base - (Base - U) * Dz / H);
+						const int32 Z = TopZ + 1 + Dz;
+						for (int32 Sx = -1; Sx <= 1; Sx += 2)
+						{
+							for (int32 Sy = -1; Sy <= 1; Sy += 2)
+							{
+								const int32 X0 = Sx < 0 ? Cx - R : Cx + R - U, Y0 = Sy < 0 ? Cy - R : Cy + R - U;
+								W.FillBox(FIntVector(X0, Y0, Z), FIntVector(X0 + U, Y0 + U, Z + 1), Ids.Trim);
+							}
+						}
+						const bool bNeon = Dz % (20 * U) == 10 * U;
+						if (bNeon || Dz % (8 * U) == 0)
+						{
+							const uint8 Mat = bNeon ? Ids.PosterEdge : Ids.Trim;
+							W.FillBox(FIntVector(Cx - R, Cy - R, Z), FIntVector(Cx + R, Cy - R + 1, Z + 1), Mat);
+							W.FillBox(FIntVector(Cx - R, Cy + R - 1, Z), FIntVector(Cx + R, Cy + R, Z + 1), Mat);
+							W.FillBox(FIntVector(Cx - R, Cy - R, Z), FIntVector(Cx - R + 1, Cy + R, Z + 1), Mat);
+							W.FillBox(FIntVector(Cx + R - 1, Cy - R, Z), FIntVector(Cx + R, Cy + R, Z + 1), Mat);
+						}
+					}
+					W.FillBox(FIntVector(Cx - U, Cy - U, TopZ + 1 + H), FIntVector(Cx + U, Cy + U, TopZ + 1 + H + 2 * U), Ids.Window);
+					return FMath::Max(Top, TopZ + 1 + H + 2 * U);
+				}},
 			// Sawtooth: an industrial roof of north-light ridges across X, the steep side glazed (the alternate window).
 			{TEXT("Sawtooth"), [](FDCVoxelWorld& W, const FFaceFrame& F, int32 TopZ, const FCraftIds& Ids, FRandomStream&)
 				{

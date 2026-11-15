@@ -55,7 +55,7 @@ struct FDCVoxelRecipe
 	/** Floors between setbacks (0 = straight tower) and how far each setback steps in per side (cm). */
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 SetbackEvery = 0;
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 SetbackCm = 0;
-	/** Roof builder id resolved by the roof registry: Flat, Crown, Spire, Antenna; R23 Tiered, Dome, Helipad, Sawtooth, Shanty. */
+	/** Roof builder id resolved by the roof registry: Flat, Crown, Spire, Antenna; R23 Tiered, Dome, Helipad, Sawtooth, Shanty, Beacon. */
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") FName Roof = TEXT("Flat");
 	/** Horizontal band (string course) every N floors, in Trim (0 = none). */
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 BandEvery = 0;

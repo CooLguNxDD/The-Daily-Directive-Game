@@ -163,8 +163,11 @@ namespace
 	{
 		FDCVoxelGrid& G = Sector.Terrain;
 		const int32 V = G.VoxelCm;
-		const FIntVector Lo = G.ToLocal(T.FootMinCm());
-		const FIntVector Hi = G.ToLocal(T.FootMaxCm() - FIntVector(1));
+		// The whole scan box, not only the footprint (R23): rubble also rests on what stands proud of the walls (a sign
+		// band at the roof line, a wall mount), which TowerTopCells counts as the tower's top; when that falls, the
+		// rubble over it drops too.
+		const FIntVector Lo = G.ToLocal(T.Grid.MinCm(T.ScanMin));
+		const FIntVector Hi = G.ToLocal(T.Grid.MinCm(T.ScanMax) - FIntVector(1));
 		const int32 Ceil = DCVoxelMath::FloorDiv(T.Grid.OriginCm.Z + T.ScanMax.Z * T.Grid.VoxelCm - G.OriginCm.Z, V) + 2;
 		const int32 Ground = FMath::Max(GroundLayers, 1);
 		TArray<uint8> Fallen;
