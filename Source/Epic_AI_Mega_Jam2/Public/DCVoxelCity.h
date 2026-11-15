@@ -255,7 +255,7 @@ private:
 	/** Pure read of the cell's chunk meshes into one mesh (safe on workers while no job result lands). */
 	void MergeCell(const FIntVector4& Cell, FDCVoxelMeshData& Out) const;
 	/** Game thread: the merged mesh into the cell's component (section + async collision). */
-	bool ApplyCell(const FIntVector4& Cell, const FDCVoxelMeshData& Merged, double T0);
+	bool ApplyCell(const FIntVector4& Cell, const FDCVoxelMeshData& Merged, double T0, const struct FProcMeshSection* Prebuilt = nullptr);
 	/** Set by Build until the first full upload is done (load-phase budget). */
 	bool bLoading = false;
 	/** A committed op hands the next queued op to the following Tick (R13: the detonation frame only commits). */
