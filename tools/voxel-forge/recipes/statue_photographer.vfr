@@ -1,0 +1,21 @@
+# Statue (R23 monument): a press photographer raising a boxy camera, cast in dark bronze-ink on a stepped plinth with a
+# dim warm plaque light. Original design. Faces +x.
+grid 10
+size 20 20 60
+slot plinth Kerb
+slot step Trim
+slot bronze InkBrown
+slot cam Ink
+slot plaque WindowDim
+box 0 0 0 20 20 4 step
+box 2 2 4 18 18 20 plinth
+box 18 7 10 19 13 13 plaque
+box 6 7 20 13 13 22 bronze
+beam 8 8 22 8 8 34 1.6 bronze
+beam 11 12 22 11 12 34 1.6 bronze
+ellipsoid 9.5 10 40 4 4.5 6 bronze
+sphere 9.5 10 49 2.8 bronze
+beam 10 6 44 15 7 50 1.2 bronze
+beam 10 14 44 15 13 50 1.2 bronze
+box 14 6 49 18 14 54 cam
+box 18 9 50 19 11 53 cam

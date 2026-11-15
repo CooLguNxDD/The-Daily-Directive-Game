@@ -1,0 +1,14 @@
+# Dry fountain (R23 plaza, monument): a round kerb-stone basin with a cracked dark pool and a stepped centre column.
+grid 10
+size 40 40 16
+slot stone Kerb
+slot pool WindowOff
+slot column Trim
+cyl 20 20 0 3 19.5 stone
+carve cyl 20 20 1 3 17.5
+cyl 20 20 1 2 17.5 pool
+noise 0.12 6 pool
+cyl 20 20 1 8 4 stone
+cyl 20 20 8 11 3 column
+cyl 20 20 11 13 5 stone
+cyl 20 20 13 15 1.5 column
