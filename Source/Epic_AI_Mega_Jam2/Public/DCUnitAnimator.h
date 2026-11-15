@@ -61,6 +61,9 @@ private:
 	uint8 SeenAttack = 0;
 	float Phase = 0.f;
 	float Speed = 0.f;
+	/** Advisor a-32: speed measured over the window between location changes (clients see 15-20 Hz steps). */
+	float SpeedWindow = 0.f;
+	float MeasuredSpeed = 0.f;
 	float Turn = 0.f;
 	float Time = 0.f;
 	float Accum = 0.f;

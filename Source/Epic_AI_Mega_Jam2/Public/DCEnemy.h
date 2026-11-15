@@ -18,6 +18,8 @@ class EPIC_AI_MEGA_JAM2_API ADCEnemy : public APawn
 	GENERATED_BODY()
 
 public:
+	/** Server time this unit spawned (replicated once; -1 = unknown). */
+	float GetSpawnServerTime() const { return SpawnServerTime; }
 	ADCEnemy();
 
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
@@ -103,6 +105,8 @@ private:
 	UPROPERTY() TObjectPtr<class UDCUnitAnimator> Anim;
 	/** R20: bumped by the host per attack so every machine plays the attack clip (melee has no multicast). */
 	UPROPERTY(Replicated) uint8 AttackSeq = 0;
+	/** Server time the unit spawned (initial-only replication): late-relevant clients skip the spawn clip (a-32). */
+	UPROPERTY(Replicated) float SpawnServerTime = -1.f;
 	/** R20: the crumb burst waits for the death clip; EndPlay bursts if the actor goes first. */
 	void BurstBody();
 	bool bBodyBurst = false;

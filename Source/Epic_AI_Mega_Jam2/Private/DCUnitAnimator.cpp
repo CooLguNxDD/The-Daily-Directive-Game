@@ -1,4 +1,5 @@
 #include "DCUnitAnimator.h"
+#include "GameFramework/GameStateBase.h"
 
 #include "Camera/PlayerCameraManager.h"
 #include "DCTuning.h"
@@ -59,9 +60,18 @@ UDCUnitAnimator* UDCUnitAnimator::Attach(AActor& Unit, UProceduralMeshComponent&
 	Anim->LastYaw = Unit.GetActorRotation().Yaw;
 	// Spread pose updates of a pack across frames.
 	Anim->Accum = FMath::FRand();
-	Anim->Play(EDCUnitClip::Spawn);
+	// Advisor a-32: a unit that becomes relevant on a client mid-walk must not replay its drop-in: the spawn clip plays
+	// only while the unit is younger than the clip (server spawn time, replicated once).
+	const FDCUnitClip* SpawnRow = Anim->ClipRow(EDCUnitClip::Spawn);
+	const AGameStateBase* GS = Unit.GetWorld() ? Unit.GetWorld()->GetGameState() : nullptr;
+	const float Age = GS && Unit.GetSpawnServerTime() >= 0.f ? static_cast<float>(GS->GetServerWorldTimeSeconds()) - Unit.GetSpawnServerTime() : 0.f;
+	const bool bFresh = !SpawnRow || Age < SpawnRow->Seconds;
+	if (bFresh)
+	{
+		Anim->Play(EDCUnitClip::Spawn);
+	}
 	// The spawn move's first frame now, so the unit never shows standing before it (a drop starts in the air).
-	if (const FDCUnitGait* G = Anim->Gait())
+	if (const FDCUnitGait* G = bFresh ? Anim->Gait() : nullptr)
 	{
 		FDCUnitAnimInput In;
 		In.Clip = Anim->Clip;
@@ -126,12 +136,26 @@ void UDCUnitAnimator::Advance(float DeltaSeconds, const FVector& Location, float
 
 	// Motion: smoothed ground speed and yaw rate; the stride phase follows the smoothed speed so 15 Hz updates on a
 	// client do not jerk the legs.
-	const float Moved = FVector::Dist2D(Location, Last) / DeltaSeconds;
+	// Advisor a-32: on a client the location steps at the net rate, so speed is measured over the window since the last
+	// change (per frame it read ~75% of the real speed and spiked on step frames: sliding legs). The host moves every
+	// frame, so its window is one frame. No clamp: the window keeps the value real.
+	SpeedWindow += DeltaSeconds;
+	const float Step = FVector::Dist2D(Location, Last);
+	if (Step > 0.5f)
+	{
+		MeasuredSpeed = Step / FMath::Max(SpeedWindow, 1e-3f);
+		SpeedWindow = 0.f;
+		Last = Location;
+	}
+	else if (SpeedWindow > 0.3f)
+	{
+		MeasuredSpeed = 0.f; // no step for longer than any net interval: standing
+		SpeedWindow = 0.f;
+	}
 	const float Turned = FRotator::NormalizeAxis(Yaw - LastYaw) / DeltaSeconds;
-	Last = Location;
 	LastYaw = Yaw;
 	const float Ease = FMath::Clamp(DeltaSeconds * UnitAnimMotionEase, 0.f, 1.f);
-	Speed = ForcedSpeedCm >= 0.f ? ForcedSpeedCm : FMath::Lerp(Speed, FMath::Min(Moved, 3000.f), Ease);
+	Speed = ForcedSpeedCm >= 0.f ? ForcedSpeedCm : FMath::Lerp(Speed, MeasuredSpeed, Ease);
 	Turn = FMath::Lerp(Turn, FMath::Clamp(Turned, -720.f, 720.f), Ease);
 	Phase = DCUnitAnim::AdvancePhase(Phase, Speed * DeltaSeconds, *G);
 	Time += DeltaSeconds;

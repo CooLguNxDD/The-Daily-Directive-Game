@@ -453,6 +453,7 @@ void ADCEnemy::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetime
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	DOREPLIFETIME(ADCEnemy, Kind);
+	DOREPLIFETIME_CONDITION(ADCEnemy, SpawnServerTime, COND_InitialOnly);
 	DOREPLIFETIME(ADCEnemy, Health);
 	DOREPLIFETIME(ADCEnemy, StunnedUntil);
 	DOREPLIFETIME(ADCEnemy, LightTarget);
@@ -784,6 +785,10 @@ bool ADCEnemy::IsWalker() const
 
 void ADCEnemy::BeginPlay()
 {
+	if (HasAuthority() && GetWorld() && GetWorld()->GetGameState())
+	{
+		SpawnServerTime = static_cast<float>(GetWorld()->GetGameState()->GetServerWorldTimeSeconds());
+	}
 	Super::BeginPlay();
 	if (const FDCEnemyDef* Def = GetDef())
 	{
