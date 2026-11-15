@@ -45,7 +45,8 @@ struct FDCVoxelRecipe
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 MaxFloors = 16;
 	/** Wall thickness (cm). All recipe sizes are cm, so a recipe keeps its look at any voxel size. */
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 WallCm = 20;
-	/** Facade bay pattern for upper floors, cycled around each face: W window, S slot window, G paired windows, P solid pier. */
+	/** Facade bay pattern for upper floors, cycled around each face: W window, S slot window, G paired windows, P solid pier;
+	 *  R23: R ribbon window, T twin tall slots, X storefront glass. */
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") FString Facade = TEXT("W");
 	/** Ground floor pattern: D door, P pier, W shop window. */
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") FString Base = TEXT("PD");
@@ -54,7 +55,7 @@ struct FDCVoxelRecipe
 	/** Floors between setbacks (0 = straight tower) and how far each setback steps in per side (cm). */
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 SetbackEvery = 0;
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 SetbackCm = 0;
-	/** Roof builder id resolved by the roof registry: Flat, Crown, Spire, Antenna. */
+	/** Roof builder id resolved by the roof registry: Flat, Crown, Spire, Antenna; R23 Tiered, Dome, Helipad, Sawtooth. */
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") FName Roof = TEXT("Flat");
 	/** Horizontal band (string course) every N floors, in Trim (0 = none). */
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 BandEvery = 0;

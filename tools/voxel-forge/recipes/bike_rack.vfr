@@ -1,0 +1,28 @@
+# Bike rack (R23 street): four steel hoops in a row on a kerb-grey strip, one bicycle locked to it. Faces +x.
+grid 5
+size 12 40 14
+slot steel Steel
+slot strip Kerb
+slot bike InkBlue
+slot wheel Ink
+box 4 1 0 8 39 1 strip
+beam 6 4 1 6 4 10 0.6 steel
+beam 6 4 10 6 8 10 0.6 steel
+beam 6 8 1 6 8 10 0.6 steel
+beam 6 14 1 6 14 10 0.6 steel
+beam 6 14 10 6 18 10 0.6 steel
+beam 6 18 1 6 18 10 0.6 steel
+beam 6 24 1 6 24 10 0.6 steel
+beam 6 24 10 6 28 10 0.6 steel
+beam 6 28 1 6 28 10 0.6 steel
+beam 6 34 1 6 34 10 0.6 steel
+beam 6 34 10 6 38 10 0.6 steel
+beam 6 38 1 6 38 10 0.6 steel
+beam 9 16 4 9 16 4 3.6 wheel
+beam 9 28 4 9 28 4 3.6 wheel
+carve beam 9 16 4 9 16 4 2.4
+carve beam 9 28 4 9 28 4 2.4
+beam 9 16 4 9 22 9 0.6 bike
+beam 9 22 9 9 28 4 0.6 bike
+beam 9 22 9 9 27 10 0.6 bike
+beam 9 18 11 9 21 11 0.7 bike

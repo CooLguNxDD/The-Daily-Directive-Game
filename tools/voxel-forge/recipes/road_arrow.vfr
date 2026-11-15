@@ -1,0 +1,6 @@
+# Lane arrow (R23 ground cover): a worn street-paint arrow, one voxel high, pointing +x.
+grid 5
+size 60 20 1
+slot paint Paint
+poly 0 1 paint 0,8 38,8 38,2 58,10 38,18 38,12 0,12
+noise 0.18 5 paint

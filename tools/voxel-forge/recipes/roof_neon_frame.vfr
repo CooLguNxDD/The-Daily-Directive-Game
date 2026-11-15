@@ -1,0 +1,19 @@
+# Rooftop neon frame (R23 roof sign, RoofEdge): an open steel lattice with a cyan tube outline and a dark plate,
+# so the skyline gets empty sign frames between the art billboards. Faces +x.
+grid 10
+size 4 40 26
+slot steel Steel
+slot plate Ink
+slot tube NeonCyanEdge
+pivot 0 20 0
+beam 1 4 0 1 4 10 0.8 steel
+beam 1 36 0 1 36 10 0.8 steel
+beam 1 4 0 1 12 10 0.6 steel
+beam 1 36 0 1 28 10 0.6 steel
+box 1 0 10 3 40 26 plate
+box 3 0 10 4 40 11 tube
+box 3 0 25 4 40 26 tube
+box 3 0 10 4 1 26 tube
+box 3 39 10 4 40 26 tube
+box 3 6 15 4 34 16 tube
+box 3 6 20 4 22 21 tube

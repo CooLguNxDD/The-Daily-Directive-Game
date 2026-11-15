@@ -1,0 +1,16 @@
+# Wall screen (R23 wall mount): a framed video panel showing cyan scan bars on dark glass, a cable down the wall.
+grid 10
+size 3 26 16
+slot frame Ink
+slot glass WindowOff
+slot bar NeonCyan
+slot hot NeonCyanEdge
+slot cable Trim
+pivot 0 13 0
+box 0 0 2 2 26 16 frame
+box 2 1 3 3 25 15 glass
+paint box 2 2 5 3 24 6 bar
+paint box 2 2 8 3 18 9 bar
+paint box 2 2 11 3 21 12 bar
+paint box 2 2 13 3 9 14 hot
+box 0 12 0 1 13 2 cable

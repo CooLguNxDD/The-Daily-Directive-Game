@@ -1,0 +1,19 @@
+# Vertical shop sign (R23 wall mount): a tall cream blade with dark glyph strokes and a magenta tube edge, on two
+# steel arms. Reads as lettering without being any real word.
+grid 10
+size 8 4 34
+slot arm Steel
+slot face Paper
+slot edge PaperEdge
+slot glyph Ink
+pivot 0 2 0
+box 0 1 4 4 3 5 arm
+box 0 1 29 4 3 30 arm
+box 3 0 2 8 4 32 edge
+box 4 0 3 7 4 31 face
+paint box 4 0 6 7 4 7 glyph
+paint box 5 0 9 7 4 12 glyph
+paint box 4 0 14 6 4 15 glyph
+paint box 4 0 17 7 4 18 glyph
+paint box 5 0 20 6 4 24 glyph
+paint box 4 0 26 7 4 27 glyph
