@@ -892,9 +892,11 @@ void ADCDemoPilot::AddChipFire()
 		Add(0.5f, [this, i, Frame]
 		{
 			ADCCharacter* Me = Cast<ADCCharacter>(GetWorld()->GetFirstPlayerController() ? GetWorld()->GetFirstPlayerController()->GetPawn() : nullptr);
-			if (Me && i % 6 == 0)
+			if (Me && i % 20 == 0)
 			{
-				Me->HostResupply(0, 60, 0.f); // pilot aid: the magazine never runs dry over the minute
+				// Pilot aid: the magazine never runs dry over the minute (~90 rounds per 10 s). Right after each frame, so
+				// its toast is gone before the next one.
+				Me->HostResupply(0, 120, 0.f);
 			}
 			const float U = static_cast<float>(i % 8) / 7.f - 0.5f;
 			const float V = static_cast<float>((i / 8) % 3) - 1.f;
