@@ -1,13 +1,15 @@
-# Outfit head (R18): a soft hood over the voxel head, open at the face, accent rim around the opening.
-# Head frame: the head fills x 1..6, y 1..5, z 1..6 (pivot 3 3 1).
+# Outfit head (R18): a soft hood up over the voxel head: rounded crown, a peak over the brow, a wide open face, the
+# cloth draped down the back of the neck, accent rim around the opening.
+# Head frame: the head fills x 1..6, y 2..6, z 2..7 (pivot 3 4 2).
 name outfit_hood
 grid 5
-size 7 6 8
+size 8 8 10
 slot hood SwatchMain
 slot rim SwatchAccent
-ellipsoid 3.2 3 4 3.8 3.1 4 hood
-carve box 1 1 1 6 5 6
-carve box 5 1 1 7 5 6
-paint box 5 0 0 7 6 8 rim
-paint box 4 0 6 7 6 8 rim
-pivot 3 3 1
+ellipsoid 3.1 4 5.2 3.9 3.9 4.4 hood
+box 0 1 0 3 7 3 hood
+carve box 1 2 2 6 6 7
+carve box 5 2 1 8 6 7
+box 5 3 7 7 5 8 hood
+paint box 5 0 0 8 8 10 rim
+pivot 3 4 2

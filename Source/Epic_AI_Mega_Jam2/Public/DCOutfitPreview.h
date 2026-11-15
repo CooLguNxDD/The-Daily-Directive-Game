@@ -23,6 +23,10 @@ public:
 	virtual void Tick(float DeltaSeconds) override;
 
 	void Show(const FDCOutfit& Outfit);
+	/** Evidence frames (R18): holds the turntable at Yaw (degrees, 0 = facing the camera); a negative value spins again. */
+	void Face(float Yaw);
+	/** Evidence frames (R18): renders the turntable now and writes it as a PNG (independent of the game window). */
+	bool SaveImage(const FString& Path);
 	UTextureRenderTarget2D* GetImage() const { return Image; }
 	/** 0 until the capture has had a moment to light the scene, then 1 (the first captures came out black, V5.5). */
 	float ImageAlpha() const;
@@ -38,4 +42,5 @@ private:
 	UPROPERTY() TObjectPtr<UTextureRenderTarget2D> Image;
 	UPROPERTY() TArray<TObjectPtr<UProceduralMeshComponent>> Parts;
 	double StartReal = 0.0;
+	bool bHold = false;
 };

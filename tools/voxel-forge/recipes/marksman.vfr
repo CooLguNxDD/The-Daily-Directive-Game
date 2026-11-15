@@ -4,6 +4,7 @@ name marksman
 grid 5
 size 24 3 7
 slot body Ink
+slot glow NeonCyanEdge
 slot wood InkBrown
 slot steel Steel
 slot lens NeonCyanEdge
@@ -22,4 +23,6 @@ box 9 0 4 10 2 5 steel
 box 11 0 5 12 2 6 lens
 box 4 0 5 5 2 6 lens
 box 7 2 3 8 3 4 steel
+# Readability stripe (h-content hand-off: dark guns vanished on the dark suit from behind): a glowing top line.
+paint box 4 0 3 11 2 4 glow
 pivot 7 1 2
