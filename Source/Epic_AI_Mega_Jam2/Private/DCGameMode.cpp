@@ -1307,8 +1307,32 @@ bool ADCGameMode::IsCombatLive() const
 	return GS && GS->Phase == EDCRunPhase::Sector;
 }
 
+namespace
+{
+	// Call effects by id (R7): a stratagem row's Effect picks how the call lands. A new kind is a new entry.
+	using FCallEffectFn = bool (*)(ADCGameMode&, const FDCStratagemDef&, const FVector&, AController*);
+	bool EffectSupply(ADCGameMode& GM, const FDCStratagemDef& Def, const FVector& Target, AController* Caller)
+	{
+		ADCSupplyPod::DropLoad(GM.GetWorld(), Target, Def.SupplyFilm, Def.SupplyAmmo, Def.SupplyHealth, Def.SupplyCrewRadiusCm, Def.TelegraphSeconds);
+		UE_LOG(LogTemp, Display, TEXT("DCSUPPLY %s called at %s"), *Def.Id.ToString(), *Target.ToCompactString());
+		return true;
+	}
+	const TMap<FName, FCallEffectFn>& CallEffects()
+	{
+		static const TMap<FName, FCallEffectFn> Map = {
+			{TEXT("Supply"), &EffectSupply},
+		};
+		return Map;
+	}
+}
+
 void ADCGameMode::CallStrike(const FDCStratagemDef& Def, const FVector& Target, AController* Caller)
 {
+	if (const FCallEffectFn* Effect = CallEffects().Find(Def.Effect))
+	{
+		(*Effect)(*this, Def, Target, Caller);
+		return;
+	}
 	const ADCGameState* GS = GetGameState<ADCGameState>();
 	FRandomStream Rng(GetTypeHash(Target) ^ GS->RunSeed);
 	for (int32 i = 0; i < FMath::Max(Def.Blasts, 1); ++i)

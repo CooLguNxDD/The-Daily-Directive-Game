@@ -67,6 +67,21 @@ ADCSupplyPod* ADCSupplyPod::Drop(UWorld* World, const FVector& Where)
 	return Pod;
 }
 
+ADCSupplyPod* ADCSupplyPod::DropLoad(UWorld* World, const FVector& Where, int32 Film, int32 Ammo, float Health, float CrewRadiusCm, float FallDelay)
+{
+	ADCSupplyPod* Pod = Drop(World, Where);
+	if (Pod)
+	{
+		Pod->LoadFilm = Film;
+		Pod->LoadAmmo = Ammo;
+		Pod->LoadHealth = Health;
+		Pod->LoadCrewRadiusCm = CrewRadiusCm;
+		Pod->LandTime += FMath::Max(FallDelay, 0.f);
+		Pod->SetLifeSpan(PodLifeSeconds + FMath::Max(FallDelay, 0.f));
+	}
+	return Pod;
+}
+
 void ADCSupplyPod::BeginPlay()
 {
 	Super::BeginPlay();
@@ -113,11 +128,23 @@ void ADCSupplyPod::Tick(float DeltaSeconds)
 		return;
 	}
 	const FDCRunTuning& Run = UDCTuning::Get().Run;
+	const int32 Film = LoadFilm >= 0 ? LoadFilm : Run.PodFilm;
+	const int32 Ammo = LoadAmmo >= 0 ? LoadAmmo : Run.PodAmmo;
+	const float Heal = LoadHealth >= 0.f ? LoadHealth : Run.PodHealth;
 	for (ADCCharacter* C : TActorRange<ADCCharacter>(GetWorld()))
 	{
 		if (!C->IsDowned() && FVector::Dist2D(C->GetActorLocation(), Ground) < PickupRadiusCm)
 		{
-			C->HostResupply(Run.PodFilm, Run.PodAmmo, Run.PodHealth);
+			// R7: a supply drop refills the whole crew nearby, not only the one who opened it.
+			for (ADCCharacter* Mate : TActorRange<ADCCharacter>(GetWorld()))
+			{
+				const bool bNear = Mate == C || (LoadCrewRadiusCm > 0.f && FVector::Dist2D(Mate->GetActorLocation(), Ground) < LoadCrewRadiusCm);
+				if (!Mate->IsDowned() && bNear)
+				{
+					Mate->HostResupply(Film, Ammo, Heal);
+				}
+			}
+			UE_LOG(LogTemp, Display, TEXT("DCSUPPLY opened by %s: ammo %d film %d health %.0f crew radius %.0f"), *C->GetName(), Ammo, Film, Heal, LoadCrewRadiusCm);
 			Destroy();
 			return;
 		}

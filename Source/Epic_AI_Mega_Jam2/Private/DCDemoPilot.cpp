@@ -558,6 +558,46 @@ void ADCDemoPilot::AddClashShot(const FString& S)
 	Add(0.6f, [this, S] { Shot(S + TEXT("_clash_stamp")); LogPhoto(); Release(TEXT("Aim")); return true; });
 }
 
+void ADCDemoPilot::AddSupplyCall()
+{
+	// R7 evidence (-dcsupply): spend the rifle's magazine, then Slot2 + Q until the Supply Drop is selected, call it 6 m
+	// ahead with the real Fire action, frame the falling crate and walk into it (DCSUPPLY lines in the log).
+	Add(0.f, [this] { const ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>(); return GS && GS->Phase == EDCRunPhase::Sector; }, 120.f);
+	for (int32 i = 0; i < 20; ++i)
+	{
+		Add(0.12f, [this] { Tap(TEXT("Fire")); return true; });
+	}
+	Add(0.5f, [this] { Shot(TEXT("supply_ammo_spent")); Tap(TEXT("Slot2")); return true; });
+	for (int32 i = 0; i < 6; ++i)
+	{
+		Add(0.35f, [this]
+		{
+			const APlayerController* PC = GetWorld()->GetFirstPlayerController();
+			const ADCCharacter* Me = PC ? Cast<ADCCharacter>(PC->GetPawn()) : nullptr;
+			if (Me && Me->GetSelectedStratagem() != TEXT("SupplyDrop"))
+			{
+				Tap(TEXT("Cycle"));
+			}
+			return true;
+		});
+	}
+	Add(0.3f, [this]
+	{
+		const APawn* Me = GetWorld()->GetFirstPlayerController() ? GetWorld()->GetFirstPlayerController()->GetPawn() : nullptr;
+		if (Me)
+		{
+			SupplyAt = Me->GetActorLocation() + Me->GetActorForwardVector() * 600.f - FVector(0, 0, 90.f);
+			AimAt(SupplyAt);
+		}
+		Shot(TEXT("supply_aim"));
+		return true;
+	});
+	Add(0.2f, [this] { Tap(TEXT("Fire")); UE_LOG(LogDCDemo, Display, TEXT("DEMO supply drop called at %s"), *SupplyAt.ToCompactString()); return true; });
+	Add(2.0f, [this] { AimAt(SupplyAt + FVector(0, 0, 300.f)); Shot(TEXT("supply_falling")); return true; });
+	Add(1.5f, [this] { AimAt(SupplyAt); Shot(TEXT("supply_landed")); Tap(TEXT("Slot1")); Press(TEXT("Move"), FVector(0, 1, 0)); return true; });
+	Add(1.6f, [this] { Release(TEXT("Move")); Shot(TEXT("supply_opened")); return true; });
+}
+
 void ADCDemoPilot::AddLineupShot()
 {
 	// R3/R10 readability evidence (-dclineup): every unit kind of every +Factions row (columns = factions, rows = its
@@ -1073,6 +1113,10 @@ void ADCDemoPilot::BuildScript()
 		}
 		int32 Cycles = CyclesPerSector;
 		FParse::Value(FCommandLine::Get(), TEXT("dccycles="), Cycles); // more strike-and-snap cycles per sector
+		if (Sector == 0 && FParse::Param(FCommandLine::Get(), TEXT("dcsupply")))
+		{
+			AddSupplyCall();
+		}
 		// Before the first strike: a clean street, inside the crew grace.
 		if (Sector == 0 && FParse::Param(FCommandLine::Get(), TEXT("dclineup")))
 		{

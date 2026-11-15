@@ -497,6 +497,12 @@ bool FDCVoxelDataTest::RunTest(const FString&)
 	}
 	for (const FDCStratagemDef& S : UDCTuning::Get().Stratagems)
 	{
+		// Blasts carve; a supply call (R7, Effect=Supply) carves nothing and must carry a crew load instead.
+		if (S.Effect == TEXT("Supply"))
+		{
+			TestTrue(FString::Printf(TEXT("supply call %s refills ammo for a crew radius"), *S.Id.ToString()), S.SupplyAmmo > 0 && S.SupplyCrewRadiusCm > 0.f);
+			continue;
+		}
 		TestTrue(FString::Printf(TEXT("stratagem %s has a carve row"), *S.Id.ToString()), V.Carves.ContainsByPredicate([&S](const FDCVoxelCarveDef& C) { return C.Stratagem == S.Id; }));
 	}
 	// Palette discipline (R6): no voxel material is propaganda red; red stays for danger.

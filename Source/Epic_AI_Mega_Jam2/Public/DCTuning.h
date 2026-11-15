@@ -96,6 +96,13 @@ struct FDCStratagemDef
 	UPROPERTY(EditAnywhere, Config, Category = "Strike") float BlastScatterCm = 0.f;
 	/** Behaviour id resolved by the strike registry: Laser, SunDrop, Singularity, Decoy. */
 	UPROPERTY(EditAnywhere, Config, Category = "Strike") FName Behaviour = TEXT("Laser");
+	/** What the call does, by id in ADCGameMode's effect registry: Strike (orbital blasts) or Supply (R7: a supply pod
+	 *  lands at the aim point after TelegraphSeconds and refills every standing player within SupplyCrewRadiusCm). */
+	UPROPERTY(EditAnywhere, Config, Category = "Strike") FName Effect = TEXT("Strike");
+	UPROPERTY(EditAnywhere, Config, Category = "Strike") int32 SupplyAmmo = 0;
+	UPROPERTY(EditAnywhere, Config, Category = "Strike") int32 SupplyFilm = 0;
+	UPROPERTY(EditAnywhere, Config, Category = "Strike") float SupplyHealth = 0.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Strike") float SupplyCrewRadiusCm = 0.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Strike") bool bStartsUnlocked = true;
 	UPROPERTY(EditAnywhere, Config, Category = "Strike") FLinearColor BeamColor = FLinearColor(1.f, 0.1f, 0.05f);
 };
