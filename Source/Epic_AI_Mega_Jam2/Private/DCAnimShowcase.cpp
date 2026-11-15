@@ -222,8 +222,9 @@ void UDCAnimShowcase::Start()
 		UE_LOG(LogTemp, Display, TEXT("DCANIMSHOT unit %s at %s animator=%d segmented=%d"), *Kinds[i], *At.ToCompactString(),
 			E->GetAnimator() ? 1 : 0, E->GetAnimator() && E->GetAnimator()->IsSegmented() ? 1 : 0);
 	}
-	const FVector Eye = Center + CamDir * CamDist + FVector(0.f, 0.f, 140.f);
-	MakeCapture(Eye, Center + FVector(0.f, 0.f, 90.f), 70.f, true);
+	// Frame from the street to above the flyers (critic c-30: the swarmer at hover height was cropped overhead).
+	const FVector Eye = Center + CamDir * CamDist * 1.15f + FVector(0.f, 0.f, 180.f);
+	MakeCapture(Eye, Center + FVector(0.f, 0.f, 150.f), 70.f, true);
 	// Evidence only: no HUD (no fill light either: the night exposure turns any lit ink unit white, frames anim2/3).
 	if (PC->GetHUD())
 	{
