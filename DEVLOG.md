@@ -162,3 +162,13 @@ is kept from the run records (Glass Box modifier): what was decided, why, and wh
 - Hive nests, a 40-unit cap across every spawn source, friendly-army kills that pay nothing (HQ calls it out), onboarding
   steps as data rows, per-machine effect scale by hardware tier, a darker ID card, and a faction lineup frame for
   evidence (`-dclineup`).
+- Evening (2026-11-14): the review judged factions, objectives and the ID card met and asked for packaged proof and a
+  firmer frame budget. Packaged runs now export the card into the game's own Saved folder and complete a Retrieve at
+  normal damage. Collapse frames got lighter: flying leaf pieces stopped casting shadows, the op after a strike starts a
+  frame later and reads street heights chunk by chunk, shard and landing debris spawn at most 28 a frame, shards live
+  4.5 s and fallen groups rest sooner. A solo host now holds 109 fps through collapses at 1080p; four game instances
+  on one PC hold 86 fps on average with some slow seconds from sharing the CPU.
+- Solo play: a player is attacked by at most a few units at once (attack slots by crew size), the others turn on rival
+  factions; unit damage to one player is budgeted per second by crew size (7 solo, uncapped at four players), and a
+  solo player refills health after 4 quiet seconds. All of it is data in `Config/DefaultGame.ini` (human calls).
+- Army and Scavenger units got a glowing chest band in their cue colour so every faction reads in the dark street.
