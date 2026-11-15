@@ -172,3 +172,20 @@ is kept from the run records (Glass Box modifier): what was decided, why, and wh
   factions; unit damage to one player is budgeted per second by crew size (7 solo, uncapped at four players), and a
   solo player refills health after 4 quiet seconds. All of it is data in `Config/DefaultGame.ini` (human calls).
 - Army and Scavenger units got a glowing chest band in their cue colour so every faction reads in the dark street.
+
+## 2026-11-14 directors-cut-final: weapons and content enrichment (h-content lane, R8 + R12)
+- Four player weapons in the gun slot, each a `+Weapons` row (stats, pellets, sound, forge model, tracer): Service Rifle,
+  Riot Scattergun (8 pellets), Press Marksman (one heavy round, wild on the move), Flash SMG. Every weapon keeps its own
+  magazine on the owner and on the host; Q or the wheel switch while the gun is drawn (1 only draws it, because the
+  pilot and players press 1 to get the gun back). Proven through injected input: `-dcweapontour` logs and frames each.
+- Sound cues can be data now (`+SoundRecipes`, layers of tones and filtered noise through the same synth), used by the
+  weapons and the new strikes.
+- Three new strikes in the draft: Strafing Run (seven small blasts walked along the line of fire), Cluster Shells (a ring
+  of seven), Bunker Buster (a deep shaft that topples a tower). Blast layouts are a registry (`Rules/DCStrikePattern.h`);
+  each row names its charge, beep and blast sounds and beam width. Card art from local ComfyUI. Framed with
+  `-dcstrikereel=GunRun,ClusterShells,BunkerBuster -dccollapsecam=<dir>`.
+- More of the city: 10 street and rooftop props per district, five neon signs from new ComfyUI line art, puddles with
+  dim neon glints, manholes, litter and scorch marks on a ground prop layer, airships drifting past mega-spires and radio
+  masts beyond the skyline (`+SkyProps`), and ground weather per profile (rain splashes, dark street steam).
+- Frame time A/B (editor -game, 1600x900, seed 7, demo pilot, back to back): median 13.4 / 13.5 ms with the ground layer
+  and sky props, 14.0 ms without; p95 about 15.6 ms both ways; the render thread dominates either way.

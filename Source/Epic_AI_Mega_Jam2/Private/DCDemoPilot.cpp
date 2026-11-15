@@ -10,6 +10,7 @@
 #include "DCSupplyPod.h"
 #include "DCCharacter.h"
 #include "DCGameState.h"
+#include "DCGameMode.h"
 #include "DCInput.h"
 #include "DCOrbitalStrike.h"
 #include "DCPlayerController.h"
@@ -1014,6 +1015,41 @@ void ADCDemoPilot::AddWeaponTour()
 	}
 }
 
+void ADCDemoPilot::AddStrikeReel(const FString& Ids)
+{
+	// R12 evidence (-dcstrikereel=A,B,..): the host calls each listed strike on the nearest tower (no unlock, no
+	// points: a look check, not a play test) and the pilot frames its telegraph, peak and aftermath from where it stands.
+	TArray<FString> List;
+	Ids.ParseIntoArray(List, TEXT(","));
+	for (const FString& Id : List)
+	{
+		const FDCStratagemDef* Def = UDCTuning::Get().FindStratagem(FName(*Id));
+		if (!Def)
+		{
+			continue;
+		}
+		const float Telegraph = Def->TelegraphSeconds;
+		const float Last = Def->BlastSpacing * FMath::Max(Def->Blasts - 1, 0);
+		Add(1.f, [this, Id]
+		{
+			Tower = PickTower();
+			ADCGameMode* GM = GetWorld()->GetAuthGameMode<ADCGameMode>();
+			const FDCStratagemDef* D = UDCTuning::Get().FindStratagem(FName(*Id));
+			APlayerController* PC = GetWorld()->GetFirstPlayerController();
+			if (GM && D && Tower.IsValid())
+			{
+				AimAt(Tower->GetActorLocation() + FVector(0, 0, 400));
+				GM->CallStrike(*D, Tower->GetActorLocation(), PC);
+				UE_LOG(LogDCDemo, Display, TEXT("DEMO strikereel id=%s blasts=%d pattern=%s at=%s"), *Id, D->Blasts, *D->Pattern.ToString(), *Tower->GetActorLocation().ToCompactString());
+			}
+			return true;
+		});
+		Add(FMath::Max(Telegraph - 0.6f, 0.f), [this, Id] { Shot(TEXT("strike_") + Id + TEXT("_telegraph")); return true; });
+		Add(0.85f + Last, [this, Id] { Shot(TEXT("strike_") + Id + TEXT("_peak")); return true; });
+		Add(2.5f, [this, Id] { Shot(TEXT("strike_") + Id + TEXT("_aftermath")); return true; });
+	}
+}
+
 void ADCDemoPilot::AddCueRoll()
 {
 	// Listening evidence (-dccueroll): every cue in the bank once, alone over a muted music bed, then the music.
@@ -1073,6 +1109,11 @@ void ADCDemoPilot::BuildScript()
 	if (FParse::Param(FCommandLine::Get(), TEXT("dcweapontour")))
 	{
 		AddWeaponTour();
+	}
+	FString StrikeReel;
+	if (FParse::Value(FCommandLine::Get(), TEXT("dcstrikereel="), StrikeReel, false))
+	{
+		AddStrikeReel(StrikeReel);
 	}
 
 	if (FParse::Param(FCommandLine::Get(), TEXT("dcwatchwalker")))
