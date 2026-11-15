@@ -23,11 +23,11 @@ bool FDCCompanionRulesTest::RunTest(const FString&)
 	const FVector Owner(1000.f, -500.f, 90.f);
 	const FVector P0 = DCCompanionRules::Position(Orbit, Owner, 0.f, 0, 1);
 	const FVector P1 = DCCompanionRules::Position(Orbit, Owner, 1.f, 0, 1);
-	TestEqual(TEXT("orbit keeps its radius"), FVector::Dist2D(P0, Owner), 200.f, 0.5f);
-	TestEqual(TEXT("orbit keeps its height over the owner"), P0.Z, Owner.Z + 150.f, 0.5f);
-	TestEqual(TEXT("a quarter lap after a quarter of OrbitSeconds (90 degrees = radius * sqrt 2 apart)"), FVector::Dist2D(P0, P1), 200.f * UE_SQRT_2, 1.f);
+	TestEqual(TEXT("orbit keeps its radius"), static_cast<float>(FVector::Dist2D(P0, Owner)), 200.f, 0.5f);
+	TestEqual(TEXT("orbit keeps its height over the owner"), static_cast<float>(P0.Z), static_cast<float>(Owner.Z + 150.f), 0.5f);
+	TestEqual(TEXT("a quarter lap after a quarter of OrbitSeconds (90 degrees = radius * sqrt 2 apart)"), static_cast<float>(FVector::Dist2D(P0, P1)), 200.f * UE_SQRT_2, 1.f);
 	const FVector Slot1 = DCCompanionRules::Position(Orbit, Owner, 0.f, 1, 2);
-	TestEqual(TEXT("two drones of one owner sit opposite"), FVector::Dist2D(P0, Slot1), 400.f, 1.f);
+	TestEqual(TEXT("two drones of one owner sit opposite"), static_cast<float>(FVector::Dist2D(P0, Slot1)), 400.f, 1.f);
 	Orbit.BobCm = 20.f;
 	Orbit.BobHz = 1.f;
 	const FVector Bobbed = DCCompanionRules::Position(Orbit, Owner, 0.25f, 0, 1);
@@ -65,7 +65,7 @@ bool FDCCompanionRulesTest::RunTest(const FString&)
 	bool bOutward = true;
 	for (int32 i = 0; i < 9; ++i)
 	{
-		const float D = DCStrikePattern::Offset(TEXT("Spiral"), {i, 9, 3200.f, Along}, Rng).Size();
+		const float D = static_cast<float>(DCStrikePattern::Offset(TEXT("Spiral"), {i, 9, 3200.f, Along}, Rng).Size());
 		bOutward &= D > Last;
 		Last = D;
 	}
@@ -100,7 +100,7 @@ bool FDCCardDataTest::RunTest(const FString&)
 		{
 			continue;
 		}
-		TestEqual(*FString::Printf(TEXT("%s effect"), K.Card), U->Effect, FName(K.Effect));
+		TestTrue(*FString::Printf(TEXT("%s effect is %s"), K.Card, K.Effect), U->Effect == FName(K.Effect));
 		TestTrue(*FString::Printf(TEXT("%s is Rare or Epic"), K.Card), U->Rarity == TEXT("Rare") || U->Rarity == TEXT("Epic"));
 		TestTrue(*FString::Printf(TEXT("%s has card art"), K.Card), U->Icon.IsValid());
 	}
@@ -114,7 +114,7 @@ bool FDCCardDataTest::RunTest(const FString&)
 	const FDCStratagemDef* Reinforce = T.FindStratagem(TEXT("Reinforcements"));
 	if (TestNotNull(TEXT("Reinforcements stratagem"), Reinforce))
 	{
-		TestEqual(TEXT("Reinforcements uses the Reinforce call effect"), Reinforce->Effect, FName(TEXT("Reinforce")));
+		TestTrue(TEXT("Reinforcements uses the Reinforce call effect"), Reinforce->Effect == FName(TEXT("Reinforce")));
 		TestTrue(TEXT("Reinforcements drops a squad"), Reinforce->SupportCount > 0);
 		TestTrue(TEXT("Reinforcements faction exists and is crew-friendly"), DCFactionRules::Find(T.Factions, Reinforce->SupportFaction) != nullptr
 			&& !DCFactionRules::FightsCrew(T.Factions, Reinforce->SupportFaction));
