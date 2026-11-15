@@ -213,8 +213,8 @@ void ADCCharacter::BeginPlay()
 	RifleMesh->AttachToComponent(GetMesh(), FAttachmentTransformRules::SnapToTargetNotIncludingScale, Hand);
 	RifleMesh->SetStaticMesh(DCAssets::Cube());
 	RifleMesh->SetMaterial(0, DCAssets::MakeFlat(this, FLinearColor(0.08f, 0.08f, 0.07f)));
-	RifleMesh->SetRelativeLocation(FVector(-10.f, 30.f, 0.f));
-	RifleMesh->SetRelativeRotation(FRotator(0.f, 90.f, 0.f));
+	RifleMesh->SetRelativeLocation(T.Assets.RifleGripLocation);
+	RifleMesh->SetRelativeRotation(T.Assets.RifleGripRotation);
 	// R8: the forge model of the weapon in hand replaces the cube (InitWeapons, DCWeapons.cpp); it rides on the rifle
 	// prop, so hand and holster placement still apply.
 	PhotoCamMesh->AttachToComponent(GetMesh(), FAttachmentTransformRules::SnapToTargetNotIncludingScale, Hand);
@@ -607,7 +607,7 @@ void ADCCharacter::OnRep_Slot()
 	// The rifle is never hidden: in the hand for slot 1, slung on the back otherwise (R1 holster).
 	const FDCAssetTuning& A = UDCTuning::Get().Assets;
 	RifleMesh->AttachToComponent(GetMesh(), FAttachmentTransformRules::SnapToTargetNotIncludingScale, Slot == EDCSlot::Rifle ? A.HandSocket : A.HolsterSocket);
-	RifleMesh->SetRelativeLocation(Slot == EDCSlot::Rifle ? FVector(-10.f, 30.f, 0.f) : A.HolsterLocation);
+	RifleMesh->SetRelativeLocation(Slot == EDCSlot::Rifle ? A.RifleGripLocation : A.HolsterLocation);
 	RifleMesh->SetVisibility(true);
 	PhotoCamMesh->SetVisibility(Slot == EDCSlot::Camera);
 	if (ChestCam)
@@ -1558,7 +1558,23 @@ void ADCCharacter::UpdateHeldItems(float DeltaSeconds)
 	const FRotator Swing(0.f, 0.f, -80.f * (1.f - Ease));
 	const bool bRifleInHand = Slot == EDCSlot::Rifle;
 	RifleMesh->SetRelativeScale3D(FVector(0.75f, 0.08f, 0.12f) * (bRifleInHand ? FMath::Lerp(0.3f, 1.f, Ease) : 1.f));
-	RifleMesh->SetRelativeRotation(bRifleInHand ? FRotator(0.f, 90.f, 0.f) + Swing : UDCTuning::Get().Assets.HolsterRotation);
+	const FDCAssetTuning& Assets = UDCTuning::Get().Assets;
+	RifleMesh->SetRelativeRotation(bRifleInHand ? Assets.RifleGripRotation + Swing : Assets.HolsterRotation);
+	// R16 (human 15:05): while aiming or just after a shot the rifle stays in the hand but points at the aim point (the
+	// view's aim: replicated pitch for remote pawns), blended by GunAimBlend, the draw swing on top. Cosmetic, every machine.
+	GunShotUntil = MuzzleFlash->IsVisible() ? GetWorld()->GetTimeSeconds() + Assets.AimAfterShotSeconds : GunShotUntil;
+	const bool bPoint = bRifleInHand && !IsDowned() && (bRifleAim || GetWorld()->GetTimeSeconds() < GunShotUntil);
+	GunAimBlend = FMath::FInterpConstantTo(GunAimBlend, bPoint ? 1.f : 0.f, DeltaSeconds, 1.f / FMath::Max(Assets.AimTurnSeconds, 0.01f));
+	if (bRifleInHand && GunAimBlend > 0.f)
+	{
+		FVector EyeAt;
+		FRotator EyeRot;
+		GetActorEyesViewPoint(EyeAt, EyeRot);
+		const FVector Anchor = EyeAt + EyeRot.Vector() * Assets.AimRangeCm;
+		const FQuat Hand = RifleMesh->GetComponentQuat();
+		const FQuat Aimed = ((Anchor - RifleMesh->GetComponentLocation()).Rotation() + Swing).Quaternion();
+		RifleMesh->SetWorldRotation(FQuat::Slerp(Hand, Aimed, GunAimBlend));
+	}
 	PhotoCamMesh->SetRelativeScale3D(FVector(0.2f, 0.12f, 0.14f) * FMath::Lerp(0.3f, 1.f, Ease));
 	PhotoCamMesh->SetRelativeLocation(bCameraRaised ? FVector(-12.f, 20.f, 12.f) : FVector(-6.f, 8.f, 0.f));
 	PhotoCamMesh->SetRelativeRotation(Swing);

@@ -182,6 +182,9 @@ private:
 	float SentAimPitch = 0.f;
 	float NextAimPitchSend = 0.f;
 	float AimBlend = 0.f;
+	/** R16: how far the held rifle points at the aim point instead of along the hand (every machine, cosmetic). */
+	float GunAimBlend = 0.f;
+	float GunShotUntil = 0.f;
 	/** R19 fall net (host). */
 	void UpdateFallNet();
 	FVector LastSafeSpot = FVector::ZeroVector;

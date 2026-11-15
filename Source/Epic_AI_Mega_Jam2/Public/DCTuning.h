@@ -716,6 +716,13 @@ struct FDCAssetTuning
 	UPROPERTY(EditAnywhere, Config, Category = "Assets") FRotator RifleModelRotation = FRotator(0.f, 0.f, 0.f);
 	/** Holster (R1): with another slot out, the rifle rides on the back at this bone and offset instead of vanishing. */
 	UPROPERTY(EditAnywhere, Config, Category = "Assets") FName HolsterSocket = TEXT("spine_03");
+	/** R16 (human 15:05): the rifle's grip on the hand socket (was literals in DCCharacter.cpp); while aiming or just after
+	 *  a shot the rifle turns in world space toward the aim point (eye + view x AimRangeCm), blended in AimTurnSeconds. */
+	UPROPERTY(EditAnywhere, Config, Category = "Assets") FVector RifleGripLocation = FVector(-10.f, 30.f, 0.f);
+	UPROPERTY(EditAnywhere, Config, Category = "Assets") FRotator RifleGripRotation = FRotator(0.f, 90.f, 0.f);
+	UPROPERTY(EditAnywhere, Config, Category = "Assets") float AimRangeCm = 5000.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Assets") float AimTurnSeconds = 0.12f;
+	UPROPERTY(EditAnywhere, Config, Category = "Assets") float AimAfterShotSeconds = 0.35f;
 	UPROPERTY(EditAnywhere, Config, Category = "Assets") FVector HolsterLocation = FVector(18.f, -22.f, 0.f);
 	UPROPERTY(EditAnywhere, Config, Category = "Assets") FRotator HolsterRotation = FRotator(0.f, 25.f, 90.f);
 	UPROPERTY(EditAnywhere, Config, Category = "Assets") FName HeadSocket = TEXT("head");
