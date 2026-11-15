@@ -1,0 +1,15 @@
+# Rooftop sign (R23): steel stand, ink frame, a crown in warm amber neon line art quantized from generated
+# art (tools/voxel-forge/art/bb_crown.png, local ComfyUI Qwen-Image via fleet media). Faces +x.
+grid 10
+size 8 44 54
+slot steel Steel
+slot frame Ink
+slot face WindowDim
+slot edge Lamp
+beam 3 8 0 3 8 12 0.8 steel
+beam 3 36 0 3 36 12 0.8 steel
+beam 3 8 6 3 36 6 0.5 steel
+box 1 1 12 5 43 54 frame
+box 5 2 13 6 42 53 face
+box 5 3 14 6 41 52 frame
+image ../art/bb_crown.png 5 4 15 36 36 frame 0.06 face 0.16 edge

@@ -1,0 +1,13 @@
+# Lantern post (R23 street, pagoda quarter): a dark wooden post with a hanging paper lantern, magenta paper, warm core.
+grid 5
+size 20 8 80
+slot post InkBrown
+slot paper Paper
+slot core WindowDim
+slot iron Ink
+box 2 2 0 6 6 78 post
+box 2 2 76 16 6 78 post
+box 13 3 70 15 5 76 iron
+ellipsoid 14 4 64 4 4 6 paper
+paint ellipsoid 14 4 64 2 2 4 core
+pivot 4 4 0
