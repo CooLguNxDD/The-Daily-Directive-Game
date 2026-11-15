@@ -684,7 +684,8 @@ void ADCPlayerController::TickBuilderFlow()
 	// R5 parity: the same outfit in play (DCOUTFIT ... wears <code> matches the card's code).
 	Then(0.5, [this]() { CloseBuilder(); });
 	Then(1.0, [this]() { MenuSolo(); });
-	Then(10.5, [&]() { Shot(TEXT("08_same_outfit_in_play.png")); });
+	// After the sector title card (it covers the street for its first seconds).
+	Then(17.0, [&]() { Shot(TEXT("08_same_outfit_in_play.png")); });
 	Then(1.0, []() { FGenericPlatformMisc::RequestExit(false); });
 	const TArray<TPair<double, TFunction<void()>>>& Steps = bSettingsFlow ? SettingsSteps : BuilderSteps;
 	if (Steps.IsValidIndex(Step) && T >= Steps[Step].Key)
