@@ -1802,7 +1802,9 @@ void ADCVoxelCity::UploadCells()
 			Busy.Add(Key(Job->Grid, CellOf(Job->Grid, Job->Chunk)));
 		}
 	}
-	// 1. A committed op's own cells, all at once (the detonation frame shows the whole op).
+	// 1. A committed op's own cells, all at once (the detonation frame shows the whole op). R1 (spikes-cb1f180: 12 of 13
+	//    sector-play spikes were this frame, 17-24 ms for 16-21 cells): the merges run in parallel, sections stay serial.
+	TArray<FIntVector4> CommitNow;
 	for (auto It = CommitCells.CreateIterator(); It; ++It)
 	{
 		if (Busy.Contains(*It))
@@ -1811,9 +1813,20 @@ void ADCVoxelCity::UploadCells()
 		}
 		if (DirtyCells.Contains(*It))
 		{
-			UploadCell(*It);
+			CommitNow.Add(*It);
 		}
 		It.RemoveCurrent();
+	}
+	if (CommitNow.Num() > 0)
+	{
+		const double T0 = FPlatformTime::Seconds();
+		TArray<FDCVoxelMeshData> Merged;
+		Merged.SetNum(CommitNow.Num());
+		ParallelFor(CommitNow.Num(), [&](int32 i) { MergeCell(CommitNow[i], Merged[i]); }, CommitNow.Num() < 4);
+		for (int32 i = 0; i < CommitNow.Num(); ++i)
+		{
+			ApplyCell(CommitNow[i], Merged[i], i == 0 ? T0 : FPlatformTime::Seconds());
+		}
 	}
 	// 2. Everything else under the millisecond budget; a held op's cells wait for its commit.
 	const FDCVoxelTuning& Tn = UDCVoxelSettings::Get().Tuning;
@@ -1848,11 +1861,8 @@ void ADCVoxelCity::UploadCells()
 	}
 }
 
-bool ADCVoxelCity::UploadCell(const FIntVector4& Cell)
+void ADCVoxelCity::MergeCell(const FIntVector4& Cell, FDCVoxelMeshData& Merged) const
 {
-	const double T0 = FPlatformTime::Seconds(); // R13: slow cell uploads are logged with their grid and size (DCUPLOAD)
-	DirtyCells.Remove(Cell);
-	FDCVoxelMeshData Merged;
 	const int32 G = Cell.X;
 	const float ChunkCm = FDCVoxelChunk::Size * GridAt(G).VoxelCm;
 	// Size the merge once (R13: the arrays grew vertex by vertex across every chunk of the cell).
@@ -1891,6 +1901,20 @@ bool ADCVoxelCity::UploadCell(const FIntVector4& Cell)
 			Merged.Indices.Add(Base + Index);
 		}
 	}
+}
+
+bool ADCVoxelCity::UploadCell(const FIntVector4& Cell)
+{
+	FDCVoxelMeshData Merged;
+	const double T0 = FPlatformTime::Seconds();
+	MergeCell(Cell, Merged);
+	return ApplyCell(Cell, Merged, T0);
+}
+
+bool ADCVoxelCity::ApplyCell(const FIntVector4& Cell, const FDCVoxelMeshData& Merged, double T0)
+{
+	DirtyCells.Remove(Cell);
+	const int32 G = Cell.X;
 	TObjectPtr<UProceduralMeshComponent>& Mesh = Cells.FindOrAdd(Cell);
 	if (Merged.IsEmpty())
 	{
