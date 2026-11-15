@@ -129,6 +129,58 @@ namespace
 		return S.Finish(0.9f);
 	}
 
+	// Human 15:35: synthesized score on one grid (120 bpm, 8 bars of 4 beats = 16 s) so the layers line up bar for bar.
+	// A minor: Am Am F F C C G G (roots in semitones from middle C).
+	constexpr int32 NoirRoots[8] = {-15, -15, -19, -19, -12, -12, -17, -17};
+	constexpr bool NoirMinor[8] = {true, true, false, false, false, false, false, false};
+
+	TArray<int16> CalmLoop()
+	{
+		// Slow noir calm layer: sparse bass on beats 1 and 3, soft minor pads per bar, quiet off-beat hats.
+		const float Beat = 0.5f;
+		FSynth S(32 * Beat, 13);
+		for (int32 Bar = 0; Bar < 8; ++Bar)
+		{
+			const float T0 = Bar * 4 * Beat;
+			const int32 Root = NoirRoots[Bar];
+			S.Tone(T0, Beat * 1.8f, Note(Root - 12), Note(Root - 12), EWave::Tri, 0.42f, 1.6f, 0.01f);
+			S.Tone(T0 + 2 * Beat, Beat * 1.4f, Note(Root - 5), Note(Root - 5), EWave::Tri, 0.3f, 2.f, 0.01f);
+			for (int32 C : {0, NoirMinor[Bar] ? 3 : 4, 7})
+			{
+				S.Tone(T0, 4 * Beat, Note(Root + 12 + C), Note(Root + 12 + C), EWave::Saw, 0.045f, 0.4f, 0.6f, 0.004f);
+			}
+			for (int32 B4 = 0; B4 < 4; ++B4)
+			{
+				S.Noise(T0 + (B4 + 0.5f) * Beat, 0.04f, 0.06f, 9000.f, 8000.f, 70.f); // soft hat on the off-beat
+			}
+		}
+		return S.Finish(0.85f);
+	}
+
+	TArray<int16> MenuLoop()
+	{
+		// Menu: the same progression as a plucked arpeggio over the bass, a little brighter than the calm layer.
+		const float Beat = 0.5f;
+		FSynth S(32 * Beat, 17);
+		for (int32 Bar = 0; Bar < 8; ++Bar)
+		{
+			const float T0 = Bar * 4 * Beat;
+			const int32 Root = NoirRoots[Bar];
+			const int32 Third = NoirMinor[Bar] ? 3 : 4;
+			S.Tone(T0, Beat * 3.6f, Note(Root - 12), Note(Root - 12), EWave::Tri, 0.38f, 1.2f, 0.01f);
+			const int32 Arp[8] = {0, Third, 7, 12, 7, Third, 7, 12};
+			for (int32 i = 0; i < 8; ++i)
+			{
+				S.Tone(T0 + i * Beat * 0.5f, Beat * 0.45f, Note(Root + 12 + Arp[i]), Note(Root + 12 + Arp[i]), EWave::Sine, 0.16f, 7.f, 0.004f);
+			}
+			for (int32 C : {0, Third, 7})
+			{
+				S.Tone(T0, 4 * Beat, Note(Root + C), Note(Root + C), EWave::Saw, 0.03f, 0.3f, 0.8f, 0.004f);
+			}
+		}
+		return S.Finish(0.85f);
+	}
+
 	using FRecipe = TArray<int16> (*)();
 
 	/** The cue registry: name -> recipe. A new sound is a new row. */
@@ -174,6 +226,8 @@ namespace
 			{TEXT("Revive"), [] { FSynth S(0.7f); for (int32 i = 0; i < 4; ++i) { S.Tone(i * 0.12f, 0.2f, Note(i * 4), Note(i * 4), EWave::Tri, 0.35f, 6.f); } return S.Finish(); }},
 			{TEXT("Music"), &MarchLoop},
 			{TEXT("March"), &MarchLoop}, // R14 Fight layer (human 15:25): a +MusicTracks row names it with Synth="March"
+			{TEXT("Calm"), &CalmLoop},   // R14 Calm layer and menu loop (human 15:35): same 16 s grid as the march
+			{TEXT("Menu"), &MenuLoop},
 		};
 		return Map;
 	}

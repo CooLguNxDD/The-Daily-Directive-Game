@@ -26,6 +26,13 @@ namespace
 	// 1e-3 (-60 dB): the engine treats |v| <= 1e-4 as zero and fades the deck out and STOPS it (helper h-39,
 	// AudioComponent.cpp IsNearlyZero), so "silent siblings keep time" never worked at 1e-4.
 	constexpr float SilentLevel = 1e-3f;
+
+	/** A layer's level while another layer leads (its QuietLevel, never below SilentLevel so the deck keeps time). */
+	float QuietOf(FName Track)
+	{
+		const FDCMusicLayer* L = UDCTuning::Get().MusicLayers.FindByPredicate([Track](const FDCMusicLayer& R) { return R.Track == Track; });
+		return FMath::Max(L ? L->QuietLevel : 0.f, SilentLevel);
+	}
 }
 
 UDCMusicSubsystem* UDCMusicSubsystem::Get(const UObject* WorldContext)
@@ -203,6 +210,24 @@ void UDCMusicSubsystem::Sample(UWorld& World, const ADCGameState& GS, float Dt)
 		Layer = INDEX_NONE;
 		LayerHeld = 0.f;
 		SlotElapsed = 0.f;
+		if (P->bByIntensity)
+		{
+			// Human 15:35: every layer starts together at sector start so they stay bar-aligned; inside the sector only
+			// their volumes move (never a restart or a swap).
+			for (const FDCMusicLayer& L : T.MusicLayers)
+			{
+				if (const TObjectPtr<UAudioComponent>* Deck = Decks.Find(L.Track))
+				{
+					if (*Deck)
+					{
+						(*Deck)->Stop();
+					}
+					Decks.Remove(L.Track);
+				}
+			}
+			Playing = NAME_None;
+			UE_LOG(LogTemp, Display, TEXT("DCMUSIC sector start: %d layers restart together"), T.MusicLayers.Num());
+		}
 	}
 	const FName Want = PickTrack(*P, Dt, Fade);
 	// Self-heal (R14, human 02:39 "music does not blend"): a deck the engine stopped (focus loss, device change, a culled
@@ -269,7 +294,7 @@ void UDCMusicSubsystem::SetTarget(UWorld& World, FName Track, float Fade, const 
 			continue;
 		}
 		Deck->bIsUISound = true; // keeps playing under pause menus
-		Deck->FadeIn(Id == Track ? F : 0.f, Id == Track ? 1.f : SilentLevel, 0.f, EAudioFaderCurve::Sin);
+		Deck->FadeIn(Id == Track ? F : 0.f, Id == Track ? 1.f : QuietOf(Id), 0.f, EAudioFaderCurve::Sin);
 		Decks.Add(Id, Deck);
 		Started.Add(Id);
 	}
@@ -282,7 +307,7 @@ void UDCMusicSubsystem::SetTarget(UWorld& World, FName Track, float Fade, const 
 		}
 		if (D.Key == Track || Keep.Contains(D.Key))
 		{
-			D.Value->AdjustVolume(F, D.Key == Track ? 1.f : SilentLevel, EAudioFaderCurve::Sin);
+			D.Value->AdjustVolume(F, D.Key == Track ? 1.f : QuietOf(D.Key), EAudioFaderCurve::Sin);
 			continue;
 		}
 		D.Value->FadeOut(F, 0.f, EAudioFaderCurve::Sin);

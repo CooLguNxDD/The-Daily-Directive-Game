@@ -30,6 +30,8 @@ struct FDCMusicLayer
 	UPROPERTY(EditAnywhere, Config, Category = "Music") FName Track;
 	/** Intensity at which this layer takes over (layers are listed in ascending EnterAt; the first is 0). */
 	UPROPERTY(EditAnywhere, Config, Category = "Music") float EnterAt = 0.f;
+	/** Level of this layer while another layer leads (human 15:35: calm stays at 0.25 under the march; 0 = silent). */
+	UPROPERTY(EditAnywhere, Config, Category = "Music") float QuietLevel = 0.f;
 	/** Intensity at or below which this layer gives way to a lower one (hysteresis; below EnterAt). */
 	UPROPERTY(EditAnywhere, Config, Category = "Music") float ExitAt = 0.f;
 	/** Crossfade seconds into this layer. */
