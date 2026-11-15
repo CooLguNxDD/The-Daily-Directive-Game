@@ -17,3 +17,6 @@ box 6 6 48 20 18 58 body
 box 19 8 50 22 16 57 lamp
 box 8 8 58 16 16 62 trim
 box 6 10 54 8 14 56 eye
+# R20 segments: the lamp head scans about the top of the mast, the tripod legs dangle from the hub under the torso
+part Head 6 6 48 23 19 63 12 12 48
+part Legs 0 0 0 24 24 30 12 12 30
