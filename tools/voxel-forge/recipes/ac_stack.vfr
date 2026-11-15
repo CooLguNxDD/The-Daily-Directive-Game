@@ -1,0 +1,19 @@
+# AC stack (R23 wall mount): four air-conditioner boxes up a facade on a steel rack, drip stains under them.
+grid 10
+size 6 12 44
+slot box Steel
+slot grille Ink
+slot rack Trim
+slot stain Rubble
+pivot 0 6 0
+box 0 1 0 1 2 44 rack
+box 0 10 0 1 11 44 rack
+box 0 1 2 6 11 8 box
+box 0 1 14 6 11 20 box
+box 0 1 26 6 11 32 box
+box 0 1 38 6 11 44 box
+paint box 5 3 3 6 9 7 grille
+paint box 5 3 15 6 9 19 grille
+paint box 5 3 27 6 9 31 grille
+paint box 5 3 39 6 9 43 grille
+box 0 5 0 1 7 2 stain

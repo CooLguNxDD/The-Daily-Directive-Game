@@ -157,14 +157,61 @@ namespace
 
 namespace
 {
+	/** Drops every terrain cell of column (X, Y) from Floor to Ceil onto the first solid cell below Floor, in order. */
+	void DropColumn(FDCVoxelGrid& G, int32 X, int32 Y, int32 Floor, int32 Ceil, TArray<uint8>& Fallen)
+	{
+		Fallen.Reset();
+		for (int32 Z = Floor; Z <= Ceil; ++Z)
+		{
+			const FIntVector P(X, Y, Z);
+			if (const uint8 M = G.Data.Get(P))
+			{
+				Fallen.Add(M);
+				G.Data.Set(P, 0);
+			}
+		}
+		if (Fallen.Num() == 0)
+		{
+			return;
+		}
+		int32 Top = 0;
+		for (int32 Z = Floor - 1; Z >= 0; --Z)
+		{
+			if (G.Data.IsSolid(FIntVector(X, Y, Z)))
+			{
+				Top = Z + 1;
+				break;
+			}
+		}
+		for (int32 i = 0; i < Fallen.Num(); ++i)
+		{
+			G.Data.Set(FIntVector(X, Y, Top + i), Fallen[i]);
+		}
+	}
+
+	/** The terrain cell just above the tallest tower's scan box: nothing settles higher. */
+	int32 TerrainCeil(const FDCVoxelSector& Sector)
+	{
+		const FDCVoxelGrid& G = Sector.Terrain;
+		int32 Ceil = 0;
+		for (const FDCVoxelTower& T : Sector.Towers)
+		{
+			Ceil = FMath::Max(Ceil, DCVoxelMath::FloorDiv(T.Grid.OriginCm.Z + T.ScanMax.Z * T.Grid.VoxelCm - G.OriginCm.Z, G.VoxelCm) + 2);
+		}
+		return Ceil;
+	}
+
 	/** Rubble lying over a touched tower drops onto what is left of it, column by column (x, y order): a carved roof
 	 *  or a fallen top never leaves a rubble sheet hanging where the voxels were. */
 	void DropTerrainOver(FDCVoxelSector& Sector, const FDCVoxelTower& T, int32 GroundLayers)
 	{
 		FDCVoxelGrid& G = Sector.Terrain;
 		const int32 V = G.VoxelCm;
-		const FIntVector Lo = G.ToLocal(T.FootMinCm());
-		const FIntVector Hi = G.ToLocal(T.FootMaxCm() - FIntVector(1));
+		// The whole scan box, not only the footprint (R23): rubble also rests on what stands proud of the walls (a sign
+		// band at the roof line, a wall mount), which TowerTopCells counts as the tower's top; when that falls, the
+		// rubble over it drops too.
+		const FIntVector Lo = G.ToLocal(T.Grid.MinCm(T.ScanMin));
+		const FIntVector Hi = G.ToLocal(T.Grid.MinCm(T.ScanMax) - FIntVector(1));
 		const int32 Ceil = DCVoxelMath::FloorDiv(T.Grid.OriginCm.Z + T.ScanMax.Z * T.Grid.VoxelCm - G.OriginCm.Z, V) + 2;
 		const int32 Ground = FMath::Max(GroundLayers, 1);
 		TArray<uint8> Fallen;
@@ -172,34 +219,37 @@ namespace
 		{
 			for (int32 X = Lo.X; X <= Hi.X; ++X)
 			{
-				const int32 Floor = FMath::Max(DCVoxelOps::TowerTopCells(T, G, X, Y), Ground);
-				Fallen.Reset();
-				for (int32 Z = Floor; Z <= Ceil; ++Z)
+				DropColumn(G, X, Y, FMath::Max(DCVoxelOps::TowerTopCells(T, G, X, Y), Ground), Ceil, Fallen);
+			}
+		}
+	}
+
+	/** Rubble over a crater drops into it (R23): the ground-level crater sphere removes the low cells of a column near
+	 *  its rim and left the rubble above them hanging (Voxel.RubbleNeverFloats). Columns under a tower keep resting on
+	 *  what is left of it. */
+	void DropTerrainOverCrater(FDCVoxelSector& Sector, const FIntVector& CenterCm, int32 RadiusCm, int32 GroundLayers)
+	{
+		if (RadiusCm <= 0)
+		{
+			return;
+		}
+		FDCVoxelGrid& G = Sector.Terrain;
+		const int32 V = G.VoxelCm;
+		const FIntVector Lo = G.ToLocal(CenterCm - FIntVector(RadiusCm + V, RadiusCm + V, 0));
+		const FIntVector Hi = G.ToLocal(CenterCm + FIntVector(RadiusCm + V, RadiusCm + V, 0));
+		const int32 Ceil = TerrainCeil(Sector);
+		const int32 Ground = FMath::Max(GroundLayers, 1);
+		TArray<uint8> Fallen;
+		for (int32 Y = Lo.Y; Y <= Hi.Y; ++Y)
+		{
+			for (int32 X = Lo.X; X <= Hi.X; ++X)
+			{
+				int32 Floor = Ground;
+				for (const FDCVoxelTower& T : Sector.Towers)
 				{
-					const FIntVector P(X, Y, Z);
-					if (const uint8 M = G.Data.Get(P))
-					{
-						Fallen.Add(M);
-						G.Data.Set(P, 0);
-					}
+					Floor = FMath::Max(Floor, DCVoxelOps::TowerTopCells(T, G, X, Y));
 				}
-				if (Fallen.Num() == 0)
-				{
-					continue;
-				}
-				int32 Top = 0;
-				for (int32 Z = Floor - 1; Z >= 0; --Z)
-				{
-					if (G.Data.IsSolid(FIntVector(X, Y, Z)))
-					{
-						Top = Z + 1;
-						break;
-					}
-				}
-				for (int32 i = 0; i < Fallen.Num(); ++i)
-				{
-					G.Data.Set(FIntVector(X, Y, Top + i), Fallen[i]);
-				}
+				DropColumn(G, X, Y, Floor, Ceil, Fallen);
 			}
 		}
 	}
@@ -724,7 +774,7 @@ namespace DCVoxelOps
 	 *  merged in lot order), terrain over them dropped, then the pieces settle. Strike and Fell run it on every lot they
 	 *  touched; Chip only on the lots the host listed in StructureLots. */
 	template <typename FLap>
-	void StructureTail(FDCVoxelSector& Sector, const TArray<int32>& Lots, const FIntVector& C, const FDCVoxelOpContext& Ctx, FDCVoxelOpResult& Out, FLap& Lap)
+	void StructureTail(FDCVoxelSector& Sector, const TArray<int32>& Lots, const FIntVector& C, const FDCVoxelOpContext& Ctx, FDCVoxelOpResult& Out, FLap& Lap, int32 CraterRadiusCm = 0)
 	{
 		// Towers are independent grids: their structure passes run in parallel, and the results merge in lot order
 		// (the same order on every machine), so the op stays deterministic.
@@ -747,6 +797,7 @@ namespace DCVoxelOps
 		{
 			DropTerrainOver(Sector, Sector.Towers[Lot], Ctx.Tuning->GroundLayers); // nothing left floating where a roof or a top was (lot order)
 		}
+		DropTerrainOverCrater(Sector, C, CraterRadiusCm, Ctx.Tuning->GroundLayers); // strikes: rubble over the crater rim drops in
 		Out.StructureMs = Lap();
 		for (FDCVoxelPiece& Piece : Out.Pieces)
 		{
@@ -827,7 +878,7 @@ namespace DCVoxelOps
 		// Props in the blast are gone, top to bottom (a sphere left their tops floating: review CP2).
 		Out.Carved += CarveColumn(Sector.Props, C, Carve.SphereRadiusCm, Sector.Props.ToLocal(FIntVector(0, 0, 4000)).Z);
 		Out.CarveMs = Lap();
-		StructureTail(Sector, Out.TouchedLots, C, Ctx, Out, Lap);
+		StructureTail(Sector, Out.TouchedLots, C, Ctx, Out, Lap, Carve.CraterRadiusCm);
 		return Out;
 	}
 

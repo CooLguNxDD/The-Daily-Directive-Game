@@ -255,6 +255,159 @@ namespace
 					}
 					return Hi.Z + U;
 				}},
+			// Shanty: a squatter town on the roof (megacity rooftops): a parapet, then a seeded jumble of one-voxel-shell
+			// shacks, some stacked two high, each with a lit window strip and a trim lid.
+			{TEXT("Shanty"), [](FDCVoxelWorld& W, const FFaceFrame& F, int32 TopZ, const FCraftIds& Ids, FRandomStream& Rng)
+				{
+					const int32 U = Ids.Unit;
+					int32 Top = Parapet(W, F, TopZ, Ids);
+					const int32 SpanX = F.Max.X - F.Min.X - 4 * U, SpanY = F.Max.Y - F.Min.Y - 4 * U;
+					if (SpanX < 10 * U || SpanY < 10 * U)
+					{
+						return Top;
+					}
+					const int32 Count = FMath::Clamp(SpanX * SpanY / (14 * U * 14 * U), 2, 9);
+					for (int32 i = 0; i < Count; ++i)
+					{
+						const int32 Sx = Rng.RandRange(6, 12) * U, Sy = Rng.RandRange(6, 12) * U, Sz = Rng.RandRange(7, 10) * U;
+						const int32 X0 = F.Min.X + 2 * U + Rng.RandRange(0, FMath::Max(0, SpanX - Sx));
+						const int32 Y0 = F.Min.Y + 2 * U + Rng.RandRange(0, FMath::Max(0, SpanY - Sy));
+						const int32 Levels = Rng.FRand() < 0.35f ? 2 : 1;
+						for (int32 L = 0; L < Levels; ++L)
+						{
+							const int32 In = L * 2 * U; // the upper shack sits a little in from the lower one
+							const FIntVector Lo(X0 + In, Y0 + In, TopZ + 1 + L * (Sz + U)), Hi(X0 + Sx - In, Y0 + Sy - In, Lo.Z + Sz);
+							if (Hi.X - Lo.X < 4 * U || Hi.Y - Lo.Y < 4 * U)
+							{
+								break;
+							}
+							W.FillBox(Lo, Hi, Ids.Wall);
+							W.FillBox(Lo + FIntVector(1, 1, 0), Hi - FIntVector(1, 1, 1), 0);
+							W.FillBox(FIntVector(Lo.X + U, Lo.Y, Lo.Z + Sz / 2), FIntVector(Hi.X - U, Lo.Y + 1, Lo.Z + Sz / 2 + U), (i + L) % 3 == 0 ? Ids.WindowAlt : Ids.Window);
+							W.FillBox(FIntVector(Lo.X - U / 2, Lo.Y - U / 2, Hi.Z), FIntVector(Hi.X + U / 2, Hi.Y + U / 2, Hi.Z + U / 2 + 1), Ids.Trim);
+							Top = FMath::Max(Top, Hi.Z + U / 2 + 1);
+						}
+					}
+					return Top;
+				}},
+			// Beacon (R23 landmark crown): a broadcast mast of four corner posts tapering to a point, trim rings every
+			// few metres, a thin neon ring (the sign edge colour) every 5 m and a warm light at the tip.
+			{TEXT("Beacon"), [](FDCVoxelWorld& W, const FFaceFrame& F, int32 TopZ, const FCraftIds& Ids, FRandomStream&)
+				{
+					const int32 U = Ids.Unit;
+					const int32 Top = Parapet(W, F, TopZ, Ids);
+					const int32 Cx = (F.Min.X + F.Max.X) / 2, Cy = (F.Min.Y + F.Max.Y) / 2;
+					const int32 Base = FMath::Min(F.Max.X - F.Min.X, F.Max.Y - F.Min.Y) / 5;
+					const int32 H = 60 * U;
+					if (Base < 3 * U)
+					{
+						return Top;
+					}
+					for (int32 Dz = 0; Dz < H; ++Dz)
+					{
+						const int32 R = FMath::Max(U, Base - (Base - U) * Dz / H);
+						const int32 Z = TopZ + 1 + Dz;
+						for (int32 Sx = -1; Sx <= 1; Sx += 2)
+						{
+							for (int32 Sy = -1; Sy <= 1; Sy += 2)
+							{
+								const int32 X0 = Sx < 0 ? Cx - R : Cx + R - U, Y0 = Sy < 0 ? Cy - R : Cy + R - U;
+								W.FillBox(FIntVector(X0, Y0, Z), FIntVector(X0 + U, Y0 + U, Z + 1), Ids.Trim);
+							}
+						}
+						const bool bNeon = Dz % (20 * U) == 10 * U;
+						if (bNeon || Dz % (8 * U) == 0)
+						{
+							const uint8 Mat = bNeon ? Ids.PosterEdge : Ids.Trim;
+							W.FillBox(FIntVector(Cx - R, Cy - R, Z), FIntVector(Cx + R, Cy - R + 1, Z + 1), Mat);
+							W.FillBox(FIntVector(Cx - R, Cy + R - 1, Z), FIntVector(Cx + R, Cy + R, Z + 1), Mat);
+							W.FillBox(FIntVector(Cx - R, Cy - R, Z), FIntVector(Cx - R + 1, Cy + R, Z + 1), Mat);
+							W.FillBox(FIntVector(Cx + R - 1, Cy - R, Z), FIntVector(Cx + R, Cy + R, Z + 1), Mat);
+						}
+					}
+					W.FillBox(FIntVector(Cx - U, Cy - U, TopZ + 1 + H), FIntVector(Cx + U, Cy + U, TopZ + 1 + H + 2 * U), Ids.Window);
+					return FMath::Max(Top, TopZ + 1 + H + 2 * U);
+				}},
+			// Garden (R23): a planted roof terrace: a low parapet, a dark planting bed ring with hedge blocks, and a pergola
+			// of trim posts and beams over the middle with a dim warm lamp.
+			{TEXT("Garden"), [](FDCVoxelWorld& W, const FFaceFrame& F, int32 TopZ, const FCraftIds& Ids, FRandomStream& Rng)
+				{
+					const int32 U = Ids.Unit;
+					for (int32 Z = TopZ + 1; Z < TopZ + 1 + 2 * U; ++Z)
+					{
+						RingLayer(W, F, Z, 0, Ids.Wall);
+					}
+					const FIntVector Lo(F.Min.X + 1, F.Min.Y + 1, TopZ + 1), Hi(F.Max.X - 1, F.Max.Y - 1, TopZ + 1 + U);
+					if (Hi.X - Lo.X < 16 * U || Hi.Y - Lo.Y < 16 * U)
+					{
+						return TopZ + 1 + 2 * U;
+					}
+					// Planting bed: a ring three units wide inside the parapet, hedge blocks on it.
+					W.FillBox(Lo, Hi, Ids.Slab);
+					W.FillBox(Lo + FIntVector(3 * U, 3 * U, 0), Hi - FIntVector(3 * U, 3 * U, 0), 0);
+					const int32 Hedges = Rng.RandRange(4, 8);
+					for (int32 i = 0; i < Hedges; ++i)
+					{
+						const bool bX = Rng.FRand() < 0.5f;
+						const int32 A = bX ? Rng.RandRange(Lo.X, Hi.X - 4 * U) : (Rng.FRand() < 0.5f ? Lo.X : Hi.X - 3 * U);
+						const int32 B = bX ? (Rng.FRand() < 0.5f ? Lo.Y : Hi.Y - 3 * U) : Rng.RandRange(Lo.Y, Hi.Y - 4 * U);
+						W.FillBox(FIntVector(A, B, Hi.Z), FIntVector(A + (bX ? 4 : 3) * U, B + (bX ? 3 : 4) * U, Hi.Z + 2 * U), Ids.Ink);
+					}
+					// Pergola: four posts and a beam grid over the middle.
+					const FIntVector C((F.Min.X + F.Max.X) / 2, (F.Min.Y + F.Max.Y) / 2, TopZ + 1);
+					const int32 R = FMath::Min(Hi.X - Lo.X, Hi.Y - Lo.Y) / 4;
+					const int32 Top = C.Z + 9 * U;
+					for (int32 Sx = -1; Sx <= 1; Sx += 2)
+					{
+						for (int32 Sy = -1; Sy <= 1; Sy += 2)
+						{
+							const FIntVector Post(C.X + Sx * R, C.Y + Sy * R, C.Z);
+							W.FillBox(Post, FIntVector(Post.X + U, Post.Y + U, Top), Ids.Trim);
+						}
+					}
+					for (int32 Off = -R; Off <= R; Off += 3 * U)
+					{
+						W.FillBox(FIntVector(C.X - R, C.Y + Off, Top), FIntVector(C.X + R + U, C.Y + Off + 1, Top + 1), Ids.Trim);
+					}
+					W.FillBox(FIntVector(C.X - R, C.Y - R, Top + 1), FIntVector(C.X + R + U, C.Y - R + U, Top + 2), Ids.Trim);
+					W.FillBox(FIntVector(C.X - R, C.Y + R, Top + 1), FIntVector(C.X + R + U, C.Y + R + U, Top + 2), Ids.Trim);
+					W.FillBox(FIntVector(C.X, C.Y, Top - U), FIntVector(C.X + U, C.Y + U, Top), Ids.WindowAlt);
+					return Top + 2;
+				}},
+			// Marquee (R23): a big rooftop sign frame on two lattice legs across the roof, its face in the sign colours
+			// (a lit edge ring round a dim panel with dark glyph bars): the megacity skyline's signboards.
+			{TEXT("Marquee"), [](FDCVoxelWorld& W, const FFaceFrame& F, int32 TopZ, const FCraftIds& Ids, FRandomStream& Rng)
+				{
+					const int32 U = Ids.Unit;
+					const int32 Top = Parapet(W, F, TopZ, Ids);
+					const bool bAlongX = Rng.FRand() < 0.5f;
+					const int32 Len = bAlongX ? F.Max.X - F.Min.X : F.Max.Y - F.Min.Y;
+					if (Len < 16 * U)
+					{
+						return Top;
+					}
+					const int32 Mid = bAlongX ? (F.Min.Y + F.Max.Y) / 2 : (F.Min.X + F.Max.X) / 2;
+					const int32 A0 = (bAlongX ? F.Min.X : F.Min.Y) + 2 * U, A1 = (bAlongX ? F.Max.X : F.Max.Y) - 2 * U;
+					const int32 Z0 = TopZ + 1 + 8 * U, Z1 = Z0 + FMath::Min(16 * U, (A1 - A0) / 3);
+					auto Box = [&W, bAlongX, Mid](int32 A, int32 B, int32 ZA, int32 ZB, int32 D0, int32 D1, uint8 M)
+					{
+						W.FillBox(bAlongX ? FIntVector(A, Mid + D0, ZA) : FIntVector(Mid + D0, A, ZA), bAlongX ? FIntVector(B, Mid + D1, ZB) : FIntVector(Mid + D1, B, ZB), M);
+					};
+					// Legs: two lattice posts with a cross bar.
+					for (const int32 L : {A0 + 2 * U, A1 - 3 * U})
+					{
+						Box(L, L + U, TopZ + 1, Z0, -U, U, Ids.Trim);
+					}
+					Box(A0 + 2 * U, A1 - 2 * U, Z0 - U, Z0, -U, U, Ids.Trim);
+					// The board: edge ring, panel, glyph bars every few units (both faces read).
+					Box(A0, A1, Z0, Z1, -1, 1, Ids.PosterEdge);
+					Box(A0 + 1, A1 - 1, Z0 + 1, Z1 - 1, -1, 1, Ids.Poster);
+					for (int32 G = A0 + 3 * U; G < A1 - 2 * U; G += 3 * U)
+					{
+						Box(G, G + U / 2 + 1, Z0 + 2 * U, Z1 - 2 * U, -1, 1, Ids.Ink);
+					}
+					return FMath::Max(Top, Z1);
+				}},
 			// Sawtooth: an industrial roof of north-light ridges across X, the steep side glazed (the alternate window).
 			{TEXT("Sawtooth"), [](FDCVoxelWorld& W, const FFaceFrame& F, int32 TopZ, const FCraftIds& Ids, FRandomStream&)
 				{
@@ -324,6 +477,40 @@ namespace
 					S.Depth = FMath::Max(1, R.SignDepthVox);
 					return S;
 				}},
+			// R23: a cloth banner hanging from under the roof line down the face (tall, flat, one or two voxels proud).
+			{TEXT("Banner"), [](const FFaceFrame& F, int32 Face, int32 B, int32 Floors, const FDCVoxelRecipe& R, FRandomStream& Rng)
+				{
+					const int32 Bays = F.Length(Face) / B;
+					FSignShape S;
+					if (Bays < 2 || Floors < 4)
+					{
+						return S;
+					}
+					// On the pier between two bays (solid wall behind it, not a column of windows).
+					const int32 W = FMath::Clamp(R.SignWidthVox, 3, B / 3);
+					S.U0 = Rng.RandRange(1, Bays - 1) * B - W / 2;
+					S.U1 = S.U0 + W;
+					S.Z1 = Floors * B - B / 4;
+					S.Z0 = FMath::Max(B, S.Z1 - R.SignHeightVox);
+					S.Depth = FMath::Clamp(R.SignDepthVox, 1, 2);
+					return S;
+				}},
+			// R23: a corporate crown band across the top floor of a face, the tower's name as glyph strokes.
+			{TEXT("Crown"), [](const FFaceFrame& F, int32 Face, int32 B, int32 Floors, const FDCVoxelRecipe& R, FRandomStream&)
+				{
+					const int32 Len = F.Length(Face);
+					FSignShape S;
+					if (Len < 3 * B || Floors < 3)
+					{
+						return S;
+					}
+					S.U0 = B / 2;
+					S.U1 = Len - B / 2;
+					S.Z0 = (Floors - 1) * B + B / 4;
+					S.Z1 = S.Z0 + FMath::Clamp(R.SignHeightVox, 3, B * 3 / 4);
+					S.Depth = FMath::Clamp(R.SignDepthVox, 1, 3);
+					return S;
+				}},
 			// The first run's two-bay board (kept for recipes that still name it).
 			{TEXT("Poster"), [](const FFaceFrame& F, int32 Face, int32 B, int32 Floors, const FDCVoxelRecipe& R, FRandomStream& Rng)
 				{
@@ -387,7 +574,19 @@ namespace
 		const FIntVector B1 = F.Cell(Face, 0, S.U1 - 1, S.Z1 - 1);
 		Sign.BackMin = B0.ComponentMin(B1);
 		Sign.BackMax = B0.ComponentMax(B1) + FIntVector(1, 1, 1);
-		Sign.BackCells = (S.U1 - S.U0) * (S.Z1 - S.Z0);
+		// The backing actually there when the sign goes up (R23: a banner or crown band over recessed windows has less
+		// than its full area behind it), so a sign falls only when it lost a share of its real support.
+		Sign.BackCells = 0;
+		for (int32 Z = Sign.BackMin.Z; Z < Sign.BackMax.Z; ++Z)
+		{
+			for (int32 Y = Sign.BackMin.Y; Y < Sign.BackMax.Y; ++Y)
+			{
+				for (int32 X = Sign.BackMin.X; X < Sign.BackMax.X; ++X)
+				{
+					Sign.BackCells += W.IsSolid(FIntVector(X, Y, Z)) ? 1 : 0;
+				}
+			}
+		}
 	}
 	/** What a mount needs to place a building attachment (R2 props). */
 	struct FMountCtx

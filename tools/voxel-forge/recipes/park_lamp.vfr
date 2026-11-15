@@ -1,0 +1,9 @@
+# Park lamp (R23 park): a short ink post with a round warm globe.
+grid 5
+size 10 10 64
+slot post Ink
+slot globe Lamp
+slot base Trim
+cyl 5 5 0 3 3 base
+cyl 5 5 3 56 1.2 post
+sphere 5 5 59 3.5 globe

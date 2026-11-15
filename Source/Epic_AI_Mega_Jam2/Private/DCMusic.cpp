@@ -200,6 +200,14 @@ void UDCMusicSubsystem::Sample(UWorld& World, const ADCGameState& GS, float Dt)
 		SlotElapsed = 0.f;
 	}
 	const FName Want = PickTrack(*P, Dt, Fade);
+	// Self-heal (R14, human 02:39 "music does not blend"): a deck the engine stopped (focus loss, device change, a culled
+	// voice) never came back, because SetTarget returns early while the wanted track is still "Playing". Restart it.
+	const TObjectPtr<UAudioComponent>* Live = Playing.IsNone() ? nullptr : Decks.Find(Playing);
+	if (!Playing.IsNone() && (!Live || !*Live || !(*Live)->IsPlaying()))
+	{
+		UE_LOG(LogTemp, Display, TEXT("DCMUSIC deck %s was stopped by the engine: restarting"), *Playing.ToString());
+		Playing = NAME_None;
+	}
 	TArray<FName> Keep;
 	if (P->bByIntensity)
 	{
