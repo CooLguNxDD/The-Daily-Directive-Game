@@ -42,6 +42,9 @@ public:
 	void OnPlayerDowned(ADCCharacter* Player);
 	/** Fails the run when every player is down and nobody can still get up (R12). */
 	void CheckWipe();
+	/** R9: spend a crew life on a downed player: a drop pod lands beside a standing teammate (or their start spot) and
+	 *  they stand up there refilled after RedeployFallSeconds. False when the crew has no lives left. */
+	bool HostRedeploy(class ADCCharacter* Downed);
 	void OnBuildingCollapsed(ADCBuilding* Building);
 	/** Every collapse goes through here. Delay > 0 writes a telegraphed event record (Kind) now and collapses the
 	 *  tower at its peak on the server clock; Delay 0 collapses at once (a strike's own record covers it). */
@@ -100,6 +103,9 @@ private:
 	void TryRollReel();
 	void SetDilation(float Value);
 	FTransform SpawnTransformFor(int32 PlayerIndex) const;
+	void TickRedeploy(float Now);
+	/** Players whose redeploy pod is on its way (they keep the run alive). */
+	TSet<TWeakObjectPtr<const class ADCCharacter>> PendingRedeploy;
 	TArray<ADCPlayerState*> Players() const;
 
 	FDCCityPlan CityPlan;

@@ -666,6 +666,14 @@ struct FDCRunTuning
 	UPROPERTY(EditAnywhere, Config, Category = "Run") FVector PreviewLocation = FVector(0.f, 0.f, 30000.f);
 	UPROPERTY(EditAnywhere, Config, Category = "Run") float ScoopFirstSeconds = 35.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Run") float ScoopGapSeconds = 20.f;
+	/** R9 (human 2026-11-14): crew lives for the run by crew size (index = players - 1). A downed player not revived
+	 *  within BleedOutSeconds, or anyone down when the whole crew is down, spends one and redeploys: a drop pod lands
+	 *  over RedeployFallSeconds next to a standing teammate (or the player's start spot) and they stand up refilled.
+	 *  Out of lives, an all-down crew wipes (the reel still plays). */
+	UPROPERTY(EditAnywhere, Config, Category = "Run") TArray<int32> LivesByPlayers = {3, 4, 5, 6};
+	UPROPERTY(EditAnywhere, Config, Category = "Run") float BleedOutSeconds = 20.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Run") float RedeployFallSeconds = 2.5f;
+	UPROPERTY(EditAnywhere, Config, Category = "Run") float RedeployBesideCm = 400.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Run") int32 PodFilm = 4;
 	UPROPERTY(EditAnywhere, Config, Category = "Run") int32 PodAmmo = 90;
 	UPROPERTY(EditAnywhere, Config, Category = "Run") float PodHealth = 50.f;

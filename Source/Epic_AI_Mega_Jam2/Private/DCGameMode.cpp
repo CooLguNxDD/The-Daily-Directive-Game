@@ -339,6 +339,14 @@ void ADCGameMode::EnterSector(float Now)
 	BuildCity(GS->SectorIndex);
 	RollFactions();
 	StartObjective();
+	if (GS->SectorIndex == 0)
+	{
+		// R9: the crew's lives for the whole run, dealt by crew size at the first sector.
+		const TArray<int32>& Lives = T.Run.LivesByPlayers;
+		GS->CrewLives = Lives.Num() > 0 ? Lives[FMath::Min(FMath::Max(Players().Num(), 1), Lives.Num()) - 1] : 0;
+		PendingRedeploy.Reset();
+		UE_LOG(LogTemp, Display, TEXT("DCLIVES run start: %d players, %d lives"), Players().Num(), GS->CrewLives);
+	}
 
 	SectorStartTime = Now;
 	LastPackTime = -1e6f;
@@ -408,6 +416,7 @@ void ADCGameMode::TickSectorPhase(float Now)
 	TickWaves(Now);
 	TickPressure(Now);
 	TickFactions(Now);
+	TickRedeploy(Now);
 	TickSpawns();
 	TickObjective(Now);
 	TickPendingCollapses(Now);
@@ -866,6 +875,68 @@ void ADCGameMode::OnPlayerDowned(ADCCharacter* Player)
 	CheckWipe();
 }
 
+void ADCGameMode::TickRedeploy(float Now)
+{
+	// R9 bleed-out: a downed player nobody revived within BleedOutSeconds spends a crew life and redeploys.
+	const float BleedOut = UDCTuning::Get().Run.BleedOutSeconds;
+	for (ADCPlayerState* PS : Players())
+	{
+		ADCCharacter* C = PS->GetPawn<ADCCharacter>();
+		if (C && C->IsDowned() && !PendingRedeploy.Contains(C) && Now - C->GetDownedAt() >= BleedOut)
+		{
+			HostRedeploy(C);
+		}
+	}
+}
+
+bool ADCGameMode::HostRedeploy(ADCCharacter* Downed)
+{
+	ADCGameState* GS = GetGameState<ADCGameState>();
+	if (!Downed || !GS || GS->CrewLives <= 0 || PendingRedeploy.Contains(Downed))
+	{
+		return false;
+	}
+	const FDCRunTuning& Run = UDCTuning::Get().Run;
+	// Beside a standing teammate, else the player's own start spot.
+	FVector Spot = FVector::ZeroVector;
+	bool bBeside = false;
+	int32 MyIndex = 0;
+	int32 Index = 0;
+	for (ADCPlayerState* PS : Players())
+	{
+		const ADCCharacter* C = PS->GetPawn<ADCCharacter>();
+		MyIndex = C == Downed ? Index : MyIndex;
+		if (!bBeside && C && C != Downed && !C->IsDowned())
+		{
+			Spot = C->GetActorLocation() + C->GetActorRightVector() * Run.RedeployBesideCm;
+			bBeside = true;
+		}
+		++Index;
+	}
+	Spot = bBeside ? Spot : SpawnTransformFor(MyIndex).GetLocation();
+	--GS->CrewLives;
+	PendingRedeploy.Add(Downed);
+	ADCSupplyPod::DropLoad(GetWorld(), Spot, 0, 0, 0.f, 0.f, 0.f); // the drop pod (an empty crate: nothing to pick up)
+	UE_LOG(LogTemp, Display, TEXT("DCREDEPLOY %s spends a life (%d left), pod at %s %s"), *Downed->GetName(), GS->CrewLives, *Spot.ToCompactString(), bBeside ? TEXT("beside a teammate") : TEXT("at the start spot"));
+	TWeakObjectPtr<ADCCharacter> Who = Downed;
+	FTimerHandle Land;
+	GetWorldTimerManager().SetTimer(Land, FTimerDelegate::CreateWeakLambda(this, [this, Who, Spot]
+	{
+		ADCCharacter* C = Who.Get();
+		PendingRedeploy.Remove(TWeakObjectPtr<const ADCCharacter>(C));
+		const ADCGameState* State = GetGameState<ADCGameState>();
+		if (!C || !State || State->Phase != EDCRunPhase::Sector)
+		{
+			return;
+		}
+		C->TeleportTo(Spot + FVector(0, 0, 120.f), C->GetActorRotation());
+		C->HostRevive();
+		C->HostRefill();
+		UE_LOG(LogTemp, Display, TEXT("DCREDEPLOY %s is back at %s"), *C->GetName(), *Spot.ToCompactString());
+	}), FMath::Max(Run.RedeployFallSeconds, 0.1f), false);
+	return true;
+}
+
 void ADCGameMode::CheckWipe()
 {
 	ADCGameState* GS = GetGameState<ADCGameState>();
@@ -876,8 +947,8 @@ void ADCGameMode::CheckWipe()
 	for (ADCPlayerState* PS : Players())
 	{
 		const ADCCharacter* C = PS->GetPawn<ADCCharacter>();
-		// Anyone standing, or a solo player still inside the self-revive window, keeps the run alive.
-		if (C && (!C->IsDowned() || C->CanSelfRevive()))
+		// Anyone standing, a solo player still inside the self-revive window, or a redeploy on its way keeps the run alive.
+		if (C && (!C->IsDowned() || C->CanSelfRevive() || PendingRedeploy.Contains(C)))
 		{
 			WipeGraceUntil = -1.f; // someone got up: a later all-down gets its own Last Frame grace
 			return;
@@ -902,6 +973,17 @@ void ADCGameMode::CheckWipe()
 		return;
 	}
 	WipeGraceUntil = -1.f;
+	// R9: everyone is down but the crew has lives: each downed player redeploys while lives last; no wipe.
+	bool bAnyRedeploy = false;
+	for (ADCPlayerState* PS : Players())
+	{
+		ADCCharacter* C = PS->GetPawn<ADCCharacter>();
+		bAnyRedeploy |= C && C->IsDowned() && HostRedeploy(C);
+	}
+	if (bAnyRedeploy)
+	{
+		return;
+	}
 	// Everyone is down: the run fails, but the reel still plays (R12).
 	UE_LOG(LogTemp, Display, TEXT("DCWIPE all %d players down in sector %d: run failed, rolling the reel"), Players().Num(), GS->SectorIndex + 1);
 	GS->bRunFailed = true;

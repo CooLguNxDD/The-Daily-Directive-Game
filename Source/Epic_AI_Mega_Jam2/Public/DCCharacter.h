@@ -59,6 +59,7 @@ public:
 	// --- State the HUD and enemies read ---
 	EDCSlot GetSlot() const { return Slot; }
 	bool IsCameraRaised() const { return bCameraRaised; }
+	float GetDownedAt() const { return DownedAt; }
 	bool IsDowned() const { return bDowned; }
 	bool HasLastFrame() const { return bDowned && bLastFrameReady; }
 	/** Last Frame in co-op (R21): slow motion on the dying player's own machine only, as presentation

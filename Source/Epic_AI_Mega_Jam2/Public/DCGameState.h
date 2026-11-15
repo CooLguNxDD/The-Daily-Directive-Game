@@ -62,6 +62,8 @@ public:
 	/** Server time the current timed phase (draft, final cut, vote) ends. */
 	UPROPERTY(Replicated) float PhaseEndTime = 0.f;
 	UPROPERTY(Replicated) bool bRunFailed = false;
+	/** R9: lives the crew has left this run (HUD). */
+	UPROPERTY(Replicated) int32 CrewLives = 0;
 	/** Photo score filed by the whole crew this sector, against the sector quota. */
 	UPROPERTY(Replicated) int32 SectorPhotoPoints = 0;
 	/** One entry per finished sector: was the quota met. */
