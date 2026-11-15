@@ -558,6 +558,41 @@ void ADCDemoPilot::AddClashShot(const FString& S)
 	Add(0.6f, [this, S] { Shot(S + TEXT("_clash_stamp")); LogPhoto(); Release(TEXT("Aim")); return true; });
 }
 
+void ADCDemoPilot::AddRunFire()
+{
+	// R10 evidence (-dcrunfire): rifle out, sprint and strafe with the real Move/Sprint actions while tapping Fire;
+	// frames mid-run show the raised rifle, the tracer from the barrel and the muzzle flash.
+	Add(0.f, [this] { const ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>(); return GS && GS->Phase == EDCRunPhase::Sector; }, 120.f);
+	Add(0.6f, [this] { Tap(TEXT("Slot1")); return true; });
+	Add(1.0f, [this] { Press(TEXT("Move"), FVector(0, 1, 0)); Press(TEXT("Sprint")); return true; });
+	for (int32 i = 0; i < 14; ++i)
+	{
+		Add(0.11f, [this, i]
+		{
+			Tap(TEXT("Fire"));
+			if (i % 5 == 2)
+			{
+				Shot(FString::Printf(TEXT("runfire_fwd_%d"), i));
+			}
+			return true;
+		});
+	}
+	Add(0.2f, [this] { Release(TEXT("Sprint")); Press(TEXT("Move"), FVector(1, 0, 0)); return true; });
+	for (int32 i = 0; i < 10; ++i)
+	{
+		Add(0.11f, [this, i]
+		{
+			Tap(TEXT("Fire"));
+			if (i % 5 == 2)
+			{
+				Shot(FString::Printf(TEXT("runfire_strafe_%d"), i));
+			}
+			return true;
+		});
+	}
+	Add(0.3f, [this] { Release(TEXT("Move")); Shot(TEXT("runfire_idle")); return true; });
+}
+
 void ADCDemoPilot::AddSupplyCall()
 {
 	// R7 evidence (-dcsupply): spend the rifle's magazine, then Slot2 + Q until the Supply Drop is selected, call it 6 m
@@ -1113,6 +1148,10 @@ void ADCDemoPilot::BuildScript()
 		}
 		int32 Cycles = CyclesPerSector;
 		FParse::Value(FCommandLine::Get(), TEXT("dccycles="), Cycles); // more strike-and-snap cycles per sector
+		if (Sector == 0 && FParse::Param(FCommandLine::Get(), TEXT("dcrunfire")))
+		{
+			AddRunFire();
+		}
 		if (Sector == 0 && FParse::Param(FCommandLine::Get(), TEXT("dcsupply")))
 		{
 			AddSupplyCall();

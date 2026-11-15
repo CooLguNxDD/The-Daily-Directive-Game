@@ -46,6 +46,7 @@ private:
 	void AddClashShot(const FString& S);
 	void AddLineupShot();
 	void AddSupplyCall();
+	void AddRunFire();
 	FVector SupplyAt = FVector::ZeroVector;
 	TArray<TWeakObjectPtr<class ADCEnemy>> Lineup;
 	FVector LineupMid = FVector::ZeroVector;
