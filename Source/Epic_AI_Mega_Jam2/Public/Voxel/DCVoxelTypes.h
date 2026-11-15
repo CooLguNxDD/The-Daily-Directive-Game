@@ -351,6 +351,9 @@ struct FDCVoxelTuning
 	 *  crumb field's stream. */
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float DissolveDelayMaxSeconds = 0.9f;
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float DissolveDurationJitter = 0.35f;
+	/** R15: a pooled debris block (unit deaths) never shrinks: at the end of its life it flakes into this many dissolving
+	 *  crumbs inside its box, after a seeded 0..DissolveDelayMaxSeconds wait of its own. */
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 DebrisFlakeCrumbs = 6;
 	/** Crumbs keep this share of their voxel's glow (lit windows sparkle as they fall, never cream confetti). */
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float CrumbGlowScale = 0.35f;
 	/** Crumbs start at most CrumbSpawnPerFrame per frame (the rest queue), and a break throws (1 - CrumbLoadCut x body

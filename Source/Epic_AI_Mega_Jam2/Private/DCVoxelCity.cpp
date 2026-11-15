@@ -645,6 +645,26 @@ void ADCVoxelCity::BurstCrumbs(const FVector& At, const FLinearColor& Body, cons
 	}
 }
 
+void ADCVoxelCity::FlakeBlock(const FBox& Box, const FLinearColor& Color, float Glow, int32 Count)
+{
+	if (!Crumbs || Count <= 0)
+	{
+		return;
+	}
+	FRandomStream Rng(static_cast<int32>(GetTypeHash(Box.GetCenter().GridSnap(10.f))));
+	const float Size = FMath::Clamp(Box.GetSize().GetMin() * 0.35f, 3.f, 14.f);
+	for (int32 i = 0; i < Count; ++i)
+	{
+		FDCCrumbSpawn C;
+		C.At = FMath::Lerp(Box.Min, Box.Max, FVector(Rng.FRand(), Rng.FRand(), Rng.FRand()));
+		C.Velocity = FVector(Rng.FRandRange(-40.f, 40.f), Rng.FRandRange(-40.f, 40.f), Rng.FRandRange(0.f, 60.f));
+		C.SizeCm = Size;
+		C.Color = Color;
+		C.Glow = Glow;
+		Crumbs->Spawn(C);
+	}
+}
+
 void ADCVoxelCity::ThrowCrumbs(const FFalling& F, int32 FragIndex, const FBox& WorldBox, const FVector& V, int32 Count, FRandomStream& Rng)
 {
 	const FDCVoxelTuning& Tn = UDCVoxelSettings::Get().Tuning;
