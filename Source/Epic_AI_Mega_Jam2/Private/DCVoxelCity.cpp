@@ -1073,7 +1073,10 @@ void ADCVoxelCity::FlushPendingCraft()
 	}
 	// An op that arrives mid-craft (review CP22) waits for the craft here instead of being dropped.
 	const TSharedPtr<FPendingCraft> Done = PendingCraft;
-	Done->Task.Wait();
+	{
+		DC_FRAME_SCOPE("CraftWait"); // a blocking wait on the game thread: a spike line names it (R24 chip spike hunt)
+		Done->Task.Wait();
+	}
 	Sector = MoveTemp(*Done->Out);
 	FinishBuild(Done->RunSeed, Done->SectorIndex, Done->BuildId, Done->Start, Done->Pads.Get(), *Done->HashOut);
 	PendingCraft.Reset();
@@ -1285,7 +1288,10 @@ void ADCVoxelCity::WaitInFlight()
 	{
 		return;
 	}
-	InFlightTask.Wait();
+	{
+		DC_FRAME_SCOPE("OpWait"); // a blocking wait on the game thread: a spike line names it (R24 chip spike hunt)
+		InFlightTask.Wait();
+	}
 	FinishInFlight();
 }
 
@@ -2630,6 +2636,7 @@ bool ADCVoxelCity::TickBodies(const TSharedPtr<FFalling>& Shared, float Dt)
 
 void ADCVoxelCity::OnBodyHit(UPrimitiveComponent* HitComp, AActor* Other, UPrimitiveComponent* OtherComp, FVector NormalImpulse, const FHitResult& Hit)
 {
+	DC_FRAME_SCOPE("BodyHit"); // runs in the engine's physics event dispatch, outside the City tick scope
 	const TWeakPtr<FFalling>* Found = Bodies.Find(HitComp);
 	const TSharedPtr<FFalling> F = Found ? Found->Pin() : nullptr;
 	FFalling::FFrag* Fr = F ? F->Frags.FindByPredicate([HitComp](const FFalling::FFrag& X) { return X.Body == HitComp; }) : nullptr;

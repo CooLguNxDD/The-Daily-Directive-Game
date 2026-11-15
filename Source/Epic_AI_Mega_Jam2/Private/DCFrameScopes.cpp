@@ -3,6 +3,8 @@
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
 #include "Engine/World.h"
+#include "RenderTimer.h"
+#include "UnrealClient.h"
 #include "UObject/UObjectGlobals.h"
 
 namespace DCFrameScopes
@@ -16,6 +18,9 @@ namespace DCFrameScopes
 		int32 Depth = 0;
 		double WorldT0 = 0.0;
 		double GcT0 = 0.0;
+		/** Engine frame that read back a screenshot: that readback flushes the render thread and the GPU, ~180 ms that
+		 *  no thread timer counts (chips-efe1a5b: 40 of 109 sector spikes were the evidence frames themselves). */
+		uint64 ShotFrame = 0;
 
 		void Rotate()
 		{
@@ -45,6 +50,7 @@ namespace DCFrameScopes
 					WorldT0 = 0.0;
 				}
 			});
+			FScreenshotRequest::OnScreenshotRequestProcessed().AddLambda([] { ShotFrame = GFrameCounter; });
 			FCoreUObjectDelegates::GetPreGarbageCollectDelegate().AddLambda([] { GcT0 = FPlatformTime::Seconds(); });
 			FCoreUObjectDelegates::GetPostGarbageCollect().AddLambda([] {
 				if (GcT0 > 0.0)
@@ -100,8 +106,11 @@ namespace DCFrameScopes
 				++Listed;
 			}
 		}
-		return FString::Printf(TEXT("owners=%s ours=%.1f world=%.1f gc=%.1f unowned=%.1f outside_world=%.1f"), Owners.IsEmpty() ? TEXT("-") : *Owners, Ours, World, Gc,
-			FMath::Max(0.0, GameMs - Ours - Gc), FMath::Max(0.0, GameMs - World));
+		// wait = the game thread's idle waits the engine took out of game_ms (events, task waits, render sync); shot = a
+		// screenshot was read back this frame or the one before (the frame the spike line describes).
+		const bool bShot = ShotFrame > 0 && GFrameCounter - ShotFrame <= 2;
+		return FString::Printf(TEXT("owners=%s ours=%.1f world=%.1f gc=%.1f unowned=%.1f outside_world=%.1f wait=%.1f shot=%d"), Owners.IsEmpty() ? TEXT("-") : *Owners, Ours,
+			World, Gc, FMath::Max(0.0, GameMs - Ours - Gc), FMath::Max(0.0, GameMs - World), FPlatformTime::ToMilliseconds(GGameThreadWaitTime), bShot ? 1 : 0);
 	}
 
 	FScope::FScope(FName InName)
