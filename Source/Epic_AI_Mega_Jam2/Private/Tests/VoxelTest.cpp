@@ -819,8 +819,8 @@ bool FDCVoxelOldKindsPinTest::RunTest(const FString&)
 	}
 	AddInfo(FString::Printf(TEXT("DCPIN craft=%08x ops=%s"), CraftHash, *List));
 	// Pinned before R24 (Strike x3, Fell; run 2026-11-15).
-	constexpr uint32 PinCraft = 0x00000000;
-	const TArray<uint32> Pin = {};
+	constexpr uint32 PinCraft = 0x2e479104;
+	const TArray<uint32> Pin = {0x4deb6926, 0x13877624, 0xdeadd5f5, 0xffd99789};
 	if (CraftHash != PinCraft || Pin.Num() != Got.Num())
 	{
 		AddInfo(FString::Printf(TEXT("pin skipped: the crafted city is %08x, pinned %08x (city data changed)"), CraftHash, PinCraft));
