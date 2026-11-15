@@ -22,3 +22,9 @@ box 10 2 0 18 10 2 trim
 box 10 30 0 18 38 2 trim
 box 32 0 0 40 8 2 trim
 box 32 32 0 40 40 2 trim
+# R20 segments (a-34: the Walker slid rigid): four legs below the hips (z < 70), each turns about its hip under the
+# slab; the body slab, hips and eye stay the root. Diagonal pairs swing together (+UnitGaits Walker).
+part LegBL 4 0 0 24 15 70 14 10 70
+part LegBR 4 25 0 24 40 70 14 30 70
+part LegFL 26 0 0 48 15 70 36 10 70
+part LegFR 26 25 0 48 40 70 36 30 70
