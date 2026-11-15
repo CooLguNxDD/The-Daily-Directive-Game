@@ -3,6 +3,7 @@
 #include "Components/StaticMeshComponent.h"
 
 #include "Async/ParallelFor.h"
+#include "Algo/AnyOf.h"
 #include "Materials/MaterialInstanceDynamic.h"
 
 #include "DCVoxelFx.h"
@@ -1777,12 +1778,20 @@ void ADCVoxelCity::PollJobs()
 	PollStats = FPollStats();
 	const double Start = FPlatformTime::Seconds();
 	const double PieceBudgetS = UDCVoxelSettings::Get().Tuning.PieceUploadBudgetMs / 1000.0;
+	const double ChunkBudgetS = UDCVoxelSettings::Get().Tuning.PollChunkBudgetMs / 1000.0;
 	for (int32 i = 0; i < Jobs.Num();)
 	{
 		const TSharedPtr<FMeshJob> Job = Jobs[i];
 		if (!Job->Task.IsCompleted() || (Job->Piece && FPlatformTime::Seconds() - Start > PieceBudgetS))
 		{
 			++i; // not done, or a piece section over this frame's budget: next frame
+			continue;
+		}
+		// R1 (DCHITCH poll 18-25 ms with 300-500 chunk results in one play frame): in play, chunk results past the budget
+		// wait a frame (their cell stays busy, so it never uploads half-updated). Loading under the card takes them all.
+		if (!Job->Piece && !bLoading && PollStats.Chunks > 0 && FPlatformTime::Seconds() - Start > ChunkBudgetS)
+		{
+			++i;
 			continue;
 		}
 		Jobs.RemoveAtSwap(i);
@@ -1830,6 +1839,45 @@ void ADCVoxelCity::PollJobs()
 	}
 }
 
+namespace
+{
+	// R1 (DCCOMMIT apply=20.8 ms for 16 cells, perfpair-8f17486): the per-vertex conversion CreateMeshSection does on the
+	// game thread, done on a worker instead; the game thread only hands the finished section over (SetProcMeshSection).
+	// Same result as CreateMeshSection(0, P, I, N, UV0, Colors, {}, true): default UV1..3 and tangent, degenerate
+	// triangles dropped, collision on.
+	void BuildSection(const FDCVoxelMeshData& In, FProcMeshSection& Out)
+	{
+		Out.Reset();
+		const int32 NumVerts = In.Positions.Num();
+		Out.ProcVertexBuffer.SetNumUninitialized(NumVerts);
+		for (int32 V = 0; V < NumVerts; ++V)
+		{
+			FProcMeshVertex& Vx = Out.ProcVertexBuffer[V];
+			Vx.Position = In.Positions[V];
+			Vx.Normal = In.Normals.Num() == NumVerts ? In.Normals[V] : FVector(0.f, 0.f, 1.f);
+			Vx.Tangent = FProcMeshTangent();
+			Vx.Color = In.Colors.Num() == NumVerts ? In.Colors[V] : FColor(255, 255, 255);
+			Vx.UV0 = In.UVs.Num() == NumVerts ? In.UVs[V] : FVector2D(0.f, 0.f);
+			Vx.UV1 = Vx.UV2 = Vx.UV3 = FVector2D(0.f, 0.f);
+			Out.SectionLocalBox += Vx.Position;
+		}
+		const int32 MaxIndex = NumVerts - 1;
+		const int32 NumTri = In.Indices.Num() / 3;
+		Out.ProcIndexBuffer.Reserve(NumTri * 3);
+		for (int32 T = 0; T < NumTri; ++T)
+		{
+			const int32 A = FMath::Min(In.Indices[T * 3], MaxIndex), B = FMath::Min(In.Indices[T * 3 + 1], MaxIndex), C = FMath::Min(In.Indices[T * 3 + 2], MaxIndex);
+			if (A != B && A != C && B != C)
+			{
+				Out.ProcIndexBuffer.Add(A);
+				Out.ProcIndexBuffer.Add(B);
+				Out.ProcIndexBuffer.Add(C);
+			}
+		}
+		Out.bEnableCollision = true;
+	}
+}
+
 void ADCVoxelCity::UploadCells()
 {
 	if (DirtyCells.Num() == 0)
@@ -1849,7 +1897,10 @@ void ADCVoxelCity::UploadCells()
 	// 1. A committed op's own cells, all at once (the detonation frame shows the whole op). R1 (spikes-cb1f180: 12 of 13
 	//    sector-play spikes were this frame, 17-24 ms for 16-21 cells): the merges run in parallel, sections stay serial.
 	TArray<FIntVector4> CommitNow;
-	for (auto It = CommitCells.CreateIterator(); It; ++It)
+	// The whole op shows in one frame (advisor a-38): while any of its cells still waits for a chunk (PollChunkBudgetMs
+	// can defer chunk results), none of them uploads.
+	const bool bCommitWaits = Algo::AnyOf(CommitCells, [&Busy](const FIntVector4& C) { return Busy.Contains(C); });
+	for (auto It = CommitCells.CreateIterator(); It && !bCommitWaits; ++It)
 	{
 		if (Busy.Contains(*It))
 		{
@@ -1866,11 +1917,13 @@ void ADCVoxelCity::UploadCells()
 		const double T0 = FPlatformTime::Seconds();
 		TArray<FDCVoxelMeshData> Merged;
 		Merged.SetNum(CommitNow.Num());
-		ParallelFor(CommitNow.Num(), [&](int32 i) { MergeCell(CommitNow[i], Merged[i]); }, CommitNow.Num() < 4);
+		TArray<FProcMeshSection> Sections;
+		Sections.SetNum(CommitNow.Num());
+		ParallelFor(CommitNow.Num(), [&](int32 i) { MergeCell(CommitNow[i], Merged[i]); BuildSection(Merged[i], Sections[i]); }, CommitNow.Num() < 4);
 		const double T1 = FPlatformTime::Seconds();
 		for (int32 i = 0; i < CommitNow.Num(); ++i)
 		{
-			ApplyCell(CommitNow[i], Merged[i], i == 0 ? T0 : FPlatformTime::Seconds());
+			ApplyCell(CommitNow[i], Merged[i], i == 0 ? T0 : FPlatformTime::Seconds(), &Sections[i]);
 		}
 		const double T2 = FPlatformTime::Seconds();
 		if ((T2 - T0) * 1000.0 > UDCVoxelSettings::Get().Tuning.HitchLogMs)
@@ -1890,7 +1943,7 @@ void ADCVoxelCity::UploadCells()
 	TArray<FIntVector4> Ready;
 	for (const FIntVector4& Cell : DirtyCells)
 	{
-		if (!Busy.Contains(Cell) && !(bHoldUploads && HeldCells.Contains(Cell)))
+		if (!Busy.Contains(Cell) && !(bHoldUploads && HeldCells.Contains(Cell)) && !CommitCells.Contains(Cell))
 		{
 			Ready.Add(Cell);
 		}
@@ -1961,7 +2014,7 @@ bool ADCVoxelCity::UploadCell(const FIntVector4& Cell)
 	return ApplyCell(Cell, Merged, T0);
 }
 
-bool ADCVoxelCity::ApplyCell(const FIntVector4& Cell, const FDCVoxelMeshData& Merged, double T0)
+bool ADCVoxelCity::ApplyCell(const FIntVector4& Cell, const FDCVoxelMeshData& Merged, double T0, const FProcMeshSection* Prebuilt)
 {
 	DirtyCells.Remove(Cell);
 	const int32 G = Cell.X;
@@ -1981,7 +2034,14 @@ bool ADCVoxelCity::ApplyCell(const FIntVector4& Cell, const FDCVoxelMeshData& Me
 		Mesh->ComponentTags.Add(G == 0 ? FName(TEXT("Terrain")) : FName(*FString::Printf(TEXT("Lot%d"), G - 1)));
 	}
 	const double T1 = FPlatformTime::Seconds();
-	Mesh->CreateMeshSection(0, Merged.Positions, Merged.Indices, Merged.Normals, Merged.UVs, Merged.Colors, {}, true);
+	if (Prebuilt)
+	{
+		Mesh->SetProcMeshSection(0, *Prebuilt);
+	}
+	else
+	{
+		Mesh->CreateMeshSection(0, Merged.Positions, Merged.Indices, Merged.Normals, Merged.UVs, Merged.Colors, {}, true);
+	}
 	const double T2 = FPlatformTime::Seconds();
 	if ((T2 - T0) * 1000.0 >= UDCVoxelSettings::Get().Tuning.HitchLogMs)
 	{
