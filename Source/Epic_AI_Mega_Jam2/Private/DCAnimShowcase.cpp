@@ -171,6 +171,29 @@ void UDCAnimShowcase::Start()
 	Center.Z = City->SurfaceZCm(Center);
 	PC->GetPawn()->SetActorHiddenInGame(true);
 	const float Spacing = 260.f;
+	// Lay the line along a clear street axis and put the camera on a clear side (the city has walls everywhere).
+	const float Half = Spacing * Kinds.Num() * 0.5f;
+	const float CamDist = Spacing * Kinds.Num() * 0.8f;
+	const FVector Up(0.f, 0.f, 120.f);
+	auto Clear = [City, this, &Up](const FVector& Dir, float Dist) { return !City->IsSightBlocked(Center + Up, Center + Up + Dir * Dist, {}); };
+	FVector LineDir = FVector::ForwardVector;
+	FVector CamDir = -FVector::RightVector;
+	int32 BestScore = -1;
+	for (const FVector& Axis : {FVector::ForwardVector, FVector::RightVector})
+	{
+		const FVector Side = FVector::CrossProduct(FVector::UpVector, Axis);
+		for (const FVector& Cam : {Side, -Side})
+		{
+			const int32 Score = (Clear(Axis, Half) ? 2 : 0) + (Clear(-Axis, Half) ? 2 : 0) + (Clear(Cam, CamDist) ? 3 : 0);
+			if (Score > BestScore)
+			{
+				BestScore = Score;
+				LineDir = Axis;
+				CamDir = Cam;
+			}
+		}
+	}
+	UE_LOG(LogTemp, Display, TEXT("DCANIMSHOT line %s camera side %s clearance score %d/7"), *LineDir.ToCompactString(), *CamDir.ToCompactString(), BestScore);
 	for (int32 i = 0; i < Kinds.Num(); ++i)
 	{
 		const FDCEnemyDef* Def = UDCTuning::Get().FindEnemy(FName(*Kinds[i]));
@@ -178,8 +201,9 @@ void UDCAnimShowcase::Start()
 		{
 			continue;
 		}
-		const FVector At = Center + FVector((i - (Kinds.Num() - 1) * 0.5f) * Spacing, 0.f, Def->HoverHeight);
-		const FTransform Xf(FRotator::ZeroRotator, At);
+		FVector At = Center + LineDir * ((i - (Kinds.Num() - 1) * 0.5f) * Spacing);
+		At.Z = City->SurfaceZCm(At) + Def->HoverHeight;
+		const FTransform Xf(LineDir.Rotation(), At);
 		ADCEnemy* E = World->SpawnActorDeferred<ADCEnemy>(ADCEnemy::StaticClass(), Xf, nullptr, nullptr, ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
 		E->InitKind(Def->Id);
 		E->FinishSpawning(Xf);
@@ -192,7 +216,7 @@ void UDCAnimShowcase::Start()
 	}
 	Camera = World->SpawnActor<ACameraActor>(ACameraActor::StaticClass(), FTransform::Identity);
 	Camera->GetCameraComponent()->SetFieldOfView(70.f);
-	const FVector Eye = Center + FVector(0.f, -Spacing * Kinds.Num() * 0.8f, 140.f);
+	const FVector Eye = Center + CamDir * CamDist + FVector(0.f, 0.f, 140.f);
 	Camera->SetActorLocationAndRotation(Eye, (Center + FVector(0.f, 0.f, 90.f) - Eye).Rotation());
 	Clock = 0.f;
 }
