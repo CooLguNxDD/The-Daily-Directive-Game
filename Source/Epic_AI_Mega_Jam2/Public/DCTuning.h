@@ -106,6 +106,25 @@ struct FDCWeaponDef
 	UPROPERTY(EditAnywhere, Config, Category = "Weapon") float PodAmmoScale = 1.f;
 };
 
+/** R12 sky detail and distant skyline: forge models placed in a ring around the sector, seeded per sector (cosmetic,
+ *  no collision). OrbitDegPerSec > 0 drifts them around the city (airships); 0 keeps them standing (spires). */
+USTRUCT(BlueprintType)
+struct FDCSkyPropDef
+{
+	GENERATED_BODY()
+	UPROPERTY(EditAnywhere, Config, Category = "Sky") FName Model;
+	UPROPERTY(EditAnywhere, Config, Category = "Sky") int32 Count = 1;
+	/** Distance past the sector edge (cm), min and max. */
+	UPROPERTY(EditAnywhere, Config, Category = "Sky") FVector2D RingCm = FVector2D(14000.f, 20000.f);
+	/** Height of the model's pivot above the street (cm), min and max. */
+	UPROPERTY(EditAnywhere, Config, Category = "Sky") FVector2D HeightCm = FVector2D(0.f, 0.f);
+	/** Uniform scale of the model, min and max. */
+	UPROPERTY(EditAnywhere, Config, Category = "Sky") FVector2D Scale = FVector2D(10.f, 10.f);
+	UPROPERTY(EditAnywhere, Config, Category = "Sky") float OrbitDegPerSec = 0.f;
+	/** Slow vertical bob (cm) of drifting props. */
+	UPROPERTY(EditAnywhere, Config, Category = "Sky") float BobCm = 0.f;
+};
+
 /** One layer of a data sound recipe: a tone (Wave Sine, Square, Saw, Tri) gliding F0 -> F1 Hz, or Noise low-passed
  *  with a cutoff gliding F0 -> F1 Hz. Repeat copies the layer every RepeatGap seconds (ticks, rattles). */
 USTRUCT(BlueprintType)
@@ -332,6 +351,9 @@ struct FDCLookTuning
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float SectorCardMaxSeconds = 6.f;
 	/** Backdrop skyline past the sector edge: towers in a ring starting GapCm out, DepthCm deep; footprint and height
 	 *  ranges in cm; the colour is an ink tone (the height fog hazes the far ones toward the sky). */
+	/** R12 ground weather puffs: spawn height of the street plane and radius around the camera (cm). */
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float GroundFxHeightCm = 5.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float GroundFxRadiusCm = 2500.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Look") int32 BackdropTowers = 90;
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float BackdropGapCm = 2500.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float BackdropDepthCm = 9000.f;
@@ -786,6 +808,8 @@ public:
 	UPROPERTY(EditAnywhere, Config, Category = "Rifle") FDCRifleTuning Rifle;
 	/** R8 player weapons (slot 1). Empty = the rifle from Rifle= alone. */
 	UPROPERTY(EditAnywhere, Config, Category = "Weapon") TArray<FDCWeaponDef> Weapons;
+	/** R12 sky detail and skyline landmarks around every sector. */
+	UPROPERTY(EditAnywhere, Config, Category = "Sky") TArray<FDCSkyPropDef> SkyProps;
 	/** Sound cues written as data (weapons, strikes), beside the code synth cues. */
 	UPROPERTY(EditAnywhere, Config, Category = "Sound") TArray<FDCSoundRecipe> SoundRecipes;
 	UPROPERTY(EditAnywhere, Config, Category = "Camera") FDCCameraTuning Camera;

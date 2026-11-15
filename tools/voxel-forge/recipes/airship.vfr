@@ -1,0 +1,20 @@
+# Advertising airship (R12 sky detail): a dark hull with a dim cyan screen band on both flanks, a gondola with warm
+# windows and tail fins. Drifts around the city far out (+SkyProps, scaled up). Faces +x. 10 cm grid.
+grid 10
+size 60 20 22
+slot hull InkBlue
+slot screen NeonCyan
+slot frame Ink
+slot lamp Lamp
+slot steel Steel
+ellipsoid 30 10 13 29 9 8 hull
+paint box 16 0 9 44 4 17 frame
+paint box 17 0 10 43 4 16 screen
+paint box 16 16 9 44 20 17 frame
+paint box 17 16 10 43 20 16 screen
+box 24 7 1 37 13 5 frame
+paint box 25 7 2 36 8 4 lamp
+paint box 25 12 2 36 13 4 lamp
+box 0 9 13 7 11 21 steel
+box 0 3 12 6 17 14 steel
+box 58 9 13 60 11 14 lamp

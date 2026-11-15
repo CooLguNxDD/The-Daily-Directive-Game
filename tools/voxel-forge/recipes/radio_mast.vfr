@@ -1,0 +1,16 @@
+# Radio mast (R12 distant skyline): a tapering steel lattice with cross braces and a warm beacon (not red: danger red
+# is only for danger). Far past the sector edge (+SkyProps, scaled up). 10 cm grid.
+grid 10
+size 12 12 64
+slot steel Steel
+slot lamp Lamp
+beam 1 1 0 5 5 60 1.0 steel
+beam 11 1 0 7 5 60 1.0 steel
+beam 1 11 0 5 7 60 1.0 steel
+beam 11 11 0 7 7 60 1.0 steel
+beam 1 1 10 11 11 22 0.8 steel
+beam 11 1 10 1 11 22 0.8 steel
+beam 2 2 30 10 10 42 0.8 steel
+beam 10 2 30 2 10 42 0.8 steel
+box 5 5 60 7 7 64 lamp
+box 4 4 32 8 8 33 lamp

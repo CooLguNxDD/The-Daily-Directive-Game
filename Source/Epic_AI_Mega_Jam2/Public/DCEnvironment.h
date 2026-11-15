@@ -86,6 +86,12 @@ private:
 	float CloudOrbitDeg = 0.f;
 	float AppliedWetness = -1.f;
 	void BuildClouds(int32 RunSeed, int32 Sector);
+	/** R12 sky detail and skyline landmarks (+SkyProps rows, DCSkyProps.cpp). */
+	struct FSkyProp { float Angle; float Radius; float Height; float OrbitDegPerSec; float BobCm; float Phase; };
+	UPROPERTY() TArray<TObjectPtr<class UProceduralMeshComponent>> SkyMeshes;
+	TArray<FSkyProp> SkyState;
+	void BuildSkyProps(int32 RunSeed, int32 Sector, float HalfCm);
+	void UpdateSkyProps(float DeltaSeconds);
 	void UpdateClouds(float DeltaSeconds);
 	UPROPERTY() TObjectPtr<ADCDebrisPool> DebrisPool;
 
@@ -97,6 +103,7 @@ private:
 	TMap<FName, float> PostWeights;
 	FDCWeatherState Weather;
 	float PrecipitationCarry = 0.f;
+	float GroundFxCarry = 0.f;
 	/** 0 = night, 1 = day (Look.DayBlend, or -dcdaypose=<0..1> for evidence runs). */
 	float DayBlend = 0.f;
 	/** Day value the sun and sky were last set for (they change only when it moves). */
