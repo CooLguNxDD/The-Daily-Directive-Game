@@ -17,3 +17,10 @@ beam 11 2 26 17 1 16 1.2 body
 beam 11 12 26 16 13 18 1.2 body
 noise 0.15 7 rag
 pivot 8 7 0
+# R20 animation segments: the short right leg limps, both arms hang forward from the shoulders, the head lolls.
+part LegL 0 0 0 18 7 14 7.5 4.5 14
+part LegR 0 7 0 18 14 14 7.5 9.5 13
+part ArmL 9 0 15 18 3 28 11 2 26
+part ArmR 9 11 15 18 14 28 11 12 26
+part Head 14 4 24 18 10 30 13 7 26
+part Head 12 4 27 14 10 30 13 7 26

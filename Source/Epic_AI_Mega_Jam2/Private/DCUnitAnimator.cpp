@@ -1,0 +1,199 @@
+#include "DCUnitAnimator.h"
+
+#include "Camera/PlayerCameraManager.h"
+#include "DCTuning.h"
+#include "Engine/World.h"
+#include "GameFramework/PlayerController.h"
+#include "Materials/MaterialInterface.h"
+#include "ProceduralMeshComponent.h"
+#include "Voxel/DCVoxelModel.h"
+#include "Voxel/DCVoxelSettings.h"
+
+namespace
+{
+	/** Speed and turn smoothing (per second): replicated units move in 15-20 Hz steps, the read must not stutter. */
+	constexpr float MotionEase = 8.f;
+}
+
+UDCUnitAnimator::UDCUnitAnimator()
+{
+	PrimaryComponentTick.bCanEverTick = false;
+}
+
+UDCUnitAnimator* UDCUnitAnimator::Attach(AActor& Unit, UProceduralMeshComponent& Mesh, const FDCEnemyDef& Def)
+{
+	const UDCTuning& T = UDCTuning::Get();
+	if (!DCUnitAnim::FindGait(T.UnitGaits, Def.Gait))
+	{
+		return nullptr;
+	}
+	const FDCVoxelUnitMesh* UnitMesh = DCVoxelModels::UnitMesh(Def.Model);
+	UMaterialInterface* UnitMat = UnitMesh && UnitMesh->Roles.Num() > 0 ? Cast<UMaterialInterface>(T.UnitMaterial.TryLoad()) : nullptr;
+	if (!UnitMesh)
+	{
+		return nullptr;
+	}
+	UDCUnitAnimator* Anim = NewObject<UDCUnitAnimator>(&Unit, TEXT("UnitAnimator"));
+	Anim->RegisterComponent();
+	Anim->Mesh = &Mesh;
+	Anim->GaitId = Def.Gait;
+	Anim->bSegmented = UnitMat != nullptr;
+	if (Anim->bSegmented)
+	{
+		const FDCVoxelMeshData& M = UnitMesh->Mesh;
+		Mesh.CreateMeshSection(0, M.Positions, M.Indices, M.Normals, M.UVs, UnitMesh->UV1, UnitMesh->UV2, {}, M.Colors, {}, false);
+		Mesh.SetMaterial(0, UnitMat);
+		// Limbs swing outside the rest-pose bounds (advisor a-28): keep them from culling at the screen edge.
+		Mesh.SetBoundsScale(1.5f);
+		Anim->Roles = UnitMesh->Roles;
+	}
+	else
+	{
+		const FDCVoxelMeshData& M = UnitMesh->Mesh;
+		Mesh.CreateMeshSection(0, M.Positions, M.Indices, M.Normals, M.UVs, M.Colors, {}, false);
+		Mesh.SetMaterial(0, Cast<UMaterialInterface>(UDCVoxelSettings::Get().VoxelMaterial.TryLoad()));
+		UE_LOG(LogTemp, Display, TEXT("DCANIM %s: %s unsegmented (parts %d, unit material %s)"), *Unit.GetName(), *Def.Model.ToString(),
+			UnitMesh->Roles.Num(), *T.UnitMaterial.ToString());
+	}
+	Anim->Last = Unit.GetActorLocation();
+	Anim->LastYaw = Unit.GetActorRotation().Yaw;
+	// Spread pose updates of a pack across frames.
+	Anim->Accum = FMath::FRand();
+	Anim->Play(EDCUnitClip::Spawn);
+	// The spawn move's first frame now, so the unit never shows standing before it (a drop starts in the air).
+	if (const FDCUnitGait* G = Anim->Gait())
+	{
+		FDCUnitAnimInput In;
+		In.Clip = Anim->Clip;
+		DCUnitAnim::Pose(*G, Anim->ClipRow(Anim->Clip), In, Anim->Roles, Anim->Pose);
+		Anim->Apply();
+		Anim->ApplyRoot(Def);
+	}
+	return Anim;
+}
+
+const FDCUnitGait* UDCUnitAnimator::Gait() const
+{
+	return DCUnitAnim::FindGait(UDCTuning::Get().UnitGaits, GaitId);
+}
+
+const FDCUnitClip* UDCUnitAnimator::ClipRow(EDCUnitClip Which) const
+{
+	const FDCUnitGait* G = Gait();
+	return G ? DCUnitAnim::FindClip(UDCTuning::Get().UnitClips, DCUnitAnim::ClipId(*G, Which)) : nullptr;
+}
+
+float UDCUnitAnimator::DeathSeconds() const
+{
+	const FDCUnitClip* Row = ClipRow(EDCUnitClip::Death);
+	return Row ? FMath::Clamp(Row->Seconds, 0.f, 3.f) : 0.f;
+}
+
+void UDCUnitAnimator::Play(EDCUnitClip Next)
+{
+	const FDCUnitClip* Current = ClipRow(Clip);
+	if (!ClipRow(Next) || !DCUnitAnim::CanStart(Clip, ClipTime, Current ? Current->Seconds : 0.f, Next))
+	{
+		return;
+	}
+	Clip = Next;
+	ClipTime = 0.f;
+}
+
+void UDCUnitAnimator::Advance(float DeltaSeconds, const FVector& Location, float Yaw, float Health, uint8 AttackSeq, bool bAlive)
+{
+	const FDCUnitGait* G = Gait();
+	if (!G || DeltaSeconds <= 0.f)
+	{
+		return;
+	}
+	// States from replicated facts (every machine): death, a health drop, a new attack.
+	if (!bAlive)
+	{
+		Play(EDCUnitClip::Death);
+	}
+	if (bStarted && bAlive && Health < LastHealth - 0.01f)
+	{
+		Play(EDCUnitClip::Flinch);
+	}
+	if (bStarted && AttackSeq != SeenAttack && bAlive)
+	{
+		Play(EDCUnitClip::Attack);
+	}
+	bStarted = true;
+	LastHealth = Health;
+	SeenAttack = AttackSeq;
+
+	// Motion: smoothed ground speed and yaw rate; the stride phase follows the smoothed speed so 15 Hz updates on a
+	// client do not jerk the legs.
+	const float Moved = FVector::Dist2D(Location, Last) / DeltaSeconds;
+	const float Turned = FRotator::NormalizeAxis(Yaw - LastYaw) / DeltaSeconds;
+	Last = Location;
+	LastYaw = Yaw;
+	const float Ease = FMath::Clamp(DeltaSeconds * MotionEase, 0.f, 1.f);
+	Speed = ForcedSpeedCm >= 0.f ? ForcedSpeedCm : FMath::Lerp(Speed, FMath::Min(Moved, 3000.f), Ease);
+	Turn = FMath::Lerp(Turn, FMath::Clamp(Turned, -720.f, 720.f), Ease);
+	Phase = DCUnitAnim::AdvancePhase(Phase, Speed * DeltaSeconds, *G);
+	Time += DeltaSeconds;
+	ClipTime += DeltaSeconds;
+	const FDCUnitClip* Row = ClipRow(Clip);
+	if (Clip != EDCUnitClip::None && (!Row || (ClipTime >= Row->Seconds && !DCUnitAnim::HoldsEnd(Clip))))
+	{
+		Clip = EDCUnitClip::None;
+		Row = nullptr;
+	}
+
+	// LOD by distance from the local camera; a machine without one (dedicated server) never poses.
+	const UWorld* World = GetWorld();
+	const APlayerController* PC = World ? World->GetFirstPlayerController() : nullptr;
+	const APlayerCameraManager* Cam = PC ? PC->PlayerCameraManager.Get() : nullptr;
+	if (!Cam)
+	{
+		return;
+	}
+	const FDCAnimLod& Lod = DCUnitAnim::Lod(UDCTuning::Get().AnimLods, FVector::Dist(Cam->GetCameraLocation(), Location));
+	Accum += DeltaSeconds;
+	if (Lod.Hz > 0.f && Accum < 1.f / Lod.Hz)
+	{
+		return;
+	}
+	Accum = Lod.Hz > 0.f ? FMath::Fmod(Accum, 1.f / Lod.Hz) : 0.f;
+	FDCUnitAnimInput In;
+	In.Phase = Phase;
+	In.SpeedCm = Speed;
+	In.TurnDegPerSec = Turn;
+	In.Time = Time;
+	In.Clip = Clip;
+	In.ClipTime = ClipTime;
+	In.bLimbs = Lod.bLimbs;
+	DCUnitAnim::Pose(*G, Row, In, Roles, Pose);
+	Apply();
+}
+
+void UDCUnitAnimator::ApplyRoot(const FDCEnemyDef& Def)
+{
+	if (UProceduralMeshComponent* M = Mesh.Get())
+	{
+		M->SetRelativeLocationAndRotation(Def.ModelOffset + Pose.RootOffset * Def.ModelScale, Pose.RootRot);
+	}
+}
+
+void UDCUnitAnimator::Apply()
+{
+	UProceduralMeshComponent* M = Mesh.Get();
+	if (!M || !bSegmented)
+	{
+		return;
+	}
+	// Custom primitive data: slot 0 is the dissolve (unused here), then 4 floats (a quaternion) per segment.
+	Cpd.SetNumZeroed(FDCVoxelModel::MaxSegments * 4);
+	for (int32 i = 0; i < Pose.Segments.Num() && i < FDCVoxelModel::MaxSegments; ++i)
+	{
+		const FQuat& Q = Pose.Segments[i];
+		Cpd[i * 4 + 0] = static_cast<float>(Q.X);
+		Cpd[i * 4 + 1] = static_cast<float>(Q.Y);
+		Cpd[i * 4 + 2] = static_cast<float>(Q.Z);
+		Cpd[i * 4 + 3] = static_cast<float>(Q.W);
+	}
+	M->SetCustomPrimitiveDataFloatArray(1, TConstArrayView<float>(Cpd));
+}

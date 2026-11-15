@@ -54,6 +54,18 @@ bool FDCVoxelModel::Parse(const FString& Text, FDCVoxelModel& Out, FString& Erro
 						return M.Slots.Num() < 255;
 					}},
 				{TEXT("solid"), [](const TArray<FString>&, FDCVoxelModel&) { return true; }},
+				// R20: part Role x0 y0 z0 x1 y1 z1 jx jy jz (an animation segment; voxel-forge `part`).
+				{TEXT("part"), [](const TArray<FString>& A, FDCVoxelModel& M)
+					{
+						if (A.Num() != 11 || M.Parts.Num() >= 64) { return false; }
+						FDCVoxelPart P;
+						P.Role = FName(*A[1]);
+						P.Min = FIntVector(FCString::Atoi(*A[2]), FCString::Atoi(*A[3]), FCString::Atoi(*A[4]));
+						P.Max = FIntVector(FCString::Atoi(*A[5]), FCString::Atoi(*A[6]), FCString::Atoi(*A[7]));
+						P.Joint = FVector(FCString::Atof(*A[8]), FCString::Atof(*A[9]), FCString::Atof(*A[10]));
+						M.Parts.Add(P);
+						return P.Joint.GetAbsMax() <= MaxModelEdge;
+					}},
 			};
 			if (T[0] == TEXT("rle"))
 			{
@@ -101,7 +113,87 @@ bool FDCVoxelModel::Parse(const FString& Text, FDCVoxelModel& Out, FString& Erro
 		Error = FString::Printf(TEXT("volume has %lld of %d voxels"), Filled, Out.Cells.Num());
 		return false;
 	}
+	if (Out.SegmentRoles().Num() > MaxSegments)
+	{
+		Error = FString::Printf(TEXT("%d part roles, at most %d"), Out.SegmentRoles().Num(), MaxSegments);
+		return false;
+	}
 	return true;
+}
+
+TArray<FName> FDCVoxelModel::SegmentRoles() const
+{
+	TArray<FName> Roles;
+	for (const FDCVoxelPart& P : Parts)
+	{
+		Roles.AddUnique(P.Role);
+	}
+	return Roles;
+}
+
+int32 FDCVoxelModel::PartOf(const FIntVector& C) const
+{
+	for (int32 i = Parts.Num() - 1; i >= 0; --i)
+	{
+		const FDCVoxelPart& P = Parts[i];
+		if (C.X >= P.Min.X && C.Y >= P.Min.Y && C.Z >= P.Min.Z && C.X < P.Max.X && C.Y < P.Max.Y && C.Z < P.Max.Z)
+		{
+			return i;
+		}
+	}
+	return INDEX_NONE;
+}
+
+void FDCVoxelModel::BuildUnitMesh(const TArray<FName>& PaletteNames, const TArray<FColor>& PaletteColors, FDCVoxelUnitMesh& Out) const
+{
+	Out = FDCVoxelUnitMesh();
+	Out.Roles = SegmentRoles();
+	TArray<uint8> SlotToId;
+	SlotToId.Add(0);
+	for (const FName& Slot : Slots)
+	{
+		const int32 Index = PaletteNames.IndexOfByKey(Slot);
+		SlotToId.Add(static_cast<uint8>(Index == INDEX_NONE ? 1 : Index + 1));
+	}
+	// Bucket voxels by owning part (bucket 0 = root body, bucket p + 1 = part p): parts sharing a role (a tripod of
+	// legs) share the segment's pose but turn about their own joints.
+	const int32 NumBuckets = Parts.Num() + 1;
+	TArray<TArray<FIntVector>> Pos;
+	TArray<TArray<uint8>> Mats;
+	Pos.SetNum(NumBuckets);
+	Mats.SetNum(NumBuckets);
+	for (int32 Z = 0; Z < Size.Z; ++Z)
+	{
+		for (int32 Y = 0; Y < Size.Y; ++Y)
+		{
+			for (int32 X = 0; X < Size.X; ++X)
+			{
+				const uint8 S = Cells[X + Size.X * (Y + Size.Y * Z)];
+				if (S != 0)
+				{
+					const int32 Bucket = PartOf(FIntVector(X, Y, Z)) + 1;
+					Pos[Bucket].Add(FIntVector(X, Y, Z));
+					Mats[Bucket].Add(SlotToId[S]);
+				}
+			}
+		}
+	}
+	for (int32 Bucket = 0; Bucket < NumBuckets; ++Bucket)
+	{
+		if (Pos[Bucket].IsEmpty())
+		{
+			continue;
+		}
+		const int32 First = Out.Mesh.Positions.Num();
+		DCVoxelMesher::MeshCells(Pos[Bucket], Mats[Bucket], Pivot, PaletteColors, static_cast<float>(GridCm), Out.Mesh);
+		const int32 Seg = Bucket == 0 ? 0 : Out.Roles.IndexOfByKey(Parts[Bucket - 1].Role) + 1;
+		const FVector JointCm = Bucket == 0 ? FVector::ZeroVector : (Parts[Bucket - 1].Joint - FVector(Pivot)) * GridCm;
+		for (int32 v = First; v < Out.Mesh.Positions.Num(); ++v)
+		{
+			Out.UV1.Add(FVector2D(Seg, JointCm.X));
+			Out.UV2.Add(FVector2D(JointCm.Y, JointCm.Z));
+		}
+	}
 }
 
 void FDCVoxelModel::BuildMesh(const TArray<FName>& PaletteNames, const TArray<FColor>& PaletteColors, FDCVoxelMeshData& Out) const
@@ -161,6 +253,32 @@ namespace DCVoxelModels
 		}
 		Slot = MakeUnique<FDCVoxelModel>(MoveTemp(M));
 		return Slot.Get();
+	}
+
+	const FDCVoxelUnitMesh* UnitMesh(FName Model)
+	{
+		check(IsInGameThread());
+		static TMap<FName, TOptional<FDCVoxelUnitMesh>> Cache;
+		if (const TOptional<FDCVoxelUnitMesh>* Found = Cache.Find(Model))
+		{
+			return Found->IsSet() ? &Found->GetValue() : nullptr;
+		}
+		TOptional<FDCVoxelUnitMesh>& Slot = Cache.Add(Model);
+		const FDCVoxelModel* M = Parsed(Model);
+		if (!M)
+		{
+			return nullptr;
+		}
+		const UDCVoxelSettings& V = UDCVoxelSettings::Get();
+		TArray<FName> Names;
+		for (const FDCVoxelMaterial& P : V.Palette)
+		{
+			Names.Add(P.Id);
+		}
+		Slot.Emplace();
+		M->BuildUnitMesh(Names, V.MeshColors(), Slot.GetValue());
+		UE_LOG(LogTemp, Display, TEXT("DCVOXEL unit model %s: %d segments, %d triangles"), *Model.ToString(), Slot->Roles.Num() + 1, Slot->Mesh.Indices.Num() / 3);
+		return &Slot.GetValue();
 	}
 
 	const FDCVoxelMeshData* Mesh(FName Model)

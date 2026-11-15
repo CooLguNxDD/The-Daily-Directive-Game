@@ -17,6 +17,11 @@ Creates (or rebuilds):
                                  crumbs being cleared away: a world-space value-noise dissolve with a faint warm edge
                                  (DissolveEdgeColor, DissolveEdgeGlow, DissolveEdge, DissolveNoiseCm). The amount comes
                                  from custom primitive data 0 (pieces) or per-instance custom data 0 (crumb instances)
+  /Game/DC/Materials/M_DCVoxelUnit - R20 twin of M_DCVoxel for animated units (h-anim, advisor a-28): World Position
+                                 Offset turns each vertex's segment (UV1.x) about its joint (UV1.y, UV2.xy, cm,
+                                 model space) by the quaternion in custom primitive data 1 + 4 * (segment - 1)
+                                 (UDCUnitAnimator writes them); segment 0 and a zero quaternion stay put. Never on
+                                 M_DCVoxel itself (a WPO city would invalidate shadow pages every frame)
   /Game/DC/Materials/M_DCInkOutline - post material: ink lines where depth or normal jumps (Sobel-style cross of
                                  four taps); Strength comes from the post stack's Outline field, the rest from Look tuning
   /Game/DC/Fonts/FF_*            - OFL font faces (R7) from Content/DC/Fonts/Source/*.ttf, inline data; the game
@@ -229,7 +234,54 @@ return Albedo * lerp(Ground.rgb, Sky.rgb, K * K) * FormFloor;
 """
 
 
-def build_voxel_material(name="M_DCVoxel", dissolve=False):
+UNIT_WPO_HLSL = """
+// R20: rotate this vertex about its segment's joint by the segment's quaternion (custom primitive data).
+float4 Qs[8] = { float4(0, 0, 0, 0), float4(Q1.xyz, W1.x), float4(Q2.xyz, W2.x), float4(Q3.xyz, W3.x), float4(Q4.xyz, W4.x), float4(Q5.xyz, W5.x), float4(Q6.xyz, W6.x), float4(Q7.xyz, W7.x) };
+int s = clamp((int)round(Seg.x), 0, 7);
+float4 q = Qs[s];
+float3 j = float3(Seg.y, Joint.x, Joint.y);
+float3 v = LocalPos - j;
+float3 t = 2.0 * cross(q.xyz, v);
+float3 r = v + q.w * t + cross(q.xyz, t);
+return r - v;
+"""
+
+
+def add_unit_wpo(mat, x, y):
+    """R20: World Position Offset that turns each segment about its joint (see UNIT_WPO_HLSL)."""
+    custom = lib.create_material_expression(mat, unreal.MaterialExpressionCustom, x, y)
+    custom.set_editor_property("code", UNIT_WPO_HLSL)
+    custom.set_editor_property("output_type", unreal.CustomMaterialOutputType.CMOT_FLOAT3)
+    custom.set_editor_property("description", "UnitSegments")
+    names = ["LocalPos", "Seg", "Joint"] + [f"{p}{k}" for k in range(1, 8) for p in ("Q", "W")]
+    inputs = []
+    for n in names:
+        ci = unreal.CustomInput()
+        ci.set_editor_property("input_name", n)
+        inputs.append(ci)
+    custom.set_editor_property("inputs", inputs)
+    lp = lib.create_material_expression(mat, unreal.MaterialExpressionLocalPosition, x - 400, y)
+    lib.connect_material_expressions(lp, "", custom, "LocalPos")
+    for idx, pin in ((1, "Seg"), (2, "Joint")):
+        uv = lib.create_material_expression(mat, unreal.MaterialExpressionTextureCoordinate, x - 400, y + 80 * idx)
+        uv.set_editor_property("coordinate_index", idx)
+        lib.connect_material_expressions(uv, "", custom, pin)
+    for k in range(1, 8):
+        q = lib.create_material_expression(mat, unreal.MaterialExpressionVectorParameter, x - 400, y + 200 + 120 * k)
+        q.set_editor_property("parameter_name", f"Seg{k}")
+        q.set_editor_property("default_value", unreal.LinearColor(0.0, 0.0, 0.0, 0.0))
+        q.set_editor_property("use_custom_primitive_data", True)
+        q.set_editor_property("primitive_data_index", 1 + 4 * (k - 1))
+        lib.connect_material_expressions(q, "", custom, f"Q{k}")
+        lib.connect_material_expressions(q, "A", custom, f"W{k}")
+    world = lib.create_material_expression(mat, unreal.MaterialExpressionTransform, x + 250, y)
+    world.set_editor_property("transform_source_type", unreal.MaterialVectorCoordTransformSource.TRANSFORMSOURCE_LOCAL)
+    world.set_editor_property("transform_type", unreal.MaterialVectorCoordTransform.TRANSFORM_WORLD)
+    lib.connect_material_expressions(custom, "", world, "")
+    lib.connect_material_property(world, "", unreal.MaterialProperty.MP_WORLD_POSITION_OFFSET)
+
+
+def build_voxel_material(name="M_DCVoxel", dissolve=False, unit=False):
     if keep(f"{MAT_DIR}/{name}"):
         return
     mat = fresh(MAT_DIR, name, unreal.Material, unreal.MaterialFactoryNew())
@@ -334,6 +386,8 @@ def build_voxel_material(name="M_DCVoxel", dissolve=False):
         amount.set_editor_property("use_custom_primitive_data", True)
         amount.set_editor_property("primitive_data_index", 0)
         add_dissolve(mat, emissive_all, amount, -400, 1800)
+    if unit:
+        add_unit_wpo(mat, -500, 2200)
     lib.recompile_material(mat)
     eal.save_asset(f"{MAT_DIR}/{name}")
     unreal.log(f"build_content: {name} saved")
@@ -545,6 +599,7 @@ build_flat_material("M_DCFlatDissolve", dissolve=True)
 build_flat_unlit_material()
 build_voxel_material()
 build_voxel_material("M_DCVoxelDissolve", dissolve=True)
+build_voxel_material("M_DCVoxelUnit", unit=True)
 build_outline_material()
 import_textures()
 import_fonts()

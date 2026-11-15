@@ -20,3 +20,8 @@ box 11 4 30 13 10 32 lamp
 box 4 2 22 12 12 23 lamp
 beam 7 2 24 15 5 25 1.0 steel
 pivot 8 7 0
+# R20 animation segments: legs from the hip, the rifle across the chest (ArmR) from the grip, head from the neck.
+part LegL 0 0 0 16 7 14 7.5 4.5 14
+part LegR 0 7 0 16 14 14 7.5 9.5 14
+part ArmR 11 0 22 16 7 27 11 3 24
+part Head 0 0 27 16 14 36 8 7 27

@@ -9,6 +9,8 @@
 #include "ProceduralMeshComponent.h"
 #include "Voxel/DCVoxelModel.h"
 #include "Voxel/DCVoxelSettings.h"
+#include "DCUnitAnimator.h"
+#include "TimerManager.h"
 
 #include "Components/CapsuleComponent.h"
 #include "Components/SphereComponent.h"
@@ -454,6 +456,7 @@ void ADCEnemy::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetime
 	DOREPLIFETIME(ADCEnemy, Health);
 	DOREPLIFETIME(ADCEnemy, StunnedUntil);
 	DOREPLIFETIME(ADCEnemy, LightTarget);
+	DOREPLIFETIME(ADCEnemy, AttackSeq);
 }
 
 UDCUnits* UDCUnits::Get(const UObject* WorldContext)
@@ -692,6 +695,7 @@ void ADCEnemy::HostAttack(AActor* Victim, float Now)
 		}
 	}
 	NextAttackTime = Now + Def->AttackInterval;
+	++AttackSeq; // R20: every machine plays the attack clip
 	// Spread: the miss chance grows with range (ShotSpread degrees per 10 m).
 	const float MissDeg = Def->ShotSpread * Dist / 1000.f;
 	const bool bHit = !bRanged || FMath::FRand() > FMath::Clamp(MissDeg / 30.f, 0.f, 0.7f);
@@ -728,18 +732,20 @@ void ADCEnemy::MulticastShot_Implementation(FVector_NetQuantize From, FVector_Ne
 void ADCEnemy::TickGait(float DeltaSeconds)
 {
 	const FDCEnemyDef* Def = GetDef();
-	if (!ModelComp || !Def || (Def->BobCm <= 0.f && Def->SwayDeg <= 0.f) || DeltaSeconds <= 0.f)
+	if (Anim && ModelComp && Def && DeltaSeconds > 0.f)
+	{
+		// R20 (h-anim): the animator poses the segments; the model component takes the root's move about the feet.
+		Anim->Advance(DeltaSeconds, GetActorLocation(), GetActorRotation().Yaw, Health, AttackSeq, IsAlive());
+		Anim->ApplyRoot(*Def);
+	}
+	else if (!ModelComp || !Def || (Def->BobCm <= 0.f && Def->SwayDeg <= 0.f) || DeltaSeconds <= 0.f)
 	{
 		return;
 	}
-	const FVector Here = GetActorLocation();
-	const bool bMoving = FVector::Dist2D(Here, GaitLast) / DeltaSeconds > 30.f;
-	GaitLast = Here;
-	GaitPhase += bMoving ? DeltaSeconds * Def->StepHz * PI : 0.f;
-	const float Bob = bMoving ? FMath::Abs(FMath::Sin(GaitPhase)) * Def->BobCm : 0.f;
-	const float Sway = bMoving ? FMath::Sin(GaitPhase) * Def->SwayDeg : 0.f;
-	ModelComp->SetRelativeLocation(Def->ModelOffset + FVector(0, 0, Bob));
-	ModelComp->SetRelativeRotation(FRotator(0.f, 0.f, Sway));
+	else
+	{
+		TickBob(*Def, DeltaSeconds);
+	}
 	if (HasAuthority())
 	{
 		return;
@@ -749,6 +755,19 @@ void ADCEnemy::TickGait(float DeltaSeconds)
 	const FVector Want = ModelComp->GetComponentLocation();
 	SmoothModel = SmoothModel.IsZero() || FVector::DistSquared(SmoothModel, Want) > 500.f * 500.f ? Want : FMath::VInterpTo(SmoothModel, Want, DeltaSeconds, 18.f);
 	ModelComp->SetWorldLocation(SmoothModel);
+}
+
+void ADCEnemy::TickBob(const FDCEnemyDef& InDef, float DeltaSeconds)
+{
+	const FDCEnemyDef* Def = &InDef;
+	const FVector Here = GetActorLocation();
+	const bool bMoving = FVector::Dist2D(Here, GaitLast) / DeltaSeconds > 30.f;
+	GaitLast = Here;
+	GaitPhase += bMoving ? DeltaSeconds * Def->StepHz * PI : 0.f;
+	const float Bob = bMoving ? FMath::Abs(FMath::Sin(GaitPhase)) * Def->BobCm : 0.f;
+	const float Sway = bMoving ? FMath::Sin(GaitPhase) * Def->SwayDeg : 0.f;
+	ModelComp->SetRelativeLocation(Def->ModelOffset + FVector(0, 0, Bob));
+	ModelComp->SetRelativeRotation(FRotator(0.f, 0.f, Sway));
 }
 
 
@@ -805,6 +824,10 @@ void ADCEnemy::BeginPlay()
 
 void ADCEnemy::EndPlay(const EEndPlayReason::Type Reason)
 {
+	if (Reason == EEndPlayReason::Destroyed && bDeathFxPlayed && !bBodyBurst)
+	{
+		BurstBody(); // R20: destroyed before the death clip ended (a client a little behind the host)
+	}
 	if (UDCUnits* Units = UDCUnits::Get(this))
 	{
 		Units->Remove(this);
@@ -823,10 +846,14 @@ bool ADCEnemy::BuildModel(const FDCEnemyDef& Def)
 	Model->SetupAttachment(Body);
 	Model->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	Model->RegisterComponent();
-	Model->CreateMeshSection(0, Mesh->Positions, Mesh->Indices, Mesh->Normals, Mesh->UVs, Mesh->Colors, {}, false);
-	Model->SetMaterial(0, Cast<UMaterialInterface>(UDCVoxelSettings::Get().VoxelMaterial.TryLoad()));
 	Model->SetRelativeLocation(Def.ModelOffset);
 	Model->SetRelativeScale3D(FVector(Def.ModelScale));
+	Anim = UDCUnitAnimator::Attach(*this, *Model, Def); // R20: a unit with a gait gets its segmented mesh there
+	if (!Anim)
+	{
+		Model->CreateMeshSection(0, Mesh->Positions, Mesh->Indices, Mesh->Normals, Mesh->UVs, Mesh->Colors, {}, false);
+		Model->SetMaterial(0, Cast<UMaterialInterface>(UDCVoxelSettings::Get().VoxelMaterial.TryLoad()));
+	}
 	ModelComp = Model;
 	for (UStaticMeshComponent* Part : {Visual.Get(), Eye.Get(), LegA.Get(), LegB.Get(), LegC.Get()})
 	{
@@ -1005,6 +1032,7 @@ void ADCEnemy::TryAttack(ADCCharacter* Target, float Now)
 		return;
 	}
 	NextAttackTime = Now + Def->AttackInterval;
+	++AttackSeq; // R20: every machine plays the attack clip
 	const float Hurt = CrewDamage(GetWorld(), Def->Damage);
 	Target->HostApplyHurt(SlotOwner ? SlotOwner->SpendCrewDamage(*Target, Hurt, Now) : Hurt, GetActorLocation());
 }
@@ -1021,9 +1049,9 @@ void ADCEnemy::Tick(float DeltaSeconds)
 	{
 		Spot->SetWorldRotation((FVector(LightTarget) - GetActorLocation()).Rotation());
 	}
-	if (IsAlive())
+	if (IsAlive() || Anim)
 	{
-		TickGait(DeltaSeconds);
+		TickGait(DeltaSeconds); // R20: an animated unit keeps posing through its death clip
 	}
 	if (!IsAlive())
 	{
@@ -1111,7 +1139,7 @@ void ADCEnemy::Die(AController* Killer)
 		}
 	}
 	PlayDeathFx();
-	SetLifeSpan(Def && Def->Behaviour == Walker ? 2.5f : 0.3f);
+	SetLifeSpan(Def && Def->Behaviour == Walker ? 2.5f : 0.3f + (Anim ? Anim->DeathSeconds() : 0.f)); // R20: the death clip plays first
 }
 
 void ADCEnemy::OnRep_Health()
@@ -1132,6 +1160,27 @@ void ADCEnemy::PlayDeathFx()
 	Spot->SetVisibility(false);
 	GlowLight->SetVisibility(false);
 	DCAudio::PlayAt(this, TEXT("Kill"), GetActorLocation(), 0.4f, 0.7f);
+	// R20: an animated unit falls first (its death clip), then bursts; EndPlay bursts if the actor goes before.
+	const float Delay = Anim ? Anim->DeathSeconds() : 0.f;
+	if (Delay > 0.f)
+	{
+		GetWorldTimerManager().SetTimer(BurstTimer, this, &ADCEnemy::BurstBody, Delay, false);
+		return;
+	}
+	BurstBody();
+}
+
+void ADCEnemy::BurstBody()
+{
+	if (bBodyBurst)
+	{
+		return;
+	}
+	bBodyBurst = true;
+	if (Anim && ModelComp)
+	{
+		ModelComp->SetVisibility(false);
+	}
 	const ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>();
 	ADCDebrisPool* Pool = GS && GS->GetEnvironment() ? GS->GetEnvironment()->GetDebrisPool() : nullptr;
 	const FDCEnemyDef* Def = GetDef();
