@@ -433,7 +433,7 @@ struct FDCVoxelTuning
 	 *  is far bigger), so without the bite no amount of wall fire could bring a tower down. */
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 ChipSupportFloors = 2;
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 ChipBiteFloors = 2;
-	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 ChipBitePercent = 60;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 ChipBitePercent = 70;
 };
 
 /** A prop layer (R2 city props): where one family of voxel-forge props goes. The district's prop rule set turns a

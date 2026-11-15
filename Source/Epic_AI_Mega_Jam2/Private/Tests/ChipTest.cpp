@@ -76,7 +76,8 @@ bool FDCChipOpTest::RunTest(const FString&)
 		return false;
 	}
 	const FDCVoxelTower& T = A.Towers[0];
-	const TArray<FIntVector> Wall = WallVoxels(T, T.Max.Z / 3);
+	const int32 SupportTop = Ctx.Tuning->ChipSupportFloors * FMath::Max(6, Ctx.BayCm / T.Grid.VoxelCm);
+	const TArray<FIntVector> Wall = WallVoxels(T, FMath::Min(T.Max.Z - 2, SupportTop + 5)); // above the support band
 	TestTrue(TEXT("the wall has voxels to shoot"), Wall.Num() > 8);
 	TArray<FIntVector> First, Second;
 	for (int32 i = 0; i < Wall.Num(); i += 3) // 30 cm apart: no chip's sphere reaches the next chip's voxel
@@ -100,7 +101,7 @@ bool FDCChipOpTest::RunTest(const FString&)
 	{
 		Credited += C.X == 0 ? C.Y : 0;
 	}
-	TestEqual(TEXT("chip carve credits the lot"), Credited, R1.Carved);
+	TestEqual(TEXT("chips above ChipSupportFloors are no support"), Credited, 0);
 	DCVoxelOps::Run(A, Op2, Ctx, FDCPendingPiece());
 	DCVoxelOps::Run(B, Op2, Ctx, FDCPendingPiece());
 	TestEqual(TEXT("two chip ops: both machines hold the same voxels"), A.Hash(), B.Hash());
