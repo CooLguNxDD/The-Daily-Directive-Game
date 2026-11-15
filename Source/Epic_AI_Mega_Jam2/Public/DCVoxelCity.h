@@ -67,6 +67,8 @@ public:
 	bool IsWalkBlocked(const FVector& Where) const;
 	/** R19: inside the built sector's bounds ring (true when no sector is built). */
 	bool IsInsideBounds(const FVector& Where) const;
+	/** R19: Where with X and Y pulled to at least InsetCm inside the ring (unchanged when no sector is built). */
+	FVector ClampInsideBounds(const FVector& Where, float InsetCm) const;
 	float GetBoundsHalfCm() const { return BoundsHalfCm; }
 	/** The standing tower lot whose footprint holds Where (XY), or INDEX_NONE. */
 	int32 StandingLotAt(const FVector& Where) const;

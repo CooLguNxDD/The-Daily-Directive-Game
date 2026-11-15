@@ -310,6 +310,16 @@ bool ADCVoxelCity::IsInsideBounds(const FVector& Where) const
 	return BoundsHalfCm <= 0.f || (FMath::Abs(Where.X) < BoundsHalfCm && FMath::Abs(Where.Y) < BoundsHalfCm);
 }
 
+FVector ADCVoxelCity::ClampInsideBounds(const FVector& Where, float InsetCm) const
+{
+	if (BoundsHalfCm <= 0.f)
+	{
+		return Where;
+	}
+	const float L = FMath::Max(0.f, BoundsHalfCm - InsetCm);
+	return FVector(FMath::Clamp(Where.X, -L, L), FMath::Clamp(Where.Y, -L, L), Where.Z);
+}
+
 void ADCVoxelCity::ApplyBounds()
 {
 	// The ring sits BoundsMarginCm past this sector's plan (the terrain reaches TerrainMarginCm past it), centred on the

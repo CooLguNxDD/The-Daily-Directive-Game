@@ -1673,7 +1673,11 @@ void ADCCharacter::UpdateFallNet()
 	{
 		return;
 	}
-	const FVector Back = bHasSafeSpot ? LastSafeSpot + FVector(0, 0, 60.f) : FVector(0, 0, 200.f);
+	// Past the ring but on the ground: step back just inside it where the player is (a fresh spawn or pod outside the
+	// ring has no safe spot in this sector yet). Below the net: the last safe spot.
+	const bool bWalkedOut = bOut && At.Z >= UDCVoxelSettings::Get().Tuning.KillZCm;
+	const FVector Back = bWalkedOut ? City->ClampInsideBounds(At, UDCVoxelSettings::Get().Tuning.SpawnRingInsetCm) + FVector(0, 0, 60.f)
+		: (bHasSafeSpot ? LastSafeSpot + FVector(0, 0, 60.f) : FVector(0, 0, 200.f));
 	TeleportTo(Back, GetActorRotation(), false, true);
 	GetCharacterMovement()->Velocity = FVector::ZeroVector;
 	UE_LOG(LogTemp, Display, TEXT("DCKILLZ %s returned from %s to %s (%s)"), *GetName(), *At.ToCompactString(), *Back.ToCompactString(), bOut ? TEXT("past the ring") : TEXT("below the net"));
