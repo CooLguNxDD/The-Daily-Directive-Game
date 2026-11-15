@@ -892,6 +892,14 @@ struct FDCRunTuning
 	UPROPERTY(EditAnywhere, Config, Category = "Run") float DraftSeconds = 25.f;
 	/** R21: cards dealt per draft hand (from every pool, rarity-weighted). */
 	UPROPERTY(EditAnywhere, Config, Category = "Run") int32 DraftHandSize = 3;
+	/** Human 16:28: a missed quota still drafts, from a smaller hand capped at this +CardRarities id (rarity table
+	 *  order: rows after it are never dealt), under its own header. Toasts: {X} = sector photo points, {Y} = quota. */
+	UPROPERTY(EditAnywhere, Config, Category = "Run") int32 DraftHandSizeMissed = 2;
+	UPROPERTY(EditAnywhere, Config, Category = "Run") FName DraftMissedMaxRarity = TEXT("Common");
+	UPROPERTY(EditAnywhere, Config, Category = "Run") FString DraftHeader = TEXT("HQ REQUISITION: DRAFT ONE UPGRADE");
+	UPROPERTY(EditAnywhere, Config, Category = "Run") FString DraftHeaderMissed = TEXT("QUOTA MISSED: HQ SENDS THE LEFTOVERS");
+	UPROPERTY(EditAnywhere, Config, Category = "Run") FString QuotaMetToast = TEXT("QUOTA MET: {X} / {Y}. HQ IS PLEASED.");
+	UPROPERTY(EditAnywhere, Config, Category = "Run") FString QuotaMissedToast = TEXT("QUOTA MISSED: {X} / {Y}. REDUCED REQUISITION.");
 	/** R25 hints: trigger poll rate, the ranges their triggers read, and the key that dismisses a card. */
 	UPROPERTY(EditAnywhere, Config, Category = "Run") float HintPollSeconds = 0.25f;
 	UPROPERTY(EditAnywhere, Config, Category = "Run") float HintEnemyRangeCm = 4500.f;

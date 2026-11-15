@@ -47,7 +47,7 @@ namespace DCRunRules
 
 	/** The draft hand (R21): HandSize distinct cards from every open option (any pool), each drawn with the weight of its
 	 *  rarity row (unknown rarity: weight 1), without replacement. Seeded: the host deals and the hand replicates. */
-	EPIC_AI_MEGA_JAM2_API TArray<FName> DraftHand(int32 Seed, const TArray<FDCUpgradeDef>& Upgrades, const TArray<FDCCardRarity>& Rarities, const TArray<FName>& Taken, int32 HandSize);
+	EPIC_AI_MEGA_JAM2_API TArray<FName> DraftHand(int32 Seed, const TArray<FDCUpgradeDef>& Upgrades, const TArray<FDCCardRarity>& Rarities, const TArray<FName>& Taken, int32 HandSize, FName MaxRarity = NAME_None);
 
 	/** Does this graded photo satisfy the scoop? */
 	EPIC_AI_MEGA_JAM2_API bool ScoopMet(const FDCScoopDef& Scoop, const FDCPhotoInputs& In, const FDCPhotoGrade& Grade);

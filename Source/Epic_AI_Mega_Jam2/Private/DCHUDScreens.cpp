@@ -119,7 +119,8 @@ void ADCHUD::DrawDraft(ADCGameState& GS, ADCCharacter* Me)
 	const ADCPlayerState* PS = PlayerOwner ? PlayerOwner->GetPlayerState<ADCPlayerState>() : nullptr;
 	Box(0, 0, W, H, Dim);
 	Text(FString::Printf(TEXT("SECTOR %d SECURED"), GS.SectorIndex + 1), W * 0.5f, Sx(70.f), Gold, 1.f, true);
-	Text(TEXT("HQ REQUISITION: DRAFT ONE UPGRADE"), W * 0.5f, Sx(120.f), Ink, 1.4f, true);
+	const bool bMissed = GS.QuotaResults.Num() > 0 && !GS.QuotaResults.Last();
+	Text(bMissed ? T.Run.DraftHeaderMissed : T.Run.DraftHeader, W * 0.5f, Sx(120.f), bMissed ? Red : Ink, 1.4f, true);
 	Text(Clock(GS.PhaseEndTime - GS.Now()), W * 0.5f, Sx(190.f), FLinearColor::White, 0.9f, true);
 	if (!PS)
 	{

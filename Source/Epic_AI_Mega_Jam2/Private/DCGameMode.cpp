@@ -477,8 +477,8 @@ void ADCGameMode::TickSectorPhase(float Now)
 	{
 		if (ADCCharacter* C = PS->GetPawn<ADCCharacter>())
 		{
-			C->HostToast(bQuotaMet ? FString::Printf(TEXT("QUOTA MET: %d / %d. HQ IS PLEASED."), GS->SectorPhotoPoints, Quota)
-				: FString::Printf(TEXT("QUOTA MISSED: %d / %d. HQ WITHHOLDS YOUR REQUISITION."), GS->SectorPhotoPoints, Quota));
+			const FString& Toast = bQuotaMet ? T.Run.QuotaMetToast : T.Run.QuotaMissedToast;
+			C->HostToast(Toast.Replace(TEXT("{X}"), *FString::FromInt(GS->SectorPhotoPoints)).Replace(TEXT("{Y}"), *FString::FromInt(Quota)));
 		}
 	}
 	if (!bMore)
@@ -486,14 +486,8 @@ void ADCGameMode::TickSectorPhase(float Now)
 		EnterPhase(EDCRunPhase::Reel);
 		return;
 	}
-	if (bQuotaMet)
-	{
-		EnterPhase(EDCRunPhase::Draft);
-		return;
-	}
-	// Quota missed (R6): no draft, straight into the next sector.
-	GS->SectorIndex += 1;
-	EnterPhase(EDCRunPhase::Sector);
+	// The draft always happens (human 16:28); a missed quota deals the smaller, plainer hand (EnterDraft).
+	EnterPhase(EDCRunPhase::Draft);
 }
 
 void ADCGameMode::TickWaves(float Now)
@@ -718,11 +712,14 @@ void ADCGameMode::EnterDraft(float Now)
 	const UDCTuning& T = UDCTuning::Get();
 	GS->PhaseEndTime = Now + T.Run.DraftSeconds;
 	int32 Index = 0;
+	const bool bMissed = GS->QuotaResults.Num() > 0 && !GS->QuotaResults.Last();
+	const int32 HandSize = bMissed ? T.Run.DraftHandSizeMissed : T.Run.DraftHandSize;
+	const FName MaxRarity = bMissed ? T.Run.DraftMissedMaxRarity : NAME_None;
 	for (ADCPlayerState* PS : Players())
 	{
 		TArray<FName> Taken = PS->Upgrades;
 		Taken.Append(GS->Mutators);
-		PS->DraftOffer = DCRunRules::DraftHand(DCCityRules::SectorSeed(GS->RunSeed, GS->SectorIndex) ^ (++Index * 7919), T.Upgrades, T.CardRarities, Taken, T.Run.DraftHandSize);
+		PS->DraftOffer = DCRunRules::DraftHand(DCCityRules::SectorSeed(GS->RunSeed, GS->SectorIndex) ^ (++Index * 7919), T.Upgrades, T.CardRarities, Taken, HandSize, MaxRarity);
 		UE_LOG(LogTemp, Display, TEXT("DCDRAFT %s dealt %s"), *PS->GetPlayerName(), *FString::JoinBy(PS->DraftOffer, TEXT(","), [&T](FName Id) { const FDCUpgradeDef* D = T.FindUpgrade(Id); return Id.ToString() + TEXT("/") + (D ? D->Rarity.ToString() : FString(TEXT("?"))); }));
 		PS->bDraftDone = PS->DraftOffer.Num() == 0;
 	}

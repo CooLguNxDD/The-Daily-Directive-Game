@@ -32,13 +32,16 @@ namespace DCRunRules
 		return Offer;
 	}
 
-	TArray<FName> DraftHand(int32 Seed, const TArray<FDCUpgradeDef>& Upgrades, const TArray<FDCCardRarity>& Rarities, const TArray<FName>& Taken, int32 HandSize)
+	TArray<FName> DraftHand(int32 Seed, const TArray<FDCUpgradeDef>& Upgrades, const TArray<FDCCardRarity>& Rarities, const TArray<FName>& Taken, int32 HandSize, FName MaxRarity)
 	{
+		// MaxRarity caps the hand by the rarity table's order (human 16:28: a missed quota deals Common only); None = all.
+		const int32 Cap = MaxRarity.IsNone() ? Rarities.Num() : Rarities.IndexOfByPredicate([MaxRarity](const FDCCardRarity& Row) { return Row.Id == MaxRarity; });
 		TArray<FName> Open;
 		TArray<float> Weights;
 		for (const FDCUpgradeDef& U : Upgrades)
 		{
-			if (Taken.Contains(U.Id))
+			const int32 Rank = Rarities.IndexOfByPredicate([&U](const FDCCardRarity& Row) { return Row.Id == U.Rarity; });
+			if (Taken.Contains(U.Id) || Rank > Cap)
 			{
 				continue;
 			}
