@@ -279,3 +279,29 @@ bool FDCHeadlineTest::RunTest(const FString&)
 }
 
 #endif
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDCFrontPageCopyTest, "Epic_AI_Mega_Jam2.Run.FrontPageCopy",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FDCFrontPageCopyTest::RunTest(const FString&)
+{
+	// R28: the page deck is a seeded permutation (each sentence once), the shipped copy has no duplicate sentence, and a
+	// winning run's footer never prints a zero count as "0/N".
+	const TArray<int32> Deck = DCNewsprint::CopyDeck(48, 5151);
+	TSet<int32> Seen(Deck);
+	TestEqual(TEXT("R28: the deck holds every sentence"), Deck.Num(), 48);
+	TestEqual(TEXT("R28: each sentence once"), Seen.Num(), 48);
+	TestTrue(TEXT("R28: the deck is seeded"), Deck == DCNewsprint::CopyDeck(48, 5151) && Deck != DCNewsprint::CopyDeck(48, 77));
+	const UDCTuning& T = UDCTuning::Get();
+	TSet<FString> Unique(T.FrontPageCopy);
+	TestEqual(TEXT("R28: no duplicate body sentence in +FrontPageCopy"), Unique.Num(), T.FrontPageCopy.Num());
+	TestTrue(TEXT("R28: a pool large enough for a page"), T.FrontPageCopy.Num() >= 40);
+	const TMap<FString, FString> Tokens = {{TEXT("LEAD"), TEXT("ALL SECTORS LIBERATED")}, {TEXT("CREW"), TEXT("1")}, {TEXT("S"), TEXT("")},
+		{TEXT("POINTS"), TEXT("9,000")}, {TEXT("QUOTAS"), TEXT("0")}, {TEXT("QUOTASOF"), TEXT("3")}, {TEXT("ORDERS"), TEXT("0")},
+		{TEXT("ORDERSOF"), TEXT("3")}, {TEXT("SEED"), TEXT("5151")}};
+	const FString Won = DCNewsprint::Footer(T.FooterParts, Tokens, {FName(TEXT("Quotas")), FName(TEXT("Orders"))}, TEXT("  |  "));
+	TestFalse(FString::Printf(TEXT("R28: a won run's footer has no 0/3 (%s)"), *Won), Won.Contains(TEXT("0/3")));
+	TestTrue(TEXT("R28: the footer keeps its lead and seed"), Won.Contains(TEXT("ALL SECTORS LIBERATED")) && Won.Contains(TEXT("5151")));
+	const FString Lost = DCNewsprint::Footer(T.FooterParts, Tokens, {}, TEXT("  |  "));
+	TestTrue(TEXT("R28: a lost run still counts honestly"), Lost.Contains(TEXT("QUOTAS MET 0/3")));
+	return true;
+}

@@ -1384,9 +1384,23 @@ void ADCGameMode::EnterFrontPage(float Now)
 	UE_LOG(LogTemp, Display, TEXT("DCPAGE headline=\"%s\"%s"), *GS->Headline, GS->bRunFailed ? TEXT(" CORRECTION EDITION") : TEXT(""));
 	const int32 QuotasMet = GS->QuotaResults.FilterByPredicate([](bool b) { return b; }).Num();
 	const int32 Extracted = GS->ObjectiveResults.FilterByPredicate([](uint8 b) { return b != 0; }).Num();
-	GS->Subhead = FString::Printf(TEXT("%s  |  %d PHOTOGRAPHER%s  |  %s PROPAGANDA POINTS RAISED  |  QUOTAS MET %d/%d  |  HQ ORDERS EXTRACTED %d/%d  |  RUN SEED %d"),
-		GS->bRunFailed ? TEXT("UNIT LOST IN ACTION, REEL RECOVERED") : TEXT("ALL SECTORS LIBERATED"),
-		All.Num(), All.Num() == 1 ? TEXT("") : TEXT("S"), *FText::AsNumber(Total).ToString(), QuotasMet, GS->QuotaResults.Num(), Extracted, GS->ObjectiveResults.Num(), GS->RunSeed);
+	// R28: footer parts are data; on a winning run a zero count prints the part's ZeroText (never "0/3").
+	const TMap<FString, FString> Tokens = {
+		{TEXT("LEAD"), GS->bRunFailed ? TEXT("UNIT LOST IN ACTION, REEL RECOVERED") : TEXT("ALL SECTORS LIBERATED")},
+		{TEXT("CREW"), FString::FromInt(All.Num())}, {TEXT("S"), All.Num() == 1 ? TEXT("") : TEXT("S")},
+		{TEXT("POINTS"), FText::AsNumber(Total).ToString()},
+		{TEXT("QUOTAS"), FString::FromInt(QuotasMet)}, {TEXT("QUOTASOF"), FString::FromInt(GS->QuotaResults.Num())},
+		{TEXT("ORDERS"), FString::FromInt(Extracted)}, {TEXT("ORDERSOF"), FString::FromInt(GS->ObjectiveResults.Num())},
+		{TEXT("SEED"), FString::FromInt(GS->RunSeed)},
+	};
+	TSet<FName> Zero;
+	if (!GS->bRunFailed)
+	{
+		Zero.Append(QuotasMet == 0 ? TArray<FName>{FName(TEXT("Quotas"))} : TArray<FName>());
+		Zero.Append(Extracted == 0 ? TArray<FName>{FName(TEXT("Orders"))} : TArray<FName>());
+	}
+	GS->Subhead = DCNewsprint::Footer(T.FooterParts, Tokens, Zero, TEXT("  |  "));
+	UE_LOG(LogTemp, Display, TEXT("DCPAGE footer=\"%s\""), *GS->Subhead);
 	GS->ForceNetUpdate();
 }
 

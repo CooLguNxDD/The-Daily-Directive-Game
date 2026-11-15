@@ -1005,6 +1005,8 @@ public:
 	/** Front page body copy (critic CP6: real type, not grey bars): sentences set in small body type, picked per column
 	 *  from the run seed. {PLAYER} and {SECTOR} fill like the headlines. */
 	UPROPERTY(EditAnywhere, Config, Category = "Run") TArray<FString> FrontPageCopy;
+	/** R28 front page footer (+FooterParts rows, data order); tokens LEAD CREW S POINTS QUOTAS QUOTASOF ORDERS ORDERSOF SEED. */
+	UPROPERTY(EditAnywhere, Config, Category = "Run") TArray<FDCFooterPart> FooterParts;
 	/** Post-process layer stack (R19): every layer of the scene and the photo look; code only sets weights by id. */
 	UPROPERTY(EditAnywhere, Config, Category = "Post") TArray<FDCPostLayer> PostLayers;
 	UPROPERTY(EditAnywhere, Config, Category = "Post") TArray<FDCPostPreset> PostPresets;

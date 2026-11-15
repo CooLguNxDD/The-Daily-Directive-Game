@@ -231,3 +231,38 @@ namespace DCNewsprint
 		}
 	}
 }
+
+TArray<int32> DCNewsprint::CopyDeck(int32 Num, int32 Seed)
+{
+	TArray<int32> Deck;
+	Deck.Reserve(FMath::Max(Num, 0));
+	for (int32 i = 0; i < Num; ++i)
+	{
+		Deck.Add(i);
+	}
+	FRandomStream Rng(Seed);
+	for (int32 i = Deck.Num() - 1; i > 0; --i)
+	{
+		Deck.Swap(i, Rng.RandRange(0, i));
+	}
+	return Deck;
+}
+
+FString DCNewsprint::Footer(const TArray<FDCFooterPart>& Parts, const TMap<FString, FString>& Tokens, const TSet<FName>& Zero, const FString& Separator)
+{
+	FString Out;
+	for (const FDCFooterPart& P : Parts)
+	{
+		FString Part = Zero.Contains(P.Id) ? P.ZeroText : P.Text;
+		if (Part.IsEmpty())
+		{
+			continue;
+		}
+		for (const TPair<FString, FString>& T : Tokens)
+		{
+			Part.ReplaceInline(*(TEXT("{") + T.Key + TEXT("}")), *T.Value);
+		}
+		Out += (Out.IsEmpty() ? FString() : Separator) + Part;
+	}
+	return Out;
+}

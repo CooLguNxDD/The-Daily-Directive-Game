@@ -435,7 +435,11 @@ void ADCHUD::DrawFrontPage(ADCGameState& GS, ADCCharacter* Me)
 	// picks where each column starts so columns read differently. Greeked bars only when no copy shipped.
 	const TArray<FString>& Copy = UDCTuning::Get().FrontPageCopy;
 	const FString Who = GS.PlayerArray.Num() > 0 && GS.PlayerArray[0] ? GS.PlayerArray[0]->GetPlayerName().ToUpper() : FString(TEXT("OUR CORRESPONDENT"));
-	auto Greek = [this, &Copy, &Who](float X, float Y, float ColW, float ColH, uint32 Seed)
+	// R28: one seeded deck per page: every column draws the next unused sentence, so no sentence repeats on the page; a
+	// column that runs out of sentences ends early (the pool is data: +FrontPageCopy).
+	const TArray<int32> Deck = DCNewsprint::CopyDeck(Copy.Num(), GS.RunSeed);
+	int32 Drawn = 0;
+	auto Greek = [this, &Copy, &Who, &Deck, &Drawn](float X, float Y, float ColW, float ColH, uint32 /*Seed: the page deck orders the copy*/)
 	{
 		const float Line = Sx(15.f);
 		const float Scale = 0.42f;
@@ -458,9 +462,9 @@ void ADCHUD::DrawFrontPage(ADCGameState& GS, ADCCharacter* Me)
 			}
 			return;
 		}
-		for (int32 n = 0; (Row + 1) * Line <= ColH && n < 64; ++n)
+		for (int32 n = 0; (Row + 1) * Line <= ColH && Drawn < Deck.Num(); ++n)
 		{
-			FString Sentence = Copy[(Seed + n) % Copy.Num()].Replace(TEXT("{PLAYER}"), *Who);
+			FString Sentence = Copy[Deck[Drawn++]].Replace(TEXT("{PLAYER}"), *Who);
 			TArray<FString> Words;
 			Sentence.ParseIntoArray(Words, TEXT(" "));
 			for (const FString& Word : Words)
