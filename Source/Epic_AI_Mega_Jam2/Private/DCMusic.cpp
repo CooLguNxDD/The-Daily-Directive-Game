@@ -17,6 +17,7 @@
 #include "Kismet/GameplayStatics.h"
 #include "Sound/SoundBase.h"
 #include "Sound/SoundWave.h"
+#include "Sound/SoundWaveProcedural.h"
 
 namespace
 {
@@ -69,7 +70,8 @@ bool UDCMusicSubsystem::Start(const UObject* WorldContext)
 	const UDCTuning& T = UDCTuning::Get();
 	for (const FDCMusicTrack& Track : T.MusicTracks)
 	{
-		USoundBase* Sound = Cast<USoundBase>(Track.Sound.TryLoad());
+		// A row names a sound asset or a synth recipe (Synth=..., e.g. the propaganda march), played as a seamless loop.
+		USoundBase* Sound = Track.Synth.IsNone() ? Cast<USoundBase>(Track.Sound.TryLoad()) : DCAudio::MakeLoop(this, Track.Synth);
 		if (!Sound)
 		{
 			UE_LOG(LogTemp, Warning, TEXT("DCMUSIC track %s: no sound at %s"), *Track.Id.ToString(), *Track.Sound.ToString());

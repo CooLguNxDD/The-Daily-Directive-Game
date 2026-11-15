@@ -86,4 +86,6 @@ namespace DCAudio
 	EPIC_AI_MEGA_JAM2_API TArray<FName> CueNames();
 	/** Renders one cue to mono 16-bit samples; empty when the cue is unknown. */
 	EPIC_AI_MEGA_JAM2_API TArray<int16> Render(FName Cue);
+	/** A seamless looping wave of a synth recipe (the whole render requeued on underflow); null when the recipe is unknown. */
+	EPIC_AI_MEGA_JAM2_API class USoundWaveProcedural* MakeLoop(UObject* Outer, FName Recipe);
 }

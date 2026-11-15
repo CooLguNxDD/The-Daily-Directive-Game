@@ -1,6 +1,7 @@
 // R14 music: the pure intensity and layer rules, and that the shipped music data resolves (every phase and layer names
 // a +MusicTracks row, the layers climb, the menu has a set, every track is an imported looping sound wave).
 #include "DCTuning.h"
+#include "DCAudio.h"
 #include "Misc/AutomationTest.h"
 #include "Rules/DCMusicRules.h"
 #include "Sound/SoundWave.h"
@@ -68,6 +69,13 @@ bool FDCMusicDataTest::RunTest(const FString&)
 	TestTrue(TEXT("music tracks are shipped"), T.MusicTracks.Num() >= 3);
 	for (const FDCMusicTrack& Track : T.MusicTracks)
 	{
+		if (!Track.Synth.IsNone())
+		{
+			// A synth row (human 15:25: the march) renders from the recipe registry as one whole loop.
+			const int32 Samples = DCAudio::Render(Track.Synth).Num();
+			TestTrue(*FString::Printf(TEXT("track %s names a synth recipe that renders a loop (>15 s)"), *Track.Id.ToString()), Samples > 15 * UDCAudioSubsystem::SampleRate);
+			continue;
+		}
 		const USoundWave* Wave = Cast<USoundWave>(Track.Sound.TryLoad());
 		TestNotNull(*FString::Printf(TEXT("track %s is an imported sound wave"), *Track.Id.ToString()), Wave);
 		if (Wave)

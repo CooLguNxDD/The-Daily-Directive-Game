@@ -173,6 +173,7 @@ namespace
 			{TEXT("Down"), [] { FSynth S(1.2f); S.Tone(0.f, 1.1f, 400, 80, EWave::Saw, 0.4f, 1.5f); return S.Finish(); }},
 			{TEXT("Revive"), [] { FSynth S(0.7f); for (int32 i = 0; i < 4; ++i) { S.Tone(i * 0.12f, 0.2f, Note(i * 4), Note(i * 4), EWave::Tri, 0.35f, 6.f); } return S.Finish(); }},
 			{TEXT("Music"), &MarchLoop},
+			{TEXT("March"), &MarchLoop}, // R14 Fight layer (human 15:25): a +MusicTracks row names it with Synth="March"
 		};
 		return Map;
 	}
@@ -234,6 +235,29 @@ namespace DCAudio
 		}
 		const FDCSoundRecipe* Data = UDCTuning::Get().FindSoundRecipe(Cue);
 		return Data ? RenderData(*Data) : TArray<int16>();
+	}
+
+	USoundWaveProcedural* MakeLoop(UObject* Outer, FName Recipe)
+	{
+		const TArray<int16> Samples = Render(Recipe);
+		if (Samples.Num() == 0)
+		{
+			return nullptr;
+		}
+		TSharedPtr<TArray<uint8>> Loop = MakeShared<TArray<uint8>>();
+		Loop->SetNumUninitialized(Samples.Num() * sizeof(int16));
+		FMemory::Memcpy(Loop->GetData(), Samples.GetData(), Loop->Num());
+		USoundWaveProcedural* Wave = NewObject<USoundWaveProcedural>(Outer);
+		Wave->SetSampleRate(UDCAudioSubsystem::SampleRate);
+		Wave->NumChannels = 1;
+		Wave->Duration = Samples.Num() / static_cast<float>(UDCAudioSubsystem::SampleRate); // one bar cycle, for playlists
+		Wave->bLooping = true;
+		Wave->OnSoundWaveProceduralUnderflow.BindLambda([Loop](USoundWaveProcedural* W, int32 /*SamplesRequired*/)
+		{
+			W->QueueAudio(Loop->GetData(), Loop->Num()); // the full 16 s again: seamless (it renders as a whole loop)
+		});
+		Wave->QueueAudio(Loop->GetData(), Loop->Num());
+		return Wave;
 	}
 
 	static UDCAudioSubsystem* Get(const UObject* WorldContext)

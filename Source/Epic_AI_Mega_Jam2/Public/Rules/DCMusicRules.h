@@ -17,6 +17,8 @@ struct FDCMusicTrack
 	UPROPERTY(EditAnywhere, Config, Category = "Music", meta = (AllowedClasses = "/Script/Engine.SoundBase")) FSoftObjectPath Sound;
 	/** Track trim (0..1), times Music.Volume and the saved master volume. */
 	UPROPERTY(EditAnywhere, Config, Category = "Music") float Volume = 1.f;
+	/** A synth recipe id (DCAudio's recipe registry, e.g. March) played as a seamless loop instead of Sound. */
+	UPROPERTY(EditAnywhere, Config, Category = "Music") FName Synth;
 };
 
 /** One combat-intensity layer of the in-sector music. */
