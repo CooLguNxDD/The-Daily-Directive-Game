@@ -261,6 +261,10 @@ def add_unit_wpo(mat, x, y):
         inputs.append(ci)
     custom.set_editor_property("inputs", inputs)
     lp = lib.create_material_expression(mat, unreal.MaterialExpressionLocalPosition, x - 400, y)
+    try:  # the rest position, before any offset (the WPO is being computed from it)
+        lp.set_editor_property("included_offsets", unreal.PositionIncludedOffsets.EXCLUDE_OFFSETS)
+    except Exception as e:  # older python enum names: keep the default
+        unreal.log(f"build_content: M_DCVoxelUnit local position offsets left default ({e})")
     lib.connect_material_expressions(lp, "", custom, "LocalPos")
     for idx, pin in ((1, "Seg"), (2, "Joint")):
         uv = lib.create_material_expression(mat, unreal.MaterialExpressionTextureCoordinate, x - 400, y + 80 * idx)
