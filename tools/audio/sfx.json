@@ -13,7 +13,16 @@
         1321,
         1331,
         1341
-      ]
+      ],
+      "Remaster": {
+        "_why": "human 2026-11-15: strike too noisy - less hiss/crackle, deeper boom, short tail, lower level",
+        "LowPassHz": 1600,
+        "LowShelfHz": 110,
+        "LowShelfDb": 5.0,
+        "Seconds": 2.4,
+        "FadeSeconds": 1.2,
+        "TargetRmsDb": -16.0
+      }
     },
     {
       "Cue": "Collapse",
