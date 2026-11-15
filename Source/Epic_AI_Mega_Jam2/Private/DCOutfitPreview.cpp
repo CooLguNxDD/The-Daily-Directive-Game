@@ -10,6 +10,9 @@
 #include "DCTuning.h"
 #include "Engine/SkeletalMesh.h"
 #include "Engine/TextureRenderTarget2D.h"
+#include "HAL/FileManager.h"
+#include "ImageUtils.h"
+#include "Misc/Paths.h"
 #include "ProceduralMeshComponent.h"
 
 ADCOutfitPreview::ADCOutfitPreview()
@@ -97,6 +100,18 @@ void ADCOutfitPreview::Face(float Yaw)
 	{
 		Turn->SetRelativeRotation(FRotator(0.f, Yaw, 0.f));
 	}
+}
+
+bool ADCOutfitPreview::SaveImage(const FString& Path)
+{
+	if (!Capture || !Image)
+	{
+		return false;
+	}
+	Capture->CaptureScene();
+	IFileManager::Get().MakeDirectory(*FPaths::GetPath(Path), true);
+	TUniquePtr<FArchive> Ar(IFileManager::Get().CreateFileWriter(*Path));
+	return Ar && FImageUtils::ExportRenderTarget2DAsPNG(Image, *Ar);
 }
 
 void ADCOutfitPreview::Show(const FDCOutfit& Outfit)
