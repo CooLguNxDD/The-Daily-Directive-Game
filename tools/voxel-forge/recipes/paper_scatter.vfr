@@ -1,0 +1,14 @@
+# Paper scatter (R23 ground cover): torn flyers and newspaper pages, dim cream, one voxel high.
+grid 5
+size 40 36 1
+slot paper Paint
+slot print Trim
+box 2 3 0 10 13 1 paper
+box 14 2 0 20 8 1 paper
+box 24 6 0 34 14 1 paper
+box 6 20 0 14 26 1 paper
+box 20 22 0 30 32 1 paper
+box 33 26 0 38 31 1 paper
+paint box 4 5 0 8 6 1 print
+paint box 26 8 0 32 9 1 print
+paint box 22 26 0 28 27 1 print

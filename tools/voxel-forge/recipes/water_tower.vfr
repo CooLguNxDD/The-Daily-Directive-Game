@@ -1,0 +1,23 @@
+# Rooftop water tower (R23 roof): a tall steel lattice with a big wooden drum and a conical cap, the skyline icon.
+grid 10
+size 26 26 60
+slot steel Steel
+slot drum InkBrown
+slot hoop Trim
+slot cap Ink
+beam 4 4 0 7 7 30 0.8 steel
+beam 22 4 0 19 7 30 0.8 steel
+beam 4 22 0 7 19 30 0.8 steel
+beam 22 22 0 19 19 30 0.8 steel
+beam 4 4 10 22 4 10 0.6 steel
+beam 4 22 10 22 22 10 0.6 steel
+beam 4 4 10 4 22 10 0.6 steel
+beam 22 4 10 22 22 10 0.6 steel
+beam 4 4 0 22 4 20 0.5 steel
+beam 4 22 0 22 22 20 0.5 steel
+box 5 5 30 21 21 31 steel
+cyl 13 13 31 48 9 drum
+carve cyl 13 13 32 47 7.5
+paint cyl 13 13 35 36 9.5 hoop
+paint cyl 13 13 42 43 9.5 hoop
+cone 13 13 48 58 10 1 cap

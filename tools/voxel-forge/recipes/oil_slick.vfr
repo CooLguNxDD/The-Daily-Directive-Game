@@ -1,0 +1,11 @@
+# Oil slick (R23 ground cover): a dark sheen with a faint magenta and cyan rainbow edge, one voxel high.
+grid 5
+size 36 30 1
+slot oil Asphalt
+slot sheen NeonCyan
+slot sheen2 Paper
+ellipsoid 18 15 0 17 14 1 oil
+ellipsoid 22 12 0 12 9 1 oil
+paint ellipsoid 18 15 0 17 14 1 sheen
+paint ellipsoid 18 15 0 15 12 1 sheen2
+paint ellipsoid 18 15 0 13 10 1 oil
