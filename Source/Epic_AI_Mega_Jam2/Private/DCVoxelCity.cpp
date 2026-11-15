@@ -1015,6 +1015,7 @@ void ADCVoxelCity::FinishInFlight()
 	TSharedPtr<FQueuedOp> Done = InFlight;
 	InFlight.Reset();
 	SurfaceCache.Reset();
+	const double F0 = FPlatformTime::Seconds(); // R13: the commit split for DCHITCH (op vs the caller's OnDone)
 	if (Done->bPrepared)
 	{
 		bHoldUploads = false;
@@ -1026,10 +1027,13 @@ void ADCVoxelCity::FinishInFlight()
 	{
 		FinishOp(Done->Op, Done->Result, Done->bAnimate, Done->ApplyMs, Done->Hash, true);
 	}
+	const double F1 = FPlatformTime::Seconds();
 	if (Done->OnDone)
 	{
 		Done->OnDone(Done->Result, Done->Hash);
 	}
+	LastCommitOpMs = (F1 - F0) * 1000.0;
+	LastOnDoneMs = (FPlatformTime::Seconds() - F1) * 1000.0;
 }
 
 void ADCVoxelCity::FinishOp(const FDCVoxelOp& Op, FDCVoxelOpResult& Result, bool bAnimate, float ApplyMs, uint32 Hash, bool bOffThread)
@@ -2327,7 +2331,7 @@ void ADCVoxelCity::Tick(float DeltaSeconds)
 	// Hitch log (R13): which stage of the city's frame went long.
 	if ((T3 - T0) * 1000.0 + PrepMs + CommitMs + NextOpMs > UDCVoxelSettings::Get().Tuning.HitchLogMs)
 	{
-		UE_LOG(LogTemp, Display, TEXT("DCHITCH city next=%.1f prep=%.1f commit=%.1f poll=%.1f upload=%.1f falling=%.1f crumb=%.1f ms (%d live) bodies=%d cells=%d->%d jobs=%d"), NextOpMs, PrepMs, CommitMs, (T1 - T0) * 1000.0, (T2 - T1) * 1000.0, (T3 - T2) * 1000.0,
+		UE_LOG(LogTemp, Display, TEXT("DCHITCH city next=%.1f prep=%.1f commit=%.1f (op %.1f ondone %.1f) poll=%.1f upload=%.1f falling=%.1f crumb=%.1f ms (%d live) bodies=%d cells=%d->%d jobs=%d"), NextOpMs, PrepMs, CommitMs, CommitMs > 0.0 ? LastCommitOpMs : 0.0, CommitMs > 0.0 ? LastOnDoneMs : 0.0, (T1 - T0) * 1000.0, (T2 - T1) * 1000.0, (T3 - T2) * 1000.0,
 			Crumbs ? Crumbs->LastTickMs : 0.f, Crumbs ? Crumbs->LiveCount() : 0, BodiesReserved, DirtyBefore, DirtyCells.Num(), Jobs.Num());
 		if ((T3 - T2) * 1000.0 > UDCVoxelSettings::Get().Tuning.HitchLogMs * 0.25)
 		{
