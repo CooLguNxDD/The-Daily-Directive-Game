@@ -224,12 +224,8 @@ void UDCMusicSubsystem::Sample(UWorld& World, const ADCGameState& GS, float Dt)
 					}
 					Decks.Remove(L.Track);
 				}
-				// Advisor a-51: a stopped procedural wave resumes mid-buffer; rewind each synth layer to sample 0 so the
-				// layers really start bar-aligned (the underflow callback requeues the loop from its start).
-				if (USoundWaveProcedural* Wave = Cast<USoundWaveProcedural>(Sounds.FindRef(L.Track)))
-				{
-					Wave->ResetAudio();
-				}
+				// Bar alignment: every deck of a synth track gets its own fresh wave (SetTarget), which starts at sample 0;
+				// no shared wave is reset (human 16:00: ResetAudio on a shared wave left the score silent).
 			}
 			Playing = NAME_None;
 			UE_LOG(LogTemp, Display, TEXT("DCMUSIC sector start: %d layers restart together"), T.MusicLayers.Num());
@@ -293,6 +289,19 @@ void UDCMusicSubsystem::SetTarget(UWorld& World, FName Track, float Fade, const 
 		if (Found && *Found && (*Found)->IsPlaying())
 		{
 			Tails.Add(*Found); // a fade-out cannot be taken back: let it finish, start the track afresh
+		}
+		// A synth track (human 16:00): one fresh looping wave per deck, never shared between decks or phases (a procedural
+		// wave feeds one active sound; sharing or resetting it left the music silent). It starts at sample 0.
+		const FDCMusicTrack* Row = UDCTuning::Get().FindMusicTrack(Id);
+		if (Row && !Row->Synth.IsNone())
+		{
+			if (USoundWaveProcedural* Fresh = DCAudio::MakeLoop(this, Row->Synth))
+			{
+				Fresh->VirtualizationMode = EVirtualizationMode::PlayWhenSilent;
+				Fresh->Priority = UDCTuning::Get().Music.Priority;
+				Fresh->bBypassVolumeScaleForPriority = true;
+				Sound = Fresh;
+			}
 		}
 		UAudioComponent* Deck = UGameplayStatics::CreateSound2D(&World, Sound, TrackLevel(Id), 1.f, 0.f, nullptr, true, false);
 		if (!Deck)

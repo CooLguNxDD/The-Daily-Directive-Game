@@ -293,18 +293,25 @@ namespace DCAudio
 
 	USoundWaveProcedural* MakeLoop(UObject* Outer, FName Recipe)
 	{
-		const TArray<int16> Samples = Render(Recipe);
-		if (Samples.Num() == 0)
+		// Rendered once per recipe (a fresh wave per music deck reuses the bytes; human 16:00).
+		static TMap<FName, TSharedPtr<TArray<uint8>>> Rendered;
+		TSharedPtr<TArray<uint8>> Loop = Rendered.FindRef(Recipe);
+		if (!Loop.IsValid())
 		{
-			return nullptr;
+			const TArray<int16> Samples = Render(Recipe);
+			if (Samples.Num() == 0)
+			{
+				return nullptr;
+			}
+			Loop = MakeShared<TArray<uint8>>();
+			Loop->SetNumUninitialized(Samples.Num() * sizeof(int16));
+			FMemory::Memcpy(Loop->GetData(), Samples.GetData(), Loop->Num());
+			Rendered.Add(Recipe, Loop);
 		}
-		TSharedPtr<TArray<uint8>> Loop = MakeShared<TArray<uint8>>();
-		Loop->SetNumUninitialized(Samples.Num() * sizeof(int16));
-		FMemory::Memcpy(Loop->GetData(), Samples.GetData(), Loop->Num());
 		USoundWaveProcedural* Wave = NewObject<USoundWaveProcedural>(Outer);
 		Wave->SetSampleRate(UDCAudioSubsystem::SampleRate);
 		Wave->NumChannels = 1;
-		Wave->Duration = Samples.Num() / static_cast<float>(UDCAudioSubsystem::SampleRate); // one bar cycle, for playlists
+		Wave->Duration = Loop->Num() / (2.f * UDCAudioSubsystem::SampleRate); // one loop cycle, for playlists
 		Wave->bLooping = true;
 		Wave->OnSoundWaveProceduralUnderflow.BindLambda([Loop](USoundWaveProcedural* W, int32 /*SamplesRequired*/)
 		{
