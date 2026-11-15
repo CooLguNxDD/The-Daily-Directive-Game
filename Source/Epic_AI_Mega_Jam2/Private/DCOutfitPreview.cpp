@@ -84,7 +84,19 @@ void ADCOutfitPreview::BeginPlay()
 void ADCOutfitPreview::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
-	Turn->AddRelativeRotation(FRotator(0, 35.f * DeltaSeconds, 0));
+	if (!bHold)
+	{
+		Turn->AddRelativeRotation(FRotator(0, 35.f * DeltaSeconds, 0));
+	}
+}
+
+void ADCOutfitPreview::Face(float Yaw)
+{
+	bHold = Yaw >= 0.f;
+	if (bHold)
+	{
+		Turn->SetRelativeRotation(FRotator(0.f, Yaw, 0.f));
+	}
 }
 
 void ADCOutfitPreview::Show(const FDCOutfit& Outfit)
