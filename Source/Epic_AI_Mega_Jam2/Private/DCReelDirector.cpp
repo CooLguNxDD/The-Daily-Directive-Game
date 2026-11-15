@@ -43,43 +43,76 @@ namespace
 	constexpr float OrbitSweepDeg = 40.f;
 	constexpr float RunSpeedThreshold = 60.f;
 
-	/** R27 framing registry: a shot kind turns (body, facing, photo subject, progress inside the shot) into an eye and a
-	 *  look-at point. A new angle is a new entry plus a +ReelCameraShots row. */
+	/** R27 framing registry: a shot kind places the eye about the anchor (or the photographer) and looks at the anchor.
+	 *  A new angle is a new entry plus a +ReelCameraShots row. Anchors are a registry too (Blast, Photographer, Between). */
 	struct FShotCtx
 	{
 		FVector Body;
 		float Yaw;
 		FVector Subject;
+		bool bBlast;
+		FVector Blast;
+		float BlastRadius;
 	};
+	using FAnchorFn = FVector (*)(const FShotCtx&);
+	const TMap<FName, FAnchorFn>& Anchors()
+	{
+		static const TMap<FName, FAnchorFn> Map = {
+			{TEXT("Blast"), +[](const FShotCtx& C) { return C.bBlast ? C.Blast : C.Body; }},
+			{TEXT("Photographer"), +[](const FShotCtx& C) { return C.Body; }},
+			{TEXT("Between"), +[](const FShotCtx& C) { return C.bBlast ? FMath::Lerp(C.Body, C.Blast, 0.5f) : C.Body; }},
+		};
+		return Map;
+	}
+	FVector AnchorOf(const FShotCtx& C, const FDCReelShot& S)
+	{
+		const FAnchorFn* Fn = Anchors().Find(S.Anchor);
+		return Fn ? (*Fn)(C) : C.Body;
+	}
+	float DistanceOf(const FShotCtx& C, const FDCReelShot& S)
+	{
+		return FMath::Max(S.DistanceCm, (C.bBlast ? C.BlastRadius : 0.f) * S.RadiusScale);
+	}
+	/** Yaw from the anchor toward the photographer: anchored angles film from the photographer's side. */
+	float SideYaw(const FShotCtx& C, const FVector& Anchor)
+	{
+		const FVector Out = (C.Body - Anchor).GetSafeNormal2D();
+		return Out.IsNearlyZero() ? C.Yaw + 180.f : Out.Rotation().Yaw;
+	}
 	using FShotFn = void (*)(const FShotCtx&, const FDCReelShot&, float, FVector&, FVector&);
 
 	void ShotOrbit(const FShotCtx& C, const FDCReelShot& S, float U, FVector& Eye, FVector& Look)
 	{
-		// The original reel angle: from behind the shoulder, sweeping round to the side as the moment arrives.
-		Eye = C.Body + FRotator(0.f, C.Yaw + 180.f - 35.f + S.SweepDeg * U, 0.f).Vector() * S.DistanceCm + FVector(0, 0, S.HeightCm);
-		Look = FMath::Lerp(C.Body, C.Subject, 0.35f);
+		// Sweeping round the anchor from the photographer's side as the moment arrives.
+		const FVector A = AnchorOf(C, S);
+		Eye = A + FRotator(0.f, SideYaw(C, A) - 35.f + S.SweepDeg * U, 0.f).Vector() * DistanceOf(C, S) + FVector(0, 0, S.HeightCm);
+		Look = A + FVector(0, 0, S.LookUpCm);
 	}
 
 	void ShotOverview(const FShotCtx& C, const FDCReelShot& S, float, FVector& Eye, FVector& Look)
 	{
-		// The high angled view the evidence captures use (-dccollapsecam numbers), centred on the action.
-		const FVector Centre = FMath::Lerp(C.Body, C.Subject, 0.6f);
-		Eye = Centre + S.Offset;
-		Look = Centre + FVector(0, 0, S.LookUpCm);
+		// The high angled view the evidence captures use (-dccollapsecam direction), pulled back by the blast radius.
+		const FVector A = AnchorOf(C, S);
+		Eye = A + S.Offset.GetSafeNormal() * DistanceOf(C, S);
+		Look = A + FVector(0, 0, S.LookUpCm);
 	}
 
 	void ShotLowHero(const FShotCtx& C, const FDCReelShot& S, float U, FVector& Eye, FVector& Look)
 	{
-		// Low in front of the photographer, looking back up at them (reel-1965cb6: looking on toward the subject framed sky).
-		Eye = C.Body + FRotator(0.f, C.Yaw + 25.f + S.SweepDeg * U, 0.f).Vector() * S.DistanceCm + FVector(0, 0, S.HeightCm);
-		Look = C.Body + FVector(0, 0, S.LookUpCm);
+		// Low behind the photographer, looking past them at the anchor: the photographer against the explosion.
+		const FVector A = AnchorOf(C, S);
+		const FVector Back = (C.Body - A).GetSafeNormal2D();
+		const FVector Behind = Back.IsNearlyZero() ? FRotator(0.f, C.Yaw + 180.f, 0.f).Vector() : Back;
+		Eye = C.Body + Behind.RotateAngleAxis(S.SweepDeg * U, FVector::UpVector) * S.DistanceCm + FVector(0, 0, S.HeightCm);
+		Look = A + FVector(0, 0, S.LookUpCm);
 	}
 
 	void ShotSideTrack(const FShotCtx& C, const FDCReelShot& S, float U, FVector& Eye, FVector& Look)
 	{
-		// Beside the photographer, moving with them, the subject in the background.
-		Eye = C.Body + FRotator(0.f, C.Yaw + 90.f + S.SweepDeg * U, 0.f).Vector() * S.DistanceCm + FVector(0, 0, S.HeightCm);
-		Look = FMath::Lerp(C.Body + FVector(0, 0, S.LookUpCm), C.Subject, 0.2f);
+		// Square to the line photographer -> anchor, tracking slowly.
+		const FVector A = AnchorOf(C, S);
+		Eye = A + FRotator(0.f, SideYaw(C, A) + 90.f + S.SweepDeg * U, 0.f).Vector() * DistanceOf(C, S) + FVector(0, 0, S.HeightCm);
+		Look = A + FVector(0, 0, S.LookUpCm);
 	}
 
 	const TMap<FName, FShotFn>& ShotKinds()
@@ -317,6 +350,19 @@ void ADCReelDirector::Restage(int32 ClipIndex)
 		}
 		PendingBlasts.Add(Blast); // spawned once the clip clock is live (their telegraph runs on server time)
 	}
+	// R27: the reel angles frame the clip's blast: the latest strike at or before the shutter (the one the photo scored).
+	bClipBlast = false;
+	for (const FDCBlastRecord& Blast : PendingBlasts)
+	{
+		if (Blast.Time <= ShotTime + 0.3f && (!bClipBlast || Blast.Time >= ClipBlastTime))
+		{
+			bClipBlast = true;
+			ClipBlastTime = Blast.Time;
+			ClipBlastAt = Blast.Location;
+			ClipBlastRadius = Blast.Radius;
+		}
+	}
+	UE_LOG(LogTemp, Display, TEXT("DCREEL anchor clip=%d %s at %s radius %.0f"), ClipIndex, bClipBlast ? TEXT("blast") : TEXT("photographer (no blast)"), *ClipBlastAt.ToCompactString(), ClipBlastRadius);
 	// The stand-in is the clip photographer's own voxel body (review CP23, R10/R23): the outfit code recorded with
 	// the clip; the mannequin only drives the pose.
 	const FString Code = Clip.OutfitCode; // recorded with the clip (review CP25: a call sign can be reused)
@@ -373,7 +419,7 @@ void ADCReelDirector::TickCamera(float ClipTime, float Progress)
 		return;
 	}
 	const FDCPoseSample Pose = SamplePose(Clip.Poses, ClipTime);
-	const FShotCtx Ctx{FVector(Pose.Location) + FVector(0, 0, 60.f), Pose.Yaw, Subject};
+	const FShotCtx Ctx{FVector(Pose.Location) + FVector(0, 0, 60.f), Pose.Yaw, Subject, bClipBlast, ClipBlastAt, ClipBlastRadius};
 	// R27: the clip plays as a sequence of angles (data rows, shares of the clip by Weight); empty data = one orbit.
 	FDCReelShot DefaultOrbit;
 	DefaultOrbit.Kind = TEXT("Orbit");
@@ -412,7 +458,7 @@ void ADCReelDirector::TickCamera(float ClipTime, float Progress)
 			Eye.Z = FMath::Max(Eye.Z, City->SurfaceZCm(Eye) + 60.f);
 			for (int32 Step = 0; Step < 12 && City->IsSolidAt(Eye); ++Step)
 			{
-				Eye = FMath::Lerp(Eye, Ctx.Body + FVector(0, 0, 250.f), 0.25f);
+				Eye = FMath::Lerp(Eye, Look + FVector(0, 0, 250.f), 0.25f); // toward what it films, out of the tower
 			}
 		}
 	};
@@ -438,7 +484,16 @@ void ADCReelDirector::TickCamera(float ClipTime, float Progress)
 		ShotClip = StagedIndex;
 		ShotOnScreen = Index;
 		ShotFramed = -1;
-		UE_LOG(LogTemp, Display, TEXT("DCREEL shot clip=%d angle %d/%d kind=%s at progress %.2f"), StagedIndex, Index + 1, Shots.Num(), *Shots[Index].Kind.ToString(), P);
+		// R27 evidence: where the anchor sits on screen (0.33..0.67 = the middle third).
+		FVector2D Screen(-1.f, -1.f);
+		if (const APlayerController* PC = GetWorld()->GetFirstPlayerController())
+		{
+			PC->ProjectWorldLocationToScreen(bClipBlast ? ClipBlastAt : Ctx.Body, Screen, true);
+			int32 Vx = 1, Vy = 1;
+			PC->GetViewportSize(Vx, Vy);
+			Screen /= FVector2D(FMath::Max(Vx, 1), FMath::Max(Vy, 1));
+		}
+		UE_LOG(LogTemp, Display, TEXT("DCREEL shot clip=%d angle %d/%d kind=%s anchor=%s at progress %.2f (blast on screen at %.2f, %.2f last frame)"), StagedIndex, Index + 1, Shots.Num(), *Shots[Index].Kind.ToString(), *Shots[Index].Anchor.ToString(), P, Screen.X, Screen.Y);
 	}
 	// -dcreelshots=<dir> evidence: one frame per angle, half way through it (after any blend).
 	FString ShotDir;

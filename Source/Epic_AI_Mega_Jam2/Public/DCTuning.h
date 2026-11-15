@@ -811,6 +811,11 @@ struct FDCReelShot
 {
 	GENERATED_BODY()
 	UPROPERTY(EditAnywhere, Config, Category = "Run") FName Kind;
+	/** What the angle frames (human 14:55: the explosion is the star): Blast (the clip's blast centre; the photographer
+	 *  when the clip has none), Photographer, Between. Every angle looks at its anchor (+LookUpCm). */
+	UPROPERTY(EditAnywhere, Config, Category = "Run") FName Anchor = TEXT("Blast");
+	/** Eye distance = max(DistanceCm, blast radius x RadiusScale). */
+	UPROPERTY(EditAnywhere, Config, Category = "Run") float RadiusScale = 0.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Run") float Weight = 1.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Run") float BlendFraction = 0.f;
 	/** Overview: eye offset from the action; LowHero/SideTrack/Orbit use DistanceCm and HeightCm about the body. */

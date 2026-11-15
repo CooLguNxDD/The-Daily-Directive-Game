@@ -86,6 +86,11 @@ private:
 	int32 StagedIndex = -1;
 	/** R27: the angle on screen (for the cut log and the -dcreelshots frames) and the clip it belongs to. */
 	int32 ShotOnScreen = -1;
+	/** R27: the clip's blast (the latest strike at or before the shutter), the reel angles' anchor. */
+	bool bClipBlast = false;
+	FVector ClipBlastAt = FVector::ZeroVector;
+	float ClipBlastRadius = 0.f;
+	float ClipBlastTime = 0.f;
 	int32 ShotClip = -1;
 	int32 ShotFramed = -1;
 	float WindowStart = 0.f;
