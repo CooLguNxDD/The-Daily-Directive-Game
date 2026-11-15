@@ -62,6 +62,9 @@ Unreal Engine 5.9 jam game. Engine: `L:/unreal/UE_5.9` (registered source build,
   one pooled actor `ADCCompanion` (`DCCompanion.cpp`, pool `UDCCompanions`, `CompanionPrewarm`/`CompanionPoolMax`):
   host targets and damages, every machine places its copy from the replicated owner/anchor, shots multicast.
   Models `tools/voxel-forge/recipes/companion_{drone,sentry}.vfr`. Logs: `DCCOMPANION`, `DCREINFORCE`, `DCLASTSTAND`.
+- More cards (h-cards2, data only): each new card is a `+Upgrades` row on an existing effect; a new strike also needs a
+  `+Stratagems` row (`bStartsUnlocked=False`) and its own `+Carves` row (test `Content.Strikes`); art `T_Card_<name>`
+  from `Content/DC/Art/Source/card-<name>.png` through the `TEXTURES` table of `tools/content/build_content.py`.
 
 ## Weapon chips (R24, final run)
 - Every weapon hit wears the city (advisor a-37): `+Weapons` rows carry `ChipDamage`, `ChipRadiusCm`, `ChipsPerSecond`;
