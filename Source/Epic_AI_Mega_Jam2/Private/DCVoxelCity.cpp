@@ -149,7 +149,7 @@ FDCCityPlan ADCVoxelCity::PlanSector(int32 RunSeed, int32 SectorIndex)
 	{
 		const UDCVoxelSettings& V = UDCVoxelSettings::Get();
 		// The city builder (R16) when the sector has a district row; recipes on the block grid otherwise.
-		if (const FDCDistrictRule* D = V.District(SectorIndex))
+		if (const FDCDistrictRule* D = V.District(SectorIndex, Seed))
 		{
 			return DCVoxelCraft::PlanDistrict(Seed, *D, V.RuleSet(D->Rules), V.RuleSet(D->Props), V.SectorLayout(SectorIndex), V.Recipes, T.City.BlockSizeCm, V.PropLayers);
 		}
@@ -499,7 +499,7 @@ bool ADCVoxelCity::IsSolidAt(const FVector& Where) const
 const FDCSeasonDef* ADCVoxelCity::SeasonFor(int32 RunSeed, int32 SectorIndex)
 {
 	const UDCVoxelSettings& V = UDCVoxelSettings::Get();
-	const FDCDistrictRule* D = V.District(SectorIndex);
+	const FDCDistrictRule* D = V.District(SectorIndex, DCCityRules::SectorSeed(RunSeed, SectorIndex));
 	return DCWeather::SeasonFor(UDCTuning::Get().Seasons, D ? V.RuleSet(D->Weather) : nullptr, DCCityRules::SectorSeed(RunSeed, SectorIndex));
 }
 

@@ -2,11 +2,47 @@
 
 #include "Voxel/DCVoxelCraft.h"
 #include "Voxel/DCVoxelOps.h"
+#include "Rules/DCPcg.h"
 
 const FDCVoxelSectorLayout& UDCVoxelSettings::SectorLayout(int32 Sector) const
 {
 	static const FDCVoxelSectorLayout Empty;
 	return Sectors.Num() == 0 ? Empty : Sectors[FMath::Clamp(Sector, 0, Sectors.Num() - 1)];
+}
+
+TArray<const FDCDistrictRule*> UDCVoxelSettings::DistrictsFor(int32 Sector) const
+{
+	TArray<const FDCDistrictRule*> Out;
+	for (const FDCDistrictRule& D : Districts)
+	{
+		if (D.Sector == Sector)
+		{
+			Out.Add(&D);
+		}
+	}
+	if (Out.Num() == 0 && Districts.Num() > 0)
+	{
+		Out.Add(&Districts[FMath::Clamp(Sector, 0, Districts.Num() - 1)]);
+	}
+	return Out;
+}
+
+const FDCDistrictRule* UDCVoxelSettings::District(int32 Sector, int32 SectorSeed) const
+{
+	const TArray<const FDCDistrictRule*> Rows = DistrictsFor(Sector);
+	if (Rows.Num() <= 1)
+	{
+		return Rows.Num() == 1 ? Rows[0] : nullptr;
+	}
+	FDCPcgRule Roll;
+	Roll.Slot = TEXT("District");
+	for (const FDCDistrictRule* D : Rows)
+	{
+		Roll.Choices.Add({D->Id, D->Weight});
+	}
+	const FName Id = DCPcg::Pick(Roll, SectorSeed ^ 0xD157C7, 0);
+	const FDCDistrictRule* const* Found = Rows.FindByPredicate([Id](const FDCDistrictRule* D) { return D->Id == Id; });
+	return Found ? *Found : Rows[0];
 }
 
 TArray<FColor> UDCVoxelSettings::MeshColors() const

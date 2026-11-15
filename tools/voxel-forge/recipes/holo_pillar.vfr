@@ -1,0 +1,14 @@
+# Advert pillar (R23 street, plaza): a round ink column with two cyan screen bands and a magenta crown ring.
+grid 5
+size 16 16 70
+slot body Ink
+slot band NeonCyan
+slot edge NeonCyanEdge
+slot crown PaperEdge
+cyl 8 8 0 66 6 body
+paint cyl 8 8 30 42 6.5 band
+paint cyl 8 8 29 30 6.5 edge
+paint cyl 8 8 42 43 6.5 edge
+paint cyl 8 8 50 56 6.5 band
+cyl 8 8 66 68 7 body
+cyl 8 8 68 69 7 crown

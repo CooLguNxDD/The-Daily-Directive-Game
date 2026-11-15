@@ -1,0 +1,18 @@
+# Scaffold (R23 wall mount): a steel pipe frame two floors high with plank decks, cross braces and a torn tarp.
+grid 10
+size 10 36 60
+slot pipe Steel
+slot plank InkBrown
+slot tarp InkBlue
+pivot 0 18 0
+box 8 0 0 9 1 60 pipe
+box 8 17 0 9 18 60 pipe
+box 8 35 0 9 36 60 pipe
+box 1 0 0 2 1 60 pipe
+box 1 35 0 2 36 60 pipe
+box 0 0 20 10 36 21 plank
+box 0 0 40 10 36 41 plank
+beam 8 1 1 8 17 19 0.8 pipe
+beam 8 18 21 8 34 39 0.8 pipe
+box 9 20 22 10 34 38 tarp
+noise 0.25 4 tarp
