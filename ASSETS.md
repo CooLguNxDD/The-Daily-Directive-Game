@@ -18,7 +18,7 @@ art) is in the game.
 | Orbital strikes, supply pods, enemies | spawned at run time | C++ actors from engine basic shapes |
 | `M_DCFlat` flat colour + glow material | `Content/DC/Materials/M_DCFlat.uasset` | built by `tools/content/build_content.py` |
 | `L_City` empty level | `Content/DC/Maps/L_City.umap` | built by `tools/content/build_content.py`; everything in it is spawned by C++ |
-| All sound and music | synthesised at start-up | `DCAudio.cpp` renders every cue from code recipes; no audio files |
+| All sound effects, and the fallback march music | synthesised at start-up | `DCAudio.cpp` renders every cue from code recipes and `+SoundRecipes` rows; the march plays only when no R14 music track loads |
 | HUD, menus, newspaper front page | drawn at run time | Canvas HUD (`DCHUD*.cpp`) and Slate (`DCMenu.cpp`) |
 
 ## Generated (R11, R25)

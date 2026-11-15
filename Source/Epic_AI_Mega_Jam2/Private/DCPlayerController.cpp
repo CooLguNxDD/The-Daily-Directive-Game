@@ -14,6 +14,7 @@
 #include "DCVoxelCity.h"
 
 #include "DCAudio.h"
+#include "DCMusic.h"
 #include "DCGameMode.h"
 #include "DCGameState.h"
 #include "DCInput.h"
@@ -109,7 +110,10 @@ void ADCPlayerController::BeginPlay()
 	{
 		GetWorld()->SpawnActor<ADCDemoPilot>();
 	}
-	if (UDCAudioSubsystem* Audio = GetGameInstance()->GetSubsystem<UDCAudioSubsystem>())
+	// R14: the generated score (DCMusic, by phase and combat intensity); the synth march only when no track loads.
+	UDCMusicSubsystem* Score = UDCMusicSubsystem::Get(this);
+	UDCAudioSubsystem* Audio = GetGameInstance()->GetSubsystem<UDCAudioSubsystem>();
+	if (Audio && !(Score && Score->Start(this)))
 	{
 		Audio->StartMusic(this, TEXT("Music"), UDCTuning::Get().Run.MusicVolume); // times the saved master volume
 	}

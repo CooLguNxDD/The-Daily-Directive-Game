@@ -15,6 +15,7 @@
 #include "Rules/DCPostStack.h"
 #include "Rules/DCRunRules.h"
 #include "Rules/DCWeather.h"
+#include "Rules/DCMusicRules.h"
 #include "DCTuning.generated.h"
 
 USTRUCT(BlueprintType)
@@ -841,6 +842,11 @@ public:
 	UPROPERTY(EditAnywhere, Config, Category = "Sky") TArray<FDCSkyPropDef> SkyProps;
 	/** Sound cues written as data (weapons, strikes), beside the code synth cues. */
 	UPROPERTY(EditAnywhere, Config, Category = "Sound") TArray<FDCSoundRecipe> SoundRecipes;
+	/** R14 music: the player's mix and intensity reading, the track files, the combat layers and what each phase plays. */
+	UPROPERTY(EditAnywhere, Config, Category = "Music") FDCMusicTuning Music;
+	UPROPERTY(EditAnywhere, Config, Category = "Music") TArray<FDCMusicTrack> MusicTracks;
+	UPROPERTY(EditAnywhere, Config, Category = "Music") TArray<FDCMusicLayer> MusicLayers;
+	UPROPERTY(EditAnywhere, Config, Category = "Music") TArray<FDCMusicPhase> MusicPhases;
 	UPROPERTY(EditAnywhere, Config, Category = "Camera") FDCCameraTuning Camera;
 	UPROPERTY(EditAnywhere, Config, Category = "Economy") FDCEconomyTuning Economy;
 	UPROPERTY(EditAnywhere, Config, Category = "City") FDCCityTuning City;
@@ -892,6 +898,14 @@ public:
 		static FDCWeaponDef Fallback;
 		Fallback.Stats = Rifle;
 		return Fallback;
+	}
+	const FDCMusicTrack* FindMusicTrack(FName Id) const
+	{
+		return MusicTracks.FindByPredicate([Id](const FDCMusicTrack& D) { return D.Id == Id; });
+	}
+	const FDCMusicPhase* FindMusicPhase(EDCRunPhase Phase) const
+	{
+		return MusicPhases.FindByPredicate([Phase](const FDCMusicPhase& D) { return D.Phase == Phase; });
 	}
 	const FDCSoundRecipe* FindSoundRecipe(FName Id) const
 	{
