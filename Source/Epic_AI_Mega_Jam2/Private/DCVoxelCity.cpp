@@ -3,6 +3,7 @@
 #include "Components/StaticMeshComponent.h"
 
 #include "Async/ParallelFor.h"
+#include "Algo/AnyOf.h"
 #include "Materials/MaterialInstanceDynamic.h"
 
 #include "DCVoxelFx.h"
@@ -1838,6 +1839,45 @@ void ADCVoxelCity::PollJobs()
 	}
 }
 
+namespace
+{
+	// R1 (DCCOMMIT apply=20.8 ms for 16 cells, perfpair-8f17486): the per-vertex conversion CreateMeshSection does on the
+	// game thread, done on a worker instead; the game thread only hands the finished section over (SetProcMeshSection).
+	// Same result as CreateMeshSection(0, P, I, N, UV0, Colors, {}, true): default UV1..3 and tangent, degenerate
+	// triangles dropped, collision on.
+	void BuildSection(const FDCVoxelMeshData& In, FProcMeshSection& Out)
+	{
+		Out.Reset();
+		const int32 NumVerts = In.Positions.Num();
+		Out.ProcVertexBuffer.SetNumUninitialized(NumVerts);
+		for (int32 V = 0; V < NumVerts; ++V)
+		{
+			FProcMeshVertex& Vx = Out.ProcVertexBuffer[V];
+			Vx.Position = In.Positions[V];
+			Vx.Normal = In.Normals.Num() == NumVerts ? In.Normals[V] : FVector(0.f, 0.f, 1.f);
+			Vx.Tangent = FProcMeshTangent();
+			Vx.Color = In.Colors.Num() == NumVerts ? In.Colors[V] : FColor(255, 255, 255);
+			Vx.UV0 = In.UVs.Num() == NumVerts ? In.UVs[V] : FVector2D(0.f, 0.f);
+			Vx.UV1 = Vx.UV2 = Vx.UV3 = FVector2D(0.f, 0.f);
+			Out.SectionLocalBox += Vx.Position;
+		}
+		const int32 MaxIndex = NumVerts - 1;
+		const int32 NumTri = In.Indices.Num() / 3;
+		Out.ProcIndexBuffer.Reserve(NumTri * 3);
+		for (int32 T = 0; T < NumTri; ++T)
+		{
+			const int32 A = FMath::Min(In.Indices[T * 3], MaxIndex), B = FMath::Min(In.Indices[T * 3 + 1], MaxIndex), C = FMath::Min(In.Indices[T * 3 + 2], MaxIndex);
+			if (A != B && A != C && B != C)
+			{
+				Out.ProcIndexBuffer.Add(A);
+				Out.ProcIndexBuffer.Add(B);
+				Out.ProcIndexBuffer.Add(C);
+			}
+		}
+		Out.bEnableCollision = true;
+	}
+}
+
 void ADCVoxelCity::UploadCells()
 {
 	if (DirtyCells.Num() == 0)
@@ -1857,7 +1897,10 @@ void ADCVoxelCity::UploadCells()
 	// 1. A committed op's own cells, all at once (the detonation frame shows the whole op). R1 (spikes-cb1f180: 12 of 13
 	//    sector-play spikes were this frame, 17-24 ms for 16-21 cells): the merges run in parallel, sections stay serial.
 	TArray<FIntVector4> CommitNow;
-	for (auto It = CommitCells.CreateIterator(); It; ++It)
+	// The whole op shows in one frame (advisor a-38): while any of its cells still waits for a chunk (PollChunkBudgetMs
+	// can defer chunk results), none of them uploads.
+	const bool bCommitWaits = Algo::AnyOf(CommitCells, [&Busy](const FIntVector4& C) { return Busy.Contains(C); });
+	for (auto It = CommitCells.CreateIterator(); It && !bCommitWaits; ++It)
 	{
 		if (Busy.Contains(*It))
 		{
@@ -1900,7 +1943,7 @@ void ADCVoxelCity::UploadCells()
 	TArray<FIntVector4> Ready;
 	for (const FIntVector4& Cell : DirtyCells)
 	{
-		if (!Busy.Contains(Cell) && !(bHoldUploads && HeldCells.Contains(Cell)))
+		if (!Busy.Contains(Cell) && !(bHoldUploads && HeldCells.Contains(Cell)) && !CommitCells.Contains(Cell))
 		{
 			Ready.Add(Cell);
 		}
@@ -1918,45 +1961,6 @@ void ADCVoxelCity::UploadCells()
 		}
 		UploadCell(Cell);
 		++Done;
-	}
-}
-
-namespace
-{
-	// R1 (DCCOMMIT apply=20.8 ms for 16 cells, perfpair-8f17486): the per-vertex conversion CreateMeshSection does on the
-	// game thread, done on a worker instead; the game thread only hands the finished section over (SetProcMeshSection).
-	// Same result as CreateMeshSection(0, P, I, N, UV0, Colors, {}, true): default UV1..3 and tangent, degenerate
-	// triangles dropped, collision on.
-	void BuildSection(const FDCVoxelMeshData& In, FProcMeshSection& Out)
-	{
-		Out.Reset();
-		const int32 NumVerts = In.Positions.Num();
-		Out.ProcVertexBuffer.SetNumUninitialized(NumVerts);
-		for (int32 V = 0; V < NumVerts; ++V)
-		{
-			FProcMeshVertex& Vx = Out.ProcVertexBuffer[V];
-			Vx.Position = In.Positions[V];
-			Vx.Normal = In.Normals.Num() == NumVerts ? In.Normals[V] : FVector(0.f, 0.f, 1.f);
-			Vx.Tangent = FProcMeshTangent();
-			Vx.Color = In.Colors.Num() == NumVerts ? In.Colors[V] : FColor(255, 255, 255);
-			Vx.UV0 = In.UVs.Num() == NumVerts ? In.UVs[V] : FVector2D(0.f, 0.f);
-			Vx.UV1 = Vx.UV2 = Vx.UV3 = FVector2D(0.f, 0.f);
-			Out.SectionLocalBox += Vx.Position;
-		}
-		const int32 MaxIndex = NumVerts - 1;
-		const int32 NumTri = In.Indices.Num() / 3;
-		Out.ProcIndexBuffer.Reserve(NumTri * 3);
-		for (int32 T = 0; T < NumTri; ++T)
-		{
-			const int32 A = FMath::Min(In.Indices[T * 3], MaxIndex), B = FMath::Min(In.Indices[T * 3 + 1], MaxIndex), C = FMath::Min(In.Indices[T * 3 + 2], MaxIndex);
-			if (A != B && A != C && B != C)
-			{
-				Out.ProcIndexBuffer.Add(A);
-				Out.ProcIndexBuffer.Add(B);
-				Out.ProcIndexBuffer.Add(C);
-			}
-		}
-		Out.bEnableCollision = true;
 	}
 }
 
