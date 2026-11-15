@@ -97,6 +97,10 @@ private:
 	bool bDriverSwapped = false;
 	/** Host: the listen map is opening over the transport; its load advertises the code. */
 	bool bAwaitListen = false;
+	/** -dceosshot evidence frame: the menu key it waits on and when that key last changed. */
+	FString ShotKey;
+	double ShotKeyTime = 0.0;
+	bool bShotTaken = false;
 	FTSTicker::FDelegateHandle TickHandle;
 	FDelegateHandle PostLoadHandle;
 	FDelegateHandle NetFailHandle;

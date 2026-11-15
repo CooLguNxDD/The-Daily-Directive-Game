@@ -932,7 +932,7 @@ void ADCPlayerController::UpdateReel()
 void ADCPlayerController::UpdateMenu()
 {
 	const ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>();
-	const bool bWant = GS && GS->Phase == EDCRunPhase::Lobby && (!FParse::Param(FCommandLine::Get(), TEXT("dcdemo")) || FCString::Strifind(FCommandLine::Get(), TEXT("dcmenuflow=")));
+	const bool bWant = GS && GS->Phase == EDCRunPhase::Lobby && (!FParse::Param(FCommandLine::Get(), TEXT("dcdemo")) || FCString::Strifind(FCommandLine::Get(), TEXT("dcmenuflow=")) || FCString::Strifind(FCommandLine::Get(), TEXT("dceosshot=")));
 	const uint8 Base = MenuModeFor(*this);
 	const uint8 Mode = !bWant ? 255 : (Base == 0 && bBuilderOpen ? 3 : (Base == 0 && bSettingsOpen ? 4 : Base));
 	// The title menu listens for LAN hosts and rebuilds when the list changes.

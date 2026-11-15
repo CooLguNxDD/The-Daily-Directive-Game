@@ -9,6 +9,7 @@
 #include "Engine/World.h"
 #include "Features/IModularFeatures.h"
 #include "HAL/PlatformTime.h"
+#include "UnrealClient.h"
 #include "Kismet/GameplayStatics.h"
 #include "Misc/CommandLine.h"
 #include "Misc/FileHelper.h"
@@ -394,6 +395,22 @@ bool UDCOnline::Tick(float)
 	if (Deadline > 0.0 && Now > Deadline && (State == EDCOnlineState::LoggingIn || State == EDCOnlineState::Joining || State == EDCOnlineState::Hosting))
 	{
 		Fail(TEXT("Timeout"), FString());
+	}
+	// Evidence frames (-dceosshot=<file>): the lobby 3 s after the code (or a fallback message) went up.
+	const FString Key = MenuKey();
+	if (Key != ShotKey)
+	{
+		ShotKey = Key;
+		ShotKeyTime = Now;
+	}
+	FString ShotFile;
+	if (!bShotTaken && Now - ShotKeyTime > 3.0 && ((State == EDCOnlineState::Hosting && Deadline == 0.0) || State == EDCOnlineState::Failed)
+		&& GetGameInstance() && GetGameInstance()->GetWorld() && GetGameInstance()->GetWorld()->GetNetMode() == NM_ListenServer
+		&& FParse::Value(FCommandLine::Get(), TEXT("dceosshot="), ShotFile))
+	{
+		bShotTaken = true;
+		FScreenshotRequest::RequestScreenshot(ShotFile, true, false);
+		UE_LOG(LogDCOnline, Display, TEXT("DCEOS shot %s state=%d"), *FPaths::GetCleanFilename(ShotFile), static_cast<int32>(State));
 	}
 	// Evidence runs press the menu buttons on the title screen after 4 real seconds, the same path as a click:
 	// -dceoshost (HOST ONLINE), -dceosjoin=<code or @file> (JOIN BY CODE; @file waits for the host's -dceoscodeout).
