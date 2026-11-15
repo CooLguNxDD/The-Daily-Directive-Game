@@ -719,12 +719,14 @@ void ADCDemoPilot::AddSupplyCall()
 	Add(1.5f, [this] { AimAt(SupplyAt); Shot(TEXT("supply_landed")); Tap(TEXT("Slot1")); return true; });
 	Add(0.f, [this]
 	{
-		// Walk to the nearest landed pod with the real Move action until it opens (it is destroyed when opened).
+		// Walk to the landed pod nearest the called drop point with the real Move action until it opens (it is destroyed
+		// when opened). Nearest the call point, not the pawn: a redeploy pod may stand closer (bugs4 opened that one).
 		APawn* Me = GetWorld()->GetFirstPlayerController() ? GetWorld()->GetFirstPlayerController()->GetPawn() : nullptr;
 		const ADCSupplyPod* Pod = nullptr;
 		for (const ADCSupplyPod* P : TActorRange<ADCSupplyPod>(GetWorld()))
 		{
-			Pod = P->HasLanded() && (!Pod || FVector::Dist(P->GetActorLocation(), Me ? Me->GetActorLocation() : FVector::ZeroVector) < FVector::Dist(Pod->GetActorLocation(), Me ? Me->GetActorLocation() : FVector::ZeroVector)) ? P : Pod;
+			const bool bCloser = !Pod || FVector::Dist2D(P->GetActorLocation(), SupplyAt) < FVector::Dist2D(Pod->GetActorLocation(), SupplyAt);
+			Pod = P->HasLanded() && FVector::Dist2D(P->GetActorLocation(), SupplyAt) < 1500.f && bCloser ? P : Pod;
 		}
 		if (!Me || !Pod)
 		{

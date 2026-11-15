@@ -225,6 +225,14 @@ namespace
 		return FVector::Dist2D(Here, Door) > 150.f ? Door : Door + (Goal - Door).GetSafeNormal2D() * 200.f;
 	}
 
+	bool FoeInOtherTower(const ADCEnemy& E, const FVector& Here, const FVector& At)
+	{
+		const ADCVoxelCity* City = ADCVoxelCity::Get(&E);
+		const FDCFactionDef* F = DCFactionRules::Find(UDCTuning::Get().Factions, E.GetFaction());
+		const int32 FoeLot = City && F && F->bEntersBuildings ? City->StandingLotAt(At) : INDEX_NONE;
+		return FoeLot != INDEX_NONE && City->StandingLotAt(Here) != FoeLot;
+	}
+
 	using FGoalFn = bool (*)(const ADCEnemy&, const FDCEnemyDef&, float, FVector&);
 	bool GoalPlayers(const ADCEnemy& E, const FDCEnemyDef& Def, float Now, FVector& Out)
 	{
@@ -326,9 +334,12 @@ namespace
 		{
 			const FVector At = Foe->GetActorLocation();
 			const FVector To = (At - Here).GetSafeNormal2D();
-			const float Hold = FMath::Max((Def.ShotRange > 0.f ? Def.ShotRange : Def.AttackRange) * 0.6f, E.CrewContactCm());
 			const float Dist = FVector::Dist2D(At, Here);
-			if (Def.KiteCm > 0.f && Dist < Def.KiteCm)
+			// R6: a foe inside a standing tower this unit is not in yet is out of sight behind its walls: shooters do not
+			// hold at range there, they keep walking door-first until they share the tower (checked only when in range).
+			const float RangeHold = FMath::Max((Def.ShotRange > 0.f ? Def.ShotRange : Def.AttackRange) * 0.6f, E.CrewContactCm());
+			const float Hold = Dist > RangeHold || !FoeInOtherTower(E, Here, At) ? RangeHold : E.CrewContactCm();
+			if (Def.KiteCm > 0.f && Dist < Def.KiteCm && !FoeInOtherTower(E, Here, At))
 			{
 				// Hit and run (Scavengers): back off at speed, still firing.
 				E.GroundMove(Here - To * 600.f, Def.Speed, Dt, Def.HoverHeight);
