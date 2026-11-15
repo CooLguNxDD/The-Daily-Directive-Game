@@ -1,4 +1,5 @@
 #include "DCAudio.h"
+#include "Misc/App.h"
 #include "DCFrameScopes.h"
 #include "DCSave.h"
 #include "DCTuning.h"
@@ -464,6 +465,9 @@ void UDCAudioSubsystem::StartEvidenceRecording(const UObject* WorldContext)
 	{
 		return;
 	}
+	// Evidence runs share the desktop with other windows: an unfocused game is muted by the engine (audio-6f4334f had
+	// 44 s stretches of digital silence). The recording hears the game as a focused player would.
+	FApp::SetUnfocusedVolumeMultiplier(1.f);
 	UAudioMixerBlueprintLibrary::StartRecordingOutput(WorldContext, 1800.f);
 	RecordStart = FPlatformTime::Seconds();
 	UE_LOG(LogTemp, Display, TEXT("DCCUE recording started to %s"), *RecordDir);

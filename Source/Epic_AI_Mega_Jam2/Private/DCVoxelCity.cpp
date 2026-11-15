@@ -1304,6 +1304,7 @@ void ADCVoxelCity::FinishInFlight()
 	{
 		FinishOp(Done->Op, Done->Result, Done->bAnimate, Done->ApplyMs, Done->Hash, true);
 	}
+	const double CommitTMask = FPlatformTime::Seconds();
 	// R6: the op's lots changed (breaches, falls): their walk masks follow, here, while no worker writes.
 	for (const int32 Lot : Done->Result.TouchedLots)
 	{
@@ -1314,6 +1315,12 @@ void ADCVoxelCity::FinishInFlight()
 		RebuildWalkMask(Lot);
 	}
 	const double CommitT1 = FPlatformTime::Seconds();
+	if ((CommitT1 - CommitT0) * 1000.0 > UDCVoxelSettings::Get().Tuning.HitchLogMs)
+	{
+		// R1 attribution (advisor a-36): the commit frame's game-thread split.
+		UE_LOG(LogTemp, Display, TEXT("DCCOMMITOP kind=%s commitop=%.1f walkmask=%.1f ms (lots %d)"), *Done->Op.Kind.ToString(), (CommitTMask - CommitT0) * 1000.0,
+			(CommitT1 - CommitTMask) * 1000.0, Done->Result.TouchedLots.Num() + Done->Result.FallenLots.Num());
+	}
 	if (Done->OnDone)
 	{
 		Done->OnDone(Done->Result, Done->Hash);
@@ -1767,6 +1774,7 @@ void ADCVoxelCity::QueueAllDirty(TSet<FIntVector>* DeferTerrain)
 
 void ADCVoxelCity::PollJobs()
 {
+	PollStats = FPollStats();
 	const double Start = FPlatformTime::Seconds();
 	const double PieceBudgetS = UDCVoxelSettings::Get().Tuning.PieceUploadBudgetMs / 1000.0;
 	for (int32 i = 0; i < Jobs.Num();)
@@ -1788,7 +1796,16 @@ void ADCVoxelCity::PollJobs()
 			UProceduralMeshComponent* Target = F.Frags.IsValidIndex(Job->Frag) ? F.Frags[Job->Frag].Comp.Get() : F.Comp.Get();
 			if (Target && F.Comp && !F.bLanded)
 			{
+				const double S0 = FPlatformTime::Seconds();
 				Target->CreateMeshSection(0, Job->Mesh.Positions, Job->Mesh.Indices, Job->Mesh.Normals, Job->Mesh.UVs, Job->Mesh.Colors, {}, false);
+				const double SectionMs = (FPlatformTime::Seconds() - S0) * 1000.0; // R1 attribution (advisor a-36)
+				PollStats.PieceMs += SectionMs;
+				++PollStats.Pieces;
+				if (SectionMs > PollStats.WorstPieceMs)
+				{
+					PollStats.WorstPieceMs = SectionMs;
+					PollStats.WorstPieceVerts = Job->Mesh.Positions.Num();
+				}
 				if (--F.PendingMeshes <= 0)
 				{
 					F.Comp->SetVisibility(GetWorld()->GetTimeSeconds() - FallOffset >= F.Start, true); // a piece meshed ahead shows at the detonation
@@ -1799,6 +1816,7 @@ void ADCVoxelCity::PollJobs()
 		}
 		const FIntVector4 K = Key(Job->Grid, Job->Chunk);
 		const FIntVector4 Cell = Key(Job->Grid, CellOf(Job->Grid, Job->Chunk));
+		++PollStats.Chunks;
 		if (Job->Mesh.IsEmpty())
 		{
 			ChunkMeshes.Remove(K);
@@ -1849,9 +1867,15 @@ void ADCVoxelCity::UploadCells()
 		TArray<FDCVoxelMeshData> Merged;
 		Merged.SetNum(CommitNow.Num());
 		ParallelFor(CommitNow.Num(), [&](int32 i) { MergeCell(CommitNow[i], Merged[i]); }, CommitNow.Num() < 4);
+		const double T1 = FPlatformTime::Seconds();
 		for (int32 i = 0; i < CommitNow.Num(); ++i)
 		{
 			ApplyCell(CommitNow[i], Merged[i], i == 0 ? T0 : FPlatformTime::Seconds());
+		}
+		const double T2 = FPlatformTime::Seconds();
+		if ((T2 - T0) * 1000.0 > UDCVoxelSettings::Get().Tuning.HitchLogMs)
+		{
+			UE_LOG(LogTemp, Display, TEXT("DCCOMMIT cells=%d merge=%.1f apply=%.1f ms"), CommitNow.Num(), (T1 - T0) * 1000.0, (T2 - T1) * 1000.0); // R1 attribution (advisor a-36)
 		}
 	}
 	// 2. Everything else under the millisecond budget; a held op's cells wait for its commit.
@@ -2704,6 +2728,10 @@ void ADCVoxelCity::Tick(float DeltaSeconds)
 	{
 		UE_LOG(LogTemp, Display, TEXT("DCHITCH city next=%.1f prep=%.1f commit=%.1f (op %.1f ondone %.1f) poll=%.1f upload=%.1f falling=%.1f crumb=%.1f ms (%d live) bodies=%d cells=%d->%d jobs=%d"), NextOpMs, PrepMs, CommitMs, CommitMs > 0.0 ? LastCommitOpMs : 0.0, CommitMs > 0.0 ? LastOnDoneMs : 0.0, (T1 - T0) * 1000.0, (T2 - T1) * 1000.0, (T3 - T2) * 1000.0,
 			Crumbs ? Crumbs->LastTickMs : 0.f, Crumbs ? Crumbs->LiveCount() : 0, BodiesReserved, DirtyBefore, DirtyCells.Num(), Jobs.Num());
+		if (PollStats.Pieces > 0 || (T1 - T0) * 1000.0 > UDCVoxelSettings::Get().Tuning.HitchLogMs * 0.25)
+		{
+			UE_LOG(LogTemp, Display, TEXT("DCHITCH poll chunks=%d pieces=%d piece_sections=%.1f ms worst=%.1f ms (%d verts)"), PollStats.Chunks, PollStats.Pieces, PollStats.PieceMs, PollStats.WorstPieceMs, PollStats.WorstPieceVerts);
+		}
 		if ((T3 - T2) * 1000.0 > UDCVoxelSettings::Get().Tuning.HitchLogMs * 0.25)
 		{
 			UE_LOG(LogTemp, Display, TEXT("DCHITCH falling shards=%.1f fade+frame=%.1f bodies=%.1f break=%.1f land=%.1f ms (fading %d, falling %d)"),
