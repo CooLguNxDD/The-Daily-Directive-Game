@@ -1958,6 +1958,19 @@ void ADCVoxelCity::TickFalling(float Now)
 			FRandomStream PieceRng(static_cast<int32>(HashCombine(HashCombine(GetTypeHash(FMath::RoundToInt32(P.X / 10.f)), GetTypeHash(FMath::RoundToInt32(P.Y / 10.f))), GetTypeHash(FMath::RoundToInt32(P.Z / 10.f)))));
 			Fading[i].Delay = PieceRng.FRandRange(0.f, FMath::Max(FadeTn.DissolveDelayMaxSeconds, 0.f));
 			Fading[i].Scale = 1.f + PieceRng.FRandRange(-1.f, 1.f) * FMath::Clamp(FadeTn.DissolveDurationJitter, 0.f, 0.9f);
+			// R15 evidence: the spread of seeded delays and durations, one line per second while pieces start fading.
+			DissolveLogN += 1;
+			DissolveLogDelay = FVector2D(FMath::Min(DissolveLogDelay.X, Fading[i].Delay), FMath::Max(DissolveLogDelay.Y, Fading[i].Delay));
+			DissolveLogScale = FVector2D(FMath::Min(DissolveLogScale.X, Fading[i].Scale), FMath::Max(DissolveLogScale.Y, Fading[i].Scale));
+			if (WorldNow >= DissolveLogNext)
+			{
+				UE_LOG(LogTemp, Display, TEXT("DCDISSOLVE timing pieces=%d delay %.2f..%.2f s duration x%.2f..x%.2f (seeded by rest position)"), DissolveLogN,
+					DissolveLogDelay.X, DissolveLogDelay.Y, DissolveLogScale.X, DissolveLogScale.Y);
+				DissolveLogNext = WorldNow + 1.f;
+				DissolveLogN = 0;
+				DissolveLogDelay = FVector2D(1e9f, -1e9f);
+				DissolveLogScale = FVector2D(1e9f, -1e9f);
+			}
 		}
 		float A = (WorldNow - Fading[i].Start - FMath::Max(Fading[i].Delay, 0.f)) / (Fade * Fading[i].Scale);
 		A = Mesh && Mesh->GetComponentLocation().Z < FadeTn.KillZCm ? 1.f : A; // R19: below the kill net: gone

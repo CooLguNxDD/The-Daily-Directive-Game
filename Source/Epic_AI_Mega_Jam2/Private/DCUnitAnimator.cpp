@@ -105,6 +105,16 @@ void UDCUnitAnimator::Play(EDCUnitClip Next)
 	}
 	Clip = Next;
 	ClipTime = 0.f;
+	// Co-op parity evidence (advisor a-32, -dcenemytrace): every clip start with the machine's role, so host and client
+	// counts of Spawn/Attack/Flinch/Death can be compared per run.
+	static const bool bTrace = FParse::Param(FCommandLine::Get(), TEXT("dcenemytrace"));
+	if (bTrace && GetOwner())
+	{
+		static const TCHAR* Names[] = {TEXT("None"), TEXT("Attack"), TEXT("Flinch"), TEXT("Spawn"), TEXT("Death")}; // EDCUnitClip order
+		const int32 Index = static_cast<int32>(Next);
+		UE_LOG(LogTemp, Display, TEXT("DCANIM clip=%s role=%s unit=%s"), Index >= 0 && Index < UE_ARRAY_COUNT(Names) ? Names[Index] : TEXT("?"),
+			GetOwner()->HasAuthority() ? TEXT("host") : TEXT("client"), *GetOwner()->GetName());
+	}
 }
 
 void UDCUnitAnimator::Advance(float DeltaSeconds, const FVector& Location, float Yaw, float Health, uint8 AttackSeq, bool bAlive)
