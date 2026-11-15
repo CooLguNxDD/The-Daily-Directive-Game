@@ -80,6 +80,9 @@ ADCPlayerController::ADCPlayerController()
 {
 	bShowMouseCursor = false;
 	bEnableClickEvents = true;
+	// The solo ESC menu pauses the world (SetPause); a paused controller skips PlayerTick unless this is set, and the menu
+	// build, cursor and evidence steps live in PlayerTick (pause-1c0a6b6: "DCPAUSE open", then nothing for 35 s).
+	bShouldPerformFullTickWhenPaused = true;
 }
 
 UDCInputSet* ADCPlayerController::GetInputSet()
