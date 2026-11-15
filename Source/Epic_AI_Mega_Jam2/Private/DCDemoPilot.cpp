@@ -422,6 +422,19 @@ void ADCDemoPilot::AddWalkerWatch()
 	}
 	Add(0.2f, [this] { Tap(TEXT("Fire")); return true; });
 	Add(0.4f, [this] { Shot(TEXT("walker_snap")); LogPhoto(); return true; });
+	// Human 16:25: frame the walker's ranged charge (red sight line) and the shot landing.
+	Add(0.f, [this, FindWalker]
+	{
+		ADCEnemy* W = FindWalker();
+		if (W)
+		{
+			AimAt(W->GetActorLocation());
+		}
+		return W && W->IsRangedCharging();
+	}, 40.f);
+	Add(0.3f, [this] { Shot(TEXT("walker_charge")); return true; });
+	Add(1.2f, [this] { Shot(TEXT("walker_shot")); return true; });
+	Add(0.3f, [this] { Shot(TEXT("walker_shot_after")); return true; });
 	// Wait until the walker condemns a tower, then frame the shaking tower and snap its fall.
 	Add(0.f, [this]
 	{

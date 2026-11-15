@@ -66,6 +66,8 @@ public:
 	/** Host, big-machine ranged shot (RangedRangeCm rows): starts a charge on a crew member in sight, fires when it ends.
 	 *  True while charging (the unit holds still). */
 	bool HostTickRanged(const FDCEnemyDef& Def, ADCCharacter* Target, float Now);
+	/** Any machine: the charge sight line is up (evidence frames). */
+	bool IsRangedCharging() const;
 	/** Host: a sound every machine hears at this enemy. */
 	void Cue(FName CueName) { MulticastCue(CueName); }
 	/** Host: Strobe Flash gear stuns the enemy until this server time. */

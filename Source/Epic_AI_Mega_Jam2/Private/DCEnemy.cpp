@@ -1115,6 +1115,11 @@ void ADCEnemy::MulticastRangedFire_Implementation(FVector_NetQuantize From, FVec
 	DCAudio::PlayAt(this, TEXT("Detonation"), To, 0.45f, 1.35f);
 }
 
+bool ADCEnemy::IsRangedCharging() const
+{
+	return GetWorld() && GetWorld()->GetRealTimeSeconds() < ChargeLineEndReal;
+}
+
 void ADCEnemy::TickRangedLine(const FDCEnemyDef& Def)
 {
 	const double Real = GetWorld()->GetRealTimeSeconds();
