@@ -1,4 +1,6 @@
 #include "DCPlayerController.h"
+#include "UObject/UObjectGlobals.h"
+#include "DCUnits.h"
 #include "DCCharacter.h"
 #include "DCEnvironment.h"
 #include "GameFramework/GameUserSettings.h"
@@ -525,9 +527,22 @@ void ADCPlayerController::TickPerf()
 	PerfRenderMsSum += FPlatformTime::ToMilliseconds(GRenderThreadTime);
 	if (FrameMs > 50.f)
 	{
-		// Which thread stalled: game, render, GPU (previous frame's timings, the closest the engine keeps).
-		UE_LOG(LogTemp, Display, TEXT("DCSPIKE frame_ms=%.1f game_ms=%.1f render_ms=%.1f gpu_ms=%.1f"), FrameMs, FPlatformTime::ToMilliseconds(GGameThreadTime),
-			FPlatformTime::ToMilliseconds(GRenderThreadTime), FPlatformTime::ToMilliseconds(RHIGetGPUFrameCycles()));
+		// Which thread stalled: game, render, GPU (previous frame's timings, the closest the engine keeps). Advisor a-25:
+		// every spike classifies itself (run phase, city loading, falling pieces, live units, viewport, seconds since GC).
+		static double LastGc = -1.0;
+		static const bool bGcHooked = [] { FCoreUObjectDelegates::GetPostGarbageCollect().AddLambda([] { LastGc = FPlatformTime::Seconds(); }); return true; }();
+		const ADCGameState* GS = GetWorld() ? GetWorld()->GetGameState<ADCGameState>() : nullptr;
+		const ADCVoxelCity* SpikeCity = ADCVoxelCity::Get(this);
+		const UDCUnits* Units = UDCUnits::Get(this);
+		FVector2D View = FVector2D::ZeroVector;
+		if (GEngine && GEngine->GameViewport)
+		{
+			GEngine->GameViewport->GetViewportSize(View);
+		}
+		UE_LOG(LogTemp, Display, TEXT("DCSPIKE frame_ms=%.1f game_ms=%.1f render_ms=%.1f gpu_ms=%.1f phase=%d loading=%d falling=%d units=%d view=%.0fx%.0f since_gc=%.1f"), FrameMs, FPlatformTime::ToMilliseconds(GGameThreadTime),
+			FPlatformTime::ToMilliseconds(GRenderThreadTime), FPlatformTime::ToMilliseconds(RHIGetGPUFrameCycles()), GS ? static_cast<int32>(GS->Phase) : -1,
+			SpikeCity && (SpikeCity->IsCrafting() || !SpikeCity->IsLoaded()) ? 1 : 0, SpikeCity ? SpikeCity->GetFallingCount() : 0, Units ? Units->All().Num() : 0,
+			View.X, View.Y, bGcHooked && LastGc > 0.0 ? FPlatformTime::Seconds() - LastGc : -1.0);
 	}
 	if (const ADCVoxelCity* City = ADCVoxelCity::Get(this))
 	{

@@ -1908,7 +1908,13 @@ void ADCVoxelCity::TickFalling(float Now)
 			continue;
 		}
 		// R15: the piece dissolves (noise, warm edge) where it lies; without the dissolve material it shrinks as before.
+		const bool bWasDissolving = Fading[i].bDissolving;
 		Fading[i].bDissolving = Fading[i].bDissolving || (A > 0.f && StartDissolve(Mesh));
+		if (!bWasDissolving && Fading[i].bDissolving && DissolveCamStart < 0.f && Fading[i].Body.IsValid())
+		{
+			DissolveCamTarget = Mesh;
+			DissolveCamStart = WorldNow - A * Fade;
+		}
 		if (Fading[i].bDissolving)
 		{
 			SetDissolve(Mesh, A);
@@ -2539,6 +2545,7 @@ void ADCVoxelCity::Tick(float DeltaSeconds)
 	TickFireLights();
 	TickLampLights();
 	TickCollapseCam();
+	TickDissolveCam();
 	// Hitch log (R13): which stage of the city's frame went long.
 	if ((T3 - T0) * 1000.0 + PrepMs + CommitMs + NextOpMs > UDCVoxelSettings::Get().Tuning.HitchLogMs)
 	{
@@ -2756,6 +2763,45 @@ void ADCVoxelCity::TickSignLights()
 		L->SetSourceWidth(P.SizeCm.X * Tn.SignSourceScale);
 		L->SetSourceHeight(P.SizeCm.Y * Tn.SignSourceScale);
 		L->SetVisibility(true);
+	}
+}
+
+void ADCVoxelCity::TickDissolveCam()
+{
+	static FString Dir;
+	static const bool bWanted = FParse::Value(FCommandLine::Get(), TEXT("dcdissolvecam="), Dir);
+	APlayerController* PC = GetWorld()->GetFirstPlayerController();
+	UPrimitiveComponent* Target = DissolveCamTarget.Get();
+	if (!bWanted || !PC || DissolveCamStep < 0 || DissolveCamStart < 0.f)
+	{
+		return;
+	}
+	static const float Stages[] = {0.1f, 0.4f, 0.7f};
+	const float Fade = FMath::Max(UDCVoxelSettings::Get().Tuning.PhysicsFadeSeconds, 0.01f);
+	const float A = (GetWorld()->GetTimeSeconds() - DissolveCamStart) / Fade;
+	if (!Target || DissolveCamStep >= UE_ARRAY_COUNT(Stages) || A > 1.f)
+	{
+		PC->SetViewTargetWithBlend(PC->GetPawn(), 0.f);
+		DissolveCamStep = -1; // once per run
+		return;
+	}
+	if (!ShotCamera)
+	{
+		ShotCamera = GetWorld()->SpawnActor<ACameraActor>(ACameraActor::StaticClass(), FTransform::Identity);
+		ShotCamera->GetCameraComponent()->SetFieldOfView(60.f);
+	}
+	const FVector At = Target->Bounds.Origin;
+	const FVector Eye = At + FVector(-1.f, -0.8f, 0.6f).GetSafeNormal() * FMath::Clamp(Target->Bounds.SphereRadius * 3.f, 250.f, 1500.f);
+	ShotCamera->SetActorLocationAndRotation(Eye, (At - Eye).Rotation());
+	if (PC->GetViewTarget() != ShotCamera)
+	{
+		PC->SetViewTargetWithBlend(ShotCamera, 0.f);
+	}
+	if (A >= Stages[DissolveCamStep])
+	{
+		FScreenshotRequest::RequestScreenshot(Dir / FString::Printf(TEXT("dissolve_%d_a%.1f.png"), DissolveCamStep, A), false, false);
+		UE_LOG(LogTemp, Display, TEXT("DCDISSOLVE frame %d at amount %.2f (piece radius %.0f cm)"), DissolveCamStep, A, Target->Bounds.SphereRadius);
+		++DissolveCamStep;
 	}
 }
 
