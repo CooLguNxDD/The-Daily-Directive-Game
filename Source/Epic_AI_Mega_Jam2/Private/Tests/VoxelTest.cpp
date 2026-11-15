@@ -158,7 +158,8 @@ bool FDCVoxelNoFloatTest::RunTest(const FString&)
 	// uncarved roof prism: a carved roof leaves no rubble sheet hanging).
 	const FDCVoxelOpContext Ctx = UDCVoxelSettings::Get().OpContext(UDCTuning::Get().City.BlockSizeCm);
 	FDCVoxelSector S;
-	Craft(S, VoxelPlan(DCCityRules::SectorSeed(31337, 2), 2));
+	const FDCCityPlan Plan = VoxelPlan(DCCityRules::SectorSeed(31337, 2), 2);
+	Craft(S, Plan);
 	TArray<FIntVector> Craters;
 	for (int32 i = 0; i < S.Towers.Num(); ++i)
 	{
@@ -201,6 +202,31 @@ bool FDCVoxelNoFloatTest::RunTest(const FString&)
 				return DCVoxelOps::TowerTopCells(T, G, P.X, P.Y) == P.Z;
 			});
 			Floating += bOnTower ? 0 : 1;
+			if (!bOnTower && Floating <= 4)
+			{
+				// Where a floater hangs (R23 diagnostics): the nearest tower, its recipe, and whether the cell lies over
+				// its footprint or only its scan box.
+				const FIntVector Cm = G.MinCm(P);
+				int32 Best = INDEX_NONE;
+				float BestD = TNumericLimits<float>::Max();
+				for (int32 t = 0; t < S.Towers.Num(); ++t)
+				{
+					const FIntVector Mid = (S.Towers[t].FootMinCm() + S.Towers[t].FootMaxCm()) / 2;
+					const float D = FVector2D(Cm.X - Mid.X, Cm.Y - Mid.Y).Size();
+					if (D < BestD)
+					{
+						BestD = D;
+						Best = t;
+					}
+				}
+				const FDCVoxelTower& T = S.Towers[Best];
+				const FIntVector L = T.Grid.ToLocal(Cm);
+				const bool bFoot = L.X >= T.Min.X && L.Y >= T.Min.Y && L.X < T.Max.X && L.Y < T.Max.Y;
+				const bool bScan = L.X >= T.ScanMin.X && L.Y >= T.ScanMin.Y && L.X < T.ScanMax.X && L.Y < T.ScanMax.Y;
+				AddInfo(FString::Printf(TEXT("DCFLOAT cell %s (cm %s) tower %d recipe %d fallen %d foot %d scan %d top %d below-solid-z %d"),
+					*P.ToString(), *Cm.ToString(), Best, Plan.Buildings.IsValidIndex(T.Lot) ? Plan.Buildings[T.Lot].Spec.Recipe : -1, T.bFallen ? 1 : 0,
+					bFoot ? 1 : 0, bScan ? 1 : 0, DCVoxelOps::TowerTopCells(T, G, P.X, P.Y), [&G, &P]() { for (int32 z = P.Z - 1; z >= 0; --z) { if (G.Data.IsSolid(FIntVector(P.X, P.Y, z))) { return z; } } return -1; }()));
+			}
 		}
 	});
 	AddInfo(FString::Printf(TEXT("DCVOXEL rubble cells %d, floating %d"), Checked, Floating));
