@@ -1,0 +1,18 @@
+# Outfit camera (R18): a cine camera, boxy body, long steel lens with a matte box, two accent film reels on top,
+# steel handle and a glowing tally light.
+name outfit_cinecam
+grid 5
+size 9 5 8
+slot body Ink
+slot lens Steel
+slot reel SwatchAccent
+slot tally SwatchGlow
+box 0 0 0 6 5 4 body
+beam 6 2.5 2 8 2.5 2 1.2 lens
+box 8 1 0 9 4 4 body
+carve box 8 2 1 9 3 3
+ellipsoid 1.5 2.5 6 1.5 1 1.6 reel
+ellipsoid 4.5 2.5 6 1.5 1 1.6 reel
+box 2 2 4 4 3 5 lens
+box 5 0 3 6 1 4 tally
+pivot 3 2 0

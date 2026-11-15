@@ -34,6 +34,10 @@ Unreal Engine 5.9 jam game. Engine: `L:/unreal/UE_5.9` (registered source build,
 - Objectives (R4): `+Objectives`, `ObjectiveLook`; pure stage table `Rules/DCObjectiveRules`; replicated state and
   visuals `ADCObjective`; host logic `DCObjectiveDirector.cpp`.
 - ID card (R5): `DCIdCard.cpp` (`ADCOutfitPreview::ExportCard`), `Card=` data, PNGs in `Saved/IdCards/`.
+- Builder (R18): `+OutfitParts` (append only: a share code stores each part's index inside its slot, in data order),
+  `+OutfitSwatches`, `+OutfitGlows` (the `SwatchGlow` palette slot), `+OutfitPresets` (by ids); pure rules
+  `Rules/DCOutfit` (versioned codes: `Versions[]` table, DC1 = no glow, DC2 newest; `FromPreset`, `Random`). Test
+  `Outfit.OldCodes` pins old codes by part id. `-dcbuilderflow=<dir>` frames every part, preset, random and glow.
 - Destruction budget: `ADCVoxelCity::BodyLoad`; crumbs `UDCCrumbField` (`Crumb*` in `Tuning=`).
 - Evidence flags: `-dcmain=<Faction>`, `-dcobjective=<Id>`, `-dcobjrun` (pilot runs the objective), `-dcenemytrace`;
   look numbers `tools/evidence/look_metrics.py`.

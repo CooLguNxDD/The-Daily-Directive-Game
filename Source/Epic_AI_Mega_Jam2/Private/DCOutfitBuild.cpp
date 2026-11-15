@@ -17,9 +17,17 @@ namespace
 		return Cache;
 	}
 
-	const FDCVoxelMeshData* PartMesh(FName Model, FName Main, FName Accent)
+	/** The palette materials an outfit paints its swatch slots with (SwatchMain, SwatchAccent, SwatchGlow). */
+	struct FSwatchPick
 	{
-		const FString Key = FString::Printf(TEXT("%s|%s|%s"), *Model.ToString(), *Main.ToString(), *Accent.ToString());
+		FName Main;
+		FName Accent;
+		FName Glow;
+	};
+
+	const FDCVoxelMeshData* PartMesh(FName Model, const FSwatchPick& Pick)
+	{
+		const FString Key = FString::Printf(TEXT("%s|%s|%s|%s"), *Model.ToString(), *Pick.Main.ToString(), *Pick.Accent.ToString(), *Pick.Glow.ToString());
 		if (const FDCVoxelMeshData* Found = MeshCache().Find(Key))
 		{
 			return Found;
@@ -29,7 +37,7 @@ namespace
 		{
 			return nullptr;
 		}
-		// The shipped mesh colours (index 0 = air, then the palette; alpha = glow) with the two swatch slots recoloured.
+		// The shipped mesh colours (index 0 = air, then the palette; alpha = glow) with the swatch slots recoloured.
 		const UDCVoxelSettings& V = UDCVoxelSettings::Get();
 		TArray<FName> Names;
 		for (const FDCVoxelMaterial& M : V.Palette)
@@ -37,7 +45,7 @@ namespace
 			Names.Add(M.Id);
 		}
 		TArray<FColor> Colors = V.MeshColors();
-		for (const TPair<FName, FName>& Swap : {TPair<FName, FName>(TEXT("SwatchMain"), Main), TPair<FName, FName>(TEXT("SwatchAccent"), Accent)})
+		for (const TPair<FName, FName>& Swap : {TPair<FName, FName>(TEXT("SwatchMain"), Pick.Main), TPair<FName, FName>(TEXT("SwatchAccent"), Pick.Accent), TPair<FName, FName>(TEXT("SwatchGlow"), Pick.Glow)})
 		{
 			const int32 Slot = Names.IndexOfByKey(Swap.Key);
 			const int32 Pick = Names.IndexOfByKey(Swap.Value);
@@ -103,12 +111,17 @@ namespace
 
 namespace DCOutfitBuild
 {
-	FDCOutfit FromCode(const FString& Code)
+	bool Decode(const FString& Code, FDCOutfit& Out, FString& Error)
 	{
 		const UDCTuning& T = UDCTuning::Get();
+		return DCOutfit::Decode(Code, T.OutfitSlots, T.OutfitParts, T.OutfitSwatches.Num(), T.OutfitGlows.Num(), Out, Error);
+	}
+
+	FDCOutfit FromCode(const FString& Code)
+	{
 		FDCOutfit Outfit;
 		FString Error;
-		return DCOutfit::Decode(Code, T.OutfitSlots, T.OutfitParts, T.OutfitSwatches.Num(), Outfit, Error) ? Outfit : DCOutfit::Default(T.OutfitSlots);
+		return Decode(Code, Outfit, Error) ? Outfit : DCOutfit::Default(UDCTuning::Get().OutfitSlots);
 	}
 
 	UProceduralMeshComponent* Apply(USkeletalMeshComponent* Mesh, const FDCOutfit& Outfit, TArray<TObjectPtr<UProceduralMeshComponent>>& Out)
@@ -133,15 +146,17 @@ namespace DCOutfitBuild
 				Mesh->UnHideBoneByName(P.HideBone);
 			}
 		}
-		const FName Main = T.OutfitSwatches.IsValidIndex(Outfit.Main) ? T.OutfitSwatches[Outfit.Main].Material : NAME_None;
-		const FName Accent = T.OutfitSwatches.IsValidIndex(Outfit.Accent) ? T.OutfitSwatches[Outfit.Accent].Material : NAME_None;
+		const FSwatchPick Pick{
+			T.OutfitSwatches.IsValidIndex(Outfit.Main) ? T.OutfitSwatches[Outfit.Main].Material : NAME_None,
+			T.OutfitSwatches.IsValidIndex(Outfit.Accent) ? T.OutfitSwatches[Outfit.Accent].Material : NAME_None,
+			T.OutfitGlows.IsValidIndex(Outfit.Glow) ? T.OutfitGlows[Outfit.Glow].Material : NAME_None};
 		UMaterialInterface* Material = Cast<UMaterialInterface>(UDCVoxelSettings::Get().VoxelMaterial.TryLoad());
 		UProceduralMeshComponent* Camera = nullptr;
 		for (int32 s = 0; s < T.OutfitSlots.Num() && s < Outfit.Parts.Num(); ++s)
 		{
 			const TArray<const FDCOutfitPart*> Parts = DCOutfit::PartsOf(T.OutfitSlots[s], T.OutfitParts);
 			const FDCOutfitPart* P = Parts.IsValidIndex(Outfit.Parts[s]) ? Parts[Outfit.Parts[s]] : nullptr;
-			const FDCVoxelMeshData* Data = P && !P->Model.IsNone() ? PartMesh(P->Model, Main, Accent) : nullptr;
+			const FDCVoxelMeshData* Data = P && !P->Model.IsNone() ? PartMesh(P->Model, Pick) : nullptr;
 			if (!Data)
 			{
 				continue;
@@ -166,7 +181,7 @@ namespace DCOutfitBuild
 		int32 Segments = 0;
 		for (const FDCBodySegment& S : T.BodySegments)
 		{
-			const FDCVoxelMeshData* Data = Asset ? PartMesh(S.Model, Main, Accent) : nullptr;
+			const FDCVoxelMeshData* Data = Asset ? PartMesh(S.Model, Pick) : nullptr;
 			const FDCVoxelModel* Model = DCVoxelModels::Parsed(S.Model);
 			const int32 Bone = Asset ? Asset->GetRefSkeleton().FindBoneIndex(S.Bone) : INDEX_NONE;
 			if (!Data || !Model || Bone == INDEX_NONE)

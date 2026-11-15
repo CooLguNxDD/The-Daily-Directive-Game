@@ -907,6 +907,10 @@ public:
 	/** The voxel body under the outfit (empty = the mannequin stays visible). */
 	UPROPERTY(EditAnywhere, Config, Category = "Outfit") TArray<FDCBodySegment> BodySegments;
 	UPROPERTY(EditAnywhere, Config, Category = "Outfit") TArray<FDCOutfitSwatch> OutfitSwatches;
+	/** R18 accent glow: the palette material every SwatchGlow voxel takes (glowing materials only). */
+	UPROPERTY(EditAnywhere, Config, Category = "Outfit") TArray<FDCOutfitSwatch> OutfitGlows;
+	/** R18 whole looks by ids, offered by the builder's PRESET row. */
+	UPROPERTY(EditAnywhere, Config, Category = "Outfit") TArray<FDCOutfitPreset> OutfitPresets;
 	UPROPERTY(EditAnywhere, Config, Category = "Run") TArray<FDCScoopDef> Scoops;
 	/** Full edition front page (R22): satirical headline rows per photo category. */
 	UPROPERTY(EditAnywhere, Config, Category = "Run") TArray<FDCHeadlineRow> HeadlineRows;
