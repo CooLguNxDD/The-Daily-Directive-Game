@@ -1,0 +1,27 @@
+# Garbage truck (R23 vehicle): a steel-grey cab, a dark ribbed compactor body with an open rear hopper, amber side lamps.
+grid 5
+size 140 46 66
+slot cab Steel
+slot body InkBlue
+slot rib Trim
+slot glass WindowOff
+slot hopper Ink
+slot lamp WindowDim
+slot wheel Rubble
+shell 22 2 8 112 44 62 2 body
+paint box 30 2 10 31 44 60 rib
+paint box 50 2 10 51 44 60 rib
+paint box 70 2 10 71 44 60 rib
+paint box 90 2 10 91 44 60 rib
+shell 112 4 8 138 42 44 2 cab
+box 128 6 28 138 40 40 glass
+box 2 4 8 22 42 50 hopper
+carve box 2 8 20 14 38 46
+box 30 1 50 34 2 54 lamp
+box 100 1 50 104 2 54 lamp
+box 30 44 50 34 45 54 lamp
+box 100 44 50 104 45 54 lamp
+ellipsoid 36 3 7 7 3 7 wheel
+ellipsoid 36 43 7 7 3 7 wheel
+ellipsoid 120 3 7 7 3 7 wheel
+ellipsoid 120 43 7 7 3 7 wheel
