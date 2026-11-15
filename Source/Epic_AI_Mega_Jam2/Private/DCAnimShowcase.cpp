@@ -2,6 +2,9 @@
 
 #include "Camera/CameraActor.h"
 #include "Camera/CameraComponent.h"
+#include "Components/PointLightComponent.h"
+#include "Engine/PointLight.h"
+#include "GameFramework/HUD.h"
 #include "DCEnemy.h"
 #include "DCTuning.h"
 #include "DCUnitAnimator.h"
@@ -170,7 +173,7 @@ void UDCAnimShowcase::Start()
 	Center = PC->GetPawn()->GetActorLocation();
 	Center.Z = City->SurfaceZCm(Center);
 	PC->GetPawn()->SetActorHiddenInGame(true);
-	const float Spacing = 260.f;
+	const float Spacing = 240.f;
 	// Lay the line along a clear street axis and put the camera on a clear side (the city has walls everywhere).
 	const float Half = Spacing * Kinds.Num() * 0.5f;
 	const float CamDist = Spacing * Kinds.Num() * 0.8f;
@@ -218,6 +221,19 @@ void UDCAnimShowcase::Start()
 	Camera->GetCameraComponent()->SetFieldOfView(70.f);
 	const FVector Eye = Center + CamDir * CamDist + FVector(0.f, 0.f, 140.f);
 	Camera->SetActorLocationAndRotation(Eye, (Center + FVector(0.f, 0.f, 90.f) - Eye).Rotation());
+	// Evidence only: a fill light beside the camera (ink-dark units on a night street read as bare silhouettes) and
+	// no HUD over the frame.
+	if (APointLight* Fill = World->SpawnActor<APointLight>(APointLight::StaticClass(), FTransform(Eye + FVector(0.f, 0.f, 200.f))))
+	{
+		Fill->PointLightComponent->SetIntensityUnits(ELightUnits::Candelas);
+		Fill->PointLightComponent->SetIntensity(6000.f);
+		Fill->PointLightComponent->SetAttenuationRadius(CamDist * 3.f);
+		Fill->PointLightComponent->SetCastShadows(false);
+	}
+	if (PC->GetHUD())
+	{
+		PC->GetHUD()->bShowHUD = false;
+	}
 	Clock = 0.f;
 }
 
