@@ -1,4 +1,5 @@
 #include "DCPhotoProbe.h"
+#include "DCFrameScopes.h"
 #include "DCUnits.h"
 #include "Rules/DCFactionRules.h"
 
@@ -97,6 +98,7 @@ namespace DCPhotoProbe
 
 	FDCPhotoInputs Measure(UWorld* World, const FDCShotView& View, float ShotTime, const AActor* Photographer, bool bSpotlit, int32& OutBlastId)
 	{
+		DC_FRAME_SCOPE("PhotoProbe");
 		FDCPhotoInputs In;
 		In.bSpotlit = bSpotlit;
 		OutBlastId = 0;

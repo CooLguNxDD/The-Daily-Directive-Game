@@ -1,4 +1,5 @@
 #include "DCDemoPilot.h"
+#include "DCFrameScopes.h"
 #include "Camera/CameraActor.h"
 #include "Camera/PlayerCameraManager.h"
 #include "GameFramework/CharacterMovementComponent.h"
@@ -1607,6 +1608,7 @@ void ADCDemoPilot::BuildScript()
 
 void ADCDemoPilot::Tick(float DeltaSeconds)
 {
+	DC_FRAME_SCOPE("Pilot");
 	Super::Tick(DeltaSeconds);
 	if (bMedic)
 	{

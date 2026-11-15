@@ -1,4 +1,5 @@
 #include "DCReelDirector.h"
+#include "DCFrameScopes.h"
 
 #include "DCVoxelCity.h"
 #include "Voxel/DCVoxelSettings.h"
@@ -430,6 +431,7 @@ void ADCReelDirector::SnapSecondTake()
 
 void ADCReelDirector::Tick(float DeltaSeconds)
 {
+	DC_FRAME_SCOPE("Reel");
 	Super::Tick(DeltaSeconds);
 	const ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>();
 	if (!GS || !GS->ReelClips.IsValidIndex(GS->ReelIndex))

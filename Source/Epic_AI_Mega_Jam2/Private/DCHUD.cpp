@@ -1,4 +1,5 @@
 #include "DCHUD.h"
+#include "DCFrameScopes.h"
 #include "Rules/DCFactionRules.h"
 #include "DCObjective.h"
 #include "DCEnemy.h"
@@ -126,6 +127,7 @@ void ADCHUD::Frame(float X, float Y, float W, float H, float T, const FLinearCol
 
 void ADCHUD::DrawHUD()
 {
+	DC_FRAME_SCOPE("HUD");
 	Super::DrawHUD();
 	if (!Canvas)
 	{

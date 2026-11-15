@@ -1,4 +1,5 @@
 #include "DCVoxelFx.h"
+#include "DCFrameScopes.h"
 #include "DCPresentationClock.h"
 
 #include "Components/InstancedStaticMeshComponent.h"
@@ -152,6 +153,7 @@ void ADCVoxelFx::ClearAll()
 
 void ADCVoxelFx::Tick(float WorldDeltaSeconds)
 {
+	DC_FRAME_SCOPE("Fx");
 	Super::Tick(WorldDeltaSeconds);
 	// Puffs live on this machine's presentation clock (a dying player's Last Frame slows them, R21).
 	const float DeltaSeconds = WorldDeltaSeconds * UDCPresentationClock::Dilation(this);

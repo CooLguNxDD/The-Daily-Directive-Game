@@ -1,4 +1,5 @@
 #include "DCCrumbField.h"
+#include "DCFrameScopes.h"
 
 #include "Components/InstancedStaticMeshComponent.h"
 #include "DCAssets.h"
@@ -158,6 +159,7 @@ void UDCCrumbField::ClearAll()
 
 void UDCCrumbField::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
 {
+	DC_FRAME_SCOPE("Crumbs");
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 	const double T0 = FPlatformTime::Seconds();
 	Clock += DeltaTime;

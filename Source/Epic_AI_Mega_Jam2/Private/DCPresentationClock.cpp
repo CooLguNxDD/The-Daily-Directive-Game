@@ -1,4 +1,5 @@
 #include "DCPresentationClock.h"
+#include "DCFrameScopes.h"
 
 #include "Components/SkeletalMeshComponent.h"
 #include "Engine/World.h"
@@ -146,6 +147,7 @@ void UDCPresentationClock::Begin(float InDilation, float RealSeconds, float Ramp
 
 void UDCPresentationClock::Tick(float DeltaTime)
 {
+	DC_FRAME_SCOPE("PresentClock");
 	UWorld* W = GetWorld();
 	const double Real = W->GetRealTimeSeconds();
 	const float RealDt = LastReal < 0.0 ? 0.f : static_cast<float>(Real - LastReal);

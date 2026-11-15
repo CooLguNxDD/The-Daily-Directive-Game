@@ -3,6 +3,7 @@
 // stage table (DCObjectiveRules::Next). Extraction pays the crew and ends the sector; a sector that times out fails
 // its objective and goes on (the reel always plays). Part of ADCGameMode, kept apart like the faction director.
 #include "DCGameMode.h"
+#include "DCFrameScopes.h"
 
 #include "DCBuilding.h"
 #include "DCCharacter.h"
@@ -106,6 +107,7 @@ void ADCGameMode::StartObjective()
 
 void ADCGameMode::TickObjective(float Now)
 {
+	DC_FRAME_SCOPE("Objective");
 	ADCGameState* GS = GetGameState<ADCGameState>();
 	const FDCObjectiveDef* Def = Objective ? Objective->GetDef() : nullptr;
 	if (!Def || (Objective->Stage != EDCObjectiveStage::Active && Objective->Stage != EDCObjectiveStage::Extract))

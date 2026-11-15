@@ -1,4 +1,5 @@
 #include "DCPlayerController.h"
+#include "DCFrameScopes.h"
 #include "UObject/UObjectGlobals.h"
 #include "DCUnits.h"
 #include "DCCharacter.h"
@@ -522,6 +523,7 @@ void ADCPlayerController::OnSensDown() { SetSensitivity(Sensitivity / 1.15f); DC
 
 void ADCPlayerController::Tick(float DeltaSeconds)
 {
+	DC_FRAME_SCOPE("Controller");
 	Super::Tick(DeltaSeconds);
 	// Runs on every copy: the client uploads, and the host-side copy of a remote player relays down to it.
 	PumpSends();
@@ -538,7 +540,7 @@ void ADCPlayerController::TickPerf()
 	PerfFrameMs.Add(FrameMs);
 	PerfGameMsSum += FPlatformTime::ToMilliseconds(GGameThreadTime);
 	PerfRenderMsSum += FPlatformTime::ToMilliseconds(GRenderThreadTime);
-	if (FrameMs > 50.f)
+	if (FrameMs > UDCTuning::Get().Run.PerfSpikeMs && DCFrameScopes::Enabled())
 	{
 		// Which thread stalled: game, render, GPU (previous frame's timings, the closest the engine keeps). Advisor a-25:
 		// every spike classifies itself (run phase, city loading, falling pieces, live units, viewport, seconds since GC).
@@ -552,10 +554,10 @@ void ADCPlayerController::TickPerf()
 		{
 			GEngine->GameViewport->GetViewportSize(View);
 		}
-		UE_LOG(LogTemp, Display, TEXT("DCSPIKE frame_ms=%.1f game_ms=%.1f render_ms=%.1f gpu_ms=%.1f phase=%d loading=%d falling=%d units=%d view=%.0fx%.0f since_gc=%.1f"), FrameMs, FPlatformTime::ToMilliseconds(GGameThreadTime),
+		UE_LOG(LogTemp, Display, TEXT("DCSPIKE frame_ms=%.1f game_ms=%.1f render_ms=%.1f gpu_ms=%.1f phase=%d loading=%d falling=%d units=%d view=%.0fx%.0f since_gc=%.1f %s"), FrameMs, FPlatformTime::ToMilliseconds(GGameThreadTime),
 			FPlatformTime::ToMilliseconds(GRenderThreadTime), FPlatformTime::ToMilliseconds(RHIGetGPUFrameCycles()), GS ? static_cast<int32>(GS->Phase) : -1,
 			SpikeCity && (SpikeCity->IsCrafting() || !SpikeCity->IsLoaded()) ? 1 : 0, SpikeCity ? SpikeCity->GetFallingCount() : 0, Units ? Units->All().Num() : 0,
-			View.X, View.Y, bGcHooked && LastGc > 0.0 ? FPlatformTime::Seconds() - LastGc : -1.0);
+			View.X, View.Y, bGcHooked && LastGc > 0.0 ? FPlatformTime::Seconds() - LastGc : -1.0, *DCFrameScopes::Describe(3, FPlatformTime::ToMilliseconds(GGameThreadTime)));
 	}
 	if (const ADCVoxelCity* City = ADCVoxelCity::Get(this))
 	{
@@ -1158,6 +1160,7 @@ void ADCPlayerController::ServerVote_Implementation(int32 PhotoId)
 
 void ADCPlayerController::AddLocalPhoto(int32 PhotoId, UTextureRenderTarget2D* Image, const FDCPhotoGrade& Preview, const FDCShotView& View, float ShotTime)
 {
+	DC_FRAME_SCOPE("PhotoPrint");
 	FDCLocalPhoto& Photo = Album.AddDefaulted_GetRef();
 	Photo.PhotoId = PhotoId;
 	Photo.Image = Image;
@@ -1170,9 +1173,13 @@ void ADCPlayerController::AddLocalPhoto(int32 PhotoId, UTextureRenderTarget2D* I
 	{
 		// Float capture (advisor CP21): metered and developed before the print, no 8-bit stretch of a dark frame.
 		TArray<FLinearColor> Linear;
-		bRead = Resource->ReadLinearColorPixels(Linear) && Linear.Num() == Image->SizeX * Image->SizeY;
+		{
+			DC_FRAME_SCOPE("PhotoReadback");
+			bRead = Resource->ReadLinearColorPixels(Linear) && Linear.Num() == Image->SizeX * Image->SizeY;
+		}
 		if (bRead)
 		{
+			DC_FRAME_SCOPE("PhotoDevelop");
 			DCNewsprint::Develop(Linear, Image->SizeX, Image->SizeY, PrintT, Photo.Pixels);
 		}
 	}
@@ -1184,6 +1191,7 @@ void ADCPlayerController::AddLocalPhoto(int32 PhotoId, UTextureRenderTarget2D* I
 	{
 		Photo.Width = Image->SizeX;
 		Photo.Height = Image->SizeY;
+		DC_FRAME_SCOPE("PhotoHalftone");
 		DCNewsprint::Print(Photo.Pixels, Photo.Width, Photo.Height, PrintT, static_cast<uint32>(PhotoId));
 		UTexture2D* Print = UTexture2D::CreateTransient(Photo.Width, Photo.Height, PF_B8G8R8A8);
 		if (Print)

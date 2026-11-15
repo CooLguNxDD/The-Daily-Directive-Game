@@ -1,4 +1,5 @@
 #include "DCSupplyPod.h"
+#include "DCFrameScopes.h"
 
 #include "Components/PointLightComponent.h"
 #include "Components/StaticMeshComponent.h"
@@ -105,6 +106,7 @@ void ADCSupplyPod::BeginPlay()
 
 void ADCSupplyPod::Tick(float DeltaSeconds)
 {
+	DC_FRAME_SCOPE("Supply");
 	Super::Tick(DeltaSeconds);
 	const ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>();
 	const float Now = GS ? GS->Now() : GetWorld()->GetTimeSeconds();

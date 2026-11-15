@@ -1,4 +1,5 @@
 #include "DCMusic.h"
+#include "DCFrameScopes.h"
 #include "DCAudio.h"
 #include "DCEnemy.h"
 #include "DCGameState.h"
@@ -95,6 +96,7 @@ void UDCMusicSubsystem::SetDuck(float InDuck)
 
 bool UDCMusicSubsystem::Tick(float DeltaSeconds)
 {
+	DC_FRAME_SCOPE("Music");
 	UGameInstance* GI = GetGameInstance();
 	UWorld* World = GI ? GI->GetWorld() : nullptr;
 	const ADCGameState* GS = World ? World->GetGameState<ADCGameState>() : nullptr;

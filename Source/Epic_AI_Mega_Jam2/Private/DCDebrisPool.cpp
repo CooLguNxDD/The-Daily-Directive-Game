@@ -1,4 +1,5 @@
 #include "DCDebrisPool.h"
+#include "DCFrameScopes.h"
 
 #include "Components/StaticMeshComponent.h"
 #include "DCAssets.h"
@@ -105,6 +106,7 @@ void ADCDebrisPool::Release(int32 ActiveIndex)
 
 void ADCDebrisPool::Tick(float DeltaSeconds)
 {
+	DC_FRAME_SCOPE("Debris");
 	Super::Tick(DeltaSeconds);
 	const float Now = GetWorld()->GetTimeSeconds();
 	for (int32 i = Active.Num() - 1; i >= 0; --i)

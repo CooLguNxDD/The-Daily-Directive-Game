@@ -1,4 +1,5 @@
 #include "DCObjective.h"
+#include "DCFrameScopes.h"
 
 #include "Components/PointLightComponent.h"
 #include "Components/StaticMeshComponent.h"
@@ -146,6 +147,7 @@ void ADCObjective::BuildVisuals()
 
 void ADCObjective::Tick(float DeltaSeconds)
 {
+	DC_FRAME_SCOPE("ObjectiveActor");
 	Super::Tick(DeltaSeconds);
 	if (!bBuilt)
 	{

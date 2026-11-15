@@ -1,4 +1,5 @@
 #include "DCGameMode.h"
+#include "DCFrameScopes.h"
 #include "Rules/DCStrikePattern.h"
 #include "Voxel/DCVoxelSettings.h"
 
@@ -460,6 +461,7 @@ void ADCGameMode::TickSectorPhase(float Now)
 
 void ADCGameMode::TickWaves(float Now)
 {
+	DC_FRAME_SCOPE("Waves");
 	const ADCGameState* GS = GetGameState<ADCGameState>();
 	const UDCTuning& T = UDCTuning::Get();
 	if (!T.Sectors.IsValidIndex(GS->SectorIndex) || CityPlan.StreetPoints.Num() == 0)
@@ -502,6 +504,7 @@ void ADCGameMode::TickWaves(float Now)
 
 void ADCGameMode::TickPressure(float Now)
 {
+	DC_FRAME_SCOPE("Pressure");
 	const ADCGameState* GS = GetGameState<ADCGameState>();
 	const UDCTuning& T = UDCTuning::Get();
 	if (!T.Sectors.IsValidIndex(GS->SectorIndex) || CityPlan.StreetPoints.Num() == 0)
@@ -1345,6 +1348,7 @@ void ADCGameMode::EnterFrontPage(float Now)
 
 void ADCGameMode::Tick(float DeltaSeconds)
 {
+	DC_FRAME_SCOPE("GameMode");
 	Super::Tick(DeltaSeconds);
 	ADCGameState* GS = GetGameState<ADCGameState>();
 	if (!GS)

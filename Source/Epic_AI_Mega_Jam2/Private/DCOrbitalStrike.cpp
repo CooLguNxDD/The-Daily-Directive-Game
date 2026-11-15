@@ -1,4 +1,5 @@
 #include "DCOrbitalStrike.h"
+#include "DCFrameScopes.h"
 
 #include "Camera/PlayerCameraManager.h"
 #include "Engine/Engine.h"
@@ -169,6 +170,7 @@ void ADCOrbitalStrike::BeginPlay()
 
 void ADCOrbitalStrike::Tick(float DeltaSeconds)
 {
+	DC_FRAME_SCOPE("Strikes");
 	Super::Tick(DeltaSeconds);
 	const ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>();
 	const FDCStratagemDef* Def = GetDef();

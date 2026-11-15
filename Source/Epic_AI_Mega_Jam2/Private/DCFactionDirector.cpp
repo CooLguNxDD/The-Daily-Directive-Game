@@ -3,6 +3,7 @@
 // call their own strikes on towers (advisor a-2: through CallStrike, rate-limited, so faction destruction is graded,
 // replicated and deterministic like the crew's). Part of ADCGameMode, kept apart to keep the run director readable.
 #include "DCGameMode.h"
+#include "DCFrameScopes.h"
 
 #include "DCBuilding.h"
 #include "DCCharacter.h"
@@ -129,6 +130,7 @@ int32 ADCGameMode::SpawnSquad(FName Faction, int32 Count, const FVector& Centre,
 
 void ADCGameMode::TickSpawns()
 {
+	DC_FRAME_SCOPE("Spawns");
 	const int32 N = FMath::Min(PendingSpawns.Num(), FMath::Max(1, UDCTuning::Get().FactionMix.SpawnsPerFrame));
 	for (int32 i = 0; i < N; ++i)
 	{
@@ -147,6 +149,7 @@ void ADCGameMode::TickSpawns()
 
 void ADCGameMode::TickFactions(float Now)
 {
+	DC_FRAME_SCOPE("Factions");
 	ADCGameState* GS = GetGameState<ADCGameState>();
 	const UDCTuning& T = UDCTuning::Get();
 	if (!FactionMode() || CityPlan.StreetPoints.Num() == 0 || !T.Sectors.IsValidIndex(GS->SectorIndex))

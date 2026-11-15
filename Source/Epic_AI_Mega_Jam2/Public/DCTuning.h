@@ -771,6 +771,8 @@ struct FDCRunTuning
 {
 	GENERATED_BODY()
 	UPROPERTY(EditAnywhere, Config, Category = "Run") float DraftSeconds = 25.f;
+	/** R1 frame time (advisor a-33): -dcperf logs a DCSPIKE line with its frame-scope owners for any frame longer than this (ms; 33 = a frame under 30 fps). */
+	UPROPERTY(EditAnywhere, Config, Category = "Run") float PerfSpikeMs = 33.f;
 	/** Solo (R12): how long a downed player has to finish the self-revive hold before the run fails. */
 	UPROPERTY(EditAnywhere, Config, Category = "Run") float SelfReviveWindowSeconds = 12.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Run") int32 ReelClipsPerPlayer = 2;

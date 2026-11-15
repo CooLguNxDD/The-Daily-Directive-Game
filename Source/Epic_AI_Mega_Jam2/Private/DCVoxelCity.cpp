@@ -1,4 +1,5 @@
 #include "DCVoxelCity.h"
+#include "DCFrameScopes.h"
 #include "Components/StaticMeshComponent.h"
 
 #include "Async/ParallelFor.h"
@@ -2548,6 +2549,7 @@ void ADCVoxelCity::FollowGameState()
 
 void ADCVoxelCity::Tick(float DeltaSeconds)
 {
+	DC_FRAME_SCOPE("City");
 	Super::Tick(DeltaSeconds);
 	if (PendingCraft.IsValid() && PendingCraft->Task.IsCompleted())
 	{

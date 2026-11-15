@@ -1,4 +1,5 @@
 #include "DCEnvironment.h"
+#include "DCFrameScopes.h"
 #include "DCSave.h"
 
 #include "DCVoxelCity.h"
@@ -497,6 +498,7 @@ void ADCEnvironment::UpdateClouds(float DeltaSeconds)
 
 void ADCEnvironment::Tick(float DeltaSeconds)
 {
+	DC_FRAME_SCOPE("Environment");
 	Super::Tick(DeltaSeconds);
 	if (const ADCGameState* BGS = GetWorld()->GetGameState<ADCGameState>())
 	{

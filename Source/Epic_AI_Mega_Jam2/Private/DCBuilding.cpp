@@ -1,4 +1,5 @@
 #include "DCBuilding.h"
+#include "DCFrameScopes.h"
 
 #include "Components/InstancedStaticMeshComponent.h"
 #include "DCAssets.h"
@@ -80,6 +81,7 @@ void ADCBuilding::BeginPlay()
 
 void ADCBuilding::Tick(float DeltaSeconds)
 {
+	DC_FRAME_SCOPE("Buildings");
 	Super::Tick(DeltaSeconds);
 	const ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>();
 	if (!GS || bCollapsed || !GetIsReplicated())

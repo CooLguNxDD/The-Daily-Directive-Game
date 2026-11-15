@@ -1,4 +1,5 @@
 #include "DCEnemy.h"
+#include "DCFrameScopes.h"
 #include "DCUnits.h"
 #include "DCVoxelFx.h"
 #include "Engine/DamageEvents.h"
@@ -842,6 +843,7 @@ void ADCEnemy::EndPlay(const EEndPlayReason::Type Reason)
 
 bool ADCEnemy::BuildModel(const FDCEnemyDef& Def)
 {
+	DC_FRAME_SCOPE("EnemyBuild");
 	const FDCVoxelMeshData* Mesh = DCVoxelModels::Mesh(Def.Model);
 	if (!Mesh)
 	{
@@ -1046,6 +1048,7 @@ void ADCEnemy::TryAttack(ADCCharacter* Target, float Now)
 
 void ADCEnemy::Tick(float DeltaSeconds)
 {
+	DC_FRAME_SCOPE("Enemies");
 	Super::Tick(DeltaSeconds);
 	const FDCEnemyDef* Def = GetDef();
 	if (!Def)

@@ -1,4 +1,5 @@
 #include "DCCharacter.h"
+#include "DCFrameScopes.h"
 #include "DCAnimInstance.h"
 
 #include "Components/PointLightComponent.h"
@@ -999,6 +1000,7 @@ void ADCCharacter::PrimaryCamera()
 
 void ADCCharacter::TakePhoto()
 {
+	DC_FRAME_SCOPE("TakePhoto");
 	ADCPlayerState* PS = GetPlayerState<ADCPlayerState>();
 	ADCPlayerController* PC = Cast<ADCPlayerController>(GetController());
 	if (!PS || !PC || Now() < NextShutterTime)
@@ -1353,6 +1355,7 @@ void ADCCharacter::ApplyStrobe(const FDCShotView& View)
 
 void ADCCharacter::RecordPose()
 {
+	DC_FRAME_SCOPE("RecordPose");
 	const float T = Now();
 	if (T < NextPoseTime)
 	{
@@ -1661,6 +1664,7 @@ void ADCCharacter::UpdateFallNet()
 
 void ADCCharacter::Tick(float DeltaSeconds)
 {
+	DC_FRAME_SCOPE("Characters");
 	Super::Tick(DeltaSeconds);
 	TickOutfit(); // every machine builds every pawn's replicated outfit (remote pawns too, CP7)
 	UpdateHeldItems(DeltaSeconds);

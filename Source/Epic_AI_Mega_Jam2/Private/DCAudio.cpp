@@ -1,4 +1,5 @@
 #include "DCAudio.h"
+#include "DCFrameScopes.h"
 #include "DCSave.h"
 #include "DCTuning.h"
 #include "Rules/DCCueMix.h"
@@ -302,6 +303,7 @@ void UDCAudioSubsystem::Deinitialize()
 
 bool UDCAudioSubsystem::FlushQueue(float DeltaSeconds)
 {
+	DC_FRAME_SCOPE("SoundQueue");
 	if (Queue.Num() == 0)
 	{
 		return true;
