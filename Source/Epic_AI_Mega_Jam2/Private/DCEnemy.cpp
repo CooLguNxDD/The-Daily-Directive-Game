@@ -853,7 +853,9 @@ bool ADCEnemy::BuildModel(const FDCEnemyDef& Def)
 	Model->RegisterComponent();
 	Model->SetRelativeLocation(Def.ModelOffset);
 	Model->SetRelativeScale3D(FVector(Def.ModelScale));
-	Anim = UDCUnitAnimator::Attach(*this, *Model, Def); // R20: a unit with a gait gets its segmented mesh there
+	const AGameStateBase* SpawnGS = GetWorld() ? GetWorld()->GetGameState() : nullptr;
+	const float SpawnAge = SpawnGS && SpawnServerTime >= 0.f ? static_cast<float>(SpawnGS->GetServerWorldTimeSeconds()) - SpawnServerTime : 0.f;
+	Anim = UDCUnitAnimator::Attach(*this, *Model, Def, SpawnAge); // R20: a unit with a gait gets its segmented mesh there
 	if (!Anim)
 	{
 		Model->CreateMeshSection(0, Mesh->Positions, Mesh->Indices, Mesh->Normals, Mesh->UVs, Mesh->Colors, {}, false);

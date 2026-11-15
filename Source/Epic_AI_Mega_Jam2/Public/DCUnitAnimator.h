@@ -24,7 +24,8 @@ public:
 
 	/** A unit with a +UnitGaits row gets an animator; the mesh section goes on Mesh (segmented when the model has parts
 	 *  and the unit material loads, else the plain voxel mesh that still bobs, leans, falls and spawns). */
-	static UDCUnitAnimator* Attach(AActor& Unit, UProceduralMeshComponent& MeshComp, const FDCEnemyDef& Def);
+	/** SpawnAgeSeconds: how long ago the unit spawned on the server (a-32: no spawn clip once older than the clip). */
+	static UDCUnitAnimator* Attach(AActor& Unit, UProceduralMeshComponent& MeshComp, const FDCEnemyDef& Def, float SpawnAgeSeconds = 0.f);
 
 	/** Every frame: motion from the unit's own location (host or replicated), flinch from a health drop, attack from the
 	 *  replicated attack counter, death from !bAlive. */

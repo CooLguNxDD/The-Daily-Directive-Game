@@ -1,5 +1,4 @@
 #include "DCUnitAnimator.h"
-#include "GameFramework/GameStateBase.h"
 
 #include "Camera/PlayerCameraManager.h"
 #include "DCTuning.h"
@@ -21,7 +20,7 @@ UDCUnitAnimator::UDCUnitAnimator()
 	PrimaryComponentTick.bCanEverTick = false;
 }
 
-UDCUnitAnimator* UDCUnitAnimator::Attach(AActor& Unit, UProceduralMeshComponent& MeshComp, const FDCEnemyDef& Def)
+UDCUnitAnimator* UDCUnitAnimator::Attach(AActor& Unit, UProceduralMeshComponent& MeshComp, const FDCEnemyDef& Def, float SpawnAgeSeconds)
 {
 	const UDCTuning& T = UDCTuning::Get();
 	if (!DCUnitAnim::FindGait(T.UnitGaits, Def.Gait))
@@ -63,9 +62,7 @@ UDCUnitAnimator* UDCUnitAnimator::Attach(AActor& Unit, UProceduralMeshComponent&
 	// Advisor a-32: a unit that becomes relevant on a client mid-walk must not replay its drop-in: the spawn clip plays
 	// only while the unit is younger than the clip (server spawn time, replicated once).
 	const FDCUnitClip* SpawnRow = Anim->ClipRow(EDCUnitClip::Spawn);
-	const AGameStateBase* GS = Unit.GetWorld() ? Unit.GetWorld()->GetGameState() : nullptr;
-	const float Age = GS && Unit.GetSpawnServerTime() >= 0.f ? static_cast<float>(GS->GetServerWorldTimeSeconds()) - Unit.GetSpawnServerTime() : 0.f;
-	const bool bFresh = !SpawnRow || Age < SpawnRow->Seconds;
+	const bool bFresh = !SpawnRow || SpawnAgeSeconds < SpawnRow->Seconds;
 	if (bFresh)
 	{
 		Anim->Play(EDCUnitClip::Spawn);
