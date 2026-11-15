@@ -160,6 +160,9 @@ struct FDCVoxelTuning
 	 *  plane reaches OuterGroundHalfCm in the street colour so no void shows. Anything below KillZCm is returned
 	 *  (players to their last safe spot) or released (physics pieces). */
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 BoundsMarginCm = 800;
+	/** Spawn, redeploy and past-the-ring returns land at least this far inside the ring (a sector whose plan is smaller
+	 *  than the spawn street's offset would otherwise start the player outside it). */
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float SpawnRingInsetCm = 500.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float BoundsWallHeightCm = 6000.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 BarrierHeightCm = 100;
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") FName BarrierMaterial = TEXT("Kerb");

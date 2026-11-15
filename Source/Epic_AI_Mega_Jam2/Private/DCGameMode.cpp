@@ -210,7 +210,14 @@ void ADCGameMode::PostLogin(APlayerController* NewPlayer)
 FTransform ADCGameMode::SpawnTransformFor(int32 PlayerIndex) const
 {
 	// Spawn on the outer street, facing the city centre.
-	const FVector Edge(-CityPlan.HalfExtent - 600.f, (PlayerIndex - 1.5f) * 250.f, 120.f);
+	FVector Edge(-CityPlan.HalfExtent - 600.f, (PlayerIndex - 1.5f) * 250.f, 120.f);
+	// R19: never outside this sector's ring (the fall net would pull the player back to a stale safe spot).
+	const ADCGameState* GS = GetGameState<ADCGameState>();
+	const ADCVoxelCity* City = GS ? GS->GetVoxelCity() : nullptr;
+	if (City && City->GetBuiltSector() == GS->CitySector)
+	{
+		Edge = City->ClampInsideBounds(Edge, UDCVoxelSettings::Get().Tuning.SpawnRingInsetCm);
+	}
 	return FTransform(FRotator(0, 0, 0), Edge);
 }
 
@@ -953,6 +960,10 @@ bool ADCGameMode::HostRedeploy(ADCCharacter* Downed)
 		++Index;
 	}
 	Spot = bBeside ? Spot : SpawnTransformFor(MyIndex).GetLocation();
+	if (const ADCVoxelCity* City = GS->GetVoxelCity())
+	{
+		Spot = City->ClampInsideBounds(Spot, UDCVoxelSettings::Get().Tuning.SpawnRingInsetCm);
+	}
 	--GS->CrewLives;
 	PendingRedeploy.Add(Downed);
 	ADCSupplyPod::DropLoad(GetWorld(), Spot, 0, 0, 0.f, 0.f, 0.f); // the drop pod (an empty crate: nothing to pick up)
