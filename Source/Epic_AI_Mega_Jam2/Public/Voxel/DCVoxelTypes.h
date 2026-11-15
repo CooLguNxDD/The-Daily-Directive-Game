@@ -467,6 +467,13 @@ struct FDCDistrictRule
 	UPROPERTY(EditAnywhere, Config, Category = "District") FName Weather;
 	/** Never fewer towers than this (a quota needs things to knock down). */
 	UPROPERTY(EditAnywhere, Config, Category = "District") int32 MinTowers = 8;
+	/** R23 district variants: the sector this row is rolled for (-1 = picked by row index, one row per sector) and its
+	 *  weight among the rows of that sector (seeded per sector: every machine builds the same district). */
+	UPROPERTY(EditAnywhere, Config, Category = "District") int32 Sector = -1;
+	UPROPERTY(EditAnywhere, Config, Category = "District") float Weight = 1.f;
+	/** R23: lot kinds that hold no building and are paved like a plaza (markets, yards, courts, parking), dressed by Lot
+	 *  prop layers that name them. */
+	UPROPERTY(EditAnywhere, Config, Category = "District") TArray<FName> OpenKinds;
 };
 
 /** A puff kind for the decay effects (R4): a chunky voxel cube that moves, spins, grows or shrinks and dies. */

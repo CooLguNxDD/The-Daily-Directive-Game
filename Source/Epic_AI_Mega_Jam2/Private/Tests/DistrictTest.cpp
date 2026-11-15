@@ -14,11 +14,25 @@ namespace
 {
 	constexpr EAutomationTestFlags DistrictFlags = EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter;
 
-	FDCCityPlan Plan(int32 RunSeed, int32 Sector)
+	/** Plans one district row for a sector (R23: a sector may roll any of its rows, so the tests cover them all). */
+	FDCCityPlan Plan(int32 RunSeed, int32 Sector, const FDCDistrictRule& D)
 	{
 		const UDCVoxelSettings& V = UDCVoxelSettings::Get();
-		const FDCDistrictRule& D = *V.District(Sector);
 		return DCVoxelCraft::PlanDistrict(DCCityRules::SectorSeed(RunSeed, Sector), D, V.RuleSet(D.Rules), V.RuleSet(D.Props), V.SectorLayout(Sector), V.Recipes, UDCTuning::Get().City.BlockSizeCm, V.PropLayers);
+	}
+
+	/** Every (sector, district row) pair the game can roll. */
+	TArray<TPair<int32, const FDCDistrictRule*>> AllDistricts()
+	{
+		TArray<TPair<int32, const FDCDistrictRule*>> Out;
+		for (int32 Sector = 0; Sector < 3; ++Sector)
+		{
+			for (const FDCDistrictRule* D : UDCVoxelSettings::Get().DistrictsFor(Sector))
+			{
+				Out.Add({Sector, D});
+			}
+		}
+		return Out;
 	}
 }
 
@@ -125,11 +139,12 @@ bool FDCDistrictBuilderTest::RunTest(const FString&)
 {
 	const UDCVoxelSettings& V = UDCVoxelSettings::Get();
 	TestTrue(TEXT("a district per sector"), V.Districts.Num() >= 3);
-	for (int32 Sector = 0; Sector < 3; ++Sector)
+	for (const TPair<int32, const FDCDistrictRule*>& SD : AllDistricts())
 	{
-		const FDCDistrictRule& D = *V.District(Sector);
-		const FDCCityPlan P = Plan(4242, Sector);
-		TestTrue(FString::Printf(TEXT("sector %d: same seed, same plan"), Sector), P.LotKinds == Plan(4242, Sector).LotKinds && P.Props.Num() == Plan(4242, Sector).Props.Num());
+		const int32 Sector = SD.Key;
+		const FDCDistrictRule& D = *SD.Value;
+		const FDCCityPlan P = Plan(4242, Sector, D);
+		TestTrue(FString::Printf(TEXT("sector %d: same seed, same plan"), Sector), P.LotKinds == Plan(4242, Sector, D).LotKinds && P.Props.Num() == Plan(4242, Sector, D).Props.Num());
 		// The landmark recipe is the lot rules' LandmarkRecipe roll (R23) or the district row's.
 		const FDCPcgRuleSet* LotRules = V.RuleSet(D.Rules);
 		const FDCPcgRule* LandmarkPick = LotRules ? LotRules->Find(TEXT("LandmarkRecipe")) : nullptr;
@@ -154,10 +169,42 @@ bool FDCDistrictBuilderTest::RunTest(const FString&)
 				TestEqual(FString::Printf(TEXT("sector %d lot %d on the sight line"), Sector, c), P.LotKinds[c], D.SightLineKind);
 			}
 		}
-		AddInfo(FString::Printf(TEXT("DCDISTRICT %s: %d buildings, %d plazas, %d rubble zones, %d props"), *D.Id.ToString(), P.Buildings.Num(), P.Plazas.Num(), P.RubbleZones.Num(), P.Props.Num()));
+		// R23 size evidence: what a bigger district costs to craft (solid voxels and worker time, all towers + props).
+		FDCVoxelCraftContext SizeCtx = V.CraftContext(UDCTuning::Get().City.BlockSizeCm);
+		for (const FName& Model : DCVoxelCraft::PlanModels(P))
+		{
+			SizeCtx.Models.Add(Model, DCVoxelModels::Parsed(Model));
+		}
+		const double C0 = FPlatformTime::Seconds();
+		TArray<FDCVoxelTower> Towers;
+		DCVoxelCraft::CraftCity(P, SizeCtx, Towers);
+		FDCVoxelGrid PropGrid;
+		DCVoxelCraft::CraftProps(PropGrid, P, SizeCtx);
+		const double CraftMs = (FPlatformTime::Seconds() - C0) * 1000.0;
+		int64 TowerSolid = 0, TowerChunks = 0;
+		for (const FDCVoxelTower& Tw : Towers)
+		{
+			TowerSolid += Tw.Grid.Data.CountSolid();
+			TowerChunks += Tw.Grid.Data.NumChunks();
+		}
+		AddInfo(FString::Printf(TEXT("DCDISTRICT %s (sector %d, %dx%d): %d buildings, %d plazas, %d rubble zones, %d props; towers %lld solid in %lld chunks, props %lld solid; craft %.0f ms"),
+			*D.Id.ToString(), Sector, P.GridX, P.GridY, P.Buildings.Num(), P.Plazas.Num(), P.RubbleZones.Num(), P.Props.Num(), TowerSolid, TowerChunks, PropGrid.Data.CountSolid(), CraftMs));
+	}
+	// R23 district variants: the roll is seeded (same seed, same row) and every row of a sector comes up across seeds.
+	for (int32 Sector = 0; Sector < 3; ++Sector)
+	{
+		const TArray<const FDCDistrictRule*> Rows = V.DistrictsFor(Sector);
+		TSet<FName> Seen;
+		for (int32 RunSeed = 1; RunSeed <= 64; ++RunSeed)
+		{
+			const int32 Seed = DCCityRules::SectorSeed(RunSeed, Sector);
+			TestTrue(TEXT("district roll is seeded"), V.District(Sector, Seed) == V.District(Sector, Seed));
+			Seen.Add(V.District(Sector, Seed)->Id);
+		}
+		TestEqual(FString::Printf(TEXT("sector %d: every district row is rolled in 64 runs"), Sector), Seen.Num(), Rows.Num());
 	}
 	// Props stamp into the 5 cm prop grid.
-	const FDCCityPlan P = Plan(4242, 0);
+	const FDCCityPlan P = Plan(4242, 0, *V.DistrictsFor(0)[0]);
 	FDCVoxelCraftContext Ctx = V.CraftContext(UDCTuning::Get().City.BlockSizeCm);
 	for (const FName& Model : DCVoxelCraft::PlanModels(P))
 	{
@@ -225,13 +272,14 @@ bool FDCCityPropsTest::RunTest(const FString&)
 	const UDCVoxelSettings& V = UDCVoxelSettings::Get();
 	TestTrue(TEXT("prop layers declared"), V.PropLayers.Num() >= 8);
 	TSet<FName> Models;
-	for (int32 Sector = 0; Sector < 3; ++Sector)
+	for (const TPair<int32, const FDCDistrictRule*>& SD : AllDistricts())
 	{
-		const FDCDistrictRule& D = *V.District(Sector);
+		const int32 Sector = SD.Key;
+		const FDCDistrictRule& D = *SD.Value;
 		const FDCPcgRuleSet* Rules = V.RuleSet(D.Props);
-		const FDCCityPlan P = Plan(4242, Sector);
-		TestEqual(FString::Printf(TEXT("sector %d: same seed, same props"), Sector), PlanFingerprint(P), PlanFingerprint(Plan(4242, Sector)));
-		TestNotEqual(FString::Printf(TEXT("sector %d: another seed, other props"), Sector), PlanFingerprint(P), PlanFingerprint(Plan(4243, Sector)));
+		const FDCCityPlan P = Plan(4242, Sector, D);
+		TestEqual(FString::Printf(TEXT("sector %d: same seed, same props"), Sector), PlanFingerprint(P), PlanFingerprint(Plan(4242, Sector, D)));
+		TestNotEqual(FString::Printf(TEXT("sector %d: another seed, other props"), Sector), PlanFingerprint(P), PlanFingerprint(Plan(4243, Sector, D)));
 		const TMap<FName, int32> Counts = LayerCounts(P, V.PropLayers);
 		FString Line;
 		for (const FDCPropLayer& L : V.PropLayers)
@@ -256,7 +304,7 @@ bool FDCCityPropsTest::RunTest(const FString&)
 	TestTrue(TEXT("at least 24 distinct prop models across the districts"), Models.Num() >= 24);
 
 	// Crafted twice from the same plan: the same voxels (host and client build the same hash).
-	const FDCCityPlan P = Plan(4242, 0);
+	const FDCCityPlan P = Plan(4242, 0, *V.DistrictsFor(0)[0]);
 	FDCVoxelCraftContext Ctx = V.CraftContext(UDCTuning::Get().City.BlockSizeCm);
 	for (const FName& M : DCVoxelCraft::PlanModels(P))
 	{

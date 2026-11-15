@@ -370,12 +370,19 @@ namespace DCVoxelCraft
 			Lot.Spec.BlockSize = BayCm;
 			RollSpec(Lot, Recipe, Recipes[Recipe], Fit, Floors, Seed, Cell);
 		};
-		const TMap<FName, FLotFn> Kinds = {
-			{TEXT("Tower"), [&](int32 Cell) { AddBuilding(Cell, WeightedRecipe(Layout, Recipes, Seed ^ SaltRecipe, Cell), nullptr); }},
+		// R23: the lot rules may give the district its own tower mix (slot TowerRecipe); the sector layout otherwise.
+		const FDCPcgRule* TowerRecipe = LotRules ? LotRules->Find(TEXT("TowerRecipe")) : nullptr;
+		auto TowerPick = [&](int32 Cell)
+		{
+			const int32 R = TowerRecipe ? RecipeIndex(Recipes, DCPcg::Pick(*TowerRecipe, Seed ^ SaltRecipe, Cell)) : INDEX_NONE;
+			return R == INDEX_NONE ? WeightedRecipe(Layout, Recipes, Seed ^ SaltRecipe, Cell) : R;
+		};
+		TMap<FName, FLotFn> Kinds = {
+			{TEXT("Tower"), [&](int32 Cell) { AddBuilding(Cell, TowerPick(Cell), nullptr); }},
 			{TEXT("Low"), [&](int32 Cell)
 				{
 					const int32 R = LowRecipe ? RecipeIndex(Recipes, DCPcg::Pick(*LowRecipe, Seed, Cell)) : INDEX_NONE;
-					AddBuilding(Cell, R == INDEX_NONE ? WeightedRecipe(Layout, Recipes, Seed ^ SaltRecipe, Cell) : R, LowFloors);
+					AddBuilding(Cell, R == INDEX_NONE ? TowerPick(Cell) : R, LowFloors);
 				}},
 			{TEXT("Landmark"), [&](int32 Cell)
 				{
@@ -385,6 +392,11 @@ namespace DCVoxelCraft
 			{TEXT("Plaza"), [&](int32 Cell) { Plan.Plazas.Add(Centre(Cell)); }},
 			{TEXT("Rubble"), [&](int32 Cell) { Plan.RubbleZones.Add(Centre(Cell)); }},
 		};
+		// R23 open lots (markets, yards, courts, parking): paved like a plaza, dressed by the Lot layers that name them.
+		for (const FName& Open : D.OpenKinds)
+		{
+			Kinds.FindOrAdd(Open, FLotFn([&](int32 Cell) { Plan.Plazas.Add(Centre(Cell)); }));
+		}
 		for (int32 c = 0; c < Gx * Gy; ++c)
 		{
 			if (const FLotFn* Fn = Kinds.Find(Plan.LotKinds[c]))

@@ -45,7 +45,11 @@ public:
 
 	bool IsVoxelCity() const { return Mode == TEXT("Voxel") && Recipes.Num() > 0 && Palette.Num() > 0; }
 	const FDCVoxelSectorLayout& SectorLayout(int32 Sector) const;
-	const FDCDistrictRule* District(int32 Sector) const { return Districts.Num() == 0 ? nullptr : &Districts[FMath::Clamp(Sector, 0, Districts.Num() - 1)]; }
+	/** The sector's district (R23): a weighted roll from SectorSeed among the rows tagged with that Sector; rows without
+	 *  a tag are picked by index (the first run's one row per sector). */
+	const FDCDistrictRule* District(int32 Sector, int32 SectorSeed) const;
+	/** Every district row that can be rolled for the sector (tests, previews). */
+	TArray<const FDCDistrictRule*> DistrictsFor(int32 Sector) const;
 	const FDCPcgRuleSet* RuleSet(FName Id) const { return RuleSets.FindByPredicate([Id](const FDCPcgRuleSet& R) { return R.Id == Id; }); }
 	/** Mesher colours: index = material id (0 = air). */
 	TArray<FColor> MeshColors() const;
