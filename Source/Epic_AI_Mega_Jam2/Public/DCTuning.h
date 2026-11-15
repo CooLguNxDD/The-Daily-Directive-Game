@@ -37,6 +37,13 @@ struct FDCAimTuning
 	UPROPERTY(EditAnywhere, Config, Category = "Aim") float CrosshairGap = 3.f;
 	/** Aim pose: upper-body pitch follows the aim, split over the spine bones, clamped. */
 	UPROPERTY(EditAnywhere, Config, Category = "Aim") float MaxPitchDegrees = 60.f;
+	/** Spine chain the pitch is split over (parent first) and each bone's share; the axis is in component space
+	 *  (mannequin faces +Y, so pitch turns about X; flip the sign here if the frame shows it bending the wrong way). */
+	UPROPERTY(EditAnywhere, Config, Category = "Aim") TArray<FName> PitchBones = {TEXT("spine_01"), TEXT("spine_02"), TEXT("spine_03"), TEXT("spine_04"), TEXT("spine_05")};
+	UPROPERTY(EditAnywhere, Config, Category = "Aim") TArray<float> PitchShares = {0.15f, 0.2f, 0.2f, 0.2f, 0.25f};
+	UPROPERTY(EditAnywhere, Config, Category = "Aim") FVector PitchAxis = FVector(1.f, 0.f, 0.f);
+	UPROPERTY(EditAnywhere, Config, Category = "Aim") float PoseBlendSpeed = 10.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Aim") float PitchFollowSpeed = 18.f;
 };
 
 USTRUCT(BlueprintType)

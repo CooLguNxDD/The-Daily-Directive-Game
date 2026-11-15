@@ -1,4 +1,5 @@
 #include "DCCharacter.h"
+#include "DCAnimInstance.h"
 
 #include "Components/PointLightComponent.h"
 #include "DCOutfitBuild.h"
@@ -170,6 +171,8 @@ void ADCCharacter::BeginPlay()
 		{
 			GetMesh()->SetAnimInstanceClass(Anim);
 		}
+		// R16: the aim pose lives in UDCAnimInstance's proxy; a plain AnimBP shows no aim pitch (logged once per pawn).
+		UE_LOG(LogTemp, Display, TEXT("DCAIM pose %s: anim class %s"), Cast<UDCAnimInstance>(GetMesh()->GetAnimInstance()) ? TEXT("on") : TEXT("OFF"), *T.Assets.PlayerAnimClass.ToString());
 	}
 	// R10: the rifle locomotion clips load once here, never in Tick.
 	for (const FSoftObjectPath& P : T.Assets.RifleJogClips)
@@ -1618,8 +1621,8 @@ void ADCCharacter::UpdateView(float DeltaSeconds)
 	const bool bSprintKick = bSprinting && !bCameraRaised && !bRifleAim && GetVelocity().Size2D() > M.WalkSpeed;
 	const float HipFOV = M.ThirdPersonFOV + (bSprintKick ? M.SprintFOVKick : 0.f);
 	ThirdCam->SetFieldOfView(FMath::FInterpTo(ThirdCam->FieldOfView, bRifleAim ? AimT.AimFOV : HipFOV, DeltaSeconds, bRifleAim ? ZoomSpeed : FMath::Max(6.f, ZoomSpeed)));
-	// The owner sends its aim pitch for the others' aim pose (at most ~15 Hz while aiming, only when it moved).
-	if (bRifleAim && IsLocallyControlled())
+	// The owner sends its aim pitch for the others' aim pose (at most ~15 Hz while the rifle is out, only when it moved).
+	if (Slot == EDCSlot::Rifle && !bDowned && IsLocallyControlled())
 	{
 		const float Pitch = FRotator::NormalizeAxis(GetControlRotation().Pitch);
 		AimPitch = Pitch;

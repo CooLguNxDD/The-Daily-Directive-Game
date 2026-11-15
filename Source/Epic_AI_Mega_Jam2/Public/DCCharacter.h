@@ -63,6 +63,8 @@ public:
 	bool IsRifleAiming() const { return bRifleAim; }
 	/** Aim pitch (degrees, the control pitch; replicated from the owner) for the aim pose on every machine. */
 	float GetAimPitch() const { return AimPitch; }
+	/** The rifle loop runs (the draw is over): the aim pose may bend the spine. */
+	bool IsRifleLocoActive() const { return GetWorld() && GetWorld()->GetTimeSeconds() >= LocoBlockedUntil; }
 	float GetDownedAt() const { return DownedAt; }
 	bool IsDowned() const { return bDowned; }
 	bool HasLastFrame() const { return bDowned && bLastFrameReady; }
