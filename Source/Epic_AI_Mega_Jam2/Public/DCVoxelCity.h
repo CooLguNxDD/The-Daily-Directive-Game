@@ -170,6 +170,9 @@ private:
 		float Added = -1.f;
 		/** R15: switched to the dissolve material (custom primitive data 0 = amount). */
 		bool bDissolving = false;
+		/** R15: this piece's seeded start delay and duration scale (set when the fade first sees it). */
+		float Delay = -1.f;
+		float Scale = 1.f;
 	};
 	TArray<FDCFading> Fading;
 	/** R15: swap a fading piece (and its attached leaves) to the dissolve twin of its voxel material; false when the

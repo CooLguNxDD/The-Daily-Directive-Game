@@ -345,6 +345,12 @@ struct FDCVoxelTuning
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float DissolveEdge = 0.12f;
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float DissolveNoiseCm = 18.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float CrumbDissolveNoiseCm = 4.f;
+	/** R15 (human 2026-11-15): a pile melts unevenly. Each rested piece waits a random 0..DissolveDelayMaxSeconds before
+	 *  it starts, and every piece and crumb dissolves over its time x a random 1 +- DissolveDurationJitter. Seeded per
+	 *  piece from its rest position (rest poses are replicated: every machine draws the same) and per crumb from the
+	 *  crumb field's stream. */
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float DissolveDelayMaxSeconds = 0.9f;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float DissolveDurationJitter = 0.35f;
 	/** Crumbs keep this share of their voxel's glow (lit windows sparkle as they fall, never cream confetti). */
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float CrumbGlowScale = 0.35f;
 	/** Crumbs start at most CrumbSpawnPerFrame per frame (the rest queue), and a break throws (1 - CrumbLoadCut x body

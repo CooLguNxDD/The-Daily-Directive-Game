@@ -53,6 +53,8 @@ private:
 		float Size = 10.f;
 		float Born = 0.f;
 		float Life = 6.f;
+		/** R15: this crumb's dissolve time (CrumbShrinkSeconds x 1 +- DissolveDurationJitter). */
+		float Gone = 1.2f;
 		int32 Bounces = 0;
 		bool bResting = false;
 		bool bAlive = false;

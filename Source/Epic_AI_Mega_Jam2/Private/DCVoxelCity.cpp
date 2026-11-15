@@ -1950,8 +1950,16 @@ void ADCVoxelCity::TickFalling(float Now)
 				continue;
 			}
 		}
-		float A = (WorldNow - Fading[i].Start) / Fade;
 		UPrimitiveComponent* Mesh = Fading[i].Mesh.Get();
+		if (Fading[i].Delay < 0.f && Mesh)
+		{
+			// R15: seeded from where the piece came to rest (the same on every machine), so a pile melts unevenly.
+			const FVector P = Mesh->GetComponentLocation();
+			FRandomStream PieceRng(static_cast<int32>(HashCombine(HashCombine(GetTypeHash(FMath::RoundToInt32(P.X / 10.f)), GetTypeHash(FMath::RoundToInt32(P.Y / 10.f))), GetTypeHash(FMath::RoundToInt32(P.Z / 10.f)))));
+			Fading[i].Delay = PieceRng.FRandRange(0.f, FMath::Max(FadeTn.DissolveDelayMaxSeconds, 0.f));
+			Fading[i].Scale = 1.f + PieceRng.FRandRange(-1.f, 1.f) * FMath::Clamp(FadeTn.DissolveDurationJitter, 0.f, 0.9f);
+		}
+		float A = (WorldNow - Fading[i].Start - FMath::Max(Fading[i].Delay, 0.f)) / (Fade * Fading[i].Scale);
 		A = Mesh && Mesh->GetComponentLocation().Z < FadeTn.KillZCm ? 1.f : A; // R19: below the kill net: gone
 		if (A >= 1.f || !Mesh)
 		{
