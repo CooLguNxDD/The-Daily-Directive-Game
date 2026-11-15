@@ -40,6 +40,7 @@ One op per line, `#` comments. Voxels: x right (the model faces +x, the actor's 
 | `mirror x\|y\|z` | copies the low half onto the high half (build one side, mirror) |
 | `noise p seed slot` | removes surface voxels of a slot with probability p (wear, rubble) |
 | `pivot x y z` | origin (default bottom centre); the game attaches the model there |
+| `part Role x0 y0 z0 x1 y1 z1 jx jy jz` | R20 animation segment: solid voxels in the box (later parts win) turn with Role (`LegL`, `LegR`, `ArmL`, `ArmR`, `Head`, ...) about the joint; at most 7 roles. The preview's 4th panel tints the parts |
 
 ## Art bible rules for recipes
 
@@ -54,6 +55,14 @@ One op per line, `#` comments. Voxels: x right (the model faces +x, the actor's 
   model's pivot relative to the actor, which flies at HoverHeight).
 - Code: `DCVoxelModels::Mesh(Name)` returns the cached mesh (`Source/Epic_AI_Mega_Jam2/Public/Voxel/DCVoxelModel.h`);
   put it on a `UProceduralMeshComponent` with the `M_DCVoxel` material.
+
+## Animated units (R20)
+
+- A unit animates when its `+Enemies` row names a `Gait=` (`+UnitGaits` rows, `Rules/DCUnitAnim.h`): each gait limb's
+  `Role` must be a `part` of the model (test `UnitAnim.Data`). Cut legs at the hip, arms at the shoulder, the head at
+  the neck; put the joint on the cut. Parts of one role may sit apart (a crawler's tripod of legs).
+- The game meshes each part on its own and the unit material (`M_DCVoxelUnit`) turns it about its joint in the vertex
+  shader. Check the tinted panel of the preview, then frames from `-dcanimshot=<dir>` (side views per state).
 
 ## Format (`.dcvox`, version 1)
 

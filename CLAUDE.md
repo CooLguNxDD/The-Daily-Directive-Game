@@ -42,6 +42,16 @@ Unreal Engine 5.9 jam game. Engine: `L:/unreal/UE_5.9` (registered source build,
 - Evidence flags: `-dcmain=<Faction>`, `-dcobjective=<Id>`, `-dcobjrun` (pilot runs the objective), `-dcenemytrace`;
   look numbers `tools/evidence/look_metrics.py`.
 
+## Unit animation (R20, final run)
+- Units with a `Gait=` on their `+Enemies` row animate: `+UnitGaits` (stride, bob, lean, limb swings per role),
+  `+UnitClips` (spawn, attack, flinch, death moves), `+AnimLods` (pose rate by camera distance) in
+  `Config/DefaultGame.ini`; pure rule `Rules/DCUnitAnim` (clip state table, envelope, pose); applier
+  `UDCUnitAnimator` (`DCUnitAnimator.cpp`: local on every machine from motion, health and the replicated `AttackSeq`;
+  quaternions per segment into custom primitive data 1..28); material `M_DCVoxelUnit` (build_content.py, WPO turns
+  each segment about its joint from UV1/UV2). Segments are voxel-forge `part` lines. Death clip plays, then crumbs.
+- Evidence: `-dcanimshot=<dir>` (side lineup, frames per state, `-dcanimkinds=`, `-dcanimshotquit`),
+  `-dcanimswarm=N` (+`-dcanimoff`) for DCANIMPERF lines.
+
 ## Editor MCP
 - Epic's MCP server (`ModelContextProtocol` + `AllToolsets` in the `.uproject`) serves `unreal-mcp` on `http://127.0.0.1:23444/mcp` (auto-start and port in the per-user `Saved/Config/WindowsEditor/EditorPerProjectUserSettings.ini`; `.mcp.json` and the other client configs point there).
 - Claude Code: the `unreal-mcp` skill of the `unreal-engine-skills-for-claude-code` plugin. Start a session with `cats game-dev` from the monorepo root.
