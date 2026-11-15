@@ -162,6 +162,8 @@ void ADCVoxelCity::TickChips()
 	}
 	// A structure pass commits like a strike (two-phase: planned ahead, the topple shows in one frame); plain chips
 	// commit as soon as they are meshed, under the upload budget.
+	// Building HP (advisor a-57): chips bring down only towers the strikes have spent; others keep their base.
+	Op.StructureLots.RemoveAll([GS](int32 Lot) { return !GS->HostTowerSpent(Lot); });
 	const bool bStructure = Op.StructureLots.Num() > 0;
 	// A plain chip op merges into the last history entry when that is one too (MergeInto): the host applies only the
 	// new chips; clients apply the merged entry (old chips clear nothing twice).

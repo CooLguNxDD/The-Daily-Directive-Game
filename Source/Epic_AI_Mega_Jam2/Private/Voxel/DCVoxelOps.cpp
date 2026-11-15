@@ -859,7 +859,7 @@ namespace DCVoxelOps
 				Out.Carved += Carved;
 				bTouched = Carved > 0;
 			}
-			if (!T.bFallen && DistSqToFootprint(T, C) <= Blast2)
+			if (!T.bFallen && DistSqToFootprint(T, C) <= Blast2 && !Op.HoldLots.Contains(i))
 			{
 				Out.Carved += Bite(T, C, Carve.BiteFloors, Carve.BitePercent, Ctx.BayCm, &Removed);
 				bTouched = true;

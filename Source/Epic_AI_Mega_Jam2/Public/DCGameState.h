@@ -68,6 +68,13 @@ public:
 	UPROPERTY(Replicated) int32 SectorPhotoPoints = 0;
 	/** One entry per finished sector: was the quota met. */
 	UPROPERTY(Replicated) TArray<bool> QuotaResults;
+	/** Building HP (human 16:32): health left per lot (0..1, index = lot) for the HUD bars; host-written. */
+	UPROPERTY(Replicated) TArray<float> TowerHealthLeft;
+	/** Host: a strike of Damage at Center (world) with BlastRadius: adds its structural damage to every standing tower
+	 *  in reach and returns the standing lots still under their health (the op's HoldLots). */
+	TArray<int32> HostStrikeTowers(const FVector& Center, float BlastRadius, float Damage);
+	/** Host: the tower's structural damage reached its health (weapon chips may then bring it down). */
+	bool HostTowerSpent(int32 Lot) const;
 	UPROPERTY(Replicated) TArray<FDCCollapseRecord> Collapses;
 	UPROPERTY(Replicated) FDCScoopState Scoop;
 	/** City Mutators drafted this run (apply to everyone). */
@@ -104,5 +111,9 @@ private:
 	UPROPERTY() TObjectPtr<ADCEnvironment> Environment;
 	UPROPERTY() TObjectPtr<ADCVoxelCity> VoxelCity;
 	int32 NextVoxelSeq = 1;
+	/** Host building-HP ledger (structural damage per lot) and the city build it belongs to. */
+	TArray<float> HostTowerDamage;
+	TArray<float> HostTowerHealth;
+	int32 HostTowerBuild = -1;
 	int32 NextBlastId = 1;
 };

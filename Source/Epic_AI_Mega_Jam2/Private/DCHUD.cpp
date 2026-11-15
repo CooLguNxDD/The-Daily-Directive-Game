@@ -2,6 +2,7 @@
 #include "DCFrameScopes.h"
 #include "Rules/DCFactionRules.h"
 #include "DCObjective.h"
+#include "DCBuilding.h"
 #include "DCEnemy.h"
 #include "EngineUtils.h"
 #include "DCFonts.h"
@@ -978,6 +979,7 @@ void ADCHUD::DrawObjective(ADCGameState& GS, ADCCharacter& Me)
 	Box(X - Sx(4.f), Y, Sx(4.f), Sx(44.f), Gold);
 	Text(TEXT("HQ ORDER  <>"), X + Sx(8.f), Y, FLinearColor(1.f, 1.f, 1.f, 0.7f), 0.5f);
 	Text(Line ? *Line : FString(), X + Sx(8.f), Y + Sx(16.f), O->Stage == EDCObjectiveStage::Failed ? Red : Gold, Q.QuestTextScale + 0.1f);
+	DrawTowerHealth(GS, *O);
 	FVector At;
 	if (!O->Waypoint(Me.GetActorLocation(), At))
 	{
@@ -1040,6 +1042,44 @@ void ADCHUD::DrawPassiveCards(ADCGameState& GS, ADCCharacter& Me)
 		Box(X - Sx(2.f), Y - Sx(2.f), S + Sx(4.f), S + Sx(4.f), Ink);
 		DrawTexture(*Icon, X, Y, S, S, 0.f, 0.f, 1.f, 1.f, FLinearColor::White, BLEND_Opaque);
 		X += S + Gap;
+	}
+}
+
+void ADCHUD::DrawTowerHealth(ADCGameState& GS, const ADCObjective& O)
+{
+	// Building HP (human 16:32): a thin bar over every HQ-marked tower still standing, from the host's replicated
+	// health left (the tower is the building nearest the marker, found on this machine).
+	for (int32 i = 0; i < O.TargetAt.Num(); ++i)
+	{
+		if (O.TargetDown.IsValidIndex(i) && O.TargetDown[i])
+		{
+			continue;
+		}
+		const FVector Mark = O.TargetAt[i];
+		const ADCBuilding* Tower = nullptr;
+		float Best = TNumericLimits<float>::Max();
+		for (const ADCBuilding* B : TActorRange<ADCBuilding>(GetWorld()))
+		{
+			const float D = FVector::Dist2D(B->GetCenter(), Mark);
+			Tower = D < Best ? B : Tower;
+			Best = FMath::Min(Best, D);
+		}
+		if (!Tower || Tower->IsCollapsed())
+		{
+			continue;
+		}
+		const int32 Lot = Tower->GetLotIndex();
+		const float Left = GS.TowerHealthLeft.IsValidIndex(Lot) ? GS.TowerHealthLeft[Lot] : 1.f;
+		const FDCBuildingSpec& S = Tower->GetSpec();
+		const FVector Top = Tower->GetCenter() + FVector(0, 0, S.Floors * S.BlockSize * 0.5f + 300.f);
+		const FVector P = Project(Top, false);
+		if (P.Z <= 0.f)
+		{
+			continue;
+		}
+		const float W = Sx(90.f), Hb = Sx(6.f);
+		Box(P.X - W * 0.5f - 1.f, P.Y - 1.f, W + 2.f, Hb + 2.f, FLinearColor(0.f, 0.f, 0.f, 0.7f));
+		Box(P.X - W * 0.5f, P.Y, W * Left, Hb, Left > 0.34f ? Gold : Red);
 	}
 }
 
