@@ -933,8 +933,8 @@ namespace DCVoxelCraft
 		Out.Data.Reset();
 		Out.VoxelCm = Vcm;
 		Out.OriginCm = FIntVector(-Half, -Half, -Layers * Vcm);
-		const uint8 Street = Ctx.MaterialId(T.StreetMaterial);
-		const uint8 Paving = Ctx.MaterialId(T.LotMaterial);
+		const uint8 Street = Ctx.MaterialId(Plan.StreetMaterial.IsNone() ? T.StreetMaterial : Plan.StreetMaterial);
+		const uint8 Paving = Ctx.MaterialId(Plan.LotMaterial.IsNone() ? T.LotMaterial : Plan.LotMaterial);
 		const uint8 Kerb = Ctx.MaterialId(T.KerbMaterial);
 		Out.Data.FillBox(FIntVector(0, 0, 0), FIntVector(N, N, Layers), Street);
 		// Lane dashes down the middle of every street (flush paint in the top layer).

@@ -507,6 +507,9 @@ struct FDCDistrictRule
 	/** R23: lot kinds that hold no building and are paved like a plaza (markets, yards, courts, parking), dressed by Lot
 	 *  prop layers that name them. */
 	UPROPERTY(EditAnywhere, Config, Category = "District") TArray<FName> OpenKinds;
+	/** R23 ground variety: palette rows for the street and the lot paving (None = Tuning StreetMaterial / LotMaterial). */
+	UPROPERTY(EditAnywhere, Config, Category = "District") FName StreetMaterial;
+	UPROPERTY(EditAnywhere, Config, Category = "District") FName LotMaterial;
 };
 
 /** A puff kind for the decay effects (R4): a chunky voxel cube that moves, spins, grows or shrinks and dies. */

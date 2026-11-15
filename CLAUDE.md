@@ -77,6 +77,21 @@ Unreal Engine 5.9 jam game. Engine: `L:/unreal/UE_5.9` (registered source build,
   the nearest tower's wall foot for 60 s, fixed-pose `chipfire_*` frames, `DEMO chipfire` hash lines); logs `DCCHIP`
   (host ops; on clients `DCCHIP check ... match=host` once idle at the newest chip entry and its host hash arrived).
 
+## Larger world (R23, final run)
+- District variants: `+Districts` rows carry `Sector` and `Weight`; `UDCVoxelSettings::District(Sector, SectorSeed)` rolls
+  one row per sector (three per sector now: 4x4 first-run rows plus 5x5/5x4 rows; keep GridY <= GridX, the spawn sits at
+  -HalfExtent on the west street). Lot rules may add `TowerRecipe` (district tower mix) and `LandmarkRecipe` (landmark
+  roll) slots; `OpenKinds` are paved lots without a building (Market, Court, Parking, Yard, Park) dressed by Lot layers;
+  `StreetMaterial`/`LotMaterial` pick palette rows for the ground.
+- Craft registries in `DCVoxelCraft.cpp`: roofs (+Tiered, Dome, Helipad, Sawtooth, Shanty, Beacon, Garden, Marquee),
+  signs (+Banner, Crown; `BackCells` = solid backing at paint time), bays (+R, T, X). Test `District.RecipeKinds` checks
+  every recipe and rule set against them.
+- Prop layers added: Escape, Market, Court, Parking, Yard, Park, Balcony, Monument (landmark forecourt), Mural (a
+  `Value="None"` choice is a blank wall). Generated sign art lives in `tools/voxel-forge/art/` (`bb_*`, `mural_*`).
+- Evidence: District.CityBuilder logs `DCDISTRICT` (towers, solid voxels, chunks, craft ms) and `DCWORLD` (first run seed
+  rolling each district: use with `-dcseed=N -dcstartsector=S`); plan PNGs headless: `UnrealEditor-Cmd <uproject>
+  -run=DCCityPreview -seed=N -out=<dir>`.
+
 ## Editor MCP
 - Epic's MCP server (`ModelContextProtocol` + `AllToolsets` in the `.uproject`) serves `unreal-mcp` on `http://127.0.0.1:23444/mcp` (auto-start and port in the per-user `Saved/Config/WindowsEditor/EditorPerProjectUserSettings.ini`; `.mcp.json` and the other client configs point there).
 - Claude Code: the `unreal-mcp` skill of the `unreal-engine-skills-for-claude-code` plugin. Start a session with `cats game-dev` from the monorepo root.
