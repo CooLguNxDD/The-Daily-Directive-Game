@@ -67,6 +67,9 @@ Unreal Engine 5.9 jam game. Engine: `L:/unreal/UE_5.9` (registered source build,
   `CallRangeCm`). Active cards get Count charges per sector, spent by the entry (GameMode call effect `Card` ->
   `DCUpgrades::CallCard` -> the effect's `Call` hook); charges replicate (`ADCPlayerState::CardCharges`). Passive cards
   draw as icons on quest tracker row 3. Test `Content.Strikes` pins the contract; evidence `-dccallin`, logs `DCCALLIN`.
+- More cards (h-cards2, data only): each new card is a `+Upgrades` row on an existing effect; a new strike also needs a
+  `+Stratagems` row (`bStartsUnlocked=False`) and its own `+Carves` row (test `Content.Strikes`); art `T_Card_<name>`
+  from `Content/DC/Art/Source/card-<name>.png` through the `TEXTURES` table of `tools/content/build_content.py`.
 
 ## Weapon chips (R24, final run)
 - Every weapon hit wears the city (advisor a-37): `+Weapons` rows carry `ChipDamage`, `ChipRadiusCm`, `ChipsPerSecond`;
