@@ -98,6 +98,9 @@ struct FDCCityPlan
 	/** Street intersections, used for player spawns, enemy spawns and supply pods. */
 	UPROPERTY() TArray<FVector> StreetPoints;
 	UPROPERTY() float HalfExtent = 0.f;
+	/** R23: the district's street and lot paving palette rows (None = the tuning's). */
+	UPROPERTY() FName StreetMaterial;
+	UPROPERTY() FName LotMaterial;
 };
 
 namespace DCCityRules
