@@ -1,0 +1,31 @@
+# Bloater (the Dead): a swollen corpse, a belly wider than it is tall on stubby legs, small arms, a sunken head.
+# Rot-green eyes and glowing rot boils on the belly (its light cue). Slow and very hard to put down.
+name bloater
+grid 5
+size 22 22 36
+slot body Flesh
+slot rag InkBrown
+slot eye Rot
+box 8 6 0 11 10 10 rag
+box 8 12 0 11 16 10 rag
+ellipsoid 11 11 18 9 8.5 9 body
+paint box 0 0 12 22 22 15 rag
+sphere 19 8 20 1.5 eye
+sphere 18 14 15 1.5 eye
+sphere 16 5 24 1.2 eye
+sphere 5 16 22 1.3 eye
+sphere 4 7 17 1.2 eye
+ellipsoid 12 11 25 4 9 2.5 body
+beam 12 1 25 16 1 13 1.5 body
+beam 12 21 25 16 21 13 1.5 body
+box 13 8 26 18 14 31 body
+box 17 9 28 18 10 30 eye
+box 17 12 28 18 13 30 eye
+noise 0.12 7 rag
+pivot 11 11 0
+# R20 animation segments (Brute gait roles): stubby legs from the hip, arms from the shoulders, the head from the neck.
+part LegL 0 0 0 22 11 10 9.5 8 10
+part LegR 0 11 0 22 22 10 9.5 14 10
+part ArmL 10 0 12 22 3 28 12 1 25
+part ArmR 10 19 12 22 22 28 12 21 25
+part Head 12 7 28 22 15 36 15 11 28

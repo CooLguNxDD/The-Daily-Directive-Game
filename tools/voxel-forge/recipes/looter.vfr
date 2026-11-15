@@ -1,0 +1,33 @@
+# Looter (Scavengers): a fast thief bent under a stuffed loot sack (scrap poking out), hood and a magenta scarf, the
+# faction's chest band (its light cue), a small pistol. Runs to the rubble, grabs, runs off.
+name looter
+grid 5
+size 18 14 34
+slot body InkBrown
+slot coat Ink
+slot band ScavMagenta
+slot steel Steel
+box 7 4 0 9 6 12 coat
+box 7 8 0 9 10 12 coat
+box 6 3 0 10 6 1 body
+box 6 8 0 10 11 1 body
+poly 12 24 body 5,4 11,4 12,7 11,10 5,10
+box 4 3 18 13 11 19 band
+box 9 4 22 14 10 24 band
+box 10 5 24 15 9 29 coat
+box 14 6 25 15 8 27 body
+ellipsoid 3.5 7 20 3.5 4 5 body
+box 2 5 25 4 9 26 coat
+beam 2 6 25 1 4 31 0.7 steel
+beam 3 9 24 4 11 30 0.6 steel
+box 0 6 18 1 8 21 band
+beam 10 3 22 8 2 15 0.9 body
+beam 10 11 22 15 12 18 0.9 body
+box 14 11 17 17 12 19 steel
+pivot 8 7 0
+# R20 animation segments (Raider gait roles): legs from the hip, strap and pistol arms from the shoulders, the hood.
+part LegL 0 0 0 18 7 12 8 5 12
+part LegR 0 7 0 18 14 12 8 9 12
+part ArmL 7 0 14 18 3 24 10 3 22
+part ArmR 8 11 15 18 14 24 10 11 22
+part Head 10 4 24 18 10 34 11 7 24

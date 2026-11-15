@@ -1,0 +1,36 @@
+# Wrecker (Scavengers): a shotgun brute. Broad hunched torso, a scrap steel chest plate, one scrap shoulder pad, a
+# welding mask with a magenta eye slit and a magenta crest, the faction's glowing chest band (its light cue), a sawn-off
+# double barrel. Walks in close and hits hard.
+name wrecker
+grid 5
+size 20 18 40
+slot body InkBrown
+slot coat Ink
+slot band ScavMagenta
+slot steel Steel
+box 7 4 0 11 8 14 coat
+box 7 10 0 11 14 14 coat
+box 6 3 0 12 8 2 body
+box 6 10 0 12 15 2 body
+poly 13 30 body 3,2 14,3 15,9 14,15 3,16
+box 13 4 18 16 14 28 steel
+noise 0.2 5 steel
+box 3 1 24 16 17 25 band
+box 7 6 30 13 12 36 body
+box 12 6 31 14 12 35 steel
+box 13 7 33 14 11 34 band
+box 7 8 36 12 10 38 band
+box 6 0 28 12 4 31 steel
+beam 9 1 29 14 1 19 1.4 body
+box 13 0 17 16 3 20 steel
+beam 9 17 29 15 17 21 1.4 body
+box 13 15 20 20 18 23 steel
+carve box 19 16 21 20 17 22
+pivot 10 9 0
+# R20 animation segments (Raider gait roles): legs from the hip, fist and shotgun arms from the shoulders, head at the neck.
+part LegL 0 0 0 20 9 14 9 6 14
+part LegR 0 9 0 20 18 14 9 12 14
+part ArmL 0 0 16 20 2 32 9 1 29
+part ArmR 0 16 16 20 18 32 9 17 29
+part ArmR 15 15 19 20 18 24 9 17 29
+part Head 0 4 31 20 14 40 10 9 31
