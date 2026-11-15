@@ -1231,8 +1231,9 @@ void ADCPlayerController::PumpPrints()
 		TSharedPtr<FDCPrintJob, ESPMode::ThreadSafe> Job = It.Value();
 		if (Job->bDone.load())
 		{
-			FinishPrint(It.Key(), MoveTemp(Job->Pixels), Job->Width, Job->Height);
-			It.RemoveCurrent();
+			const int32 Id = It.Key();
+			It.RemoveCurrent(); // first: FinishPrint may upload, and an upload of a pending id would wait again
+			FinishPrint(Id, MoveTemp(Job->Pixels), Job->Width, Job->Height);
 			continue;
 		}
 		if (Job->bPolling.exchange(true))
@@ -1248,9 +1249,20 @@ void ADCPlayerController::PumpPrints()
 			}
 			int32 RowPitch = 0;
 			const FFloat16Color* Src = static_cast<const FFloat16Color*>(Job->Readback->Lock(RowPitch));
+			if (!Src || RowPitch < Job->Width)
+			{
+				// No mapping (advisor a-35): no print; the raw capture stays on screen and the job ends empty.
+				if (Src)
+				{
+					Job->Readback->Unlock();
+				}
+				Job->Readback.Reset();
+				Job->bDone = true;
+				return;
+			}
 			TArray<FFloat16Color> Raw;
 			Raw.SetNumUninitialized(Job->Width * Job->Height);
-			for (int32 Y = 0; Src && Y < Job->Height; ++Y)
+			for (int32 Y = 0; Y < Job->Height; ++Y)
 			{
 				FMemory::Memcpy(&Raw[Y * Job->Width], Src + static_cast<int64>(Y) * RowPitch, Job->Width * sizeof(FFloat16Color));
 			}
@@ -1282,6 +1294,7 @@ void ADCPlayerController::FinishPrint(int32 PhotoId, TArray<FColor>&& Pixels, in
 	FDCLocalPhoto* Photo = Album.FindByPredicate([PhotoId](const FDCLocalPhoto& P) { return P.PhotoId == PhotoId; });
 	if (!Photo || Pixels.Num() != Width * Height || Width <= 0)
 	{
+		UploadWhenPrinted.Remove(PhotoId);
 		return;
 	}
 	DC_FRAME_SCOPE("PhotoUpload");
@@ -1297,6 +1310,10 @@ void ADCPlayerController::FinishPrint(int32 PhotoId, TArray<FColor>&& Pixels, in
 		Print->SRGB = true;
 		Print->UpdateResource();
 		Photo->Image = Print;
+	}
+	if (UploadWhenPrinted.Remove(PhotoId) > 0)
+	{
+		ClientUploadPhotos_Implementation({PhotoId});
 	}
 }
 
@@ -1334,6 +1351,11 @@ void ADCPlayerController::ClientUploadPhotos_Implementation(const TArray<int32>&
 	IImageWrapperModule& Wrappers = FModuleManager::LoadModuleChecked<IImageWrapperModule>(TEXT("ImageWrapper"));
 	for (int32 Id : PhotoIds)
 	{
+		if (PendingPrints.Contains(Id))
+		{
+			UploadWhenPrinted.Add(Id); // still developing off the game thread (advisor a-35): FinishPrint uploads it
+			continue;
+		}
 		const FDCLocalPhoto* Photo = FindLocalPhoto(Id);
 		if (!Photo || Photo->Pixels.Num() == 0)
 		{

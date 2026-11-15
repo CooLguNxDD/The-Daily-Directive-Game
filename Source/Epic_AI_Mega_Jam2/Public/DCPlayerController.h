@@ -201,6 +201,8 @@ private:
 	TArray<FDCPhotoSend> Outgoing;
 	/** Prints in flight (render-thread readback, then a worker develops and prints): photo id -> job. */
 	TMap<int32, TSharedPtr<struct FDCPrintJob, ESPMode::ThreadSafe>> PendingPrints;
+	/** Uploads the host asked for while their print was still developing. */
+	TSet<int32> UploadWhenPrinted;
 	TArray<int32> LocalPicks;
 	TSharedPtr<SWidget> MenuWidget;
 	UPROPERTY() TObjectPtr<class ADCReelDirector> Director;
