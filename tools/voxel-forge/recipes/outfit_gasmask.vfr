@@ -1,0 +1,18 @@
+# Outfit head (R18): gas mask over the face, two glowing eye lenses and a steel filter can on the snout.
+# Head frame as outfit_goggles (the head fills x 1..6, y 1..5, z 0..5).
+name outfit_gasmask
+grid 5
+size 9 6 4
+slot mask SwatchMain
+slot strap SwatchAccent
+slot lens SwatchGlow
+slot can Steel
+box 6 1 0 7 5 4 mask
+box 7 2 0 8 4 2 mask
+box 8 2 0 9 4 2 can
+box 6 1 2 7 2 3 lens
+box 6 4 2 7 5 3 lens
+box 0 1 2 1 5 3 strap
+box 1 0 2 6 1 3 strap
+box 1 5 2 6 6 3 strap
+pivot 3 3 0
