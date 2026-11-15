@@ -55,7 +55,7 @@ struct FDCVoxelRecipe
 	/** Floors between setbacks (0 = straight tower) and how far each setback steps in per side (cm). */
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 SetbackEvery = 0;
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 SetbackCm = 0;
-	/** Roof builder id resolved by the roof registry: Flat, Crown, Spire, Antenna; R23 Tiered, Dome, Helipad, Sawtooth. */
+	/** Roof builder id resolved by the roof registry: Flat, Crown, Spire, Antenna; R23 Tiered, Dome, Helipad, Sawtooth, Shanty. */
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") FName Roof = TEXT("Flat");
 	/** Horizontal band (string course) every N floors, in Trim (0 = none). */
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 BandEvery = 0;
@@ -84,7 +84,7 @@ struct FDCVoxelRecipe
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") FName PosterEdge;
 	/** Sign builder id from the sign registry (critic V19.4: storefront-scale neon, not giant flat boards): Blade = a
 	 *  vertical sign standing out from a pier, Board = a horizontal band over the ground floor, Poster = the old
-	 *  two-bay board. Sizes in voxels: Width along the face (blade thickness), Height, Depth out from the wall. */
+	 *  two-bay board; R23 Banner = a cloth strip hanging from the roof line, Crown = a band across the top floor. Sizes in voxels: Width along the face (blade thickness), Height, Depth out from the wall. */
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") FName SignKind = TEXT("Poster");
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 SignWidthVox = 2;
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 SignHeightVox = 36;

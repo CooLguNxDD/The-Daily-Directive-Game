@@ -255,6 +255,41 @@ namespace
 					}
 					return Hi.Z + U;
 				}},
+			// Shanty: a squatter town on the roof (megacity rooftops): a parapet, then a seeded jumble of one-voxel-shell
+			// shacks, some stacked two high, each with a lit window strip and a trim lid.
+			{TEXT("Shanty"), [](FDCVoxelWorld& W, const FFaceFrame& F, int32 TopZ, const FCraftIds& Ids, FRandomStream& Rng)
+				{
+					const int32 U = Ids.Unit;
+					int32 Top = Parapet(W, F, TopZ, Ids);
+					const int32 SpanX = F.Max.X - F.Min.X - 4 * U, SpanY = F.Max.Y - F.Min.Y - 4 * U;
+					if (SpanX < 10 * U || SpanY < 10 * U)
+					{
+						return Top;
+					}
+					const int32 Count = FMath::Clamp(SpanX * SpanY / (14 * U * 14 * U), 2, 9);
+					for (int32 i = 0; i < Count; ++i)
+					{
+						const int32 Sx = Rng.RandRange(6, 12) * U, Sy = Rng.RandRange(6, 12) * U, Sz = Rng.RandRange(7, 10) * U;
+						const int32 X0 = F.Min.X + 2 * U + Rng.RandRange(0, FMath::Max(0, SpanX - Sx));
+						const int32 Y0 = F.Min.Y + 2 * U + Rng.RandRange(0, FMath::Max(0, SpanY - Sy));
+						const int32 Levels = Rng.FRand() < 0.35f ? 2 : 1;
+						for (int32 L = 0; L < Levels; ++L)
+						{
+							const int32 In = L * 2 * U; // the upper shack sits a little in from the lower one
+							const FIntVector Lo(X0 + In, Y0 + In, TopZ + 1 + L * (Sz + U)), Hi(X0 + Sx - In, Y0 + Sy - In, Lo.Z + Sz);
+							if (Hi.X - Lo.X < 4 * U || Hi.Y - Lo.Y < 4 * U)
+							{
+								break;
+							}
+							W.FillBox(Lo, Hi, Ids.Wall);
+							W.FillBox(Lo + FIntVector(1, 1, 0), Hi - FIntVector(1, 1, 1), 0);
+							W.FillBox(FIntVector(Lo.X + U, Lo.Y, Lo.Z + Sz / 2), FIntVector(Hi.X - U, Lo.Y + 1, Lo.Z + Sz / 2 + U), (i + L) % 3 == 0 ? Ids.WindowAlt : Ids.Window);
+							W.FillBox(FIntVector(Lo.X - U / 2, Lo.Y - U / 2, Hi.Z), FIntVector(Hi.X + U / 2, Hi.Y + U / 2, Hi.Z + U / 2 + 1), Ids.Trim);
+							Top = FMath::Max(Top, Hi.Z + U / 2 + 1);
+						}
+					}
+					return Top;
+				}},
 			// Sawtooth: an industrial roof of north-light ridges across X, the steep side glazed (the alternate window).
 			{TEXT("Sawtooth"), [](FDCVoxelWorld& W, const FFaceFrame& F, int32 TopZ, const FCraftIds& Ids, FRandomStream&)
 				{
@@ -322,6 +357,39 @@ namespace
 					S.Z0 = B * 2 / 3 + 1;
 					S.Z1 = S.Z0 + FMath::Min(R.SignHeightVox, B - S.Z0 - 1);
 					S.Depth = FMath::Max(1, R.SignDepthVox);
+					return S;
+				}},
+			// R23: a cloth banner hanging from under the roof line down the face (tall, flat, one or two voxels proud).
+			{TEXT("Banner"), [](const FFaceFrame& F, int32 Face, int32 B, int32 Floors, const FDCVoxelRecipe& R, FRandomStream& Rng)
+				{
+					const int32 Bays = F.Length(Face) / B;
+					FSignShape S;
+					if (Bays < 2 || Floors < 4)
+					{
+						return S;
+					}
+					const int32 W = FMath::Clamp(R.SignWidthVox, 3, B - 2);
+					S.U0 = Rng.RandRange(0, Bays - 1) * B + (B - W) / 2;
+					S.U1 = S.U0 + W;
+					S.Z1 = Floors * B - B / 4;
+					S.Z0 = FMath::Max(B, S.Z1 - R.SignHeightVox);
+					S.Depth = FMath::Clamp(R.SignDepthVox, 1, 2);
+					return S;
+				}},
+			// R23: a corporate crown band across the top floor of a face, the tower's name as glyph strokes.
+			{TEXT("Crown"), [](const FFaceFrame& F, int32 Face, int32 B, int32 Floors, const FDCVoxelRecipe& R, FRandomStream&)
+				{
+					const int32 Len = F.Length(Face);
+					FSignShape S;
+					if (Len < 3 * B || Floors < 3)
+					{
+						return S;
+					}
+					S.U0 = B / 2;
+					S.U1 = Len - B / 2;
+					S.Z0 = (Floors - 1) * B + B / 4;
+					S.Z1 = S.Z0 + FMath::Clamp(R.SignHeightVox, 3, B * 3 / 4);
+					S.Depth = FMath::Clamp(R.SignDepthVox, 1, 3);
 					return S;
 				}},
 			// The first run's two-bay board (kept for recipes that still name it).
