@@ -2833,7 +2833,7 @@ void ADCVoxelCity::TickDissolveCam()
 	{
 		return;
 	}
-	static const float Stages[] = {0.1f, 0.4f, 0.7f};
+	static const float Stages[] = {0.05f, 0.35f, 0.6f, 0.85f};
 	const float Fade = FMath::Max(UDCVoxelSettings::Get().Tuning.PhysicsFadeSeconds, 0.01f);
 	const float A = (GetWorld()->GetTimeSeconds() - DissolveCamStart) / Fade;
 	if (!Target || DissolveCamStep >= UE_ARRAY_COUNT(Stages) || A > 1.f)
@@ -2848,7 +2848,8 @@ void ADCVoxelCity::TickDissolveCam()
 		ShotCamera->GetCameraComponent()->SetFieldOfView(60.f);
 	}
 	const FVector At = Target->Bounds.Origin;
-	const FVector Eye = At + FVector(-1.f, -0.8f, 0.6f).GetSafeNormal() * FMath::Clamp(Target->Bounds.SphereRadius * 3.f, 250.f, 1500.f);
+	// Above and back (three-quarter overhead): the pile lies on the street, neighbours do not block the view.
+	const FVector Eye = At + FVector(-0.55f, -0.45f, 1.f).GetSafeNormal() * FMath::Clamp(Target->Bounds.SphereRadius * 5.f, 600.f, 2500.f);
 	ShotCamera->SetActorLocationAndRotation(Eye, (At - Eye).Rotation());
 	if (PC->GetViewTarget() != ShotCamera)
 	{
