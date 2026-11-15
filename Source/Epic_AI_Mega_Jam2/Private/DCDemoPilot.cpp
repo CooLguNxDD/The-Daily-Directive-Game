@@ -1324,13 +1324,14 @@ void ADCDemoPilot::BuildScript()
 		}
 		int32 Cycles = CyclesPerSector;
 		FParse::Value(FCommandLine::Get(), TEXT("dccycles="), Cycles); // more strike-and-snap cycles per sector
-		if (Sector == 0 && FParse::Param(FCommandLine::Get(), TEXT("dcindoors")))
-		{
-			AddIndoors();
-		}
+		// Run-and-fire first, on the open street at the spawn (bugs4 framed it in dark rubble after the indoors hold).
 		if (Sector == 0 && FParse::Param(FCommandLine::Get(), TEXT("dcrunfire")))
 		{
 			AddRunFire();
+		}
+		if (Sector == 0 && FParse::Param(FCommandLine::Get(), TEXT("dcindoors")))
+		{
+			AddIndoors();
 		}
 		if (Sector == 0 && FParse::Param(FCommandLine::Get(), TEXT("dcsupply")))
 		{
