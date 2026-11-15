@@ -96,18 +96,40 @@ void ADCVoxelCity::SetChipProps(const FDCCityPlan& Plan)
 		{
 			Solid += C != 0 ? 1 : 0;
 		}
-		const int32 Rx = FMath::Max(M->Pivot.X, M->Size.X - M->Pivot.X);
-		const int32 Ry = FMath::Max(M->Pivot.Y, M->Size.Y - M->Pivot.Y);
+		// Reach: the model's larger half extent from the pivot (not the diagonal: the break column would cut its
+		// neighbours); a prop wider than a chip column can clear never breaks (no floating remains).
+		const int32 Reach = FMath::Max(FMath::Max(M->Pivot.X, M->Size.X - M->Pivot.X), FMath::Max(M->Pivot.Y, M->Size.Y - M->Pivot.Y)) * Vcm;
 		FDCChipProp& Out = ChipLedger.Props.AddDefaulted_GetRef();
 		Out.FootCm = DCVoxelMath::ToCm(P.Location);
-		Out.RadiusCm = FMath::CeilToInt32(FMath::Sqrt(static_cast<float>(Rx * Rx + Ry * Ry))) * Vcm;
+		Out.RadiusCm = Reach;
 		Out.TopCm = Out.FootCm.Z + (M->Size.Z - M->Pivot.Z) * Vcm;
-		Out.BreakAt = Layer && Layer->ChipBreakPercent > 0 ? FMath::Max(1, Solid * Layer->ChipBreakPercent / 100) : 0;
+		const bool bBreaks = Layer && Layer->ChipBreakPercent > 0 && Reach <= DCVoxelOps::ChipMaxRadiusCm;
+		Out.BreakAt = bBreaks ? FMath::Max(1, Solid * Layer->ChipBreakPercent / 100) : 0;
 	}
+}
+
+void ADCVoxelCity::CheckChipHash()
+{
+	const ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>();
+	const double Real = FPlatformTime::Seconds();
+	if (GetNetMode() != NM_Client || !bFollowGameState || !GS || GS->VoxelOps.Num() == 0 || Real < ChipCheckNext || !IsOpQueueIdle() || bLoading)
+	{
+		return;
+	}
+	const FDCVoxelOp& Last = GS->VoxelOps.Last();
+	if (Last.Build != BuiltId || Last.Seq != AppliedSeq || Last.Seq == ChipCheckedSeq || Last.ResultHash == 0 || !DCVoxelOps::IsChipOnly(Last))
+	{
+		return;
+	}
+	ChipCheckedSeq = Last.Seq;
+	ChipCheckNext = Real + 1.0; // at most once a second (a whole-city hash, cached per chunk)
+	const uint32 Mine = Sector.Hash();
+	UE_LOG(LogTemp, Display, TEXT("DCCHIP check seq=%d chips=%d hash=%08x host=%08x %s"), Last.Seq, Last.Chips.Num(), Mine, Last.ResultHash, Mine == Last.ResultHash ? TEXT("match=host") : TEXT("MISMATCH=host"));
 }
 
 void ADCVoxelCity::TickChips()
 {
+	CheckChipHash();
 	const FDCVoxelTuning& Tn = UDCVoxelSettings::Get().Tuning;
 	if (!ChipsOn(Tn) || !HasAuthority() || GetNetMode() == NM_Client || BuiltSector == INDEX_NONE || bLoading || !bHostRests)
 	{
@@ -126,16 +148,31 @@ void ADCVoxelCity::TickChips()
 	// A structure pass commits like a strike (two-phase: planned ahead, the topple shows in one frame); plain chips
 	// commit as soon as they are meshed, under the upload budget.
 	const bool bStructure = Op.StructureLots.Num() > 0;
-	const int32 Seq = GS->AddVoxelOp(Op, bStructure ? GS->Now() + Tn.PlanLeadSeconds : -1.f).Seq;
-	const float OpTime = GS->VoxelOps.Last().Time;
+	// A plain chip op merges into the last history entry when that is one too (MergeInto): the host applies only the
+	// new chips; clients apply the merged entry (old chips clear nothing twice).
+	Op.Build = GS->CityBuildId;
+	Op.Sector = GS->CitySector;
+	Op.Time = GS->Now();
+	const bool bMerged = !bStructure && GS->VoxelOps.Num() > 0 && DCChipRules::MergeInto(GS->VoxelOps.Last(), Op, FMath::Max(1, Tn.ChipMergeMaxChips));
+	if (bMerged)
+	{
+		Op.Seq = GS->TakeVoxelSeq();
+		GS->VoxelOps.Last().Seq = Op.Seq;
+	}
+	else
+	{
+		Op = GS->AddVoxelOp(Op, bStructure ? GS->Now() + Tn.PlanLeadSeconds : -1.f);
+	}
+	const int32 Seq = Op.Seq;
+	const float OpTime = Op.Time;
 	const FVector From(Op.CenterCm);
 	bChipOpOut = true;
-	UE_LOG(LogTemp, Display, TEXT("DCCHIP host op=%d chips=%d structure=%d breakprops=%d pending=%d"), Seq, Op.Chips.Num(), bStructure ? Op.StructureLots[0] : -1, Op.BreakProps.Num(),
-		ChipLedger.Pending.Num());
+	UE_LOG(LogTemp, Display, TEXT("DCCHIP host op=%d chips=%d structure=%d breakprops=%d pending=%d merged=%d entry=%d history=%d"), Seq, Op.Chips.Num(), bStructure ? Op.StructureLots[0] : -1,
+		Op.BreakProps.Num(), ChipLedger.Pending.Num(), bMerged ? 1 : 0, GS->VoxelOps.Last().Chips.Num(), GS->VoxelOps.Num());
 	TWeakObjectPtr<ADCGameState> WeakGS(GS);
 	TWeakObjectPtr<ADCVoxelCity> WeakCity(this);
 	const int32 Build = BuiltId;
-	ApplyOpAsync(GS->VoxelOps.Last(), true, [WeakGS, WeakCity, Seq, Build, From, OpTime, Chips = Op.Chips](const FDCVoxelOpResult& Result, uint32 Hash)
+	ApplyOpAsync(Op, true, [WeakGS, WeakCity, Seq, Build, From, OpTime, Chips = Op.Chips](const FDCVoxelOpResult& Result, uint32 Hash)
 	{
 		ADCGameState* State = WeakGS.Get();
 		ADCVoxelCity* City = WeakCity.Get();

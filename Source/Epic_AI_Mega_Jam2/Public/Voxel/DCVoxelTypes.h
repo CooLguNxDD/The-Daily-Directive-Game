@@ -423,10 +423,13 @@ struct FDCVoxelTuning
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 ChipBucketCm = 30;
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float ChipHp = 1.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float ChipPropHp = 1.f;
-	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 ChipStructureVoxels = 300;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 ChipStructureVoxels = 1000;
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float ChipStructureMinSeconds = 3.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float ChipStructureMaxBodyLoad = 0.6f;
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 ChipCrumbs = 3;
+	/** Consecutive chip-only ops merge into one replicated entry up to this many chips (the op history stays far under
+	 *  the engine's replicated array limit through a long firefight). */
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 ChipMergeMaxChips = 384;
 	/** Support (R24): only voxels chipped in a tower's bottom ChipSupportFloors floors count toward ChipStructureVoxels
 	 *  (0 = every chipped voxel counts). When the lot is listed, its base gives way on the side the shots came from
 	 *  (a bite ChipBiteFloors tall, ChipBitePercent of the footprint deep) before the structure pass, so it topples away

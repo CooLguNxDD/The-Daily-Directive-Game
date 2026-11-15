@@ -111,6 +111,29 @@ bool FDCChipOpTest::RunTest(const FString&)
 	TestTrue(TEXT("chip-only ops fold"), DCVoxelOps::IsChipOnly(Op1) && DCVoxelOps::IsChipOnly(Op2));
 	DCVoxelOps::Run(Folded, Fold, Ctx, FDCPendingPiece());
 	TestEqual(TEXT("folded chip ops leave the same voxels"), Folded.Hash(), A.Hash());
+	// History merge (MergeInto): op 2 merges into op 1's entry. A client that applied op 1 already and then the merged
+	// entry ends with the same voxels as one that applied them one by one.
+	FDCVoxelOp Entry = Op1;
+	FDCVoxelOp Next = Op2;
+	TestTrue(TEXT("a chip-only op merges into a chip-only entry"), DCChipRules::MergeInto(Entry, Next, 1000));
+	TestTrue(TEXT("the merged entry holds both and takes the newer seq"), Entry.Chips.Num() == Op1.Chips.Num() + Op2.Chips.Num() && Entry.Seq == Op2.Seq);
+	FDCVoxelSector Lagging;
+	CraftSector(Lagging, 4242, 0);
+	DCVoxelOps::Run(Lagging, Op1, Ctx, FDCPendingPiece());
+	DCVoxelOps::Run(Lagging, Entry, Ctx, FDCPendingPiece());
+	TestEqual(TEXT("a lagging client that re-applies the merged entry matches"), Lagging.Hash(), A.Hash());
+	FDCVoxelOp Small = Op1;
+	TestFalse(TEXT("no merge past MaxChips"), DCChipRules::MergeInto(Small, Op2, Op1.Chips.Num()));
+	FDCVoxelOp Strike = Op1;
+	Strike.Kind = TEXT("Strike");
+	TestFalse(TEXT("no merge into a strike"), DCChipRules::MergeInto(Strike, Op2, 1000));
+	FDCVoxelOp Struct = Op2;
+	Struct.StructureLots.Add(0);
+	FDCVoxelOp Base = Op1;
+	TestFalse(TEXT("a structure op never merges"), DCChipRules::MergeInto(Base, Struct, 1000));
+	FDCVoxelOp OtherBuild = Op2;
+	OtherBuild.Build = Op1.Build + 1;
+	TestFalse(TEXT("no merge across builds"), DCChipRules::MergeInto(Base, OtherBuild, 1000));
 	// Holes: the chipped wall voxels are gone (you see and shoot through).
 	TestFalse(TEXT("a chipped wall voxel is open"), T.Grid.Data.IsSolid(T.Grid.ToLocal(First[0])));
 	// Kinds: the terrain flag drives the city's street snapshot.

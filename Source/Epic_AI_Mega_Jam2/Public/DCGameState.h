@@ -97,6 +97,8 @@ public:
 	/** The active mutators' definitions (data drives their effects; code never names a mutator). */
 	TArray<const struct FDCUpgradeDef*> ActiveMutators() const;
 	void AddCollapse(int32 Sector, int32 Lot, const FVector& Epicenter, float Time = -1.f);
+	/** Host: the next voxel op Seq, for an op merged into the last VoxelOps entry (R24 chips) instead of appended. */
+	int32 TakeVoxelSeq() { return NextVoxelSeq++; }
 
 private:
 	UPROPERTY() TObjectPtr<ADCEnvironment> Environment;

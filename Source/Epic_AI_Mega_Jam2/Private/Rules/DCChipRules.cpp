@@ -183,6 +183,22 @@ namespace DCChipRules
 		return true;
 	}
 
+	bool MergeInto(FDCVoxelOp& Last, const FDCVoxelOp& Op, int32 MaxChips)
+	{
+		const bool bChipOnly = DCVoxelOps::IsChipOnly(Last) && DCVoxelOps::IsChipOnly(Op);
+		if (!bChipOnly || Last.Build != Op.Build || Last.Sector != Op.Sector || Last.Chips.Num() + Op.Chips.Num() > MaxChips)
+		{
+			return false;
+		}
+		Last.Chips.Append(Op.Chips);
+		Last.BreakProps.Append(Op.BreakProps);
+		Last.Seq = Op.Seq;
+		Last.Time = Op.Time;
+		Last.CenterCm = Op.CenterCm;
+		Last.ResultHash = 0;
+		return true;
+	}
+
 	void Credit(FDCChipLedger& L, int32 Lot, int32 Voxels)
 	{
 		if (Lot >= 0 && Voxels > 0)

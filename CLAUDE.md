@@ -74,7 +74,8 @@ Unreal Engine 5.9 jam game. Engine: `L:/unreal/UE_5.9` (registered source build,
   bite on the shooters' side, then the structure pass; committed two-phase like a strike). Chip-only ops skip the
   street snapshot, keep the surface cache, throw crumbs (never shard bodies) and fold on replay.
 - Evidence flags: `-dcchips` (host: chips on while the data default is off), `-dcchipfire` (pilot: sustained fire at
-  the nearest tower's wall foot for 60 s, fixed-pose `chipfire_*` frames, `DEMO chipfire` hash lines); logs `DCCHIP`.
+  the nearest tower's wall foot for 60 s, fixed-pose `chipfire_*` frames, `DEMO chipfire` hash lines); logs `DCCHIP`
+  (host ops; on clients `DCCHIP check ... match=host` once idle at the newest chip entry and its host hash arrived).
 
 ## Editor MCP
 - Epic's MCP server (`ModelContextProtocol` + `AllToolsets` in the `.uproject`) serves `unreal-mcp` on `http://127.0.0.1:23444/mcp` (auto-start and port in the per-user `Saved/Config/WindowsEditor/EditorPerProjectUserSettings.ini`; `.mcp.json` and the other client configs point there).

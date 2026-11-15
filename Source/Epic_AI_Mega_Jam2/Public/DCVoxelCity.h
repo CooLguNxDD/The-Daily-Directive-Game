@@ -137,6 +137,11 @@ private:
 	void SetChipProps(const FDCCityPlan& Plan);
 	/** R24 host: sends the due Chip op (DCChipRules::Flush) and applies it like any op. */
 	void TickChips();
+	/** R24 evidence on a client: once idle at the newest op and its host hash has arrived, compare (DCCHIP check). A
+	 *  merged chip entry gets its hash after clients applied it, so the apply-time comparison rarely runs for chips. */
+	void CheckChipHash();
+	int32 ChipCheckedSeq = 0;
+	double ChipCheckNext = 0.0;
 	/** Grid of a city cell component (its tag): a tower lot, DCVoxelOps::PropGrid, or INDEX_NONE (terrain, other). */
 	int32 ChipGridOf(const UPrimitiveComponent* Comp) const;
 	/** Clusters of a Chip op throw crumbs only (no physics shards; cosmetic, local). */
