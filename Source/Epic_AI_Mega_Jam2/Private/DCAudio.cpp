@@ -335,11 +335,23 @@ namespace DCAudio
 		return Save ? FMath::Clamp(Save->Settings.MasterVolume, 0.f, 1.f) : 1.f;
 	}
 
+	float MusicLevel(const UObject* WorldContext)
+	{
+		const UDCSaveSubsystem* Save = UDCSaveSubsystem::Get(WorldContext);
+		return Master(WorldContext) * (Save ? FMath::Clamp(Save->Settings.MusicVolume, 0.f, 1.f) : 1.f);
+	}
+
+	float SfxLevel(const UObject* WorldContext)
+	{
+		const UDCSaveSubsystem* Save = UDCSaveSubsystem::Get(WorldContext);
+		return Master(WorldContext) * (Save ? FMath::Clamp(Save->Settings.SfxVolume, 0.f, 1.f) : 1.f);
+	}
+
 	void PlayAt(const UObject* WorldContext, FName Cue, const FVector& Location, float Volume, float Pitch)
 	{
 		if (UDCAudioSubsystem* Audio = Get(WorldContext))
 		{
-			Audio->PlayAt(WorldContext, Cue, Location, Volume * Master(WorldContext), Pitch);
+			Audio->PlayAt(WorldContext, Cue, Location, Volume * SfxLevel(WorldContext), Pitch);
 		}
 	}
 
@@ -347,7 +359,7 @@ namespace DCAudio
 	{
 		if (UDCAudioSubsystem* Audio = Get(WorldContext))
 		{
-			Audio->Play2D(WorldContext, Cue, Volume * Master(WorldContext), Pitch);
+			Audio->Play2D(WorldContext, Cue, Volume * SfxLevel(WorldContext), Pitch);
 		}
 	}
 }
@@ -640,7 +652,7 @@ void UDCAudioSubsystem::Play2D(const UObject* WorldContext, FName Cue, float Vol
 void UDCAudioSubsystem::StartMusic(const UObject* WorldContext, FName Cue, float Volume)
 {
 	MusicBase = Volume;
-	Volume *= DCAudio::Master(WorldContext);
+	Volume *= DCAudio::MusicLevel(WorldContext);
 	if (Music && Music->IsPlaying() && MusicCue == Cue)
 	{
 		Music->SetVolumeMultiplier(Volume);
@@ -679,7 +691,7 @@ void UDCAudioSubsystem::SetMusicVolume(float Volume)
 	MusicBase = Volume;
 	if (Music)
 	{
-		Music->SetVolumeMultiplier(Volume * DCAudio::Master(Music));
+		Music->SetVolumeMultiplier(Volume * DCAudio::MusicLevel(Music));
 	}
 }
 
@@ -687,6 +699,6 @@ void UDCAudioSubsystem::ApplyMasterVolume(const UObject* WorldContext)
 {
 	if (Music)
 	{
-		Music->SetVolumeMultiplier(MusicBase * DCAudio::Master(WorldContext));
+		Music->SetVolumeMultiplier(MusicBase * DCAudio::MusicLevel(WorldContext));
 	}
 }

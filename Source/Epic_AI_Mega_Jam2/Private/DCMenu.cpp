@@ -19,6 +19,7 @@
 #include "Brushes/SlateRoundedBoxBrush.h"
 #include "Widgets/Input/SButton.h"
 #include "DCSave.h"
+#include "Widgets/Input/SSlider.h"
 #include "Widgets/Input/SEditableTextBox.h"
 #include "Widgets/Layout/SBorder.h"
 #include "Widgets/Layout/SBox.h"
@@ -302,7 +303,23 @@ namespace DCMenu
 		{
 			// Settings (R24): every change is saved at once (Saved/DCSave/settings.json).
 			Column->AddSlot().AutoHeight().HAlign(HAlign_Center).Padding(0, 0, 0, 10)[Label(TEXT("SETTINGS"), 30, Ink)];
-			for (const TPair<FName, const TCHAR*>& R : {TPair<FName, const TCHAR*>(TEXT("Volume"), TEXT("VOLUME")), TPair<FName, const TCHAR*>(TEXT("Mouse"), TEXT("MOUSE")),
+			// Volume sliders (human 16:03): Master, Music, SFX; live while dragging, saved on release.
+			for (const TPair<FName, const TCHAR*>& V : {TPair<FName, const TCHAR*>(TEXT("Volume"), TEXT("MASTER")), TPair<FName, const TCHAR*>(TEXT("Music"), TEXT("MUSIC")), TPair<FName, const TCHAR*>(TEXT("Sfx"), TEXT("SFX"))})
+			{
+				const FName Id = V.Key;
+				const FString Name = V.Value;
+				Column->AddSlot().AutoHeight().HAlign(HAlign_Center).Padding(0, 4)
+					[SNew(SHorizontalBox)
+						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[SNew(SBox).WidthOverride(170.f)
+							[SNew(STextBlock).Font(DCFonts::Slate(TEXT("Body"), 20)).ColorAndOpacity(Ink)
+								.Text_Lambda([Weak, Id, Name]() { const ADCPlayerController* P = Weak.Get(); return FText::FromString(FString::Printf(TEXT("%s %d%%"), *Name, FMath::RoundToInt32((P ? P->GetVolume(Id) : 1.f) * 100.f))); })]]
+						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[SNew(SBox).WidthOverride(300.f).HeightOverride(40.f)
+							[SNew(SSlider).Value(PC->GetVolume(Id)).MinValue(0.f).MaxValue(1.f).StepSize(FMath::Max(UDCTuning::Get().Run.VolumeStep, 0.01f))
+								.SliderBarColor(FLinearColor(Ink.R, Ink.G, Ink.B, 0.4f)).SliderHandleColor(Gold)
+								.OnValueChanged_Lambda([Weak, Id](float X) { if (ADCPlayerController* P = Weak.Get()) { P->SetVolumeLive(Id, X); } })
+								.OnMouseCaptureEnd_Lambda([Weak]() { if (ADCPlayerController* P = Weak.Get()) { P->SaveSettingsNow(); } })]]];
+			}
+			for (const TPair<FName, const TCHAR*>& R : {TPair<FName, const TCHAR*>(TEXT("Mouse"), TEXT("MOUSE")),
 				TPair<FName, const TCHAR*>(TEXT("Quality"), TEXT("QUALITY")), TPair<FName, const TCHAR*>(TEXT("Window"), TEXT("WINDOW")), TPair<FName, const TCHAR*>(TEXT("Hints"), TEXT("HINTS"))})
 			{
 				const FName Id = R.Key;
@@ -346,6 +363,18 @@ namespace DCMenu
 				Column->AddSlot().AutoHeight().HAlign(HAlign_Center).Padding(0, 16, 0, 0)[Button(TEXT("PLAY"), Click(&ADCPlayerController::HowToPlaySolo), Gold, &GSoloButton)];
 			}
 			Column->AddSlot().AutoHeight().HAlign(HAlign_Center).Padding(0, PC->IsHowToThenSolo() ? 4 : 16, 0, 0)[Button(TEXT("BACK"), Click(&ADCPlayerController::CloseHowTo), Ink)];
+		},
+		[&]()
+		{
+			// 6: the in-game ESC menu (human 16:05): buttons are +PauseMenu rows dispatched by action id.
+			Column->AddSlot().AutoHeight().HAlign(HAlign_Center).Padding(0, 0, 0, 12)[Label(TEXT("PAUSED"), 30, Ink)];
+			for (const FDCMenuButton& B : UDCTuning::Get().PauseMenu)
+			{
+				const FName Action = B.Action;
+				const bool bArmed = PC->IsPauseArmed(Action);
+				Column->AddSlot().AutoHeight().HAlign(HAlign_Center).Padding(0, 4)
+					[Button(bArmed ? B.ConfirmLabel : B.Label, [Weak, Action]() { if (ADCPlayerController* P = Weak.Get()) { DCAudio::Play2D(P, TEXT("UIClick")); P->PauseAction(Action); } }, bArmed ? Gold : Ink)];
+			}
 		}};
 		Modes[FMath::Min<int32>(Mode, UE_ARRAY_COUNT(Modes) - 1)]();
 		Column->AddSlot().AutoHeight().HAlign(HAlign_Center).Padding(0, 20, 0, 0)

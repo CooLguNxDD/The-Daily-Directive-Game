@@ -65,6 +65,9 @@ public:
 	bool bSettingsOpen = false;
 	/** R25 tutorial page open, and whether its PLAY button starts the solo run (offered before the first run). */
 	bool bHowToOpen = false;
+	bool bPauseOpen = false;
+	/** The pause action waiting for its confirm click (QUIT TO MENU). */
+	FName PauseArmed;
 	bool bHowToThenSolo = false;
 	FName AwaitingKey;
 	FDCOutfit BuilderOutfit;
@@ -160,6 +163,15 @@ public:
 	/** R25: the "How to play" page; opening it once stops the menu button shining (saved). */
 	void OpenHowTo();
 	void CloseHowTo() { bHowToOpen = false; bHowToThenSolo = false; MenuMode = 254; }
+	/** Settings sliders (human 16:03): Id Volume (master), Music or Sfx; applied live while dragging, saved on release. */
+	float GetVolume(FName Id) const;
+	/** In-game ESC menu (human 16:05): open/close, the data-row buttons dispatch through PauseAction. */
+	bool IsPauseOpen() const { return bPauseOpen; }
+	bool IsPauseArmed(FName Action) const { return PauseArmed == Action; }
+	void SetPauseOpen(bool bOpen);
+	void PauseAction(FName Action);
+	void SetVolumeLive(FName Id, float Value);
+	void SaveSettingsNow();
 	/** The page's PLAY button: the solo run it was offered before. */
 	void HowToPlaySolo();
 	bool IsHowToThenSolo() const { return bHowToThenSolo; }

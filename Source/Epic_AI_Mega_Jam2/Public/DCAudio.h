@@ -81,6 +81,9 @@ namespace DCAudio
 	EPIC_AI_MEGA_JAM2_API void Play2D(const UObject* WorldContext, FName Cue, float Volume = 1.f, float Pitch = 1.f);
 	/** The saved master volume (R24), 0..1. */
 	EPIC_AI_MEGA_JAM2_API float Master(const UObject* WorldContext);
+	/** Settings sliders (human 16:03): master x music for the score, master x sfx for every other sound. */
+	EPIC_AI_MEGA_JAM2_API float MusicLevel(const UObject* WorldContext);
+	EPIC_AI_MEGA_JAM2_API float SfxLevel(const UObject* WorldContext);
 
 	/** Pure synthesis, used by the subsystem and the tests: the registered cue names. */
 	EPIC_AI_MEGA_JAM2_API TArray<FName> CueNames();

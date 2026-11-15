@@ -236,6 +236,107 @@ void ADCPlayerController::SettingsStep(FName Row, int32 Step)
 	MenuMode = 254;
 }
 
+namespace
+{
+	/** The saved volume each slider edits (a registry: a new slider is a new entry). */
+	float* VolumeField(FDCSettingsSave& S, FName Id)
+	{
+		static const TMap<FName, float FDCSettingsSave::*> Fields = {
+			{TEXT("Volume"), &FDCSettingsSave::MasterVolume}, {TEXT("Music"), &FDCSettingsSave::MusicVolume}, {TEXT("Sfx"), &FDCSettingsSave::SfxVolume},
+		};
+		float FDCSettingsSave::* const* Field = Fields.Find(Id);
+		return Field ? &(S.**Field) : nullptr;
+	}
+}
+
+void ADCPlayerController::SetPauseOpen(bool bOpen)
+{
+	if (bPauseOpen == bOpen)
+	{
+		MenuMode = 254;
+		return;
+	}
+	bPauseOpen = bOpen;
+	PauseArmed = NAME_None;
+	bSettingsOpen = false;
+	bHowToOpen = false;
+	// Solo pauses the world; co-op never does (the host's world keeps running), the menu overlays this player only.
+	if (GetNetMode() == NM_Standalone)
+	{
+		SetPause(bOpen);
+	}
+	if (APawn* Me = GetPawn())
+	{
+		bOpen ? Me->DisableInput(this) : Me->EnableInput(this);
+	}
+	if (!bOpen && PlayerInput)
+	{
+		PlayerInput->FlushPressedKeys(); // nothing held on close: no running on, no firing
+	}
+	bShowMouseCursor = !bOpen; // forces UpdateCursor to re-apply the input mode
+	MenuMode = 254;
+	UE_LOG(LogTemp, Display, TEXT("DCPAUSE %s"), bOpen ? TEXT("open") : TEXT("closed"));
+}
+
+void ADCPlayerController::PauseAction(FName Action)
+{
+	using FAction = void (*)(ADCPlayerController&);
+	static const TMap<FName, FAction> Actions = {
+		{TEXT("Resume"), +[](ADCPlayerController& P) { P.SetPauseOpen(false); }},
+		{TEXT("Settings"), +[](ADCPlayerController& P) { P.OpenSettings(); }},
+		{TEXT("HowTo"), +[](ADCPlayerController& P) { P.OpenHowTo(); }},
+		{TEXT("Quit"), +[](ADCPlayerController& P)
+			{
+				P.SetPauseOpen(false);
+				UGameplayStatics::OpenLevel(&P, FName(*UGameplayStatics::GetCurrentLevelName(&P)), true); // the title menu
+			}},
+	};
+	const FDCMenuButton* Row = UDCTuning::Get().PauseMenu.FindByPredicate([Action](const FDCMenuButton& B) { return B.Action == Action; });
+	if (Row && !Row->ConfirmLabel.IsEmpty() && PauseArmed != Action)
+	{
+		PauseArmed = Action; // first click arms it; the button now reads its confirm label
+		MenuMode = 254;
+		return;
+	}
+	PauseArmed = NAME_None;
+	if (const FAction* Fn = Actions.Find(Action))
+	{
+		(*Fn)(*this);
+	}
+	MenuMode = 254;
+}
+
+float ADCPlayerController::GetVolume(FName Id) const
+{
+	UDCSaveSubsystem* Save = UDCSaveSubsystem::Get(this);
+	const float* V = Save ? VolumeField(Save->Settings, Id) : nullptr;
+	return V ? *V : 1.f;
+}
+
+void ADCPlayerController::SetVolumeLive(FName Id, float Value)
+{
+	UDCSaveSubsystem* Save = UDCSaveSubsystem::Get(this);
+	float* V = Save ? VolumeField(Save->Settings, Id) : nullptr;
+	if (!V)
+	{
+		return;
+	}
+	*V = FMath::Clamp(Value, 0.f, 1.f);
+	if (UDCAudioSubsystem* Audio = GetGameInstance()->GetSubsystem<UDCAudioSubsystem>())
+	{
+		Audio->ApplyMasterVolume(this); // the score follows at once (DCMusic re-levels its decks on its next tick)
+	}
+}
+
+void ADCPlayerController::SaveSettingsNow()
+{
+	if (UDCSaveSubsystem* Save = UDCSaveSubsystem::Get(this))
+	{
+		Save->SaveSettings();
+		UE_LOG(LogTemp, Display, TEXT("DCSETTINGS volumes master=%.2f music=%.2f sfx=%.2f (saved)"), Save->Settings.MasterVolume, Save->Settings.MusicVolume, Save->Settings.SfxVolume);
+	}
+}
+
 FString ADCPlayerController::KeyFor(FName Action) const
 {
 	const UDCSaveSubsystem* Save = UDCSaveSubsystem::Get(this);
@@ -261,6 +362,16 @@ bool ADCPlayerController::InputKey(const FInputKeyEventArgs& Params)
 		}
 		AwaitingKey = NAME_None;
 		MenuMode = 254;
+		return true;
+	}
+	// ESC menu (human 16:05): Esc in play opens or closes it (the rebinding Esc above still cancels a rebind first).
+	const ADCGameState* GS = GetWorld() ? GetWorld()->GetGameState<ADCGameState>() : nullptr;
+	if (Params.Key == EKeys::Escape && Params.Event == IE_Pressed && GS && GS->Phase != EDCRunPhase::Lobby)
+	{
+		const bool bSubPage = bPauseOpen && (bSettingsOpen || bHowToOpen);
+		bSettingsOpen = false;
+		bHowToOpen = false;
+		SetPauseOpen(bSubPage ? true : !bPauseOpen);
 		return true;
 	}
 	return Super::InputKey(Params);
@@ -848,6 +959,32 @@ void ADCPlayerController::PlayerTick(float DeltaTime)
 			bOutfitSent = true;
 			SendOutfit(); // R23: the saved photographer, validated and replicated by the host
 		}
+		// -dcpauseshot=<dir> evidence (human 16:05): in play, open the ESC menu, frame it, open its Settings (sliders), frame
+		// that, close. Real-time steps, so the solo pause does not stall them.
+		static FString PauseShot;
+		static const bool bPauseShot = FParse::Value(FCommandLine::Get(), TEXT("dcpauseshot="), PauseShot);
+		static double PauseShotStart = -1.0;
+		static int32 PauseShotStep = 0;
+		const ADCGameState* PS_GS = GetWorld()->GetGameState<ADCGameState>();
+		if (bPauseShot && PS_GS && PS_GS->Phase == EDCRunPhase::Sector && PauseShotStep < 5)
+		{
+			const double Real = FPlatformTime::Seconds();
+			PauseShotStart = PauseShotStart < 0.0 ? Real + 20.0 : PauseShotStart;
+			const double At[] = {0.0, 2.0, 3.0, 5.0, 6.0};
+			if (Real >= PauseShotStart + At[PauseShotStep])
+			{
+				const TFunction<void()> Steps[] = {
+					[this] { SetPauseOpen(true); },
+					[] { FScreenshotRequest::RequestScreenshot(FPaths::Combine(PauseShot, TEXT("esc_menu.png")), true, false); },
+					[this] { PauseAction(TEXT("Settings")); },
+					[] { FScreenshotRequest::RequestScreenshot(FPaths::Combine(PauseShot, TEXT("esc_settings.png")), true, false); },
+					[this] { SetPauseOpen(false); },
+				};
+				Steps[PauseShotStep]();
+				UE_LOG(LogTemp, Display, TEXT("DCPAUSE shot step %d"), PauseShotStep);
+				++PauseShotStep;
+			}
+		}
 		UpdateMenu();
 		UpdateCursor();
 		UpdateReel();
@@ -937,11 +1074,12 @@ void ADCPlayerController::UpdateReel()
 void ADCPlayerController::UpdateMenu()
 {
 	const ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>();
-	const bool bWant = GS && GS->Phase == EDCRunPhase::Lobby && (!FParse::Param(FCommandLine::Get(), TEXT("dcdemo")) || FCString::Strifind(FCommandLine::Get(), TEXT("dcmenuflow=")) || FCString::Strifind(FCommandLine::Get(), TEXT("dceosshot=")));
-	const uint8 Base = MenuModeFor(*this);
-	// Title-menu pages (page table, first open one wins): builder 3, settings 4, how to play 5 (R25).
+	const bool bWant = bPauseOpen || (GS && GS->Phase == EDCRunPhase::Lobby && (!FParse::Param(FCommandLine::Get(), TEXT("dcdemo")) || FCString::Strifind(FCommandLine::Get(), TEXT("dcmenuflow=")) || FCString::Strifind(FCommandLine::Get(), TEXT("dceosshot="))));
+	const uint8 Base = bPauseOpen ? 6 : MenuModeFor(*this); // 6 = the in-game ESC menu (human 16:05)
+	// Title-menu pages (page table, first open one wins): builder 3, settings 4, how to play 5 (R25); the ESC menu opens
+	// settings and how to play over itself.
 	const TPair<bool, uint8> Pages[] = {{bBuilderOpen, 3}, {bSettingsOpen, 4}, {bHowToOpen, 5}};
-	const TPair<bool, uint8>* Open = Base == 0 ? Algo::FindByPredicate(Pages, [](const TPair<bool, uint8>& P) { return P.Key; }) : nullptr;
+	const TPair<bool, uint8>* Open = Base == 0 || Base == 6 ? Algo::FindByPredicate(Pages, [](const TPair<bool, uint8>& P) { return P.Key; }) : nullptr;
 	const uint8 Mode = !bWant ? 255 : (Open ? Open->Value : Base);
 	// The title menu listens for LAN hosts and rebuilds when the list changes.
 	UDCLanBeacon* Beacon = GetGameInstance()->GetSubsystem<UDCLanBeacon>();
@@ -1008,7 +1146,7 @@ void ADCPlayerController::UpdateMenu()
 void ADCPlayerController::UpdateCursor()
 {
 	const ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>();
-	const bool bCursor = GS && WantsCursor(GS->Phase) && (!FParse::Param(FCommandLine::Get(), TEXT("dcdemo")) || (GS->Phase == EDCRunPhase::Lobby && FCString::Strifind(FCommandLine::Get(), TEXT("dcmenuflow="))));
+	const bool bCursor = bPauseOpen || (GS && WantsCursor(GS->Phase) && (!FParse::Param(FCommandLine::Get(), TEXT("dcdemo")) || (GS->Phase == EDCRunPhase::Lobby && FCString::Strifind(FCommandLine::Get(), TEXT("dcmenuflow=")))));
 	if (bCursor == bShowMouseCursor)
 	{
 		return;

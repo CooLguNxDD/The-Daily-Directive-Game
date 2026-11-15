@@ -194,7 +194,7 @@ void UDCMusicSubsystem::Sample(UWorld& World, const ADCGameState& GS, float Dt)
 	int32 Hostiles = 0, NumBlasts = 0;
 	Raw = ReadIntensity(World, GS, Hostiles, NumBlasts);
 	Intensity = DCMusicRules::Smooth(T.Music, Intensity, Raw, Dt);
-	if (!FMath::IsNearlyEqual(AppliedMaster, DCAudio::Master(&World)))
+	if (!FMath::IsNearlyEqual(AppliedMaster, DCAudio::MusicLevel(&World)))
 	{
 		ApplyLevels(); // the saved master volume changed (settings, R24)
 	}
@@ -333,7 +333,7 @@ float UDCMusicSubsystem::TrackLevel(FName Track) const
 {
 	const FDCMusicTrack* Row = UDCTuning::Get().FindMusicTrack(Track);
 	const UGameInstance* GI = GetGameInstance();
-	return (Row ? Row->Volume : 1.f) * UDCTuning::Get().Music.Volume * Duck * DCAudio::Master(GI ? GI->GetWorld() : nullptr);
+	return (Row ? Row->Volume : 1.f) * UDCTuning::Get().Music.Volume * Duck * DCAudio::MusicLevel(GI ? GI->GetWorld() : nullptr);
 }
 
 float UDCMusicSubsystem::TrackSeconds(FName Track) const
@@ -345,7 +345,7 @@ float UDCMusicSubsystem::TrackSeconds(FName Track) const
 void UDCMusicSubsystem::ApplyLevels()
 {
 	const UGameInstance* GI = GetGameInstance();
-	AppliedMaster = DCAudio::Master(GI ? GI->GetWorld() : nullptr);
+	AppliedMaster = DCAudio::MusicLevel(GI ? GI->GetWorld() : nullptr);
 	for (const TPair<FName, TObjectPtr<UAudioComponent>>& D : Decks)
 	{
 		if (D.Value)

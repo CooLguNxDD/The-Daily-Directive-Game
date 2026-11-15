@@ -14,8 +14,11 @@ USTRUCT()
 struct FDCSettingsSave
 {
 	GENERATED_BODY()
-	UPROPERTY() int32 Version = 1;
+	/** 2 (human 16:03): MusicVolume and SfxVolume added; an older save loads them at their defaults. */
+	UPROPERTY() int32 Version = 2;
 	UPROPERTY() float MasterVolume = 1.f;
+	UPROPERTY() float MusicVolume = 1.f;
+	UPROPERTY() float SfxVolume = 1.f;
 	UPROPERTY() float MouseSensitivity = 1.f;
 	/** Post scalability preset index (0 low .. 2 high) and window mode. */
 	UPROPERTY() int32 Quality = 2;

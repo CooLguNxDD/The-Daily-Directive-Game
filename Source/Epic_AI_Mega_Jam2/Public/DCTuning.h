@@ -842,6 +842,17 @@ struct FDCReelShot
 	UPROPERTY(EditAnywhere, Config, Category = "Run") float Fov = 70.f;
 };
 
+/** ESC menu button (human 16:05): Action names an entry of the controller's pause action registry. */
+USTRUCT(BlueprintType)
+struct FDCMenuButton
+{
+	GENERATED_BODY()
+	UPROPERTY(EditAnywhere, Config, Category = "Run") FName Action;
+	UPROPERTY(EditAnywhere, Config, Category = "Run") FString Label;
+	/** Shown after the first click of an action that asks to confirm (empty = no confirm). */
+	UPROPERTY(EditAnywhere, Config, Category = "Run") FString ConfirmLabel;
+};
+
 /** R25 hint card: shown once, at the first moment its trigger (Id, a key of the DCHints registry) holds. */
 USTRUCT(BlueprintType)
 struct FDCHintDef
@@ -869,6 +880,8 @@ struct FDCRunTuning
 	UPROPERTY(EditAnywhere, Config, Category = "Run") FString HintDismissKey = TEXT("H");
 	/** No hint until this long after the sector's city is built (the sector card holds, then lifts). */
 	UPROPERTY(EditAnywhere, Config, Category = "Run") float HintAfterCardSeconds = 2.5f;
+	/** Settings volume sliders (Master, Music, SFX): the slider step (0..1). */
+	UPROPERTY(EditAnywhere, Config, Category = "Run") float VolumeStep = 0.05f;
 	/** R1 frame time (advisor a-33): -dcperf logs a DCSPIKE line with its frame-scope owners for any frame longer than this (ms; 33 = a frame under 30 fps). */
 	UPROPERTY(EditAnywhere, Config, Category = "Run") float PerfSpikeMs = 33.f;
 	/** Solo (R12): how long a downed player has to finish the self-revive hold before the run fails. */
@@ -1048,6 +1061,8 @@ public:
 	UPROPERTY(EditAnywhere, Config, Category = "Run") TArray<FDCFooterPart> FooterParts;
 	/** R27 reel: every clip plays through these angles in order (shares of the clip by Weight); empty = one Orbit. */
 	UPROPERTY(EditAnywhere, Config, Category = "Run") TArray<FDCReelShot> ReelCameraShots;
+	/** In-game ESC menu buttons, in order (human 16:05). */
+	UPROPERTY(EditAnywhere, Config, Category = "Run") TArray<FDCMenuButton> PauseMenu;
 	/** Post-process layer stack (R19): every layer of the scene and the photo look; code only sets weights by id. */
 	UPROPERTY(EditAnywhere, Config, Category = "Post") TArray<FDCPostLayer> PostLayers;
 	UPROPERTY(EditAnywhere, Config, Category = "Post") TArray<FDCPostPreset> PostPresets;
