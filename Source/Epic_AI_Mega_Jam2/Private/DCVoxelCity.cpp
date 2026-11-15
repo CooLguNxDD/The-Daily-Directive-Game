@@ -1282,6 +1282,7 @@ void ADCVoxelCity::FinishInFlight()
 	{
 		FinishOp(Done->Op, Done->Result, Done->bAnimate, Done->ApplyMs, Done->Hash, true);
 	}
+	const double CommitTMask = FPlatformTime::Seconds();
 	// R6: the op's lots changed (breaches, falls): their walk masks follow, here, while no worker writes.
 	for (const int32 Lot : Done->Result.TouchedLots)
 	{
@@ -1292,6 +1293,12 @@ void ADCVoxelCity::FinishInFlight()
 		RebuildWalkMask(Lot);
 	}
 	const double CommitT1 = FPlatformTime::Seconds();
+	if ((CommitT1 - CommitT0) * 1000.0 > UDCVoxelSettings::Get().Tuning.HitchLogMs)
+	{
+		// R1 attribution (advisor a-36): the commit frame's game-thread split.
+		UE_LOG(LogTemp, Display, TEXT("DCCOMMITOP kind=%s commitop=%.1f walkmask=%.1f ms (lots %d)"), *Done->Op.Kind.ToString(), (CommitTMask - CommitT0) * 1000.0,
+			(CommitT1 - CommitTMask) * 1000.0, Done->Result.TouchedLots.Num() + Done->Result.FallenLots.Num());
+	}
 	if (Done->OnDone)
 	{
 		Done->OnDone(Done->Result, Done->Hash);
