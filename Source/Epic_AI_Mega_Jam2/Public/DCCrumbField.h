@@ -60,6 +60,7 @@ private:
 	struct FBucket
 	{
 		TObjectPtr<UInstancedStaticMeshComponent> Ism;
+		bool bDissolve = false; // R15: the bucket material dissolves per instance (custom data 0)
 		TArray<int32> FreeInstances;
 		bool bDirty = false;
 	};

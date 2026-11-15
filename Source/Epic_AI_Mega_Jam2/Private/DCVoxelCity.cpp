@@ -731,7 +731,66 @@ void ADCVoxelCity::ReleasePiece(UPrimitiveComponent* Piece)
 	Mesh->SetOwnerNoSee(false);
 	Mesh->SetCastShadow(true);
 	Mesh->SetMaterial(0, VoxelMaterialFor(*Cm));
+	Mesh->SetCustomPrimitiveDataFloat(0, 0.f); // R15: a reused piece starts solid
 	FreePieces.FindOrAdd(*Cm).Add(Mesh);
+}
+
+UMaterialInterface* ADCVoxelCity::DissolveMaterialFor(int32 VoxelCm)
+{
+	if (const TObjectPtr<UMaterialInstanceDynamic>* Found = DissolveMIDs.Find(VoxelCm))
+	{
+		return *Found;
+	}
+	UMaterialInterface* Parent = Cast<UMaterialInterface>(UDCVoxelSettings::Get().VoxelDissolveMaterial.TryLoad());
+	UMaterialInstanceDynamic* Base = Cast<UMaterialInstanceDynamic>(VoxelMaterialFor(VoxelCm));
+	if (!Parent || !Base)
+	{
+		DissolveMIDs.Add(VoxelCm, nullptr); // not built: remember, fall back to the shrink
+		return nullptr;
+	}
+	UMaterialInstanceDynamic* Mid = UMaterialInstanceDynamic::Create(Parent, this);
+	Mid->CopyParameterOverrides(Base); // the same voxel look (palette edges, form floor, wetness) as the solid piece
+	const FDCVoxelTuning& Tn = UDCVoxelSettings::Get().Tuning;
+	Mid->SetVectorParameterValue(TEXT("DissolveEdgeColor"), Tn.DissolveEdgeColor);
+	Mid->SetScalarParameterValue(TEXT("DissolveEdgeGlow"), Tn.DissolveEdgeGlow);
+	Mid->SetScalarParameterValue(TEXT("DissolveEdge"), Tn.DissolveEdge);
+	Mid->SetScalarParameterValue(TEXT("DissolveNoiseCm"), Tn.DissolveNoiseCm);
+	DissolveMIDs.Add(VoxelCm, Mid);
+	return Mid;
+}
+
+bool ADCVoxelCity::StartDissolve(UPrimitiveComponent* Mesh)
+{
+	UProceduralMeshComponent* Proc = Cast<UProceduralMeshComponent>(Mesh);
+	const int32* Cm = Proc ? PieceCm.Find(Proc) : nullptr;
+	UMaterialInterface* Mat = Cm ? DissolveMaterialFor(*Cm) : nullptr;
+	if (!Mat)
+	{
+		return false;
+	}
+	Mesh->SetMaterial(0, Mat);
+	for (USceneComponent* Child : Mesh->GetAttachChildren())
+	{
+		UProceduralMeshComponent* Leaf = Cast<UProceduralMeshComponent>(Child);
+		const int32* LeafCm = Leaf ? PieceCm.Find(Leaf) : nullptr;
+		if (UMaterialInterface* LeafMat = LeafCm ? DissolveMaterialFor(*LeafCm) : nullptr)
+		{
+			Leaf->SetMaterial(0, LeafMat);
+		}
+	}
+	return true;
+}
+
+void ADCVoxelCity::SetDissolve(UPrimitiveComponent* Mesh, float Amount)
+{
+	Mesh->SetCustomPrimitiveDataFloat(0, Amount);
+	for (USceneComponent* Child : Mesh->GetAttachChildren())
+	{
+		if (UProceduralMeshComponent* Leaf = Cast<UProceduralMeshComponent>(Child))
+		{
+			Leaf->SetCustomPrimitiveDataFloat(0, Amount);
+		}
+	}
 }
 
 void ADCVoxelCity::PrewarmPieces(int32 PerFrame)
@@ -1848,7 +1907,13 @@ void ADCVoxelCity::TickFalling(float Now)
 			Fading.RemoveAtSwap(i);
 			continue;
 		}
-		if (Fading[i].Body.IsValid())
+		// R15: the piece dissolves (noise, warm edge) where it lies; without the dissolve material it shrinks as before.
+		Fading[i].bDissolving = Fading[i].bDissolving || (A > 0.f && StartDissolve(Mesh));
+		if (Fading[i].bDissolving)
+		{
+			SetDissolve(Mesh, A);
+		}
+		else if (Fading[i].Body.IsValid())
 		{
 			Mesh->SetRelativeScale3D(FVector(FMath::Max(1.f - A, 0.01f))); // leaves shrink with their chunk
 		}

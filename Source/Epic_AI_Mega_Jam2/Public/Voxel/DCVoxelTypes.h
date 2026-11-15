@@ -321,6 +321,13 @@ struct FDCVoxelTuning
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float CrumbBounce = 0.3f;
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float CrumbLifeSeconds = 7.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float CrumbShrinkSeconds = 1.2f;
+	/** R15 block clear look: rested pieces (over PhysicsFadeSeconds) and crumbs (over CrumbShrinkSeconds) dissolve in a
+	 *  world-space noise with a faint warm edge instead of shrinking to a point. Edge colour, glow, width and noise size. */
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") FLinearColor DissolveEdgeColor = FLinearColor(1.f, 0.45f, 0.15f, 1.f);
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float DissolveEdgeGlow = 3.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float DissolveEdge = 0.12f;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float DissolveNoiseCm = 18.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float CrumbDissolveNoiseCm = 4.f;
 	/** Crumbs keep this share of their voxel's glow (lit windows sparkle as they fall, never cream confetti). */
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float CrumbGlowScale = 0.35f;
 	/** Crumbs start at most CrumbSpawnPerFrame per frame (the rest queue), and a break throws (1 - CrumbLoadCut x body

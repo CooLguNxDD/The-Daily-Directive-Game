@@ -34,7 +34,11 @@ int32 UDCCrumbField::BucketFor(const FLinearColor& InColor, float Glow)
 	}
 	UInstancedStaticMeshComponent* Ism = NewObject<UInstancedStaticMeshComponent>(GetOwner());
 	Ism->SetStaticMesh(DCAssets::Cube());
-	Ism->SetMaterial(0, DCAssets::MakeFlat(GetOwner(), FLinearColor::FromSRGBColor(FColor((Q.R >> 3) << 3, (Q.G >> 3) << 3, (Q.B >> 3) << 3)), FMath::RoundToInt(Glow * 4.f) / 4.f));
+	const FLinearColor BucketColor = FLinearColor::FromSRGBColor(FColor((Q.R >> 3) << 3, (Q.G >> 3) << 3, (Q.B >> 3) << 3));
+	const float BucketGlow = FMath::RoundToInt(Glow * 4.f) / 4.f;
+	UMaterialInstanceDynamic* Dissolve = DCAssets::MakeFlatDissolve(GetOwner(), BucketColor, BucketGlow); // R15
+	Ism->SetMaterial(0, Dissolve ? Dissolve : DCAssets::MakeFlat(GetOwner(), BucketColor, BucketGlow));
+	Ism->SetNumCustomDataFloats(Dissolve ? 1 : 0);
 	Ism->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	Ism->SetCastShadow(false);
 	Ism->SetMobility(EComponentMobility::Movable);
@@ -43,6 +47,7 @@ int32 UDCCrumbField::BucketFor(const FLinearColor& InColor, float Glow)
 	Isms.Add(Ism);
 	FBucket& B = Buckets.AddDefaulted_GetRef();
 	B.Ism = Ism;
+	B.bDissolve = Dissolve != nullptr;
 	BucketByKey.Add(Key, Buckets.Num() - 1);
 	return Buckets.Num() - 1;
 }
@@ -107,6 +112,10 @@ void UDCCrumbField::SpawnNow(const FDCCrumbSpawn& S)
 	else
 	{
 		C.Instance = B.Ism->AddInstance(Xf, true);
+	}
+	if (B.bDissolve)
+	{
+		B.Ism->SetCustomDataValue(C.Instance, 0, 0.f, false);
 	}
 	B.bDirty = true;
 	++Live;
@@ -202,10 +211,15 @@ void UDCCrumbField::TickComponent(float DeltaTime, ELevelTick TickType, FActorCo
 		{
 			continue; // lying still: nothing to update
 		}
-		const float Shrink = Age > C.Life ? FMath::Clamp(1.f - (Age - C.Life) / FMath::Max(Tn.CrumbShrinkSeconds, 0.01f), 0.f, 1.f) : 1.f;
+		// R15: past its life a crumb dissolves (noise with a warm edge) at full size; without the dissolve material it shrinks.
+		const float Gone = Age > C.Life ? FMath::Clamp((Age - C.Life) / FMath::Max(Tn.CrumbShrinkSeconds, 0.01f), 0.f, 1.f) : 0.f;
 		const FQuat Rot = C.bResting ? FQuat(FVector::UpVector, FMath::DegreesToRadians(C.AngleDeg)) : FQuat(C.SpinAxis, FMath::DegreesToRadians(C.AngleDeg));
 		FBucket& B = Buckets[C.Bucket];
-		B.Ism->UpdateInstanceTransform(C.Instance, FTransform(Rot, C.Pos, FVector(C.Size * Shrink / CubeCm)), true, false, true);
+		B.Ism->UpdateInstanceTransform(C.Instance, FTransform(Rot, C.Pos, FVector(C.Size * (B.bDissolve ? 1.f : 1.f - Gone) / CubeCm)), true, false, true);
+		if (B.bDissolve)
+		{
+			B.Ism->SetCustomDataValue(C.Instance, 0, Gone, false);
+		}
 		B.bDirty = true;
 	}
 	for (FBucket& B : Buckets)

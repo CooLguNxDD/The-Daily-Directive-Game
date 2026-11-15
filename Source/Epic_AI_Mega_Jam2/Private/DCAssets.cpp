@@ -1,4 +1,5 @@
 #include "DCAssets.h"
+#include "Voxel/DCVoxelSettings.h"
 
 #include "DCTuning.h"
 #include "Engine/StaticMesh.h"
@@ -78,6 +79,29 @@ namespace DCAssets
 	{
 		UMaterialInstanceDynamic* Mid = UMaterialInstanceDynamic::Create(FlatMaterial(), Outer);
 		SetFlat(Mid, Color, Glow);
+		return Mid;
+	}
+
+	UMaterialInstanceDynamic* MakeFlatDissolve(UObject* Outer, const FLinearColor& Color, float Glow)
+	{
+		static TWeakObjectPtr<UMaterialInterface> GFlatDissolve;
+		UMaterialInterface* Parent = GFlatDissolve.Get();
+		if (!Parent)
+		{
+			Parent = Cast<UMaterialInterface>(UDCVoxelSettings::Get().FlatDissolveMaterial.TryLoad());
+			GFlatDissolve = Parent;
+		}
+		if (!Parent)
+		{
+			return nullptr;
+		}
+		UMaterialInstanceDynamic* Mid = UMaterialInstanceDynamic::Create(Parent, Outer);
+		SetFlat(Mid, Color, Glow);
+		const FDCVoxelTuning& Tn = UDCVoxelSettings::Get().Tuning;
+		Mid->SetVectorParameterValue(TEXT("DissolveEdgeColor"), Tn.DissolveEdgeColor);
+		Mid->SetScalarParameterValue(TEXT("DissolveEdgeGlow"), Tn.DissolveEdgeGlow);
+		Mid->SetScalarParameterValue(TEXT("DissolveEdge"), Tn.DissolveEdge);
+		Mid->SetScalarParameterValue(TEXT("DissolveNoiseCm"), Tn.CrumbDissolveNoiseCm);
 		return Mid;
 	}
 
