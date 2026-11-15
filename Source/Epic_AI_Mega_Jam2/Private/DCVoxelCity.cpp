@@ -1069,7 +1069,10 @@ void ADCVoxelCity::FlushPendingCraft()
 	}
 	// An op that arrives mid-craft (review CP22) waits for the craft here instead of being dropped.
 	const TSharedPtr<FPendingCraft> Done = PendingCraft;
-	Done->Task.Wait();
+	{
+		DC_FRAME_SCOPE("CraftWait"); // a blocking wait on the game thread: a spike line names it (R24 chip spike hunt)
+		Done->Task.Wait();
+	}
 	Sector = MoveTemp(*Done->Out);
 	FinishBuild(Done->RunSeed, Done->SectorIndex, Done->BuildId, Done->Start, Done->Pads.Get(), *Done->HashOut);
 	PendingCraft.Reset();
@@ -1281,7 +1284,10 @@ void ADCVoxelCity::WaitInFlight()
 	{
 		return;
 	}
-	InFlightTask.Wait();
+	{
+		DC_FRAME_SCOPE("OpWait"); // a blocking wait on the game thread: a spike line names it (R24 chip spike hunt)
+		InFlightTask.Wait();
+	}
 	FinishInFlight();
 }
 
