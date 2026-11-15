@@ -1,0 +1,23 @@
+# Parked street bike (R23 vehicle): long low ink frame, fat wheels, a cyan light strip under the tank. Faces +x.
+grid 5
+size 44 8 24
+slot frame Ink
+slot wheel Rubble
+slot tank InkBlue
+slot steel Steel
+slot lamp Lamp
+slot strip NeonCyanEdge
+beam 7 4 6 7 4 6 5.5 wheel
+beam 37 4 6 37 4 6 5.5 wheel
+carve beam 7 4 6 7 4 6 3
+carve beam 7 2 6 7 6 6 3
+carve beam 37 2 6 37 6 6 3
+box 10 2 9 32 6 13 frame
+ellipsoid 24 4 15 7 3 3 tank
+box 12 2 14 20 6 16 frame
+beam 32 4 12 38 4 6 1 steel
+beam 32 4 12 30 4 21 0.8 steel
+box 28 1 20 32 7 22 steel
+box 38 3 13 41 5 16 lamp
+paint box 17 1 11 31 7 12 strip
+pivot 22 4 0

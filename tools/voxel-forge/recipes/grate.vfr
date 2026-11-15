@@ -1,0 +1,11 @@
+# Storm grate (R23 ground cover): a steel frame with dark slots, one voxel high, along the kerb.
+grid 5
+size 10 24 1
+slot frame Steel
+slot slot Asphalt
+box 0 0 0 10 24 1 frame
+paint box 2 2 0 8 4 1 slot
+paint box 2 6 0 8 8 1 slot
+paint box 2 10 0 8 12 1 slot
+paint box 2 14 0 8 16 1 slot
+paint box 2 18 0 8 20 1 slot

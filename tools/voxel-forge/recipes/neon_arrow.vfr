@@ -1,0 +1,15 @@
+# Neon arrow (R23 wall mount): a bent arrow sign pointing down at a doorway, magenta tube on an ink plate.
+grid 10
+size 4 20 26
+slot plate Ink
+slot tube PaperEdge
+slot arm Steel
+pivot 0 10 0
+box 0 9 22 3 11 26 arm
+box 2 2 6 3 18 24 plate
+box 3 4 20 4 16 21 tube
+box 3 15 10 4 16 21 tube
+box 3 12 10 4 19 11 tube
+box 3 12 7 4 13 11 tube
+box 3 18 7 4 19 11 tube
+box 3 13 6 4 18 7 tube

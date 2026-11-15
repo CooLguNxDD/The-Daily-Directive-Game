@@ -1,0 +1,19 @@
+# Pod car (R23 vehicle): a rounded two-seat city pod, dark glass bubble, cyan underglow strip, warm headlamps.
+# Friendly rounded shapes. Faces +x.
+grid 5
+size 56 32 30
+slot body InkBlue
+slot glass WindowCool
+slot wheel Ink
+slot glow NeonCyanEdge
+slot lamp Lamp
+ellipsoid 28 16 12 26 15 9 body
+ellipsoid 30 16 19 15 12 9 glass
+carve box 0 0 0 56 32 4
+ellipsoid 12 3 4 5 2 4 wheel
+ellipsoid 12 29 4 5 2 4 wheel
+ellipsoid 44 3 4 5 2 4 wheel
+ellipsoid 44 29 4 5 2 4 wheel
+box 12 7 4 44 25 5 glow
+box 53 8 11 55 12 14 lamp
+box 53 20 11 55 24 14 lamp

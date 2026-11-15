@@ -1,0 +1,12 @@
+# Fire hydrant (R23 street): squat steel-grey body, domed cap, two side nozzles, kerb-grey base. Faces +x.
+grid 5
+size 10 10 16
+slot body Steel
+slot cap Trim
+slot base Kerb
+cyl 5 5 0 2 4.4 base
+cyl 5 5 2 11 3 body
+cyl 5 5 11 12 3.6 cap
+ellipsoid 5 5 12 2.8 2.8 2.6 cap
+beam 1 5 7 9 5 7 1.2 cap
+box 4 4 15 6 6 16 body

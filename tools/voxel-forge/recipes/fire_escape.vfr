@@ -1,0 +1,22 @@
+# Fire escape (R23 wall mount): two steel landings with rails and a diagonal ladder between them, bolted to the wall.
+# Spans about two floors. Faces +x (x = 0 on the wall).
+grid 10
+size 10 30 64
+slot steel Steel
+slot rail Trim
+pivot 0 15 0
+box 0 0 0 10 30 1 steel
+box 0 0 30 10 30 31 steel
+box 9 0 1 10 30 2 rail
+box 9 0 9 10 30 10 rail
+box 9 0 31 10 30 32 rail
+box 9 0 39 10 30 40 rail
+box 0 0 1 10 1 10 rail
+box 0 29 1 10 30 10 rail
+box 0 0 31 10 1 40 rail
+box 0 29 31 10 30 40 rail
+beam 4 4 1 4 26 30 0.6 steel
+beam 7 4 1 7 26 30 0.6 steel
+box 0 2 60 10 28 61 steel
+beam 9 2 40 9 2 60 0.5 rail
+beam 9 27 40 9 27 60 0.5 rail

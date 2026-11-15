@@ -1,0 +1,17 @@
+# Dumpster (R23 street): dented ink-blue bin with a half-open lid, a trash bag on the side, wheels. Faces +x.
+grid 5
+size 30 40 26
+slot body InkBlue
+slot lid Ink
+slot bag Rubble
+slot wheel Steel
+shell 2 2 2 28 38 20 2 body
+box 4 4 4 26 36 17 bag
+poly 20 22 lid 0,2 30,2 30,20 0,20
+beam 2 22 20 28 24 25 1 lid
+cyl 5 5 0 2 1.5 wheel
+cyl 25 5 0 2 1.5 wheel
+cyl 5 35 0 2 1.5 wheel
+cyl 25 35 0 2 1.5 wheel
+ellipsoid 28 32 4 3 5 4 bag
+noise 0.05 9 body
