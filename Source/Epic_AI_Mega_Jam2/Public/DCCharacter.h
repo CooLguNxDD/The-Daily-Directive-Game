@@ -104,6 +104,9 @@ public:
 
 	/** Camera shake from blasts (local). */
 	void AddTrauma(float Amount) { Trauma = FMath::Min(Trauma + Amount, 1.5f); }
+	/** R17: hit shake channel (unit hits), capped and rate-limited by FDCCameraTuning; never stacks onto blast shake. */
+	float HitTrauma = 0.f;
+	float LastHitShakeTime = -100.f;
 
 private:
 	// Input handlers (bound by action name from the input table).

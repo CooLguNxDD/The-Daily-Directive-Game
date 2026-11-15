@@ -1227,10 +1227,22 @@ void ADCCharacter::HostApplyHurt(float InAmount, const FVector& From)
 
 void ADCCharacter::ClientHurt_Implementation(FVector_NetQuantize From)
 {
-	LocalFeedback.HurtTime = GetWorld()->GetRealTimeSeconds();
+	// R17: surrounded and hit many times a second, the camera stays readable: one capped hit shake per interval and one
+	// flinch (hurt flash, sound) per interval; the hit direction still updates every hit.
+	const FDCCameraTuning& C = UDCTuning::Get().Camera;
+	const float Now = GetWorld()->GetRealTimeSeconds();
 	LocalFeedback.HurtFrom = From;
-	AddTrauma(0.25f);
-	DCAudio::Play2D(this, TEXT("Hurt"), 0.7f, FMath::FRandRange(0.9f, 1.1f));
+	if (Now - LastHitShakeTime >= C.HitShakeMinIntervalSeconds)
+	{
+		LastHitShakeTime = Now;
+		HitTrauma = FMath::Min(HitTrauma + C.HitTraumaPerHit, C.HitTraumaCap);
+	}
+	if (Now - LocalFeedback.HurtTime < C.FlinchMinIntervalSeconds)
+	{
+		return;
+	}
+	LocalFeedback.HurtTime = Now;
+	DCAudio::Play2D(this, TEXT("Hurt"), 0.7f, FMath::FRandRange(0.95f, 1.05f));
 }
 
 void ADCCharacter::ClientToast_Implementation(const FString& Text) { Toast(Text); }
@@ -1529,7 +1541,8 @@ void ADCCharacter::UpdateView(float DeltaSeconds)
 
 	// Trauma shake: offsets the camera only, never the aim.
 	Trauma = FMath::Max(0.f, Trauma - DeltaSeconds * 1.6f);
-	const float Shake = Trauma * Trauma;
+	HitTrauma = FMath::Max(0.f, HitTrauma - DeltaSeconds * UDCTuning::Get().Camera.HitTraumaDecayPerSecond);
+	const float Shake = FMath::Max(Trauma * Trauma, HitTrauma * HitTrauma); // R17: hits never stack onto blast shake
 	const float T = GetWorld()->GetRealTimeSeconds();
 	const FRotator Jitter(FMath::PerlinNoise1D(T * 23.f) * 4.f * Shake, FMath::PerlinNoise1D(T * 19.f + 7.f) * 4.f * Shake, FMath::PerlinNoise1D(T * 17.f + 3.f) * 3.f * Shake);
 	ThirdCam->SetRelativeRotation(Jitter);

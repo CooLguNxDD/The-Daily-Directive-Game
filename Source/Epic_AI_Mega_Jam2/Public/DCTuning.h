@@ -214,6 +214,14 @@ struct FDCCameraTuning
 	UPROPERTY(EditAnywhere, Config, Category = "Camera") int32 ShotsPerSector = 15;
 	UPROPERTY(EditAnywhere, Config, Category = "Camera") float WindOnSeconds = 0.7f;
 	UPROPERTY(EditAnywhere, Config, Category = "Camera") float DrawSeconds = 0.45f;
+	/** R17 calmer camera under attack: unit hits add to their own capped shake channel (strike and collapse shake keep the
+	 *  blast channel), at most one hit shake per HitShakeMinIntervalSeconds, decaying smoothly; the hurt flash, sound and
+	 *  flinch fire at most once per FlinchMinIntervalSeconds. The shake moves the camera, never the aim. */
+	UPROPERTY(EditAnywhere, Config, Category = "Camera") float HitTraumaPerHit = 0.12f;
+	UPROPERTY(EditAnywhere, Config, Category = "Camera") float HitTraumaCap = 0.32f;
+	UPROPERTY(EditAnywhere, Config, Category = "Camera") float HitTraumaDecayPerSecond = 0.9f;
+	UPROPERTY(EditAnywhere, Config, Category = "Camera") float HitShakeMinIntervalSeconds = 0.3f;
+	UPROPERTY(EditAnywhere, Config, Category = "Camera") float FlinchMinIntervalSeconds = 0.6f;
 	UPROPERTY(EditAnywhere, Config, Category = "Camera") float ViewfinderFOVWide = 70.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Camera") float ViewfinderFOVTight = 25.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Camera") float ZoomStep = 6.f;
