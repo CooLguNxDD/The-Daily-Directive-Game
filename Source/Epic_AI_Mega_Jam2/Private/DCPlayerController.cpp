@@ -1072,8 +1072,14 @@ void ADCPlayerController::TickHints(float DeltaSeconds)
 	{
 		return;
 	}
-	static const bool bFresh = [Save] { if (FParse::Param(FCommandLine::Get(), TEXT("dcfreshhints"))) { Save->Settings.HintsSeen.Reset(); Save->Settings.bHowToPlaySeen = false; } return true; }();
-	(void)bFresh;
+	// -dcfreshhints: first-launch state for evidence runs (nothing saved). A demo pilot run without it shows no hint
+	// cards, so the other evidence frames stay clean.
+	static const bool bFresh = [Save] { const bool b = FParse::Param(FCommandLine::Get(), TEXT("dcfreshhints")); if (b) { Save->Settings.HintsSeen.Reset(); Save->Settings.bHowToPlaySeen = false; } return b; }();
+	static const bool bQuietPilot = !bFresh && FParse::Param(FCommandLine::Get(), TEXT("dcdemo"));
+	if (bQuietPilot)
+	{
+		return;
+	}
 	HintSectorSeconds = GS->Phase == EDCRunPhase::Sector ? HintSectorSeconds + DeltaSeconds : 0.f;
 	const double Real = FPlatformTime::Seconds();
 	const UDCTuning& T = UDCTuning::Get();
