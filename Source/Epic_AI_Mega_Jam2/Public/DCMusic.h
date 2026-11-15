@@ -55,6 +55,9 @@ private:
 	FTSTicker::FDelegateHandle TickHandle;
 	FName Playing;
 	float Intensity = 0.f;
+	/** Real time of the last sample: the core ticker fires at SampleHz but hands over the frame delta (R14 bug: the
+	 *  smoothing ran ~30x slow, so the fight layer came late and never left). */
+	double LastSampleReal = 0.0;
 	float Raw = 0.f;
 	int32 Layer = INDEX_NONE;
 	float LayerHeld = 0.f;

@@ -286,9 +286,15 @@ void UDCAudioSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 	Attenuation->Attenuation.FalloffDistance = 14000.f;
 	for (const FDCCueMix& Mix : UDCTuning::Get().CueMix)
 	{
-		if (USoundBase* Remix = Mix.Sound.IsNull() ? nullptr : Cast<USoundBase>(Mix.Sound.TryLoad()))
+		USoundBase* Remix = Mix.Sound.IsNull() ? nullptr : Cast<USoundBase>(Mix.Sound.TryLoad());
+		if (Remix)
 		{
 			MixSounds.Add(Mix.Cue, Remix);
+		}
+		if (!Mix.Sound.IsNull())
+		{
+			// R13 trace (human 02:38: no detonation in play): which remix recordings the packaged build actually has.
+			UE_LOG(LogTemp, Display, TEXT("DCAUDIO remix %s -> %s loaded=%d duration=%.2f"), *Mix.Cue.ToString(), *Mix.Sound.ToString(), Remix ? 1 : 0, Remix ? Remix->GetDuration() : 0.f);
 		}
 	}
 	FlushHandle = FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateUObject(this, &UDCAudioSubsystem::FlushQueue));
@@ -355,10 +361,22 @@ void UDCAudioSubsystem::Start(const FDCSoundRequest& R)
 	USoundBase* Sound = MixSounds.FindRef(R.Cue);
 	USoundWaveProcedural* Wave = Sound ? nullptr : AcquireWave(R.Cue, R.Pitch, Priority);
 	Sound = Sound ? Sound : Wave;
+	if (Sound && Sound != Wave)
+	{
+		// The remix asset kept the engine default priority 1.0, under every synth wave (class Priority / 25: units 1.6,
+		// strikes 4): past AudioMaxChannels the engine culled the remixed detonation first (R13, human 02:38).
+		Sound->Priority = static_cast<float>(Priority) / 25.f;
+	}
 	if (!Sound)
 	{
 		UE_LOG(LogTemp, Display, TEXT("DCAUDIO drop %s: wave pool full"), *R.Cue.ToString());
 		return;
+	}
+	if (RecordStart >= 0.0 || Priority >= 100)
+	{
+		// R13 trace: the sound that actually starts for a cue (remix or synth), its final volume, ducking and 2D/3D.
+		UE_LOG(LogTemp, Display, TEXT("DCAUDIO start %s via=%s vol=%.2f pitch=%.2f 2d=%d ducked=%d"), *R.Cue.ToString(), *Sound->GetName(), Volume, R.Pitch, R.b2D ? 1 : 0,
+			Real < DuckUntil && Priority < DuckPriority ? 1 : 0);
 	}
 	if (R.b2D)
 	{
