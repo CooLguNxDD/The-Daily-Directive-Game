@@ -1,0 +1,26 @@
+# Crawler (the Dead): a corpse dragging itself on its belly, head low and forward, both arms clawing ahead, legs
+# trailing behind. Rot-green eyes and a rot gash on the back (its light cue). Fast, fragile, low under the rifle line.
+name crawler
+grid 5
+size 26 14 10
+slot body Flesh
+slot rag InkBrown
+slot eye Rot
+box 8 4 1 18 10 6 rag
+beam 8 5 3 1 4 1 1.2 rag
+beam 8 9 3 2 11 1 1.2 rag
+box 18 5 3 23 9 8 body
+box 22 5 6 23 6 8 eye
+box 22 8 6 23 9 8 eye
+beam 16 4 4 24 1 0 1.1 body
+beam 16 10 4 24 13 0 1.1 body
+box 11 6 6 15 8 7 eye
+noise 0.15 9 rag
+pivot 13 7 0
+# R20 animation segments (Skitter gait roles: LegL and LegR sweep fore and aft about yaw). Diagonal pairs crawl
+# together: LegL = left arm + right leg, LegR = right arm + left leg. The head bites.
+part Head 18 4 2 26 10 10 18 7 5
+part LegL 16 0 0 26 4 10 16 4 4
+part LegL 0 9 0 8 14 10 8 9 3
+part LegR 16 10 0 26 14 10 16 10 4
+part LegR 0 0 0 8 6 10 8 5 3
