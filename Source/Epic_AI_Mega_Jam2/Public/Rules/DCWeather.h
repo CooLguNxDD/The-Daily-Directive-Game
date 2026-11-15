@@ -23,6 +23,10 @@ struct FDCWeatherProfile
 	/** Precipitation puffs per second around the camera, and which puff kind (Rain, Snow, Ash; None = dry). */
 	UPROPERTY(EditAnywhere, Config, Category = "Weather") FName Precipitation;
 	UPROPERTY(EditAnywhere, Config, Category = "Weather") float PrecipitationRate = 0.f;
+	/** R12 ground weather: puffs per second on the street around the camera (rain splashes, drifting steam) and their
+	 *  kind (an FxKinds row; None = nothing). Cosmetic and local, like precipitation. */
+	UPROPERTY(EditAnywhere, Config, Category = "Weather") FName GroundFx;
+	UPROPERTY(EditAnywhere, Config, Category = "Weather") float GroundFxRate = 0.f;
 	/** Cloud layer: share of the cloud band shown (0 none, 1 every cloud) and its shade (0 paper light, 1 storm). */
 	UPROPERTY(EditAnywhere, Config, Category = "Weather") float CloudCover = 0.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Weather") float CloudShade = 0.f;

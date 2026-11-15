@@ -1,0 +1,24 @@
+# Skyline mega-spire (R12 distant skyline): a stepped ink tower with dim warm window bands, a thin cyan neon edge on
+# one corner and a steel mast with a warm beacon. Stands far past the sector edge (+SkyProps, scaled up). 10 cm grid.
+grid 10
+size 16 16 92
+slot body InkBlue
+slot win WindowDim
+slot neon NeonCyanEdge
+slot steel Steel
+slot lamp Lamp
+box 0 0 0 16 16 44 body
+box 2 2 44 14 14 68 body
+box 4 4 68 12 12 82 body
+cyl 8 8 82 91 0.8 steel
+box 7 7 90 9 9 92 lamp
+paint box 0 0 4 16 16 5 win
+paint box 0 0 10 16 16 11 win
+paint box 0 0 17 16 16 18 win
+paint box 0 0 25 16 16 26 win
+paint box 0 0 33 16 16 34 win
+paint box 2 2 49 14 14 50 win
+paint box 2 2 57 14 14 58 win
+paint box 4 4 73 12 12 74 win
+paint box 0 0 0 1 1 44 neon
+paint box 2 2 44 3 3 68 neon

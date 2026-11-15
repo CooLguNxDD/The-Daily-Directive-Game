@@ -506,15 +506,7 @@ void ADCCharacter::DoReload()
 	ServerReload();
 }
 
-void ADCCharacter::OnSlot1(const FInputActionInstance&)
-{
-	if (Slot == EDCSlot::Rifle)
-	{
-		NextWeapon(); // R8: 1 again switches the weapon in the gun slot
-		return;
-	}
-	SelectSlot(EDCSlot::Rifle);
-}
+void ADCCharacter::OnSlot1(const FInputActionInstance&) { SelectSlot(EDCSlot::Rifle); } // R8: Q or the wheel switch weapons on it
 void ADCCharacter::OnSlot2(const FInputActionInstance&) { SelectSlot(EDCSlot::Stratagem); }
 void ADCCharacter::OnSlot3(const FInputActionInstance&) { SelectSlot(EDCSlot::Camera); }
 

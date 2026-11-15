@@ -48,6 +48,7 @@ namespace DCWeather
 		const float RateA = A.PrecipitationRate * FMath::Clamp(1.f - 2.f * T, 0.f, 1.f);
 		const float RateB = B.PrecipitationRate * FMath::Clamp(2.f * T - 1.f, 0.f, 1.f);
 		R.PrecipitationRate = T < 0.5f ? RateA : RateB;
+		R.GroundFxRate = T < 0.5f ? A.GroundFxRate * FMath::Clamp(1.f - 2.f * T, 0.f, 1.f) : B.GroundFxRate * FMath::Clamp(2.f * T - 1.f, 0.f, 1.f);
 		R.Exposure = FMath::Lerp(A.Exposure, B.Exposure, T);
 		R.Saturation = FMath::Lerp(A.Saturation, B.Saturation, T);
 		R.Contrast = FMath::Lerp(A.Contrast, B.Contrast, T);

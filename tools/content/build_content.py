@@ -310,6 +310,9 @@ TEXTURES = {
     "T_Card_domino": "card-domino.png",
     "T_Card_eclipse": "card-eclipse.png",
     "T_Card_rogue": "card-rogue.png",
+    "T_Card_gunrun": "card-gunrun.png",
+    "T_Card_cluster": "card-cluster.png",
+    "T_Card_bunker": "card-bunker.png",
     "T_PaperGrain": "tex-paper.png",
     "T_StampGrit": "tex-stampgrit.png",
 }

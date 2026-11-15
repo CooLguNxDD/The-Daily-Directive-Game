@@ -83,4 +83,22 @@ bool FDCStrikeRowsTest::RunTest(const FString&)
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDCSkyPropRowsTest, "Epic_AI_Mega_Jam2.Content.SkyProps",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FDCSkyPropRowsTest::RunTest(const FString&)
+{
+	const TArray<FDCSkyPropDef>& Rows = UDCTuning::Get().SkyProps;
+	TestTrue(TEXT("R12: sky detail and skyline rows are shipped"), Rows.Num() > 0);
+	int32 Total = 0;
+	for (const FDCSkyPropDef& R : Rows)
+	{
+		const FString Id = R.Model.ToString();
+		TestNotNull(*FString::Printf(TEXT("%s is a forged model"), *Id), DCVoxelModels::Parsed(R.Model));
+		TestTrue(*FString::Printf(TEXT("%s ring and scale are ordered"), *Id), R.RingCm.X <= R.RingCm.Y && R.Scale.X > 0.f && R.Scale.X <= R.Scale.Y);
+		Total += R.Count;
+	}
+	TestTrue(TEXT("a handful of sky meshes, not hundreds (60 fps)"), Total <= 40);
+	return true;
+}
+
 #endif

@@ -348,6 +348,15 @@ void ADCEnvironment::UpdateWeather(float DeltaSeconds)
 	{
 		Fx->SpawnKind(Weather.Blend.Precipitation, PC->PlayerCameraManager->GetCameraLocation() + FVector(0, 0, 900.f), 3200.f, Count);
 	}
+	// R12 ground weather (splashes, steam) on the street plane around the local camera.
+	GroundFxCarry += Weather.Blend.GroundFxRate * DeltaSeconds;
+	const int32 GroundCount = FMath::FloorToInt32(GroundFxCarry);
+	GroundFxCarry -= GroundCount;
+	if (GroundCount > 0 && PC && PC->PlayerCameraManager && !Weather.Blend.GroundFx.IsNone())
+	{
+		const FVector Eye = PC->PlayerCameraManager->GetCameraLocation();
+		Fx->SpawnKind(Weather.Blend.GroundFx, FVector(Eye.X, Eye.Y, Look.GroundFxHeightCm), Look.GroundFxRadiusCm, GroundCount);
+	}
 }
 
 void ADCEnvironment::BuildBackdrop(const ADCVoxelCity& City, int32 RunSeed, int32 SectorIndex)
@@ -488,6 +497,7 @@ void ADCEnvironment::Tick(float DeltaSeconds)
 			BackdropBuild = City->GetBuildId();
 			BuildBackdrop(*City, BGS->RunSeed, City->GetBuiltSector());
 			BuildClouds(BGS->RunSeed, City->GetBuiltSector());
+			BuildSkyProps(BGS->RunSeed, City->GetBuiltSector(), FMath::Abs(static_cast<float>(City->GetSector().Terrain.OriginCm.X)));
 		}
 	}
 	const FDCLookTuning& Look = UDCTuning::Get().Look;
@@ -510,6 +520,7 @@ void ADCEnvironment::Tick(float DeltaSeconds)
 	}
 	UpdateWeather(DeltaSeconds);
 	UpdateClouds(DeltaSeconds);
+	UpdateSkyProps(DeltaSeconds);
 	const FDCWeatherProfile& W = Weather.Blend;
 	ADCVoxelCity* WetCity = ADCVoxelCity::IsEnabled() ? ADCVoxelCity::Get(this) : nullptr;
 	if (WetCity && FMath::Abs(W.Wetness - AppliedWetness) > 0.01f)
