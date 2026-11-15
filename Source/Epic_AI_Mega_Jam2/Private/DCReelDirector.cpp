@@ -58,9 +58,10 @@ namespace
 	const TMap<FName, FAnchorFn>& Anchors()
 	{
 		static const TMap<FName, FAnchorFn> Map = {
-			{TEXT("Blast"), +[](const FShotCtx& C) { return C.bBlast ? C.Blast : C.Body; }},
+			// No strike in the clip: the photo's subject (advisor a-51: the photographer's body framed sky in LowHero).
+			{TEXT("Blast"), +[](const FShotCtx& C) { return C.bBlast ? C.Blast : C.Subject; }},
 			{TEXT("Photographer"), +[](const FShotCtx& C) { return C.Body; }},
-			{TEXT("Between"), +[](const FShotCtx& C) { return C.bBlast ? FMath::Lerp(C.Body, C.Blast, 0.5f) : C.Body; }},
+			{TEXT("Between"), +[](const FShotCtx& C) { return FMath::Lerp(C.Body, C.bBlast ? C.Blast : C.Subject, 0.5f); }},
 		};
 		return Map;
 	}

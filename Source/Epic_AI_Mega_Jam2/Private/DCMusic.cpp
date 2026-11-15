@@ -224,6 +224,12 @@ void UDCMusicSubsystem::Sample(UWorld& World, const ADCGameState& GS, float Dt)
 					}
 					Decks.Remove(L.Track);
 				}
+				// Advisor a-51: a stopped procedural wave resumes mid-buffer; rewind each synth layer to sample 0 so the
+				// layers really start bar-aligned (the underflow callback requeues the loop from its start).
+				if (USoundWaveProcedural* Wave = Cast<USoundWaveProcedural>(Sounds.FindRef(L.Track)))
+				{
+					Wave->ResetAudio();
+				}
 			}
 			Playing = NAME_None;
 			UE_LOG(LogTemp, Display, TEXT("DCMUSIC sector start: %d layers restart together"), T.MusicLayers.Num());
