@@ -64,6 +64,9 @@ public:
 	/** R6 (advisor a-20): for units that enter buildings: inside a standing tower's footprint the walk mask decides
 	 *  (walls and floors-in-the-way block, doors and breaches are open); elsewhere the same as IsSolidAt. */
 	bool IsWalkBlocked(const FVector& Where) const;
+	/** R19: inside the built sector's bounds ring (true when no sector is built). */
+	bool IsInsideBounds(const FVector& Where) const;
+	float GetBoundsHalfCm() const { return BoundsHalfCm; }
 	/** The standing tower lot whose footprint holds Where (XY), or INDEX_NONE. */
 	int32 StandingLotAt(const FVector& Where) const;
 	/** The open footprint-edge cell of a standing lot nearest to From (a door or breach), in world cm. */
@@ -179,6 +182,11 @@ private:
 	void TickCollapseCam();
 	/** -dcdissolvecam=<dir> evidence (R15): frames the first dissolving piece up close at three stages, once. */
 	void TickDissolveCam();
+	/** R19: the bounds ring's invisible walls and the outer ground plane, placed for the built sector. */
+	void ApplyBounds();
+	UPROPERTY() TArray<TObjectPtr<class UBoxComponent>> BoundsWalls;
+	UPROPERTY() TObjectPtr<class UStaticMeshComponent> OuterGround;
+	float BoundsHalfCm = 0.f;
 	TWeakObjectPtr<UPrimitiveComponent> DissolveCamTarget;
 	float DissolveCamStart = -1.f;
 	int32 DissolveCamStep = 0;

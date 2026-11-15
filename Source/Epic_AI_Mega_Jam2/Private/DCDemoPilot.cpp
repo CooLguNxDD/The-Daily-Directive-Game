@@ -697,6 +697,74 @@ void ADCDemoPilot::AddSwarmed()
 	}
 }
 
+void ADCDemoPilot::AddBounds()
+{
+	// R19 evidence (-dcbounds): face the nearest sector edge and walk at it with the real Move/Sprint actions for 25 s
+	// (DEMO bounds lines: distance to the ring every 5 s, it must stop at the ring), frame the dressed edge, then a
+	// pilot aid drops the pawn 30 m under the street: the host's fall net must return it (DCKILLZ).
+	Add(0.f, [this] { const ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>(); return GS && GS->Phase == EDCRunPhase::Sector; }, 120.f);
+	Add(0.5f, [this]
+	{
+		const APawn* Me = GetWorld()->GetFirstPlayerController() ? GetWorld()->GetFirstPlayerController()->GetPawn() : nullptr;
+		if (Me)
+		{
+			const FVector P = Me->GetActorLocation();
+			const FVector Dir = FMath::Abs(P.X) > FMath::Abs(P.Y) ? FVector(FMath::Sign(P.X), 0, 0) : FVector(0, FMath::Sign(P.Y), 0);
+			AimAt(P + Dir * 5000.f + FVector(0, 0, 60.f));
+		}
+		Press(TEXT("Move"), FVector(0, 1, 0));
+		Press(TEXT("Sprint"));
+		return true;
+	});
+	for (int32 i = 1; i <= 5; ++i)
+	{
+		Add(5.f, [this, i]
+		{
+			const APawn* Me = GetWorld()->GetFirstPlayerController() ? GetWorld()->GetFirstPlayerController()->GetPawn() : nullptr;
+			const ADCVoxelCity* City = ADCVoxelCity::Get(this);
+			if (Me && City)
+			{
+				const FVector P = Me->GetActorLocation();
+				UE_LOG(LogDCDemo, Display, TEXT("DEMO bounds t=%d s: pawn at %s, ring half %.0f, inside=%d"), i * 5, *P.ToCompactString(), City->GetBoundsHalfCm(), City->IsInsideBounds(P) ? 1 : 0);
+			}
+			if (i == 5)
+			{
+				Release(TEXT("Move"));
+				Release(TEXT("Sprint"));
+				Shot(TEXT("bounds_edge"));
+			}
+			return true;
+		});
+	}
+	Add(0.5f, [this]
+	{
+		APawn* Me = GetWorld()->GetFirstPlayerController() ? GetWorld()->GetFirstPlayerController()->GetPawn() : nullptr;
+		if (Me)
+		{
+			Me->AddActorWorldRotation(FRotator(0.f, 180.f, 0.f));
+			Shot(TEXT("bounds_back_to_city"));
+		}
+		return true;
+	});
+	Add(1.f, [this]
+	{
+		APawn* Me = GetWorld()->GetFirstPlayerController() ? GetWorld()->GetFirstPlayerController()->GetPawn() : nullptr;
+		if (Me && GetWorld()->GetAuthGameMode())
+		{
+			Me->SetActorLocation(Me->GetActorLocation() - FVector(0, 0, 3000.f), false, nullptr, ETeleportType::TeleportPhysics);
+			UE_LOG(LogDCDemo, Display, TEXT("DEMO bounds: pawn dropped under the street to %s (pilot aid)"), *Me->GetActorLocation().ToCompactString());
+		}
+		return true;
+	});
+	Add(1.5f, [this]
+	{
+		const APawn* Me = GetWorld()->GetFirstPlayerController() ? GetWorld()->GetFirstPlayerController()->GetPawn() : nullptr;
+		UE_LOG(LogDCDemo, Display, TEXT("DEMO bounds: after the drop the pawn is at %s"), Me ? *Me->GetActorLocation().ToCompactString() : TEXT("none"));
+		Shot(TEXT("bounds_after_drop"));
+		return true;
+	});
+}
+
 void ADCDemoPilot::AddRunFire()
 {
 	// R10 evidence (-dcrunfire): rifle out, sprint and strafe with the real Move/Sprint actions while tapping Fire;
@@ -1392,6 +1460,10 @@ void ADCDemoPilot::BuildScript()
 		if (Sector == 0 && FParse::Param(FCommandLine::Get(), TEXT("dcrunfire")))
 		{
 			AddRunFire();
+		}
+		if (Sector == 0 && FParse::Param(FCommandLine::Get(), TEXT("dcbounds")))
+		{
+			AddBounds();
 		}
 		if (Sector == 0 && FParse::Param(FCommandLine::Get(), TEXT("dcaim")))
 		{

@@ -1,6 +1,7 @@
 #include "DCAudio.h"
 #include "DCSave.h"
 #include "DCTuning.h"
+#include "Rules/DCCueMix.h"
 
 #include "AudioMixerBlueprintLibrary.h"
 #include "Camera/PlayerCameraManager.h"
@@ -10,6 +11,7 @@
 #include "Engine/World.h"
 #include "Kismet/GameplayStatics.h"
 #include "Sound/SoundAttenuation.h"
+#include "Sound/SoundBase.h"
 #include "Sound/SoundWaveProcedural.h"
 
 namespace
@@ -281,6 +283,13 @@ void UDCAudioSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 	Attenuation->Attenuation.AttenuationShape = EAttenuationShape::Sphere;
 	Attenuation->Attenuation.AttenuationShapeExtents = FVector(1500.f, 0.f, 0.f);
 	Attenuation->Attenuation.FalloffDistance = 14000.f;
+	for (const FDCCueMix& Mix : UDCTuning::Get().CueMix)
+	{
+		if (USoundBase* Remix = Mix.Sound.IsNull() ? nullptr : Cast<USoundBase>(Mix.Sound.TryLoad()))
+		{
+			MixSounds.Add(Mix.Cue, Remix);
+		}
+	}
 	FlushHandle = FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateUObject(this, &UDCAudioSubsystem::FlushQueue));
 }
 
@@ -325,22 +334,37 @@ void UDCAudioSubsystem::Start(const FDCSoundRequest& R)
 	{
 		return;
 	}
-	const TArray<FDCSoundClassDef>& Classes = UDCTuning::Get().SoundClasses;
+	const UDCTuning& T = UDCTuning::Get();
+	const TArray<FDCSoundClassDef>& Classes = T.SoundClasses;
 	const int32 Ci = DCSoundQueue::ClassOf(Classes, R.Cue);
+	const int32 Priority = Classes.IsValidIndex(Ci) ? Classes[Ci].Priority : 50;
 	LogCue(World, R.Cue, R.b2D ? nullptr : &R.Location);
-	USoundWaveProcedural* Wave = AcquireWave(R.Cue, R.Pitch, Classes.IsValidIndex(Ci) ? Classes[Ci].Priority : 50);
-	if (!Wave)
+	// Mixer pass: the cue's own trim (+CueMix), then ducking under a recent strike for lower-priority classes.
+	const double Real = FPlatformTime::Seconds();
+	float Volume = R.Volume * DCCueMix::Trim(T.CueMix, R.Cue);
+	Volume *= Real < DuckUntil && Priority < DuckPriority ? DuckScale : 1.f;
+	if (Classes.IsValidIndex(Ci) && Classes[Ci].DuckOthers > 0.f)
+	{
+		DuckUntil = Real + Classes[Ci].DuckSeconds;
+		DuckPriority = Priority;
+		DuckScale = FMath::Clamp(1.f - Classes[Ci].DuckOthers, 0.f, 1.f);
+	}
+	// A remixed recording plays instead of the synth wave (a normal sound wave: no pool needed).
+	USoundBase* Sound = MixSounds.FindRef(R.Cue);
+	USoundWaveProcedural* Wave = Sound ? nullptr : AcquireWave(R.Cue, R.Pitch, Priority);
+	Sound = Sound ? Sound : Wave;
+	if (!Sound)
 	{
 		UE_LOG(LogTemp, Display, TEXT("DCAUDIO drop %s: wave pool full"), *R.Cue.ToString());
 		return;
 	}
 	if (R.b2D)
 	{
-		UGameplayStatics::PlaySound2D(World, Wave, R.Volume, R.Pitch);
+		UGameplayStatics::PlaySound2D(World, Sound, Volume, R.Pitch);
 	}
 	else
 	{
-		UGameplayStatics::PlaySoundAtLocation(World, Wave, R.Location, R.Volume, R.Pitch, 0.f, Attenuation);
+		UGameplayStatics::PlaySoundAtLocation(World, Sound, R.Location, Volume, R.Pitch, 0.f, Attenuation);
 	}
 }
 

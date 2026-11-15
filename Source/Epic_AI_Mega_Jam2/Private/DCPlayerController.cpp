@@ -414,8 +414,17 @@ void ADCPlayerController::BuilderRandom()
 
 FString ADCPlayerController::GetBuilderPresetName() const
 {
-	const TArray<FDCOutfitPreset>& Presets = UDCTuning::Get().OutfitPresets;
-	return Presets.IsValidIndex(BuilderPresetIndex) ? Presets[BuilderPresetIndex].DisplayName.ToString() : FString();
+	// Named only while the outfit is still that preset: any part, swatch or glow change (or a loaded code) clears it.
+	const UDCTuning& T = UDCTuning::Get();
+	if (!T.OutfitPresets.IsValidIndex(BuilderPresetIndex))
+	{
+		return FString();
+	}
+	const FDCOutfitPreset& Preset = T.OutfitPresets[BuilderPresetIndex];
+	FDCOutfit Worn;
+	FString Error;
+	const bool bStill = DCOutfit::FromPreset(Preset, T.OutfitSlots, T.OutfitParts, T.OutfitSwatches, T.OutfitGlows, Worn, Error) && Worn == BuilderOutfit;
+	return bStill ? Preset.DisplayName.ToString() : FString();
 }
 
 void ADCPlayerController::BuilderImport(const FString& Code)
@@ -637,7 +646,7 @@ void ADCPlayerController::TickBuilderFlow()
 	auto Then = [&](double Gap, TFunction<void()> Fn) { At += Gap; BuilderSteps.Add({At, MoveTemp(Fn)}); };
 	const UDCTuning& Tune = UDCTuning::Get();
 	// The turntable holds still for these frames: three-quarter front, gear from behind (it is worn on the back).
-	const TMap<FName, float> SlotYaw = {{TEXT("Head"), 25.f}, {TEXT("Body"), 25.f}, {TEXT("Gear"), 145.f}, {TEXT("Camera"), 40.f}};
+	const TMap<FName, float> SlotYaw = {{TEXT("Head"), 25.f}, {TEXT("Body"), 25.f}, {TEXT("Gear"), 145.f}, {TEXT("Camera"), 5.f}};
 	auto Face = [this](float Yaw) { if (OutfitPreview) { OutfitPreview->Face(Yaw); } };
 	// The turntable's own render target as well: window screenshots drop out when the window stops presenting.
 	auto Turntable = [this](const FString& Name) { if (OutfitPreview) { OutfitPreview->SaveImage(Dir / TEXT("turntable") / Name); } };

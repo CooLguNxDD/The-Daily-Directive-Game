@@ -635,7 +635,7 @@ void ADCEnemy::GroundMove(const FVector& Goal, float Speed, float DeltaSeconds, 
 		const FVector Probe = Here + Dir * FMath::Max(Step, 120.f);
 		const float Ground = City ? City->SurfaceZCm(Probe) : 0.f;
 		const FVector BodyAt(Probe.X, Probe.Y, Ground + 120.f);
-		if (IntoCrew(Next) || Ground - GroundHere > 160.f || (City && (bEnters ? City->IsWalkBlocked(BodyAt) : City->IsSolidAt(BodyAt))))
+		if (IntoCrew(Next) || Ground - GroundHere > 160.f || (City && !City->IsInsideBounds(BodyAt)) || (City && (bEnters ? City->IsWalkBlocked(BodyAt) : City->IsSolidAt(BodyAt))))
 		{
 			continue;
 		}

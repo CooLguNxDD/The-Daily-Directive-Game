@@ -1,25 +1,24 @@
-# Outfit body (R18): a rain poncho draped from the shoulders: full width from the shoulders down (it hides the arms the
-# way a real poncho does), a short slope only up to the neck, a ragged stepped hem, accent hem band and front stripe,
-# one glow stripe. Torso inside x 3..9, y 3..11 (pivot 6 7 0 on spine_03).
+# Outfit body (R18): a rain poncho hanging from the shoulders and widening toward the hem like fabric: shoulder width
+# at the top, one voxel wider every few rows down to a broad hem, accent hem band and front stripe, one glow stripe.
+# Torso inside x 4..10, y 4..12 (pivot 7 8 0 on spine_03).
 name outfit_poncho
 grid 5
-size 12 14 12
+size 14 16 12
 slot cloth SwatchMain
 slot hem SwatchAccent
 slot glow SwatchGlow
-box 0 0 1 12 14 10 cloth
-box 1 0 0 11 14 1 cloth
-box 1 1 10 11 13 11 cloth
-box 2 3 11 10 11 12 cloth
-carve box 0 0 1 1 1 10
-carve box 11 0 1 12 1 10
-carve box 0 13 1 1 14 10
-carve box 11 13 1 12 14 10
-carve box 3 3 0 9 11 11
-carve box 4 5 11 8 9 12
-carve box 1 0 0 3 2 1
-carve box 9 12 0 11 14 1
-paint box 0 0 0 12 14 2 hem
-paint box 5.5 0 0 6.5 14 12 hem
-paint box 0 0 6 12 14 7 glow
-pivot 6 7 0
+box 0 0 0 14 16 3 cloth
+box 1 1 3 13 15 6 cloth
+box 2 2 6 12 14 9 cloth
+box 3 2 9 11 14 11 cloth
+box 4 5 11 10 11 12 cloth
+carve box 0 0 0 1 1 3
+carve box 13 0 0 14 1 3
+carve box 0 15 0 1 16 3
+carve box 13 15 0 14 16 3
+carve box 4 4 0 10 12 11
+carve box 5 6 11 9 10 12
+paint box 0 0 0 14 16 1 hem
+paint box 6.5 0 0 7.5 16 12 hem
+paint box 0 0 4 14 16 5 glow
+pivot 7 8 0

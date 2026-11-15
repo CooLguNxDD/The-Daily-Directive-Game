@@ -51,6 +51,7 @@ private:
 	void AddLineupShot();
 	void AddSupplyCall();
 	void AddRunFire();
+	void AddBounds();
 	void AddAim();
 	void LogAim(const TCHAR* Tag);
 	void AddSwarmed();
