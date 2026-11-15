@@ -53,7 +53,9 @@ namespace
 bool UDCAnimShowcase::ShouldCreateSubsystem(UObject* Outer) const
 {
 	FString Unused;
-	return FParse::Value(FCommandLine::Get(), TEXT("dcanimshot="), Unused) && Super::ShouldCreateSubsystem(Outer);
+	int32 Count = 0;
+	return (FParse::Value(FCommandLine::Get(), TEXT("dcanimshot="), Unused) || FParse::Value(FCommandLine::Get(), TEXT("dcanimswarm="), Count))
+		&& Super::ShouldCreateSubsystem(Outer);
 }
 
 void UDCAnimShowcase::OnWorldBeginPlay(UWorld& InWorld)
@@ -65,7 +67,91 @@ void UDCAnimShowcase::OnWorldBeginPlay(UWorld& InWorld)
 	}
 	FParse::Value(FCommandLine::Get(), TEXT("dcanimshot="), Dir);
 	FParse::Value(FCommandLine::Get(), TEXT("dcanimshotat="), StartAt);
+	bSwarm = FParse::Value(FCommandLine::Get(), TEXT("dcanimswarm="), SwarmCount) && SwarmCount > 0;
 	Clock = -1.f;
+}
+
+void UDCAnimShowcase::StartSwarm(int32 Count)
+{
+	UWorld* World = GetWorld();
+	APlayerController* PC = World->GetFirstPlayerController();
+	const ADCVoxelCity* City = ADCVoxelCity::Get(World);
+	if (!PC || !PC->GetPawn() || !City)
+	{
+		return;
+	}
+	FString KindList = TEXT("Trooper,Shambler,Raider,Soldier,Skitter");
+	FParse::Value(FCommandLine::Get(), TEXT("dcanimkinds="), KindList);
+	TArray<FString> Kinds;
+	KindList.ParseIntoArray(Kinds, TEXT(","));
+	Center = PC->GetPawn()->GetActorLocation();
+	Center.Z = City->SurfaceZCm(Center);
+	for (int32 i = 0; i < Count && Kinds.Num() > 0; ++i)
+	{
+		const FDCEnemyDef* Def = UDCTuning::Get().FindEnemy(FName(*Kinds[i % Kinds.Num()]));
+		if (!Def)
+		{
+			continue;
+		}
+		// Rings of 10 from 6 m out, 4 m apart: near units pose every frame, far ones at their LOD rate.
+		const float Angle = (i % 10) * 36.f + (i / 10) * 18.f;
+		const float Radius = 600.f + (i / 10) * 400.f;
+		FVector At = Center + FRotator(0.f, Angle, 0.f).Vector() * Radius;
+		At.Z = City->SurfaceZCm(At) + Def->HoverHeight;
+		const FTransform Xf(FRotator(0.f, Angle + 90.f, 0.f), At);
+		ADCEnemy* E = World->SpawnActorDeferred<ADCEnemy>(ADCEnemy::StaticClass(), Xf, nullptr, nullptr, ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
+		E->InitKind(Def->Id);
+		E->FinishSpawning(Xf);
+		E->SetActorTickEnabled(false);
+		E->SetCanBeDamaged(false);
+		Units.Add(E);
+	}
+	Camera = World->SpawnActor<ACameraActor>(ACameraActor::StaticClass(), FTransform::Identity);
+	Camera->GetCameraComponent()->SetFieldOfView(80.f);
+	const FVector Eye = Center + FVector(-2600.f, 0.f, 1100.f);
+	Camera->SetActorLocationAndRotation(Eye, (Center - Eye).Rotation());
+	UE_LOG(LogTemp, Display, TEXT("DCANIMSWARM spawned %d units round %s, animate=%d"), Units.Num(), *Center.ToCompactString(),
+		FParse::Param(FCommandLine::Get(), TEXT("dcanimoff")) ? 0 : 1);
+	Clock = 0.f;
+}
+
+void UDCAnimShowcase::TickSwarm(float DeltaTime)
+{
+	static const bool bOff = FParse::Param(FCommandLine::Get(), TEXT("dcanimoff"));
+	const double T0 = FPlatformTime::Seconds();
+	int32 Alive = 0;
+	for (int32 i = 0; i < Units.Num(); ++i)
+	{
+		ADCEnemy* E = Units[i];
+		UDCUnitAnimator* Anim = E ? E->GetAnimator() : nullptr;
+		const FDCEnemyDef* Def = E ? E->GetDef() : nullptr;
+		if (!Anim || !Def)
+		{
+			continue;
+		}
+		++Alive;
+		if (bOff)
+		{
+			continue;
+		}
+		// Each unit cycles walk, run, idle (6 s, own offset) and attacks every 2 s, at real time.
+		static const float Speeds[] = {200.f, 520.f, 0.f};
+		Anim->ForcedSpeedCm = Speeds[FMath::Clamp(FMath::FloorToInt32(FMath::Fmod(Clock + i * 0.37f, 6.f) / 2.f), 0, 2)];
+		const uint8 Seq = static_cast<uint8>(FMath::FloorToInt32((Clock + i * 0.21f) / 2.f));
+		Anim->Advance(DeltaTime, E->GetActorLocation(), E->GetActorRotation().Yaw, 1.f, Seq, true);
+		Anim->ApplyRoot(*Def);
+	}
+	PerfAnimSeconds += FPlatformTime::Seconds() - T0;
+	++PerfFrames;
+	PerfClock += DeltaTime;
+	if (PerfClock >= 1.f)
+	{
+		UE_LOG(LogTemp, Display, TEXT("DCANIMPERF units=%d animate=%d frames=%d anim_ms_per_frame=%.3f fps=%.1f"), Alive, bOff ? 0 : 1, PerfFrames,
+			PerfFrames > 0 ? PerfAnimSeconds * 1000.0 / PerfFrames : 0.0, PerfFrames / PerfClock);
+		PerfClock = 0.f;
+		PerfAnimSeconds = 0.0;
+		PerfFrames = 0;
+	}
 }
 
 void UDCAnimShowcase::Start()
@@ -115,13 +201,20 @@ void UDCAnimShowcase::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 	UWorld* World = GetWorld();
-	if (!World || Dir.IsEmpty() || World->GetTimeSeconds() < StartAt)
+	if (!World || (Dir.IsEmpty() && !bSwarm) || World->GetTimeSeconds() < StartAt)
 	{
 		return;
 	}
 	if (Clock < 0.f)
 	{
-		Start();
+		if (bSwarm)
+		{
+			StartSwarm(SwarmCount);
+		}
+		else
+		{
+			Start();
+		}
 		if (Clock < 0.f)
 		{
 			return;
@@ -131,6 +224,17 @@ void UDCAnimShowcase::Tick(float DeltaTime)
 	if (PC && Camera && PC->GetViewTarget() != Camera)
 	{
 		PC->SetViewTargetWithBlend(Camera, 0.f);
+	}
+	if (bSwarm)
+	{
+		TickSwarm(DeltaTime);
+		Clock += DeltaTime;
+		if (!Dir.IsEmpty() && NextShot == 0 && Clock >= 3.f)
+		{
+			FScreenshotRequest::RequestScreenshot(Dir / TEXT("swarm.png"), false, false);
+			++NextShot;
+		}
+		return;
 	}
 	const FCue* Cue = nullptr;
 	while (NextCue < UE_ARRAY_COUNT(Cues) && Clock >= Cues[NextCue].T)

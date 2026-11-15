@@ -1,6 +1,9 @@
 // R20 evidence only (-dcanimshot=<dir>): a side-view lineup of one unit per animated kind (-dcanimkinds=A,B,..), held
 // in place (no AI, no damage) and stepped through spawn, idle, walk, run, attack, flinch and death on a fixed camera,
-// with frames at fixed times (a still never proves motion: frames across time per state). Off without the flag.
+// with frames at fixed times (a still never proves motion: frames across time per state).
+// -dcanimswarm=N (perf): N units of those kinds in rings round the player, held in place and animated at real time
+// (walk, run, idle, attacks; each at its distance LOD) under a fixed overview camera, one DCANIMPERF line per second;
+// -dcanimoff spawns the same swarm without animating it (the before half of the pair). Off without the flags.
 #pragma once
 
 #include "CoreMinimal.h"
@@ -23,6 +26,13 @@ public:
 
 private:
 	void Start();
+	void StartSwarm(int32 Count);
+	void TickSwarm(float DeltaTime);
+	int32 SwarmCount = 0;
+	bool bSwarm = false;
+	float PerfClock = 0.f;
+	double PerfAnimSeconds = 0.0;
+	int32 PerfFrames = 0;
 	FString Dir;
 	float Clock = -1.f;
 	float StartAt = 10.f;
