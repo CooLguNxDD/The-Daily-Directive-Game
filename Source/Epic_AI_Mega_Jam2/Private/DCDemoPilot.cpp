@@ -1131,8 +1131,14 @@ void ADCDemoPilot::AddObjectiveRun(const FString& S)
 		// cuts the base and the tower falls (destroy4/objcard: strikes on the marker hit sky). Inside strike range the
 		// pilot holds there (never walks into the swarm at the tower's foot) until the laser is ready.
 		const bool bDestroyActive = Def && Def->Kind == TEXT("Destroy") && O->Stage == EDCObjectiveStage::Active;
-		const bool bInStrikeRange = FVector::Dist2D(Me->GetActorLocation(), At) < ObjStrikeRangeCm;
 		const FVector Base(At.X, At.Y, Me->GetActorLocation().Z + 300.f);
+		// R23 bigger districts (proof5: Destroy s777 reached its first tower at 238 of 240 s): from farther out too, when the
+		// view of the base is clear (the sight line stops short of the target tower itself, which would block it).
+		const float D2 = FVector::Dist2D(Me->GetActorLocation(), At);
+		const ADCVoxelCity* SightCity = ADCVoxelCity::Get(this);
+		const FVector Eye = Me->GetActorLocation() + FVector(0.f, 0.f, 60.f);
+		const bool bInStrikeRange = D2 < ObjStrikeRangeCm || (D2 < ObjStrikeFarCm && SightCity
+			&& !SightCity->IsSightBlocked(Eye, Base - (Base - Eye).GetSafeNormal() * ObjStrikeSightStopCm, {}));
 		if (bDestroyActive && bInStrikeRange && !bStrikeReady && ObjStrikePhase == 0)
 		{
 			Release(TEXT("Move"));

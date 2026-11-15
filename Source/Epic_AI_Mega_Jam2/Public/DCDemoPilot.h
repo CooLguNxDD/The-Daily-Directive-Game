@@ -78,6 +78,8 @@ private:
 	float ObjDefendCm = 700.f; // pilot only: self-defence radius in -dcobjrun
 	double ObjStrikeReal = 0.0;
 	float ObjStrikeRangeCm = 2500.f; // pilot only: it holds this far from a marked tower and calls the laser on its base
+	float ObjStrikeFarCm = 6000.f; // pilot only: farther than that too, when its view of the base is clear
+	float ObjStrikeSightStopCm = 800.f; // the sight check ends this short of the base (the target tower itself)
 	void AddEnemyFight(const FString& Sector);
 	void AddStratagemOnSwarm(const FString& Sector);
 	void AddWidestFrame(const FString& Sector);
