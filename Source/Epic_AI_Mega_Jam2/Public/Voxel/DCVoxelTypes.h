@@ -46,7 +46,7 @@ struct FDCVoxelRecipe
 	/** Wall thickness (cm). All recipe sizes are cm, so a recipe keeps its look at any voxel size. */
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 WallCm = 20;
 	/** Facade bay pattern for upper floors, cycled around each face: W window, S slot window, G paired windows, P solid pier;
-	 *  R23: R ribbon window, T twin tall slots, X storefront glass. */
+	 *  R23: R ribbon window, T twin tall slots, X storefront glass, O open bay (under construction). */
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") FString Facade = TEXT("W");
 	/** Ground floor pattern: D door, P pier, W shop window. */
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") FString Base = TEXT("PD");
