@@ -299,6 +299,7 @@ private:
 	FDCVoxelSector Sector;
 	FDCVoxelOpContext OpCtx;
 	TArray<FColor> Colors;
+	TSharedPtr<const TArray<FColor>> SharedColors; // one immutable copy of Colors the mesher jobs share (no copy per job)
 	int32 BuiltSector = INDEX_NONE;
 	int32 BuiltId = 0;
 	int32 BuiltSeed = 0;

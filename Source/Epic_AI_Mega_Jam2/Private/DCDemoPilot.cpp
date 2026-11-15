@@ -930,7 +930,7 @@ void ADCDemoPilot::AddObjectiveRun(const FString& S)
 			ObjCheckReal = Real + 1.5;
 		}
 		return false;
-	}, 200.f);
+	}, 900.f); // the step ends with the sector (bOver); finalobj-Destroy-s777-0ad4bc5 timed out at 200 s with the extract open
 	Add(0.5f, [this, S] { Release(TEXT("Move")); Release(TEXT("Sprint")); Shot(S + TEXT("_obj_end")); return true; });
 }
 

@@ -942,6 +942,7 @@ void ADCVoxelCity::FinishBuild(int32 RunSeed, int32 SectorIndex, int32 BuildId, 
 	const UDCTuning& T = UDCTuning::Get();
 	OpCtx = V.OpContext(T.City.BlockSizeCm);
 	Colors = V.MeshColors();
+	SharedColors = MakeShared<const TArray<FColor>>(Colors);
 	BuiltSector = SectorIndex;
 	BuiltId = BuildId;
 	BuiltSeed = RunSeed;
@@ -1545,6 +1546,7 @@ void ADCVoxelCity::SpawnDueShards(float Now)
 void ADCVoxelCity::QueuePadded(TArray<FPrePad>& Pads)
 {
 	const float AO = UDCVoxelSettings::Get().Tuning.AOStrength;
+	SharedColors = SharedColors.IsValid() ? SharedColors : MakeShared<const TArray<FColor>>(Colors);
 	for (FPrePad& P : Pads)
 	{
 		TSharedPtr<FMeshJob> Job = MakeShared<FMeshJob>();
@@ -1552,11 +1554,10 @@ void ADCVoxelCity::QueuePadded(TArray<FPrePad>& Pads)
 		Job->Chunk = P.Chunk;
 		Job->BuildId = BuiltId;
 		FDCVoxelMeshData* Out = &Job->Mesh;
-		TArray<FColor> JobColors = Colors;
 		const float Vcm = GridAt(P.Grid).VoxelCm;
-		Job->Task = UE::Tasks::Launch(TEXT("DCVoxelChunkMesh"), [Padded = MoveTemp(P.Padded), JobColors = MoveTemp(JobColors), Vcm, AO, Out]()
+		Job->Task = UE::Tasks::Launch(TEXT("DCVoxelChunkMesh"), [Padded = MoveTemp(P.Padded), JobColors = SharedColors, Vcm, AO, Out]()
 		{
-			DCVoxelMesher::MeshPadded(Padded, JobColors, Vcm, AO, *Out);
+			DCVoxelMesher::MeshPadded(Padded, *JobColors, Vcm, AO, *Out);
 		});
 		Jobs.Add(Job);
 	}
@@ -1570,6 +1571,8 @@ void ADCVoxelCity::QueueDirty(int32 GridIndex, const TSet<FIntVector>& Chunks)
 	const float AO = UDCVoxelSettings::Get().Tuning.AOStrength;
 	// Snapshots in parallel (read-only on the grid; a whole city at once cost ~0.7 s on one thread: reel restage).
 	TArray<FIntVector> List = Chunks.Array();
+	const UE::Tasks::ETaskPriority Priority = UDCVoxelSettings::Get().Tuning.bOpMeshInBackground && !bLoading ? UE::Tasks::ETaskPriority::BackgroundNormal : UE::Tasks::ETaskPriority::Normal;
+	SharedColors = SharedColors.IsValid() ? SharedColors : MakeShared<const TArray<FColor>>(Colors);
 	TArray<TArray<uint8>> Padded;
 	Padded.SetNum(List.Num());
 	ParallelFor(List.Num(), [&](int32 i) { Grid.Data.CopyPadded(List[i], Padded[i]); }, List.Num() < 16);
@@ -1580,11 +1583,10 @@ void ADCVoxelCity::QueueDirty(int32 GridIndex, const TSet<FIntVector>& Chunks)
 		Job->Chunk = List[i];
 		Job->BuildId = BuiltId;
 		FDCVoxelMeshData* Out = &Job->Mesh;
-		TArray<FColor> JobColors = Colors;
-		Job->Task = UE::Tasks::Launch(TEXT("DCVoxelChunkMesh"), [Pad = MoveTemp(Padded[i]), JobColors = MoveTemp(JobColors), Vcm, AO, Out]()
+		Job->Task = UE::Tasks::Launch(TEXT("DCVoxelChunkMesh"), [Pad = MoveTemp(Padded[i]), JobColors = SharedColors, Vcm, AO, Out]()
 		{
-			DCVoxelMesher::MeshPadded(Pad, JobColors, Vcm, AO, *Out);
-		});
+			DCVoxelMesher::MeshPadded(Pad, *JobColors, Vcm, AO, *Out);
+		}, Priority);
 		Jobs.Add(Job);
 	}
 }
