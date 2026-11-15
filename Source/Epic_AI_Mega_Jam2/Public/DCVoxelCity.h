@@ -177,6 +177,11 @@ private:
 	UPROPERTY() TMap<int32, TObjectPtr<class UMaterialInstanceDynamic>> DissolveMIDs;
 	/** -dccollapsecam evidence camera (step -1 = off). */
 	void TickCollapseCam();
+	/** -dcdissolvecam=<dir> evidence (R15): frames the first dissolving piece up close at three stages, once. */
+	void TickDissolveCam();
+	TWeakObjectPtr<UPrimitiveComponent> DissolveCamTarget;
+	float DissolveCamStart = -1.f;
+	int32 DissolveCamStep = 0;
 	int32 CollapseCamStep = -1;
 	int32 CollapseCamOp = 0;
 	FVector CollapseCamCenter = FVector::ZeroVector;
