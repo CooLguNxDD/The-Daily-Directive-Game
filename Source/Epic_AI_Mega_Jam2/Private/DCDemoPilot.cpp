@@ -1,4 +1,5 @@
 #include "DCDemoPilot.h"
+#include "Camera/CameraActor.h"
 #include "DCObjective.h"
 #include "DCUnits.h"
 #include "DCVoxelCity.h"
@@ -589,7 +590,7 @@ void ADCDemoPilot::AddIndoors()
 		}
 		return true;
 	});
-	for (int32 i = 0; i < 6; ++i)
+	for (int32 i = 0; i < 12; ++i)
 	{
 		Add(5.f, [this, i]
 		{
@@ -613,6 +614,32 @@ void ADCDemoPilot::AddIndoors()
 	}
 }
 
+void ADCDemoPilot::SideCam(bool bOn)
+{
+	// Evidence camera: 3.5 m to the pawn's right, chest height, looking at it (the shoulder camera hides the arms).
+	APlayerController* PC = GetWorld()->GetFirstPlayerController();
+	APawn* Me = PC ? PC->GetPawn() : nullptr;
+	if (!PC || !Me)
+	{
+		return;
+	}
+	if (!bOn)
+	{
+		PC->SetViewTargetWithBlend(Me, 0.f);
+		return;
+	}
+	if (!EvidenceCam)
+	{
+		EvidenceCam = GetWorld()->SpawnActor<ACameraActor>(ACameraActor::StaticClass(), FTransform::Identity);
+	}
+	const FVector Eye = Me->GetActorLocation() + Me->GetActorRightVector() * 350.f + Me->GetActorForwardVector() * 120.f + FVector(0, 0, 40.f);
+	EvidenceCam->SetActorLocationAndRotation(Eye, (Me->GetActorLocation() + FVector(0, 0, 30.f) - Eye).Rotation());
+	if (PC->GetViewTarget() != EvidenceCam)
+	{
+		PC->SetViewTargetWithBlend(EvidenceCam, 0.f);
+	}
+}
+
 void ADCDemoPilot::AddRunFire()
 {
 	// R10 evidence (-dcrunfire): rifle out, sprint and strafe with the real Move/Sprint actions while tapping Fire;
@@ -620,11 +647,13 @@ void ADCDemoPilot::AddRunFire()
 	Add(0.f, [this] { const ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>(); return GS && GS->Phase == EDCRunPhase::Sector; }, 120.f);
 	Add(0.6f, [this] { Tap(TEXT("Slot1")); return true; });
 	Add(1.0f, [this] { Press(TEXT("Move"), FVector(0, 1, 0)); Press(TEXT("Sprint")); return true; });
+	Add(0.f, [this] { SideCam(true); return true; });
 	for (int32 i = 0; i < 14; ++i)
 	{
 		Add(0.11f, [this, i]
 		{
 			Tap(TEXT("Fire"));
+			SideCam(true);
 			if (i % 5 == 2)
 			{
 				Shot(FString::Printf(TEXT("runfire_fwd_%d"), i));
@@ -638,6 +667,7 @@ void ADCDemoPilot::AddRunFire()
 		Add(0.11f, [this, i]
 		{
 			Tap(TEXT("Fire"));
+			SideCam(true);
 			if (i % 5 == 2)
 			{
 				Shot(FString::Printf(TEXT("runfire_strafe_%d"), i));
@@ -645,7 +675,8 @@ void ADCDemoPilot::AddRunFire()
 			return true;
 		});
 	}
-	Add(0.3f, [this] { Release(TEXT("Move")); Shot(TEXT("runfire_idle")); return true; });
+	Add(0.3f, [this] { Release(TEXT("Move")); SideCam(true); Shot(TEXT("runfire_idle")); return true; });
+	Add(0.2f, [this] { SideCam(false); return true; });
 }
 
 void ADCDemoPilot::AddSupplyCall()
@@ -684,8 +715,26 @@ void ADCDemoPilot::AddSupplyCall()
 	});
 	Add(0.2f, [this] { Tap(TEXT("Fire")); UE_LOG(LogDCDemo, Display, TEXT("DEMO supply drop called at %s"), *SupplyAt.ToCompactString()); return true; });
 	Add(2.0f, [this] { AimAt(SupplyAt + FVector(0, 0, 300.f)); Shot(TEXT("supply_falling")); return true; });
-	Add(1.5f, [this] { AimAt(SupplyAt); Shot(TEXT("supply_landed")); Tap(TEXT("Slot1")); Press(TEXT("Move"), FVector(0, 1, 0)); return true; });
-	Add(1.6f, [this] { Release(TEXT("Move")); Shot(TEXT("supply_opened")); return true; });
+	Add(1.5f, [this] { AimAt(SupplyAt); Shot(TEXT("supply_landed")); Tap(TEXT("Slot1")); return true; });
+	Add(0.f, [this]
+	{
+		// Walk to the nearest landed pod with the real Move action until it opens (it is destroyed when opened).
+		APawn* Me = GetWorld()->GetFirstPlayerController() ? GetWorld()->GetFirstPlayerController()->GetPawn() : nullptr;
+		const ADCSupplyPod* Pod = nullptr;
+		for (const ADCSupplyPod* P : TActorRange<ADCSupplyPod>(GetWorld()))
+		{
+			Pod = P->HasLanded() && (!Pod || FVector::Dist(P->GetActorLocation(), Me ? Me->GetActorLocation() : FVector::ZeroVector) < FVector::Dist(Pod->GetActorLocation(), Me ? Me->GetActorLocation() : FVector::ZeroVector)) ? P : Pod;
+		}
+		if (!Me || !Pod)
+		{
+			Release(TEXT("Move"));
+			return true;
+		}
+		AimAt(Pod->GetActorLocation() + FVector(0, 0, 60.f));
+		Press(TEXT("Move"), FVector(0, 1, 0));
+		return false;
+	}, 8.f);
+	Add(0.6f, [this] { Release(TEXT("Move")); Shot(TEXT("supply_opened")); return true; });
 }
 
 void ADCDemoPilot::AddLineupShot()

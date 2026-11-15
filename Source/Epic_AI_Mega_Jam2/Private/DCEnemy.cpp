@@ -361,7 +361,7 @@ namespace
 				return;
 			}
 			const FVector Facing = (Goal - Here).GetSafeNormal2D();
-			E.GroundMove(Goal + E.SlotOffset(Def, Facing.IsNearlyZero() ? E.Heading : Facing), Def.Speed * 0.7f, Dt, Def.HoverHeight);
+			E.GroundMove(EntryGoal(E, Here, Goal + E.SlotOffset(Def, Facing.IsNearlyZero() ? E.Heading : Facing)), Def.Speed * 0.7f, Dt, Def.HoverHeight); // R6: door first
 			return;
 		}
 		E.Heading = E.Heading.RotateAngleAxis(15.f * Dt, FVector::UpVector);
