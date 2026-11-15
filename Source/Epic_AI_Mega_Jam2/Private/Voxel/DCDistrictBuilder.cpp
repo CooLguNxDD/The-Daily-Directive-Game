@@ -393,9 +393,9 @@ namespace DCVoxelCraft
 			{TEXT("Rubble"), [&](int32 Cell) { Plan.RubbleZones.Add(Centre(Cell)); }},
 		};
 		// R23 open lots (markets, yards, courts, parking): paved like a plaza, dressed by the Lot layers that name them.
-		for (const FName& Open : D.OpenKinds)
+		for (const FName& OpenKind : D.OpenKinds)
 		{
-			Kinds.FindOrAdd(Open, FLotFn([&](int32 Cell) { Plan.Plazas.Add(Centre(Cell)); }));
+			Kinds.FindOrAdd(OpenKind, FLotFn([&](int32 Cell) { Plan.Plazas.Add(Centre(Cell)); }));
 		}
 		for (int32 c = 0; c < Gx * Gy; ++c)
 		{
