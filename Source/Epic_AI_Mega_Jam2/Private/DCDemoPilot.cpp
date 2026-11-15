@@ -422,7 +422,22 @@ void ADCDemoPilot::AddWalkerWatch()
 	}
 	Add(0.2f, [this] { Tap(TEXT("Fire")); return true; });
 	Add(0.4f, [this] { Shot(TEXT("walker_snap")); LogPhoto(); return true; });
-	// Human 16:25: frame the walker's ranged charge (red sight line) and the shot landing.
+	// Human 16:25: frame the walker's ranged charge (red sight line) and the shot landing. The walker marches on towers,
+	// not the crew, so the pilot is set down 25 m from it on the street first (evidence pose).
+	Add(0.f, [this, FindWalker]
+	{
+		ADCEnemy* W = FindWalker();
+		APawn* Me = GetWorld()->GetFirstPlayerController() ? GetWorld()->GetFirstPlayerController()->GetPawn() : nullptr;
+		const ADCVoxelCity* City = ADCVoxelCity::Get(this);
+		if (W && Me)
+		{
+			const FVector Spot = W->GetActorLocation() - W->GetActorForwardVector() * -2500.f;
+			const float Z = City ? City->SurfaceZCm(Spot) : 0.f;
+			Me->SetActorLocation(FVector(Spot.X, Spot.Y, Z + 120.f), false, nullptr, ETeleportType::TeleportPhysics);
+			UE_LOG(LogDCDemo, Display, TEXT("DEMO walker watch: pilot set 25 m ahead of the walker at %s"), *Me->GetActorLocation().ToCompactString());
+		}
+		return true;
+	});
 	Add(0.f, [this, FindWalker]
 	{
 		ADCEnemy* W = FindWalker();
