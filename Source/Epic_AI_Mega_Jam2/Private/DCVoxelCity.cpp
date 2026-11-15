@@ -168,7 +168,7 @@ float ADCVoxelCity::SurfaceZCm(const FVector& Where) const
 		return 0.f;
 	}
 	const FIntVector C = T.ToLocal(DCVoxelMath::ToCm(FVector(Where.X, Where.Y, 0.f)));
-	if (InFlight.IsValid())
+	if (InFlight.IsValid() && DCVoxelOps::WritesTerrain(InFlight->Op))
 	{
 		// An op plans or waits: inside its area the snapshot taken before it started; outside it the sector is
 		// unchanged, but it may only be read once the worker is done writing.
@@ -903,6 +903,8 @@ void ADCVoxelCity::Clear()
 	}
 	QueuedOps.Reset();
 	SurfaceCache.Reset();
+	ChipLedger.Reset(); // R24: a new city starts unworn, and an op dropped with it is no longer out
+	bChipOpOut = false;
 	for (const TSharedPtr<FMeshJob>& Job : Jobs)
 	{
 		Job->Task.Wait();
@@ -997,6 +999,7 @@ void ADCVoxelCity::Build(int32 RunSeed, int32 SectorIndex, int32 BuildId, bool b
 	{
 		Craft.Models.Add(Model, DCVoxelModels::Parsed(Model)); // file reads stay on the game thread
 	}
+	SetChipProps(Plan); // R24: what the host's chips can break
 	const FDCSeasonDef* Season = SeasonFor(RunSeed, SectorIndex);
 	const float SnowCover = Season ? Season->SnowCover : -1.f;
 	const int32 Seed = DCCityRules::SectorSeed(RunSeed, SectorIndex);
@@ -1112,7 +1115,7 @@ FDCVoxelOpResult ADCVoxelCity::ApplyOp(const FDCVoxelOp& Op, bool bAnimate)
 	}
 	WaitInFlight(); // the synchronous path (reel re-staging) never overlaps a queued op
 	const double Start = FPlatformTime::Seconds();
-	FDCVoxelOpResult Result = Op.Kind == TEXT("Rest") ? DCVoxelOps::ApplyRest(Sector, Op, PendingFor(Op), OpCtx) : DCVoxelOps::Apply(Sector, Op, OpCtx);
+	FDCVoxelOpResult Result = DCVoxelOps::Run(Sector, Op, OpCtx, PendingFor(Op)); // the kind registry (R24)
 	DCVoxelOps::DeriveCosmetics(Sector, Op, OpCtx, Result);
 	AppliedSeq = FMath::Max(AppliedSeq, Op.Seq);
 	const uint32 Hash = Sector.Hash();
@@ -1150,7 +1153,23 @@ void ADCVoxelCity::StartNextOp()
 	// collapse costs the game thread only the uploads (impact hitch, R13). Ops stay strictly in Seq order.
 	InFlight = MakeShared<FQueuedOp>(MoveTemp(QueuedOps[0]));
 	QueuedOps.RemoveAt(0);
-	// Snapshot the street tops the op can change (blast radius plus topple reach), before the worker writes them.
+	// R24 (advisor a-37): consecutive replayed chip-only ops (the reel restage, a late joiner) fold into one task: their
+	// spheres only clear voxels, so one pass over all of them leaves the same voxels as one op after the other.
+	while (!InFlight->bAnimate && !InFlight->OnDone && DCVoxelOps::IsChipOnly(InFlight->Op) && QueuedOps.Num() > 0 && !QueuedOps[0].bAnimate && !QueuedOps[0].OnDone
+		&& DCVoxelOps::IsChipOnly(QueuedOps[0].Op) && QueuedOps[0].Op.Build == InFlight->Op.Build)
+	{
+		FDCVoxelOp& Into = InFlight->Op;
+		const FDCVoxelOp& Next = QueuedOps[0].Op;
+		Into.Chips.Append(Next.Chips);
+		Into.BreakProps.Append(Next.BreakProps); // removals only: their union is the same in any order
+		Into.Seq = Next.Seq;
+		Into.Time = Next.Time;
+		Into.ResultHash = Next.ResultHash; // compared after the last folded op
+		QueuedOps.RemoveAt(0);
+	}
+	// Snapshot the street tops the op can change (blast radius plus topple reach), before the worker writes them. A
+	// chip-only op never writes the street (R24): no snapshot, and the street stays readable while it runs.
+	if (DCVoxelOps::WritesTerrain(InFlight->Op))
 	{
 		const FDCVoxelOp& Op = InFlight->Op;
 		const FDCVoxelTuning& Tn = UDCVoxelSettings::Get().Tuning;
@@ -1177,7 +1196,7 @@ void ADCVoxelCity::StartNextOp()
 	InFlightTask = UE::Tasks::Launch(TEXT("DCVoxelOp"), [Job, Target, Ctx, Pend = MoveTemp(Pend)]()
 	{
 		const double Start = FPlatformTime::Seconds();
-		Job->Result = Job->Op.Kind == TEXT("Rest") ? DCVoxelOps::ApplyRest(*Target, Job->Op, Pend, *Ctx) : DCVoxelOps::Apply(*Target, Job->Op, *Ctx);
+		Job->Result = DCVoxelOps::Run(*Target, Job->Op, *Ctx, Pend);
 		const double Applied = FPlatformTime::Seconds();
 		DCVoxelOps::DeriveCosmetics(*Target, Job->Op, *Ctx, Job->Result); // shards and fragment trees off the game thread
 		const double Derived = FPlatformTime::Seconds();
@@ -1269,7 +1288,10 @@ void ADCVoxelCity::FinishInFlight()
 {
 	TSharedPtr<FQueuedOp> Done = InFlight;
 	InFlight.Reset();
-	SurfaceCache.Reset();
+	if (DCVoxelOps::WritesTerrain(Done->Op))
+	{
+		SurfaceCache.Reset(); // R24: a chip-only op leaves the street as it was
+	}
 	const double CommitT0 = FPlatformTime::Seconds(); // R13: the commit split for DCHITCH (op vs the caller's OnDone)
 	if (Done->bPrepared)
 	{
@@ -1282,6 +1304,7 @@ void ADCVoxelCity::FinishInFlight()
 	{
 		FinishOp(Done->Op, Done->Result, Done->bAnimate, Done->ApplyMs, Done->Hash, true);
 	}
+	const double CommitTMask = FPlatformTime::Seconds();
 	// R6: the op's lots changed (breaches, falls): their walk masks follow, here, while no worker writes.
 	for (const int32 Lot : Done->Result.TouchedLots)
 	{
@@ -1292,6 +1315,12 @@ void ADCVoxelCity::FinishInFlight()
 		RebuildWalkMask(Lot);
 	}
 	const double CommitT1 = FPlatformTime::Seconds();
+	if ((CommitT1 - CommitT0) * 1000.0 > UDCVoxelSettings::Get().Tuning.HitchLogMs)
+	{
+		// R1 attribution (advisor a-36): the commit frame's game-thread split.
+		UE_LOG(LogTemp, Display, TEXT("DCCOMMITOP kind=%s commitop=%.1f walkmask=%.1f ms (lots %d)"), *Done->Op.Kind.ToString(), (CommitTMask - CommitT0) * 1000.0,
+			(CommitT1 - CommitTMask) * 1000.0, Done->Result.TouchedLots.Num() + Done->Result.FallenLots.Num());
+	}
 	if (Done->OnDone)
 	{
 		Done->OnDone(Done->Result, Done->Hash);
@@ -1303,6 +1332,9 @@ void ADCVoxelCity::FinishInFlight()
 void ADCVoxelCity::FinishOp(const FDCVoxelOp& Op, FDCVoxelOpResult& Result, bool bAnimate, float ApplyMs, uint32 Hash, bool bOffThread)
 {
 	PrepareOp(Op, Result, bAnimate, GetWorld()->GetTimeSeconds());
+	// R24: an op committed on the spot holds nothing (no op is held while one finishes here); its cells upload under the
+	// budget instead of piling into the next held strike's all-at-once commit (frequent chip ops).
+	HeldCells.Reset();
 	CommitOp(Op, Result, bAnimate, ApplyMs, Hash, bOffThread);
 }
 
@@ -1425,7 +1457,8 @@ void ADCVoxelCity::PrepareOp(const FDCVoxelOp& Op, FDCVoxelOpResult& Result, boo
 	const double P2 = FPlatformTime::Seconds();
 	if (bAnimate)
 	{
-		QueueShards(Op, Result, Now);
+		const FDCOpKind* Kind = DCVoxelOps::FindKind(Op.Kind);
+		(Kind && !Kind->bShardBodies) ? QueueChipCrumbs(Op, Result, Now) : QueueShards(Op, Result, Now); // R24: chips throw crumbs only
 	}
 	const double P3 = FPlatformTime::Seconds();
 	int32 PieceIndex = -1;
@@ -1741,6 +1774,7 @@ void ADCVoxelCity::QueueAllDirty(TSet<FIntVector>* DeferTerrain)
 
 void ADCVoxelCity::PollJobs()
 {
+	PollStats = FPollStats();
 	const double Start = FPlatformTime::Seconds();
 	const double PieceBudgetS = UDCVoxelSettings::Get().Tuning.PieceUploadBudgetMs / 1000.0;
 	for (int32 i = 0; i < Jobs.Num();)
@@ -1762,7 +1796,16 @@ void ADCVoxelCity::PollJobs()
 			UProceduralMeshComponent* Target = F.Frags.IsValidIndex(Job->Frag) ? F.Frags[Job->Frag].Comp.Get() : F.Comp.Get();
 			if (Target && F.Comp && !F.bLanded)
 			{
+				const double S0 = FPlatformTime::Seconds();
 				Target->CreateMeshSection(0, Job->Mesh.Positions, Job->Mesh.Indices, Job->Mesh.Normals, Job->Mesh.UVs, Job->Mesh.Colors, {}, false);
+				const double SectionMs = (FPlatformTime::Seconds() - S0) * 1000.0; // R1 attribution (advisor a-36)
+				PollStats.PieceMs += SectionMs;
+				++PollStats.Pieces;
+				if (SectionMs > PollStats.WorstPieceMs)
+				{
+					PollStats.WorstPieceMs = SectionMs;
+					PollStats.WorstPieceVerts = Job->Mesh.Positions.Num();
+				}
 				if (--F.PendingMeshes <= 0)
 				{
 					F.Comp->SetVisibility(GetWorld()->GetTimeSeconds() - FallOffset >= F.Start, true); // a piece meshed ahead shows at the detonation
@@ -1773,6 +1816,7 @@ void ADCVoxelCity::PollJobs()
 		}
 		const FIntVector4 K = Key(Job->Grid, Job->Chunk);
 		const FIntVector4 Cell = Key(Job->Grid, CellOf(Job->Grid, Job->Chunk));
+		++PollStats.Chunks;
 		if (Job->Mesh.IsEmpty())
 		{
 			ChunkMeshes.Remove(K);
@@ -1823,9 +1867,15 @@ void ADCVoxelCity::UploadCells()
 		TArray<FDCVoxelMeshData> Merged;
 		Merged.SetNum(CommitNow.Num());
 		ParallelFor(CommitNow.Num(), [&](int32 i) { MergeCell(CommitNow[i], Merged[i]); }, CommitNow.Num() < 4);
+		const double T1 = FPlatformTime::Seconds();
 		for (int32 i = 0; i < CommitNow.Num(); ++i)
 		{
 			ApplyCell(CommitNow[i], Merged[i], i == 0 ? T0 : FPlatformTime::Seconds());
+		}
+		const double T2 = FPlatformTime::Seconds();
+		if ((T2 - T0) * 1000.0 > UDCVoxelSettings::Get().Tuning.HitchLogMs)
+		{
+			UE_LOG(LogTemp, Display, TEXT("DCCOMMIT cells=%d merge=%.1f apply=%.1f ms"), CommitNow.Num(), (T1 - T0) * 1000.0, (T2 - T1) * 1000.0); // R1 attribution (advisor a-36)
 		}
 	}
 	// 2. Everything else under the millisecond budget; a held op's cells wait for its commit.
@@ -2608,6 +2658,7 @@ void ADCVoxelCity::Tick(float DeltaSeconds)
 	{
 		FollowGameState();
 	}
+	TickChips(); // R24 host: the due Chip op goes out
 	// Two-phase ops: a planned op is held until its apply time (a strike's detonation), then committed.
 	const ADCGameState* State = GetWorld()->GetGameState<ADCGameState>();
 	double PrepMs = 0.0;
@@ -2677,6 +2728,10 @@ void ADCVoxelCity::Tick(float DeltaSeconds)
 	{
 		UE_LOG(LogTemp, Display, TEXT("DCHITCH city next=%.1f prep=%.1f commit=%.1f (op %.1f ondone %.1f) poll=%.1f upload=%.1f falling=%.1f crumb=%.1f ms (%d live) bodies=%d cells=%d->%d jobs=%d"), NextOpMs, PrepMs, CommitMs, CommitMs > 0.0 ? LastCommitOpMs : 0.0, CommitMs > 0.0 ? LastOnDoneMs : 0.0, (T1 - T0) * 1000.0, (T2 - T1) * 1000.0, (T3 - T2) * 1000.0,
 			Crumbs ? Crumbs->LastTickMs : 0.f, Crumbs ? Crumbs->LiveCount() : 0, BodiesReserved, DirtyBefore, DirtyCells.Num(), Jobs.Num());
+		if (PollStats.Pieces > 0 || (T1 - T0) * 1000.0 > UDCVoxelSettings::Get().Tuning.HitchLogMs * 0.25)
+		{
+			UE_LOG(LogTemp, Display, TEXT("DCHITCH poll chunks=%d pieces=%d piece_sections=%.1f ms worst=%.1f ms (%d verts)"), PollStats.Chunks, PollStats.Pieces, PollStats.PieceMs, PollStats.WorstPieceMs, PollStats.WorstPieceVerts);
+		}
 		if ((T3 - T2) * 1000.0 > UDCVoxelSettings::Get().Tuning.HitchLogMs * 0.25)
 		{
 			UE_LOG(LogTemp, Display, TEXT("DCHITCH falling shards=%.1f fade+frame=%.1f bodies=%.1f break=%.1f land=%.1f ms (fading %d, falling %d)"),

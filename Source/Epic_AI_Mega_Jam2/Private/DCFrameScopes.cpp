@@ -100,8 +100,8 @@ namespace DCFrameScopes
 				++Listed;
 			}
 		}
-		return FString::Printf(TEXT("owners=%s ours=%.1f world=%.1f gc=%.1f unowned=%.1f"), Owners.IsEmpty() ? TEXT("-") : *Owners, Ours, World, Gc,
-			FMath::Max(0.0, GameMs - Ours - Gc));
+		return FString::Printf(TEXT("owners=%s ours=%.1f world=%.1f gc=%.1f unowned=%.1f outside_world=%.1f"), Owners.IsEmpty() ? TEXT("-") : *Owners, Ours, World, Gc,
+			FMath::Max(0.0, GameMs - Ours - Gc), FMath::Max(0.0, GameMs - World));
 	}
 
 	FScope::FScope(FName InName)

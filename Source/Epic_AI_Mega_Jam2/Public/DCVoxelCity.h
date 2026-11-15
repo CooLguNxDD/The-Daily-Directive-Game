@@ -10,6 +10,7 @@
 #include "Rules/DCCityPlan.h"
 #include "Voxel/DCVoxelMesher.h"
 #include "Voxel/DCVoxelOps.h"
+#include "Rules/DCChipRules.h"
 #include "Rules/DCWeather.h"
 #include "DCDebrisPool.h"
 #include "DCCrumbField.h"
@@ -109,6 +110,10 @@ public:
 	int32 GetFallingCount() const { return Falling.Num(); }
 	/** An op due by Time (its apply time) is still planning, held or queued: its results have not landed yet. */
 	bool HasPendingOpsAt(float Time) const;
+	/** R24 host: a weapon hit (Hit from the host's own trace) wears the city voxel it struck: the hit adds the weapon's
+	 *  ChipDamage to the host's chip ledger (rate-limited per Shooter); Chip ops go out from Tick. No-op on clients,
+	 *  for hits on anything but a tower or prop cell, and while Tuning ChipsEnabled is off. */
+	void HostChip(const FHitResult& Hit, const struct FDCWeaponDef& Weapon, const AActor* Shooter);
 
 private:
 	struct FMeshJob;
@@ -128,6 +133,17 @@ private:
 	FDCPendingPiece PendingFor(const FDCVoxelOp& Op) const;
 	/** Host: its bodies of a piece came to rest; append and apply the Rest op (poses snapped to cm and axis frames). */
 	void HostRest(FFalling& F);
+	/** R24 host: the sector's street props as the chip ledger tracks them (foot, reach, top, break count). */
+	void SetChipProps(const FDCCityPlan& Plan);
+	/** R24 host: sends the due Chip op (DCChipRules::Flush) and applies it like any op. */
+	void TickChips();
+	/** Grid of a city cell component (its tag): a tower lot, DCVoxelOps::PropGrid, or INDEX_NONE (terrain, other). */
+	int32 ChipGridOf(const UPrimitiveComponent* Comp) const;
+	/** Clusters of a Chip op throw crumbs only (no physics shards; cosmetic, local). */
+	void QueueChipCrumbs(const FDCVoxelOp& Op, const FDCVoxelOpResult& Result, float Start);
+	FDCChipLedger ChipLedger;
+	/** A Chip op is appended and not applied yet (at most one out: the pending set coalesces under load). */
+	bool bChipOpOut = false;
 public:
 	/** Off for cities that never append ops (the reel's re-staged city replays the recorded Rest ops instead). */
 	bool bHostRests = true;
@@ -254,6 +270,16 @@ private:
 	void RebuildWalkMask(int32 Lot);
 	/** R13: the last commit split (CommitOp/FinishOp vs the caller's OnDone), for DCHITCH. */
 	double LastCommitOpMs = 0.0, LastOnDoneMs = 0.0;
+	/** R1 attribution (advisor a-36): what this frame's PollJobs absorbed. */
+	struct FPollStats
+	{
+		int32 Chunks = 0;
+		int32 Pieces = 0;
+		double PieceMs = 0.0;
+		double WorstPieceMs = 0.0;
+		int32 WorstPieceVerts = 0;
+	};
+	FPollStats PollStats;
 	/** The current load came from an async (sector card) build. */
 	bool bAsyncLoad = false;
 	/** An off-thread sector craft in flight (Build with bAsync); FinishBuild swaps it in. */

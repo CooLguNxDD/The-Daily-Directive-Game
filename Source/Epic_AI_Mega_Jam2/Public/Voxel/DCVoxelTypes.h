@@ -409,6 +409,32 @@ struct FDCVoxelTuning
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") FDCVoxelCarveDef DefaultCarve;
 	/** Decay window: how long the rubble of a fallen piece smokes and burns (s). */
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float DecaySeconds = 9.f;
+	/** R24 weapon chips (advisor a-37). The host adds each weapon hit's ChipDamage (+Weapons row) to a ChipBucketCm
+	 *  bucket of the voxel it hit; past ChipHp (ChipPropHp on props) the hit voxel is chipped (the weapon's ChipRadiusCm)
+	 *  and the bucket starts over. Pending chips go out as one Chip op every ChipWindowSeconds while no Chip op is
+	 *  out: at most ChipMaxEntries chips on at most ChipMaxCellsPerOp render cells (the rest wait, ChipMaxPending at
+	 *  most). A lot shot ChipStructureVoxels voxels since its last structure pass gets one (at most one lot per op,
+	 *  ChipStructureMinSeconds apart per lot, only under ChipStructureMaxBodyLoad). Each chip throws ChipCrumbs crumbs. */
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") bool ChipsEnabled = false;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float ChipWindowSeconds = 0.25f;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 ChipMaxEntries = 32;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 ChipMaxCellsPerOp = 4;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 ChipMaxPending = 256;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 ChipBucketCm = 30;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float ChipHp = 1.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float ChipPropHp = 1.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 ChipStructureVoxels = 300;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float ChipStructureMinSeconds = 3.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float ChipStructureMaxBodyLoad = 0.6f;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 ChipCrumbs = 3;
+	/** Support (R24): only voxels chipped in a tower's bottom ChipSupportFloors floors count toward ChipStructureVoxels
+	 *  (0 = every chipped voxel counts). When the lot is listed, its base gives way on the side the shots came from
+	 *  (a bite ChipBiteFloors tall, ChipBitePercent of the footprint deep) before the structure pass, so it topples away
+	 *  from the shooters like a strike. Wall-only layers never trip the layer-support rule on their own (a floor slab
+	 *  is far bigger), so without the bite no amount of wall fire could bring a tower down. */
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 ChipSupportFloors = 2;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 ChipBiteFloors = 2;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 ChipBitePercent = 70;
 };
 
 /** A prop layer (R2 city props): where one family of voxel-forge props goes. The district's prop rule set turns a
@@ -442,6 +468,8 @@ struct FDCPropLayer
 	UPROPERTY(EditAnywhere, Config, Category = "District") FName BeadMaterial;
 	UPROPERTY(EditAnywhere, Config, Category = "District") float BeadEveryCm = 0.f;
 	UPROPERTY(EditAnywhere, Config, Category = "District") FName PoleMaterial;
+	/** R24: a prop of this layer breaks apart once weapon chips took this percent of its voxels (0 = never breaks). */
+	UPROPERTY(EditAnywhere, Config, Category = "District") int32 ChipBreakPercent = 35;
 };
 
 /** District rules for one sector (R16): the street grid, which lot kinds the PCG rules roll, the landmark, the sight
@@ -534,6 +562,17 @@ struct FDCVoxelRest
 	UPROPERTY() uint8 AxisZ = 4;
 };
 
+/** R24 one weapon chip (advisor a-37): every solid voxel of one grid within RadiusCm of CenterCm (sector cm, the hit
+ *  voxel's centre, quantized on the host) is cleared. Grid: a lot's tower grid (0..N-1) or DCVoxelOps::PropGrid. */
+USTRUCT()
+struct FDCVoxelChip
+{
+	GENERATED_BODY()
+	UPROPERTY() int32 Grid = 0;
+	UPROPERTY() FIntVector CenterCm = FIntVector::ZeroValue;
+	UPROPERTY() int32 RadiusCm = 0;
+};
+
 USTRUCT()
 struct FDCVoxelOp
 {
@@ -558,4 +597,11 @@ struct FDCVoxelOp
 	UPROPERTY() int32 RestOf = 0;
 	UPROPERTY() int32 RestPiece = -1;
 	UPROPERTY() TArray<FDCVoxelRest> Rests;
+	/** Kind "Chip" (R24, host-batched weapon hits): the spheres to clear, in order; StructureLots get the structure
+	 *  pass after them (the host lists a lot once enough of it was shot away, CenterCm = where the chips came from). */
+	UPROPERTY() TArray<FDCVoxelChip> Chips;
+	UPROPERTY() TArray<int32> StructureLots;
+	/** Props shot past their break fraction: each entry clears a column of the prop grid (CenterCm X/Y = the prop's
+	 *  foot, CenterCm Z = its top, RadiusCm = its reach) and the prop flies apart as pieces and crumbs. */
+	UPROPERTY() TArray<FDCVoxelChip> BreakProps;
 };

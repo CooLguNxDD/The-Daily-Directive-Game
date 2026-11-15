@@ -51,6 +51,11 @@ private:
 	void AddLineupShot();
 	void AddSupplyCall();
 	void AddRunFire();
+	/** R24 evidence (-dcchipfire): sustained fire at one tower wall; fixed-pose frames before, during and after. */
+	void AddChipFire();
+	FVector ChipAim = FVector::ZeroVector;
+	FVector ChipEye = FVector::ZeroVector;
+	int32 ChipLot = INDEX_NONE;
 	void AddBounds();
 	void AddAim();
 	void LogAim(const TCHAR* Tag);

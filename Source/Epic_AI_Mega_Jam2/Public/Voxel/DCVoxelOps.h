@@ -59,6 +59,8 @@ struct EPIC_AI_MEGA_JAM2_API FDCShardCluster
 	uint8 Material = 0;
 	int32 Block = 1;
 	float VoxelCm = 10.f;
+	/** R24: a broken prop's piece (a pooled debris block), not grit. */
+	bool bPiece = false;
 };
 
 struct EPIC_AI_MEGA_JAM2_API FDCVoxelOpResult
@@ -78,6 +80,11 @@ struct EPIC_AI_MEGA_JAM2_API FDCVoxelOpResult
 	TArray<FIntVector> Rubble;
 	TArray<uint8> RubbleMaterials;
 	int32 Carved = 0;
+	/** R24 Chip ops: voxels each chip removed from a tower, as (lot, voxels) in chip order (the host's structure
+	 *  trigger counts them). Never hashed. */
+	TArray<FIntPoint> ChipCarved;
+	/** R24 Chip ops: voxels each entry of Op.Chips removed, in order (the host credits props with them). */
+	TArray<int32> ChipVoxels;
 	/** Where the op's time went (ms): carve and bite, structure pass, settle (evidence for the impact hitch, R13). */
 	float CarveMs = 0.f;
 	float StructureMs = 0.f;
@@ -107,8 +114,33 @@ struct EPIC_AI_MEGA_JAM2_API FDCVoxelSector
 	uint32 Hash() const;
 };
 
+/** One op kind (rule 3: dispatch by id, advisor a-37): how it applies, and what the city must do around it. */
+struct EPIC_AI_MEGA_JAM2_API FDCOpKind
+{
+	FDCVoxelOpResult (*Apply)(FDCVoxelSector&, const FDCVoxelOp&, const FDCVoxelOpContext&, const FDCPendingPiece&) = nullptr;
+	/** The op can change the street (crater, rubble): the city snapshots street tops before it and drops its surface
+	 *  cache after it. A Chip op writes the street only through its StructureLots. */
+	bool bWritesTerrain = true;
+	/** Carved tower voxels fly as physics shard bodies (else the op's clusters throw crumbs only). */
+	bool bShardBodies = true;
+};
+
 namespace DCVoxelOps
 {
+	/** FDCVoxelChip::Grid of the prop grid (towers are 0..N-1). */
+	constexpr int32 PropGrid = -1;
+	/** No chip clears a sphere wider than this (validated on every machine). */
+	constexpr int32 ChipMaxRadiusCm = 200;
+
+	/** The kind registry: Strike, Fell, Rest, Chip. Null for an unknown kind. */
+	EPIC_AI_MEGA_JAM2_API const FDCOpKind* FindKind(FName Kind);
+	/** Applies any op through its kind's row (Pend: the pending piece a Rest op settles). Unknown kinds do nothing. */
+	EPIC_AI_MEGA_JAM2_API FDCVoxelOpResult Run(FDCVoxelSector& Sector, const FDCVoxelOp& Op, const FDCVoxelOpContext& Ctx, const FDCPendingPiece& Pend);
+	/** True when the op may change the terrain grid (street tops). */
+	EPIC_AI_MEGA_JAM2_API bool WritesTerrain(const FDCVoxelOp& Op);
+	/** A Chip op without a structure pass: only spheres cleared, so consecutive ones fold into one task. */
+	EPIC_AI_MEGA_JAM2_API bool IsChipOnly(const FDCVoxelOp& Op);
+
 	/** Removes every solid voxel of a grid within RadiusCm of CenterCm (voxel centres, integer). Returns how many. */
 	/** The highest solid tower voxel under terrain column (X, Y), as a terrain cell index (0 = none): rubble rests on
 	 *  what is left of a tower, not on its uncarved roof prism. */
@@ -131,8 +163,9 @@ namespace DCVoxelOps
 	 *  slid to the angle of repose, stacked on rubble and stumps, never into a standing tower. Writes the terrain. */
 	EPIC_AI_MEGA_JAM2_API void Settle(FDCVoxelSector& Sector, FDCVoxelPiece& Piece, const FDCVoxelOpContext& Ctx, FDCVoxelOpResult& Out);
 
-	/** One replicated op. Strike: beam column + blast sphere in every tower it reaches, a crater in the terrain, a
-	 *  bite in every standing tower within the blast radius, then the structure pass and settle. Fell: bite one lot. */
+	/** One replicated op (through Run). Strike: beam column + blast sphere in every tower it reaches, a crater in the
+	 *  terrain, a bite in every standing tower within the blast radius, then the structure pass and settle. Fell: bite
+	 *  one lot. Chip: the listed spheres, then the structure pass on StructureLots only. */
 	EPIC_AI_MEGA_JAM2_API FDCVoxelOpResult Apply(FDCVoxelSector& Sector, const FDCVoxelOp& Op, const FDCVoxelOpContext& Ctx);
 
 	/** Deterministic per-voxel hash (no RNG state, order independent). */

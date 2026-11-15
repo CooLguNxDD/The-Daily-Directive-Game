@@ -805,6 +805,130 @@ void ADCDemoPilot::AddRunFire()
 	Add(0.2f, [this] { SideCam(false); return true; });
 }
 
+void ADCDemoPilot::AddChipFire()
+{
+	// R24 evidence (-dcchipfire, with -dcchips on the host when ChipsEnabled is off in data): the pawn is placed on the
+	// street ChipStandCm out from the middle of the nearest standing tower's face (a logged pilot aid), rifle out, and
+	// holds the real Fire action for ChipFireSeconds at the wall's foot, sweeping a small pattern; ammo is topped up
+	// (pilot aid). A fixed camera beside the pawn frames the wall before, every 10 s and after (the hole, and the
+	// topple once the support is shot away); DEMO chipfire lines carry the city hash and the op count.
+	constexpr float StandCm = 1100.f;
+	constexpr int32 Seconds = 60;
+	Add(0.f, [this] { const ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>(); return GS && GS->Phase == EDCRunPhase::Sector; }, 120.f);
+	Add(2.f, [this]
+	{
+		APawn* Me = GetWorld()->GetFirstPlayerController() ? GetWorld()->GetFirstPlayerController()->GetPawn() : nullptr;
+		const ADCVoxelCity* City = ADCVoxelCity::Get(this);
+		if (!Me || !City)
+		{
+			return true;
+		}
+		const TArray<FDCVoxelTower>& Towers = City->GetSector().Towers;
+		float Best = TNumericLimits<float>::Max();
+		for (int32 Lot = 0; Lot < Towers.Num(); ++Lot)
+		{
+			const FVector C = FVector(Towers[Lot].FootMinCm() + Towers[Lot].FootMaxCm()) * 0.5f;
+			if (!City->IsTowerFallen(Lot) && FVector::DistSquared2D(C, Me->GetActorLocation()) < Best)
+			{
+				Best = FVector::DistSquared2D(C, Me->GetActorLocation());
+				ChipLot = Lot;
+			}
+		}
+		if (ChipLot == INDEX_NONE)
+		{
+			return true;
+		}
+		const FDCVoxelTower& T = Towers[ChipLot];
+		const FVector Lo(T.FootMinCm()), Hi(T.FootMaxCm());
+		const FVector Mid = (Lo + Hi) * 0.5f;
+		const FVector To = Me->GetActorLocation() - Mid;
+		// The face toward the pawn, on its dominant axis.
+		const FVector Out = FMath::Abs(To.X) * (Hi.Y - Lo.Y) >= FMath::Abs(To.Y) * (Hi.X - Lo.X) ? FVector(FMath::Sign(To.X), 0, 0) : FVector(0, FMath::Sign(To.Y), 0);
+		const FVector Face = Mid + Out * (FMath::Abs(Out.X) > 0.f ? (Hi.X - Lo.X) : (Hi.Y - Lo.Y)) * 0.5f;
+		const float Base = T.Grid.OriginCm.Z;
+		ChipAim = FVector(Face.X, Face.Y, Base + 110.f);
+		const FVector Stand = Face + Out * StandCm;
+		const float Ground = City->SurfaceZCm(Stand);
+		Me->SetActorLocation(FVector(Stand.X, Stand.Y, Ground + 100.f), false, nullptr, ETeleportType::TeleportPhysics);
+		ChipEye = FVector(Stand.X, Stand.Y, Ground + 160.f) + FVector::CrossProduct(Out, FVector::UpVector) * 180.f - Out * 150.f;
+		UE_LOG(LogDCDemo, Display, TEXT("DEMO chipfire: lot %d face %s, pawn placed at %s (pilot aid), camera %s"), ChipLot, *Face.ToCompactString(), *Stand.ToCompactString(), *ChipEye.ToCompactString());
+		return true;
+	});
+	auto Frame = [this](const FString& Name)
+	{
+		APlayerController* PC = GetWorld()->GetFirstPlayerController();
+		if (!PC)
+		{
+			return;
+		}
+		if (!EvidenceCam)
+		{
+			EvidenceCam = GetWorld()->SpawnActor<ACameraActor>(ACameraActor::StaticClass(), FTransform::Identity);
+		}
+		EvidenceCam->SetActorLocationAndRotation(ChipEye, (ChipAim + FVector(0, 0, 150.f) - ChipEye).Rotation());
+		PC->SetViewTargetWithBlend(EvidenceCam, 0.f);
+		const ADCVoxelCity* City = ADCVoxelCity::Get(this);
+		const ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>();
+		UE_LOG(LogDCDemo, Display, TEXT("DEMO chipfire %s: lot %d fallen=%d city hash=%08x ops=%d applied=%d"), *Name, ChipLot, City && City->IsTowerFallen(ChipLot) ? 1 : 0,
+			City ? City->GetHash() : 0u, GS ? GS->VoxelOps.Num() : 0, City ? City->GetAppliedSeq() : 0);
+		Shot(Name);
+	};
+	Add(0.6f, [this] { Tap(TEXT("Slot1")); return true; });
+	Add(1.0f, [this, Frame] { Frame(TEXT("chipfire_before")); return true; });
+	Add(0.3f, [this]
+	{
+		APlayerController* PC = GetWorld()->GetFirstPlayerController();
+		if (PC && PC->GetPawn())
+		{
+			PC->SetViewTargetWithBlend(PC->GetPawn(), 0.f);
+		}
+		AimAt(ChipAim);
+		Press(TEXT("Fire"));
+		return true;
+	});
+	// A sweep 2 m wide and 1 m tall at the wall's foot, one aim point every half second.
+	for (int32 i = 0; i < Seconds * 2; ++i)
+	{
+		Add(0.5f, [this, i, Frame]
+		{
+			ADCCharacter* Me = Cast<ADCCharacter>(GetWorld()->GetFirstPlayerController() ? GetWorld()->GetFirstPlayerController()->GetPawn() : nullptr);
+			if (Me && i % 6 == 0)
+			{
+				Me->HostResupply(0, 60, 0.f); // pilot aid: the magazine never runs dry over the minute
+			}
+			const float U = static_cast<float>(i % 8) / 7.f - 0.5f;
+			const float V = static_cast<float>((i / 8) % 3) - 1.f;
+			const FVector Side = FVector::CrossProduct((ChipAim - ChipEye).GetSafeNormal2D(), FVector::UpVector);
+			if (i % 20 == 19)
+			{
+				Release(TEXT("Fire"));
+				Frame(FString::Printf(TEXT("chipfire_t%02d"), (i + 1) / 2));
+				return true;
+			}
+			APlayerController* PC = GetWorld()->GetFirstPlayerController();
+			if (PC && PC->GetPawn() && PC->GetViewTarget() != PC->GetPawn())
+			{
+				PC->SetViewTargetWithBlend(PC->GetPawn(), 0.f);
+			}
+			AimAt(ChipAim + Side * U * 200.f + FVector(0, 0, V * 50.f));
+			Press(TEXT("Fire"));
+			return true;
+		});
+	}
+	Add(0.2f, [this] { Release(TEXT("Fire")); return true; });
+	Add(3.f, [this, Frame] { Frame(TEXT("chipfire_after")); return true; });
+	Add(6.f, [this, Frame] { Frame(TEXT("chipfire_settled")); return true; });
+	Add(0.2f, [this]
+	{
+		APlayerController* PC = GetWorld()->GetFirstPlayerController();
+		if (PC && PC->GetPawn())
+		{
+			PC->SetViewTargetWithBlend(PC->GetPawn(), 0.f);
+		}
+		return true;
+	});
+}
+
 void ADCDemoPilot::AddSupplyCall()
 {
 	// R7 evidence (-dcsupply): spend the rifle's magazine, then Slot2 + Q until the Supply Drop is selected, call it 6 m
@@ -1461,6 +1585,10 @@ void ADCDemoPilot::BuildScript()
 		if (Sector == 0 && FParse::Param(FCommandLine::Get(), TEXT("dcrunfire")))
 		{
 			AddRunFire();
+		}
+		if (Sector == 0 && FParse::Param(FCommandLine::Get(), TEXT("dcchipfire")))
+		{
+			AddChipFire();
 		}
 		if (Sector == 0 && FParse::Param(FCommandLine::Get(), TEXT("dcbounds")))
 		{

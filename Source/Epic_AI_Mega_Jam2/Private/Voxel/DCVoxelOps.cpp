@@ -770,69 +770,19 @@ namespace DCVoxelOps
 		Piece.RubbleNum = Out.Rubble.Num() - Piece.RubbleStart;
 	}
 
-	FDCVoxelOpResult Apply(FDCVoxelSector& Sector, const FDCVoxelOp& Op, const FDCVoxelOpContext& Ctx)
+	/** The shared tail of every op that can bring a tower down (advisor a-37): structure pass on Lots (in parallel,
+	 *  merged in lot order), terrain over them dropped, then the pieces settle. Strike and Fell run it on every lot they
+	 *  touched; Chip only on the lots the host listed in StructureLots. */
+	template <typename FLap>
+	void StructureTail(FDCVoxelSector& Sector, const TArray<int32>& Lots, const FIntVector& C, const FDCVoxelOpContext& Ctx, FDCVoxelOpResult& Out, FLap& Lap)
 	{
-		FDCVoxelOpResult Out;
-		double Clock = FPlatformTime::Seconds();
-		auto Lap = [&Clock]() { const double Now = FPlatformTime::Seconds(); const float Ms = static_cast<float>((Now - Clock) * 1000.0); Clock = Now; return Ms; };
-		const bool bFell = Op.Kind == TEXT("Fell");
-		const FDCVoxelCarveDef& Carve = bFell ? Ctx.Tuning->DefaultCarve : Ctx.CarveFor(Op.Stratagem);
-		const FIntVector C = Op.CenterCm;
-		if (bFell)
-		{
-			if (Sector.Towers.IsValidIndex(Op.Lot) && !Sector.Towers[Op.Lot].bFallen)
-			{
-				TArray<TPair<FIntVector, uint8>> Removed;
-				Out.Carved += Bite(Sector.Towers[Op.Lot], C, Carve.BiteFloors, Carve.BitePercent, Ctx.BayCm, &Removed);
-				for (const TPair<FIntVector, uint8>& R : Removed)
-				{
-					Out.Shards.Add({Op.Lot, R.Key, R.Value});
-				}
-				Out.TouchedLots.Add(Op.Lot);
-			}
-		}
-		else
-		{
-			const int32 Reach = FMath::Max(Carve.ColumnRadiusCm, Carve.SphereRadiusCm);
-			const int64 Blast2 = static_cast<int64>(Op.BlastRadiusCm) * Op.BlastRadiusCm;
-			for (int32 i = 0; i < Sector.Towers.Num(); ++i)
-			{
-				FDCVoxelTower& T = Sector.Towers[i];
-				bool bTouched = false;
-				TArray<TPair<FIntVector, uint8>> Removed;
-				if (DistSqToFootprint(T, C) <= static_cast<int64>(Reach + 100) * (Reach + 100))
-				{
-					const int32 Carved = CarveColumn(T.Grid, C, Carve.ColumnRadiusCm, T.ScanMax.Z, &Removed) + CarveSphere(T.Grid, C, Carve.SphereRadiusCm, 0, &Removed);
-					Out.Carved += Carved;
-					bTouched = Carved > 0;
-				}
-				if (!T.bFallen && DistSqToFootprint(T, C) <= Blast2)
-				{
-					Out.Carved += Bite(T, C, Carve.BiteFloors, Carve.BitePercent, Ctx.BayCm, &Removed);
-					bTouched = true;
-				}
-				for (const TPair<FIntVector, uint8>& R : Removed)
-				{
-					Out.Shards.Add({i, R.Key, R.Value});
-				}
-				if (bTouched)
-				{
-					Out.TouchedLots.Add(i);
-				}
-			}
-			// The crater never punches through the bedrock layers (a hole to the void read as a checkerboard).
-			Out.Carved += CarveSphere(Sector.Terrain, C, Carve.CraterRadiusCm, FMath::Max(Ctx.Tuning->BedrockLayers, 0));
-			// Props in the blast are gone, top to bottom (a sphere left their tops floating: review CP2).
-			Out.Carved += CarveColumn(Sector.Props, C, Carve.SphereRadiusCm, Sector.Props.ToLocal(FIntVector(0, 0, 4000)).Z);
-		}
-		Out.CarveMs = Lap();
 		// Towers are independent grids: their structure passes run in parallel, and the results merge in lot order
 		// (the same order on every machine), so the op stays deterministic.
 		TArray<FDCVoxelOpResult> PerTower;
-		PerTower.SetNum(Out.TouchedLots.Num());
-		ParallelFor(Out.TouchedLots.Num(), [&](int32 k)
+		PerTower.SetNum(Lots.Num());
+		ParallelFor(Lots.Num(), [&](int32 k)
 		{
-			FDCVoxelTower& T = Sector.Towers[Out.TouchedLots[k]];
+			FDCVoxelTower& T = Sector.Towers[Lots[k]];
 			Structure(T, DominantDir(C, TowerCenterCm(T)), Ctx, PerTower[k]); // falls away from the blast
 		});
 		for (FDCVoxelOpResult& R : PerTower)
@@ -843,7 +793,7 @@ namespace DCVoxelOps
 				Out.Pieces.Add(MoveTemp(Piece));
 			}
 		}
-		for (int32 Lot : Out.TouchedLots)
+		for (int32 Lot : Lots)
 		{
 			DropTerrainOver(Sector, Sector.Towers[Lot], Ctx.Tuning->GroundLayers); // nothing left floating where a roof or a top was (lot order)
 		}
@@ -857,7 +807,227 @@ namespace DCVoxelOps
 			Settle(Sector, Piece, Ctx, Out);
 		}
 		Out.SettleMs = Lap();
+	}
+
+	/** Op clock: each call returns the ms since the previous one (carve, structure, settle evidence). */
+	struct FOpLap
+	{
+		double Clock = FPlatformTime::Seconds();
+		float operator()()
+		{
+			const double Now = FPlatformTime::Seconds();
+			const float Ms = static_cast<float>((Now - Clock) * 1000.0);
+			Clock = Now;
+			return Ms;
+		}
+	};
+
+	FDCVoxelOpResult ApplyFell(FDCVoxelSector& Sector, const FDCVoxelOp& Op, const FDCVoxelOpContext& Ctx, const FDCPendingPiece&)
+	{
+		FDCVoxelOpResult Out;
+		FOpLap Lap;
+		const FDCVoxelCarveDef& Carve = Ctx.Tuning->DefaultCarve;
+		const FIntVector C = Op.CenterCm;
+		if (Sector.Towers.IsValidIndex(Op.Lot) && !Sector.Towers[Op.Lot].bFallen)
+		{
+			TArray<TPair<FIntVector, uint8>> Removed;
+			Out.Carved += Bite(Sector.Towers[Op.Lot], C, Carve.BiteFloors, Carve.BitePercent, Ctx.BayCm, &Removed);
+			for (const TPair<FIntVector, uint8>& R : Removed)
+			{
+				Out.Shards.Add({Op.Lot, R.Key, R.Value});
+			}
+			Out.TouchedLots.Add(Op.Lot);
+		}
+		Out.CarveMs = Lap();
+		StructureTail(Sector, Out.TouchedLots, C, Ctx, Out, Lap);
 		return Out;
+	}
+
+	FDCVoxelOpResult ApplyStrike(FDCVoxelSector& Sector, const FDCVoxelOp& Op, const FDCVoxelOpContext& Ctx, const FDCPendingPiece&)
+	{
+		FDCVoxelOpResult Out;
+		FOpLap Lap;
+		const FDCVoxelCarveDef& Carve = Ctx.CarveFor(Op.Stratagem);
+		const FIntVector C = Op.CenterCm;
+		const int32 Reach = FMath::Max(Carve.ColumnRadiusCm, Carve.SphereRadiusCm);
+		const int64 Blast2 = static_cast<int64>(Op.BlastRadiusCm) * Op.BlastRadiusCm;
+		for (int32 i = 0; i < Sector.Towers.Num(); ++i)
+		{
+			FDCVoxelTower& T = Sector.Towers[i];
+			bool bTouched = false;
+			TArray<TPair<FIntVector, uint8>> Removed;
+			if (DistSqToFootprint(T, C) <= static_cast<int64>(Reach + 100) * (Reach + 100))
+			{
+				const int32 Carved = CarveColumn(T.Grid, C, Carve.ColumnRadiusCm, T.ScanMax.Z, &Removed) + CarveSphere(T.Grid, C, Carve.SphereRadiusCm, 0, &Removed);
+				Out.Carved += Carved;
+				bTouched = Carved > 0;
+			}
+			if (!T.bFallen && DistSqToFootprint(T, C) <= Blast2)
+			{
+				Out.Carved += Bite(T, C, Carve.BiteFloors, Carve.BitePercent, Ctx.BayCm, &Removed);
+				bTouched = true;
+			}
+			for (const TPair<FIntVector, uint8>& R : Removed)
+			{
+				Out.Shards.Add({i, R.Key, R.Value});
+			}
+			if (bTouched)
+			{
+				Out.TouchedLots.Add(i);
+			}
+		}
+		// The crater never punches through the bedrock layers (a hole to the void read as a checkerboard).
+		Out.Carved += CarveSphere(Sector.Terrain, C, Carve.CraterRadiusCm, FMath::Max(Ctx.Tuning->BedrockLayers, 0));
+		// Props in the blast are gone, top to bottom (a sphere left their tops floating: review CP2).
+		Out.Carved += CarveColumn(Sector.Props, C, Carve.SphereRadiusCm, Sector.Props.ToLocal(FIntVector(0, 0, 4000)).Z);
+		Out.CarveMs = Lap();
+		StructureTail(Sector, Out.TouchedLots, C, Ctx, Out, Lap);
+		return Out;
+	}
+
+	/** R24 weapon chips (advisor a-37): clear the listed spheres (tower grid of a lot, or the prop grid), then the
+	 *  structure pass on StructureLots only. Every chip leaves one crumb cluster (cosmetic, from the voxels it
+	 *  removed), never physics shard bodies. */
+	FDCVoxelOpResult ApplyChip(FDCVoxelSector& Sector, const FDCVoxelOp& Op, const FDCVoxelOpContext& Ctx, const FDCPendingPiece&)
+	{
+		FDCVoxelOpResult Out;
+		FOpLap Lap;
+		TArray<TPair<FIntVector, uint8>> Removed;
+		for (const FDCVoxelChip& Chip : Op.Chips)
+		{
+			const bool bTower = Sector.Towers.IsValidIndex(Chip.Grid);
+			if (!bTower && Chip.Grid != PropGrid)
+			{
+				Out.ChipVoxels.Add(0);
+				continue; // an unknown grid is skipped on every machine alike
+			}
+			FDCVoxelGrid& Grid = bTower ? Sector.Towers[Chip.Grid].Grid : Sector.Props;
+			Removed.Reset();
+			const int32 Carved = CarveSphere(Grid, Chip.CenterCm, FMath::Clamp(Chip.RadiusCm, 1, ChipMaxRadiusCm), 0, &Removed);
+			Out.ChipVoxels.Add(Carved);
+			if (Carved == 0)
+			{
+				continue;
+			}
+			Out.Carved += Carved;
+			if (bTower)
+			{
+				Out.TouchedLots.AddUnique(Chip.Grid);
+				const int32 SupportTop = Ctx.Tuning->ChipSupportFloors * FMath::Max(6, Ctx.BayCm / FMath::Max(Grid.VoxelCm, 1));
+				if (SupportTop <= 0 || Grid.ToLocal(Chip.CenterCm).Z < SupportTop)
+				{
+					Out.ChipCarved.Add(FIntPoint(Chip.Grid, Carved)); // support the host counts toward a structure pass
+				}
+			}
+			FDCShardCluster& Cl = Out.ShardClusters.AddDefaulted_GetRef();
+			Cl.Pos = FVector(Chip.CenterCm);
+			Cl.Count = Carved;
+			Cl.Material = Removed[0].Value;
+			Cl.VoxelCm = Grid.VoxelCm;
+		}
+		// Broken props: their column clears top to bottom; the voxels fly as a few pieces and grit (cosmetic).
+		for (const FDCVoxelChip& Prop : Op.BreakProps)
+		{
+			Removed.Reset();
+			const int32 Top = Sector.Props.ToLocal(FIntVector(Prop.CenterCm.X, Prop.CenterCm.Y, FMath::Clamp(Prop.CenterCm.Z, 0, 4000))).Z + 1; // CenterCm.Z: the prop's top
+			const int32 Carved = CarveColumn(Sector.Props, Prop.CenterCm, FMath::Clamp(Prop.RadiusCm, 1, ChipMaxRadiusCm), Top, &Removed);
+			Out.Carved += Carved;
+			constexpr int32 PiecesPerProp = 6;
+			for (int32 k = 0; k < PiecesPerProp && Removed.Num() > 0; ++k)
+			{
+				// Slice k of the removed voxels (they come out in grid order: bottom to top), as one piece at its mean.
+				const int32 From = Removed.Num() * k / PiecesPerProp, To = Removed.Num() * (k + 1) / PiecesPerProp;
+				if (To <= From)
+				{
+					continue;
+				}
+				FVector Sum = FVector::ZeroVector;
+				for (int32 i = From; i < To; ++i)
+				{
+					Sum += FVector(Sector.Props.CenterCm(Removed[i].Key));
+				}
+				FDCShardCluster& Cl = Out.ShardClusters.AddDefaulted_GetRef();
+				Cl.Pos = Sum / (To - From);
+				Cl.Count = To - From;
+				Cl.Material = Removed[From].Value;
+				Cl.VoxelCm = Sector.Props.VoxelCm;
+				Cl.bPiece = true;
+			}
+		}
+		Out.CarveMs = Lap();
+		TArray<int32> Lots;
+		for (int32 Lot : Op.StructureLots)
+		{
+			if (Sector.Towers.IsValidIndex(Lot))
+			{
+				Lots.AddUnique(Lot);
+				Out.TouchedLots.AddUnique(Lot);
+			}
+		}
+		Lots.Sort(); // lot order on every machine
+		for (int32 Lot : Lots)
+		{
+			// The shot-away base gives way on the shooters' side (ChipBite*): the structure pass then topples it away.
+			if (!Sector.Towers[Lot].bFallen)
+			{
+				Out.Carved += Bite(Sector.Towers[Lot], Op.CenterCm, Ctx.Tuning->ChipBiteFloors, Ctx.Tuning->ChipBitePercent, Ctx.BayCm);
+			}
+		}
+		StructureTail(Sector, Lots, Op.CenterCm, Ctx, Out, Lap);
+		return Out;
+	}
+
+	FDCVoxelOpResult ApplyRestKind(FDCVoxelSector& Sector, const FDCVoxelOp& Op, const FDCVoxelOpContext& Ctx, const FDCPendingPiece& Pend)
+	{
+		return ApplyRest(Sector, Op, Pend, Ctx);
+	}
+
+	/** The op kind registry (rule 3): one row per kind, found by the op's Kind. A new kind is a new row. */
+	const TMap<FName, FDCOpKind>& Kinds()
+	{
+		static const TMap<FName, FDCOpKind> Table = []()
+		{
+			TMap<FName, FDCOpKind> T;
+			T.Add(TEXT("Strike"), FDCOpKind{&ApplyStrike, true, true});
+			T.Add(TEXT("Fell"), FDCOpKind{&ApplyFell, true, true});
+			T.Add(TEXT("Rest"), FDCOpKind{&ApplyRestKind, true, true});
+			T.Add(TEXT("Chip"), FDCOpKind{&ApplyChip, false, false});
+			return T;
+		}();
+		return Table;
+	}
+
+	const FDCOpKind* FindKind(FName Kind)
+	{
+		return Kinds().Find(Kind);
+	}
+
+	bool WritesTerrain(const FDCVoxelOp& Op)
+	{
+		const FDCOpKind* K = FindKind(Op.Kind);
+		return !K || K->bWritesTerrain || Op.StructureLots.Num() > 0;
+	}
+
+	bool IsChipOnly(const FDCVoxelOp& Op)
+	{
+		const FDCOpKind* K = FindKind(Op.Kind);
+		return K && !K->bWritesTerrain && Op.StructureLots.Num() == 0;
+	}
+
+	FDCVoxelOpResult Run(FDCVoxelSector& Sector, const FDCVoxelOp& Op, const FDCVoxelOpContext& Ctx, const FDCPendingPiece& Pend)
+	{
+		const FDCOpKind* K = FindKind(Op.Kind);
+		if (!K)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("DCVOXEL op seq=%d: unknown kind %s skipped"), Op.Seq, *Op.Kind.ToString());
+			return FDCVoxelOpResult();
+		}
+		return K->Apply(Sector, Op, Ctx, Pend);
+	}
+
+	FDCVoxelOpResult Apply(FDCVoxelSector& Sector, const FDCVoxelOp& Op, const FDCVoxelOpContext& Ctx)
+	{
+		return Run(Sector, Op, Ctx, FDCPendingPiece());
 	}
 
 	TArray<TArray<int32>> SplitFragments(const TArray<FIntVector>& Cells, int32 BlockCells, int32 MaxFragments, const FIntVector* Focus, float FalloffCells)

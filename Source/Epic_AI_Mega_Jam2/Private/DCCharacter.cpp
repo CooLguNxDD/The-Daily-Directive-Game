@@ -836,6 +836,7 @@ void ADCCharacter::ServerFire_Implementation(FVector_NetQuantize Start, FVector_
 	bool bAnyHit = false;
 	bool bAnyKill = false;
 	const float PelletCone = FMath::DegreesToRadians(R.SpreadDegrees);
+	ADCVoxelCity* ChipCity = ADCVoxelCity::IsEnabled() ? ADCVoxelCity::Get(this) : nullptr; // R24: hits wear the city
 	for (int32 p = 0; p < FMath::Clamp(W.Pellets, 1, 24); ++p)
 	{
 		FHitResult PelletHit = Hit;
@@ -847,6 +848,10 @@ void ADCCharacter::ServerFire_Implementation(FVector_NetQuantize Start, FVector_
 			UGameplayStatics::ApplyPointDamage(Enemy, R.Damage, PelletDir, PelletHit, GetController(), this, UDamageType::StaticClass());
 			bAnyHit = true;
 			bAnyKill |= !Enemy->IsAlive();
+		}
+		else if (bPelletHit && ChipCity)
+		{
+			ChipCity->HostChip(PelletHit, W, this);
 		}
 	}
 	if (bAnyHit)
