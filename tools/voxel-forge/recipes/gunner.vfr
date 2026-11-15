@@ -1,0 +1,32 @@
+# Gunner (friendly Army): a heavy machine gunner. Bulky olive armour with an ink front plate, a steel ammo box on the
+# back feeding a belt to a hip-held gun with a drum, a rounded helmet with a blue lamp visor and the blue chest band
+# (its light cue). Holds the line and hoses the street.
+name gunner
+grid 5
+size 18 17 38
+slot body Olive
+slot dark Ink
+slot lamp AllyBlue
+slot steel Steel
+box 6 3 0 10 7 14 body
+box 6 9 0 10 13 14 body
+box 4 2 0 10 7 1 dark
+box 4 9 0 10 14 1 dark
+box 4 2 14 12 14 28 body
+box 11 3 17 13 13 27 dark
+box 1 4 15 4 12 26 steel
+beam 3 12 20 10 14 18 0.6 steel
+box 6 5 28 11 11 31 dark
+ellipsoid 8.5 8 33 3.8 3.4 2.4 body
+box 11 5 31 13 11 33 lamp
+# Cue band round the chest, readable from every side.
+box 3 1 23 13 15 24 lamp
+box 9 14 19 14 17 23 dark
+beam 9 15 21 18 15 21 1.1 steel
+box 10 14 16 13 17 19 steel
+pivot 8 8 0
+# R20 animation segments (Soldier gait roles): legs from the hip, the hip gun (ArmR) from the grip, head at the neck.
+part LegL 0 0 0 18 8 14 8 5 14
+part LegR 0 8 0 18 14 14 8 11 14
+part ArmR 8 14 15 18 17 24 10 14 23
+part Head 0 3 28 18 13 38 8 8 28

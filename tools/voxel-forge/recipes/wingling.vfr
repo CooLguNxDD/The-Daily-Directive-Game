@@ -1,0 +1,20 @@
+# Wingling (the Hive): a flying swarmer. Chitin thorax and tapering abdomen, two broad wings with violet veins, violet
+# eyes and a glowing stinger tip (its light cue). Original design. Dives in packs like the machines' swarmers.
+name wingling
+grid 5
+size 22 24 10
+slot shell Chitin
+slot glow HiveViolet
+ellipsoid 12 12 5 4 2.5 2.5 shell
+ellipsoid 17 12 5 2.5 2 2 shell
+box 18 10 5 20 11 7 glow
+ellipsoid 5 12 4 5 2 2 shell
+box 0 11 3 2 13 5 glow
+poly 6 7 shell 14,10 17,2 12,0 9,4 11,10
+paint beam 13 9 6.5 15.5 2 6.5 0.7 glow
+paint beam 12 9 6.5 10 2 6.5 0.7 glow
+mirror y
+pivot 11 12 0
+# R20 animation segments (Swarmer gait roles): the wings flap (roll) about the thorax sides.
+part BladeL 0 0 0 22 9 10 13 9 6
+part BladeR 0 15 0 22 24 10 13 15 6
