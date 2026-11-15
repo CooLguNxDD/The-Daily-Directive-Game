@@ -328,6 +328,86 @@ namespace
 					W.FillBox(FIntVector(Cx - U, Cy - U, TopZ + 1 + H), FIntVector(Cx + U, Cy + U, TopZ + 1 + H + 2 * U), Ids.Window);
 					return FMath::Max(Top, TopZ + 1 + H + 2 * U);
 				}},
+			// Garden (R23): a planted roof terrace: a low parapet, a dark planting bed ring with hedge blocks, and a pergola
+			// of trim posts and beams over the middle with a dim warm lamp.
+			{TEXT("Garden"), [](FDCVoxelWorld& W, const FFaceFrame& F, int32 TopZ, const FCraftIds& Ids, FRandomStream& Rng)
+				{
+					const int32 U = Ids.Unit;
+					for (int32 Z = TopZ + 1; Z < TopZ + 1 + 2 * U; ++Z)
+					{
+						RingLayer(W, F, Z, 0, Ids.Wall);
+					}
+					const FIntVector Lo(F.Min.X + 1, F.Min.Y + 1, TopZ + 1), Hi(F.Max.X - 1, F.Max.Y - 1, TopZ + 1 + U);
+					if (Hi.X - Lo.X < 16 * U || Hi.Y - Lo.Y < 16 * U)
+					{
+						return TopZ + 1 + 2 * U;
+					}
+					// Planting bed: a ring three units wide inside the parapet, hedge blocks on it.
+					W.FillBox(Lo, Hi, Ids.Slab);
+					W.FillBox(Lo + FIntVector(3 * U, 3 * U, 0), Hi - FIntVector(3 * U, 3 * U, 0), 0);
+					const int32 Hedges = Rng.RandRange(4, 8);
+					for (int32 i = 0; i < Hedges; ++i)
+					{
+						const bool bX = Rng.FRand() < 0.5f;
+						const int32 A = bX ? Rng.RandRange(Lo.X, Hi.X - 4 * U) : (Rng.FRand() < 0.5f ? Lo.X : Hi.X - 3 * U);
+						const int32 B = bX ? (Rng.FRand() < 0.5f ? Lo.Y : Hi.Y - 3 * U) : Rng.RandRange(Lo.Y, Hi.Y - 4 * U);
+						W.FillBox(FIntVector(A, B, Hi.Z), FIntVector(A + (bX ? 4 : 3) * U, B + (bX ? 3 : 4) * U, Hi.Z + 2 * U), Ids.Ink);
+					}
+					// Pergola: four posts and a beam grid over the middle.
+					const FIntVector C((F.Min.X + F.Max.X) / 2, (F.Min.Y + F.Max.Y) / 2, TopZ + 1);
+					const int32 R = FMath::Min(Hi.X - Lo.X, Hi.Y - Lo.Y) / 4;
+					const int32 Top = C.Z + 9 * U;
+					for (int32 Sx = -1; Sx <= 1; Sx += 2)
+					{
+						for (int32 Sy = -1; Sy <= 1; Sy += 2)
+						{
+							const FIntVector Post(C.X + Sx * R, C.Y + Sy * R, C.Z);
+							W.FillBox(Post, FIntVector(Post.X + U, Post.Y + U, Top), Ids.Trim);
+						}
+					}
+					for (int32 Off = -R; Off <= R; Off += 3 * U)
+					{
+						W.FillBox(FIntVector(C.X - R, C.Y + Off, Top), FIntVector(C.X + R + U, C.Y + Off + 1, Top + 1), Ids.Trim);
+					}
+					W.FillBox(FIntVector(C.X - R, C.Y - R, Top + 1), FIntVector(C.X + R + U, C.Y - R + U, Top + 2), Ids.Trim);
+					W.FillBox(FIntVector(C.X - R, C.Y + R, Top + 1), FIntVector(C.X + R + U, C.Y + R + U, Top + 2), Ids.Trim);
+					W.FillBox(FIntVector(C.X, C.Y, Top - U), FIntVector(C.X + U, C.Y + U, Top), Ids.WindowAlt);
+					return Top + 2;
+				}},
+			// Marquee (R23): a big rooftop sign frame on two lattice legs across the roof, its face in the sign colours
+			// (a lit edge ring round a dim panel with dark glyph bars): the megacity skyline's signboards.
+			{TEXT("Marquee"), [](FDCVoxelWorld& W, const FFaceFrame& F, int32 TopZ, const FCraftIds& Ids, FRandomStream& Rng)
+				{
+					const int32 U = Ids.Unit;
+					const int32 Top = Parapet(W, F, TopZ, Ids);
+					const bool bAlongX = Rng.FRand() < 0.5f;
+					const int32 Len = bAlongX ? F.Max.X - F.Min.X : F.Max.Y - F.Min.Y;
+					if (Len < 16 * U)
+					{
+						return Top;
+					}
+					const int32 Mid = bAlongX ? (F.Min.Y + F.Max.Y) / 2 : (F.Min.X + F.Max.X) / 2;
+					const int32 A0 = (bAlongX ? F.Min.X : F.Min.Y) + 2 * U, A1 = (bAlongX ? F.Max.X : F.Max.Y) - 2 * U;
+					const int32 Z0 = TopZ + 1 + 8 * U, Z1 = Z0 + FMath::Min(16 * U, (A1 - A0) / 3);
+					auto Box = [&W, bAlongX, Mid](int32 A, int32 B, int32 ZA, int32 ZB, int32 D0, int32 D1, uint8 M)
+					{
+						W.FillBox(bAlongX ? FIntVector(A, Mid + D0, ZA) : FIntVector(Mid + D0, A, ZA), bAlongX ? FIntVector(B, Mid + D1, ZB) : FIntVector(Mid + D1, B, ZB), M);
+					};
+					// Legs: two lattice posts with a cross bar.
+					for (const int32 L : {A0 + 2 * U, A1 - 3 * U})
+					{
+						Box(L, L + U, TopZ + 1, Z0, -U, U, Ids.Trim);
+					}
+					Box(A0 + 2 * U, A1 - 2 * U, Z0 - U, Z0, -U, U, Ids.Trim);
+					// The board: edge ring, panel, glyph bars every few units (both faces read).
+					Box(A0, A1, Z0, Z1, -1, 1, Ids.PosterEdge);
+					Box(A0 + 1, A1 - 1, Z0 + 1, Z1 - 1, -1, 1, Ids.Poster);
+					for (int32 G = A0 + 3 * U; G < A1 - 2 * U; G += 3 * U)
+					{
+						Box(G, G + U / 2 + 1, Z0 + 2 * U, Z1 - 2 * U, -1, 1, Ids.Ink);
+					}
+					return FMath::Max(Top, Z1);
+				}},
 			// Sawtooth: an industrial roof of north-light ridges across X, the steep side glazed (the alternate window).
 			{TEXT("Sawtooth"), [](FDCVoxelWorld& W, const FFaceFrame& F, int32 TopZ, const FCraftIds& Ids, FRandomStream&)
 				{
