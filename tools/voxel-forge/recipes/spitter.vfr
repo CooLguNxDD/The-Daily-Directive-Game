@@ -1,0 +1,29 @@
+# Spitter (the Hive): a six-legged crawler with a raised neck and a glowing acid maw, a swollen violet sac on its back
+# (its light cue). Original design. Hangs back in the crowd and spits from range.
+name spitter
+grid 5
+size 24 18 16
+slot shell Chitin
+slot glow HiveViolet
+ellipsoid 10 9 6 7 5 3.5 shell
+ellipsoid 5 9 9 3.5 3 3 glow
+beam 15 9 7 19 9 12 1.5 shell
+ellipsoid 20 9 12 3 3 2.5 shell
+box 22 8 11 24 10 13 glow
+box 21 7 13 22 8 14 glow
+box 21 10 13 22 11 14 glow
+beam 8 5 4 5 0 0 0.8 shell
+beam 11 5 4 11 0 0 0.8 shell
+beam 14 5 4 17 0 0 0.8 shell
+beam 8 13 4 5 17 0 0.8 shell
+beam 11 13 4 11 17 0 0.8 shell
+beam 14 13 4 17 17 0 0.8 shell
+pivot 11 9 0
+# R20 animation segments (Skitter gait roles): legs sweep fore and aft (yaw) in two tripods, the neck and maw pitch.
+part Head 15 5 6 24 13 16 15 9 7
+part LegL 13 0 0 18 4 8 14 5 4
+part LegL 0 0 0 10 4 8 8 5 4
+part LegL 13 14 0 18 18 8 14 13 4
+part LegL 0 14 0 10 18 8 8 13 4
+part LegR 10 0 0 13 4 8 11 5 4
+part LegR 10 14 0 13 18 8 11 13 4
