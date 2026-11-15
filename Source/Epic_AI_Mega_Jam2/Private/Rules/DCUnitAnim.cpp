@@ -3,25 +3,25 @@
 namespace
 {
 	/** Clip state table (an entry per EDCUnitClip, in enum order): priority is the enum order, Death is final. */
-	struct FClipRule
+	struct FDCUnitClipRule
 	{
 		bool bHoldsEnd;
 		FName FDCUnitGait::*Row;
 	};
-	const FClipRule& Rule(EDCUnitClip Clip)
+	const FDCUnitClipRule& UnitClipRule(EDCUnitClip Clip)
 	{
-		static const FClipRule Rules[] = {
+		static const FDCUnitClipRule ClipRules[] = {
 			{false, nullptr},              // None
 			{false, &FDCUnitGait::Attack}, // Attack
 			{false, &FDCUnitGait::Flinch}, // Flinch
 			{false, &FDCUnitGait::Spawn},  // Spawn
 			{true, &FDCUnitGait::Death},   // Death
 		};
-		static_assert(static_cast<int32>(UE_ARRAY_COUNT(Rules)) == static_cast<int32>(EDCUnitClip::Death) + 1, "one rule per clip");
-		return Rules[FMath::Clamp(static_cast<int32>(Clip), 0, static_cast<int32>(UE_ARRAY_COUNT(Rules)) - 1)];
+		static_assert(static_cast<int32>(UE_ARRAY_COUNT(ClipRules)) == static_cast<int32>(EDCUnitClip::Death) + 1, "one rule per clip");
+		return ClipRules[FMath::Clamp(static_cast<int32>(Clip), 0, static_cast<int32>(UE_ARRAY_COUNT(ClipRules)) - 1)];
 	}
 
-	float Wave(float Cycles)
+	float UnitAnimWave(float Cycles)
 	{
 		return FMath::Sin(Cycles * UE_TWO_PI);
 	}
@@ -31,7 +31,7 @@ namespace DCUnitAnim
 {
 	bool HoldsEnd(EDCUnitClip Clip)
 	{
-		return Rule(Clip).bHoldsEnd;
+		return UnitClipRule(Clip).bHoldsEnd;
 	}
 
 	bool CanStart(EDCUnitClip Current, float CurrentTime, float CurrentSeconds, EDCUnitClip Next)
@@ -46,7 +46,7 @@ namespace DCUnitAnim
 
 	FName ClipId(const FDCUnitGait& Gait, EDCUnitClip Clip)
 	{
-		const FClipRule& R = Rule(Clip);
+		const FDCUnitClipRule& R = UnitClipRule(Clip);
 		return R.Row ? Gait.*R.Row : NAME_None;
 	}
 
@@ -99,7 +99,7 @@ namespace DCUnitAnim
 		const float Keep = Clip ? FMath::Lerp(1.f, FMath::Clamp(Clip->LocoKeep, 0.f, 1.f), W) : 1.f;
 		const float Loco = MoveW * Keep;
 		const float Idle = (1.f - MoveW) * Keep;
-		const float Stride = Wave(In.Phase);
+		const float Stride = UnitAnimWave(In.Phase);
 
 		// Root: bob twice a stride, sway once, lean into speed and roll into turns; the clip's move on top.
 		Out.RootOffset = FVector(0.f, 0.f, Gait.BobCm * Amp * Loco * FMath::Abs(Stride));
@@ -109,7 +109,7 @@ namespace DCUnitAnim
 		{
 			Out.RootOffset += Clip->RootOffsetCm * W;
 			Out.RootRot += Clip->RootRot * W;
-			Out.RootRot.Roll += Clip->ShakeDeg * W * Wave(In.ClipTime * Clip->ShakeHz);
+			Out.RootRot.Roll += Clip->ShakeDeg * W * UnitAnimWave(In.ClipTime * Clip->ShakeHz);
 		}
 
 		Out.Segments.Reset();
@@ -119,8 +119,8 @@ namespace DCUnitAnim
 			FRotator R = Limb ? Limb->Rest : FRotator::ZeroRotator;
 			if (Limb && In.bLimbs)
 			{
-				const float Swing = Wave(In.Phase + Limb->Phase) * Limb->SwingDeg * Amp * Loco
-					+ Wave(In.Time * Gait.IdleHz + Limb->Phase) * Limb->IdleDeg * Idle;
+				const float Swing = UnitAnimWave(In.Phase + Limb->Phase) * Limb->SwingDeg * Amp * Loco
+					+ UnitAnimWave(In.Time * Gait.IdleHz + Limb->Phase) * Limb->IdleDeg * Idle;
 				R += Limb->Axis * Swing;
 			}
 			const FDCClipLimb* Target = Clip && In.bLimbs ? Clip->Limbs.FindByPredicate([Role](const FDCClipLimb& L) { return L.Role == Role; }) : nullptr;

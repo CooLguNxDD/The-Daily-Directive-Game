@@ -12,7 +12,7 @@
 namespace
 {
 	/** Speed and turn smoothing (per second): replicated units move in 15-20 Hz steps, the read must not stutter. */
-	constexpr float MotionEase = 8.f;
+	constexpr float UnitAnimMotionEase = 8.f;
 }
 
 UDCUnitAnimator::UDCUnitAnimator()
@@ -130,7 +130,7 @@ void UDCUnitAnimator::Advance(float DeltaSeconds, const FVector& Location, float
 	const float Turned = FRotator::NormalizeAxis(Yaw - LastYaw) / DeltaSeconds;
 	Last = Location;
 	LastYaw = Yaw;
-	const float Ease = FMath::Clamp(DeltaSeconds * MotionEase, 0.f, 1.f);
+	const float Ease = FMath::Clamp(DeltaSeconds * UnitAnimMotionEase, 0.f, 1.f);
 	Speed = ForcedSpeedCm >= 0.f ? ForcedSpeedCm : FMath::Lerp(Speed, FMath::Min(Moved, 3000.f), Ease);
 	Turn = FMath::Lerp(Turn, FMath::Clamp(Turned, -720.f, 720.f), Ease);
 	Phase = DCUnitAnim::AdvancePhase(Phase, Speed * DeltaSeconds, *G);

@@ -11,10 +11,10 @@
 
 namespace
 {
-	constexpr EAutomationTestFlags AnimFlags = EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter;
+	constexpr EAutomationTestFlags UnitAnimTestFlags = EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter;
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDCUnitAnimRulesTest, "Epic_AI_Mega_Jam2.UnitAnim.Rules", AnimFlags)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDCUnitAnimRulesTest, "Epic_AI_Mega_Jam2.UnitAnim.Rules", UnitAnimTestFlags)
 bool FDCUnitAnimRulesTest::RunTest(const FString&)
 {
 	using E = EDCUnitClip;
@@ -116,7 +116,7 @@ bool FDCUnitAnimRulesTest::RunTest(const FString&)
 	return true;
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDCUnitAnimDataTest, "Epic_AI_Mega_Jam2.UnitAnim.Data", AnimFlags)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDCUnitAnimDataTest, "Epic_AI_Mega_Jam2.UnitAnim.Data", UnitAnimTestFlags)
 bool FDCUnitAnimDataTest::RunTest(const FString&)
 {
 	// The shipped rows: every gait a unit names exists, every clip a gait names exists and is sane, every limb a gait
@@ -177,7 +177,7 @@ bool FDCUnitAnimDataTest::RunTest(const FString&)
 	return true;
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDCUnitAnimMeshTest, "Epic_AI_Mega_Jam2.UnitAnim.SegmentedMesh", AnimFlags)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDCUnitAnimMeshTest, "Epic_AI_Mega_Jam2.UnitAnim.SegmentedMesh", UnitAnimTestFlags)
 bool FDCUnitAnimMeshTest::RunTest(const FString&)
 {
 	// A two-voxel model, foot and body: the foot is a part with its joint on top; the mesh tags its vertices.

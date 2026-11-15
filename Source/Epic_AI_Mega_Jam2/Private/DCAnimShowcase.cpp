@@ -15,14 +15,14 @@
 namespace
 {
 	/** The script: from this showcase time on, hold this ground speed; optionally play a clip or die once. */
-	struct FCue
+	struct FDCAnimShotCue
 	{
 		float T;
 		float SpeedCm;
 		EDCUnitClip Clip;
 		bool bDie;
 	};
-	const FCue Cues[] = {
+	const FDCAnimShotCue AnimShotCues[] = {
 		{0.f, 0.f, EDCUnitClip::None, false},      // spawn move (the animator starts it) then idle
 		{3.5f, 200.f, EDCUnitClip::None, false},   // walk
 		{5.5f, 520.f, EDCUnitClip::None, false},   // run
@@ -32,12 +32,12 @@ namespace
 		{10.5f, 0.f, EDCUnitClip::Flinch, false},
 		{11.5f, 0.f, EDCUnitClip::None, true},     // death
 	};
-	struct FShot
+	struct FDCAnimShotFrame
 	{
 		float T;
 		const TCHAR* Label;
 	};
-	const FShot Shots[] = {
+	const FDCAnimShotFrame AnimShotFrames[] = {
 		{0.05f, TEXT("spawn")}, {0.3f, TEXT("spawn")}, {0.6f, TEXT("spawn")}, {0.9f, TEXT("spawn")}, {1.3f, TEXT("spawn")},
 		{2.2f, TEXT("idle")}, {3.0f, TEXT("idle")},
 		{4.2f, TEXT("walk")}, {4.35f, TEXT("walk")}, {4.5f, TEXT("walk")}, {4.65f, TEXT("walk")}, {4.8f, TEXT("walk")}, {4.95f, TEXT("walk")},
@@ -47,7 +47,7 @@ namespace
 		{11.55f, TEXT("death")}, {11.75f, TEXT("death")}, {11.95f, TEXT("death")}, {12.15f, TEXT("death")}, {12.4f, TEXT("death")},
 	};
 	/** Fixed step: frames land on exact showcase times however long a screenshot stalls the game. */
-	constexpr float Step = 1.f / 30.f;
+	constexpr float AnimShotStep = 1.f / 30.f;
 }
 
 bool UDCAnimShowcase::ShouldCreateSubsystem(UObject* Outer) const
@@ -80,7 +80,7 @@ void UDCAnimShowcase::StartSwarm(int32 Count)
 	{
 		return;
 	}
-	FString KindList = TEXT("Trooper,Shambler,Raider,Soldier,Skitter");
+	FString KindList = TEXT("Trooper,Swarmer,Shambler,Raider,Soldier,Skitter");
 	FParse::Value(FCommandLine::Get(), TEXT("dcanimkinds="), KindList);
 	TArray<FString> Kinds;
 	KindList.ParseIntoArray(Kinds, TEXT(","));
@@ -163,7 +163,7 @@ void UDCAnimShowcase::Start()
 	{
 		return;
 	}
-	FString KindList = TEXT("Trooper,Shambler,Raider,Soldier,Skitter");
+	FString KindList = TEXT("Trooper,Swarmer,Shambler,Raider,Soldier,Skitter");
 	FParse::Value(FCommandLine::Get(), TEXT("dcanimkinds="), KindList);
 	TArray<FString> Kinds;
 	KindList.ParseIntoArray(Kinds, TEXT(","));
@@ -260,13 +260,13 @@ void UDCAnimShowcase::Tick(float DeltaTime)
 		}
 		return;
 	}
-	const FCue* Cue = nullptr;
-	while (NextCue < UE_ARRAY_COUNT(Cues) && Clock >= Cues[NextCue].T)
+	const FDCAnimShotCue* Cue = nullptr;
+	while (NextCue < UE_ARRAY_COUNT(AnimShotCues) && Clock >= AnimShotCues[NextCue].T)
 	{
-		Cue = &Cues[NextCue++];
+		Cue = &AnimShotCues[NextCue++];
 		AttackSeq += Cue->Clip == EDCUnitClip::Attack ? 1 : 0;
 	}
-	const FCue& Now = Cues[FMath::Max(NextCue - 1, 0)];
+	const FDCAnimShotCue& Now = AnimShotCues[FMath::Max(NextCue - 1, 0)];
 	for (ADCEnemy* E : Units)
 	{
 		UDCUnitAnimator* Anim = E ? E->GetAnimator() : nullptr;
@@ -280,19 +280,19 @@ void UDCAnimShowcase::Tick(float DeltaTime)
 		{
 			Anim->Play(EDCUnitClip::Flinch);
 		}
-		Anim->Advance(Step, E->GetActorLocation(), E->GetActorRotation().Yaw, 1.f, AttackSeq, !Now.bDie);
+		Anim->Advance(AnimShotStep, E->GetActorLocation(), E->GetActorRotation().Yaw, 1.f, AttackSeq, !Now.bDie);
 		Anim->ApplyRoot(*Def);
 	}
-	if (NextShot < UE_ARRAY_COUNT(Shots) && Clock >= Shots[NextShot].T)
+	if (NextShot < UE_ARRAY_COUNT(AnimShotFrames) && Clock >= AnimShotFrames[NextShot].T)
 	{
-		const FShot& S = Shots[NextShot];
+		const FDCAnimShotFrame& S = AnimShotFrames[NextShot];
 		const FString File = Dir / FString::Printf(TEXT("anim_%02d_%s_t%.2f.png"), NextShot, S.Label, S.T);
 		FScreenshotRequest::RequestScreenshot(File, false, false);
 		UE_LOG(LogTemp, Display, TEXT("DCANIMSHOT frame %s"), *File);
 		++NextShot;
 	}
-	Clock += Step;
-	if (NextShot >= UE_ARRAY_COUNT(Shots) && FParse::Param(FCommandLine::Get(), TEXT("dcanimshotquit")))
+	Clock += AnimShotStep;
+	if (NextShot >= UE_ARRAY_COUNT(AnimShotFrames) && FParse::Param(FCommandLine::Get(), TEXT("dcanimshotquit")))
 	{
 		UE_LOG(LogTemp, Display, TEXT("DCANIMSHOT done, quitting"));
 		FPlatformMisc::RequestExit(false);
