@@ -168,7 +168,7 @@ float ADCVoxelCity::SurfaceZCm(const FVector& Where) const
 		return 0.f;
 	}
 	const FIntVector C = T.ToLocal(DCVoxelMath::ToCm(FVector(Where.X, Where.Y, 0.f)));
-	if (InFlight.IsValid())
+	if (InFlight.IsValid() && DCVoxelOps::WritesTerrain(InFlight->Op))
 	{
 		// An op plans or waits: inside its area the snapshot taken before it started; outside it the sector is
 		// unchanged, but it may only be read once the worker is done writing.
@@ -903,6 +903,8 @@ void ADCVoxelCity::Clear()
 	}
 	QueuedOps.Reset();
 	SurfaceCache.Reset();
+	ChipLedger.Reset(); // R24: a new city starts unworn, and an op dropped with it is no longer out
+	bChipOpOut = false;
 	for (const TSharedPtr<FMeshJob>& Job : Jobs)
 	{
 		Job->Task.Wait();
@@ -1112,7 +1114,7 @@ FDCVoxelOpResult ADCVoxelCity::ApplyOp(const FDCVoxelOp& Op, bool bAnimate)
 	}
 	WaitInFlight(); // the synchronous path (reel re-staging) never overlaps a queued op
 	const double Start = FPlatformTime::Seconds();
-	FDCVoxelOpResult Result = Op.Kind == TEXT("Rest") ? DCVoxelOps::ApplyRest(Sector, Op, PendingFor(Op), OpCtx) : DCVoxelOps::Apply(Sector, Op, OpCtx);
+	FDCVoxelOpResult Result = DCVoxelOps::Run(Sector, Op, OpCtx, PendingFor(Op)); // the kind registry (R24)
 	DCVoxelOps::DeriveCosmetics(Sector, Op, OpCtx, Result);
 	AppliedSeq = FMath::Max(AppliedSeq, Op.Seq);
 	const uint32 Hash = Sector.Hash();
@@ -1150,7 +1152,22 @@ void ADCVoxelCity::StartNextOp()
 	// collapse costs the game thread only the uploads (impact hitch, R13). Ops stay strictly in Seq order.
 	InFlight = MakeShared<FQueuedOp>(MoveTemp(QueuedOps[0]));
 	QueuedOps.RemoveAt(0);
-	// Snapshot the street tops the op can change (blast radius plus topple reach), before the worker writes them.
+	// R24 (advisor a-37): consecutive replayed chip-only ops (the reel restage, a late joiner) fold into one task: their
+	// spheres only clear voxels, so one pass over all of them leaves the same voxels as one op after the other.
+	while (!InFlight->bAnimate && !InFlight->OnDone && DCVoxelOps::IsChipOnly(InFlight->Op) && QueuedOps.Num() > 0 && !QueuedOps[0].bAnimate && !QueuedOps[0].OnDone
+		&& DCVoxelOps::IsChipOnly(QueuedOps[0].Op) && QueuedOps[0].Op.Build == InFlight->Op.Build)
+	{
+		FDCVoxelOp& Into = InFlight->Op;
+		const FDCVoxelOp& Next = QueuedOps[0].Op;
+		Into.Chips.Append(Next.Chips);
+		Into.Seq = Next.Seq;
+		Into.Time = Next.Time;
+		Into.ResultHash = Next.ResultHash; // compared after the last folded op
+		QueuedOps.RemoveAt(0);
+	}
+	// Snapshot the street tops the op can change (blast radius plus topple reach), before the worker writes them. A
+	// chip-only op never writes the street (R24): no snapshot, and the street stays readable while it runs.
+	if (DCVoxelOps::WritesTerrain(InFlight->Op))
 	{
 		const FDCVoxelOp& Op = InFlight->Op;
 		const FDCVoxelTuning& Tn = UDCVoxelSettings::Get().Tuning;
@@ -1177,7 +1194,7 @@ void ADCVoxelCity::StartNextOp()
 	InFlightTask = UE::Tasks::Launch(TEXT("DCVoxelOp"), [Job, Target, Ctx, Pend = MoveTemp(Pend)]()
 	{
 		const double Start = FPlatformTime::Seconds();
-		Job->Result = Job->Op.Kind == TEXT("Rest") ? DCVoxelOps::ApplyRest(*Target, Job->Op, Pend, *Ctx) : DCVoxelOps::Apply(*Target, Job->Op, *Ctx);
+		Job->Result = DCVoxelOps::Run(*Target, Job->Op, *Ctx, Pend);
 		const double Applied = FPlatformTime::Seconds();
 		DCVoxelOps::DeriveCosmetics(*Target, Job->Op, *Ctx, Job->Result); // shards and fragment trees off the game thread
 		const double Derived = FPlatformTime::Seconds();
@@ -1269,7 +1286,10 @@ void ADCVoxelCity::FinishInFlight()
 {
 	TSharedPtr<FQueuedOp> Done = InFlight;
 	InFlight.Reset();
-	SurfaceCache.Reset();
+	if (DCVoxelOps::WritesTerrain(Done->Op))
+	{
+		SurfaceCache.Reset(); // R24: a chip-only op leaves the street as it was
+	}
 	const double CommitT0 = FPlatformTime::Seconds(); // R13: the commit split for DCHITCH (op vs the caller's OnDone)
 	if (Done->bPrepared)
 	{
@@ -1303,6 +1323,9 @@ void ADCVoxelCity::FinishInFlight()
 void ADCVoxelCity::FinishOp(const FDCVoxelOp& Op, FDCVoxelOpResult& Result, bool bAnimate, float ApplyMs, uint32 Hash, bool bOffThread)
 {
 	PrepareOp(Op, Result, bAnimate, GetWorld()->GetTimeSeconds());
+	// R24: an op committed on the spot holds nothing (no op is held while one finishes here); its cells upload under the
+	// budget instead of piling into the next held strike's all-at-once commit (frequent chip ops).
+	HeldCells.Reset();
 	CommitOp(Op, Result, bAnimate, ApplyMs, Hash, bOffThread);
 }
 
@@ -1425,7 +1448,8 @@ void ADCVoxelCity::PrepareOp(const FDCVoxelOp& Op, FDCVoxelOpResult& Result, boo
 	const double P2 = FPlatformTime::Seconds();
 	if (bAnimate)
 	{
-		QueueShards(Op, Result, Now);
+		const FDCOpKind* Kind = DCVoxelOps::FindKind(Op.Kind);
+		(Kind && !Kind->bShardBodies) ? QueueChipCrumbs(Op, Result, Now) : QueueShards(Op, Result, Now); // R24: chips throw crumbs only
 	}
 	const double P3 = FPlatformTime::Seconds();
 	int32 PieceIndex = -1;
@@ -2608,6 +2632,7 @@ void ADCVoxelCity::Tick(float DeltaSeconds)
 	{
 		FollowGameState();
 	}
+	TickChips(); // R24 host: the due Chip op goes out
 	// Two-phase ops: a planned op is held until its apply time (a strike's detonation), then committed.
 	const ADCGameState* State = GetWorld()->GetGameState<ADCGameState>();
 	double PrepMs = 0.0;

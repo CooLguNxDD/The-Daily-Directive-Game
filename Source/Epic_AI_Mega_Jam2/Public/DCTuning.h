@@ -141,6 +141,11 @@ struct FDCWeaponDef
 	UPROPERTY(EditAnywhere, Config, Category = "Weapon") float TracerSeconds = 0.04f;
 	/** A supply pod's ammo is scaled by this for this weapon (shells come in fewer than rounds). */
 	UPROPERTY(EditAnywhere, Config, Category = "Weapon") float PodAmmoScale = 1.f;
+	/** R24 chips: damage each hit (each pellet) adds to the voxel bucket it strikes (Tuning ChipHp chips it; 0 = this
+	 *  weapon never chips), the chip's sphere radius (cm), and how many hits per second at most count (per shooter). */
+	UPROPERTY(EditAnywhere, Config, Category = "Weapon") float ChipDamage = 0.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Weapon") int32 ChipRadiusCm = 12;
+	UPROPERTY(EditAnywhere, Config, Category = "Weapon") float ChipsPerSecond = 8.f;
 };
 
 /** R12 sky detail and distant skyline: forge models placed in a ring around the sector, seeded per sector (cosmetic,
