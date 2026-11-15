@@ -477,6 +477,8 @@ void ADCHUD::DrawStatus(ADCGameState& GS, ADCCharacter& Me)
 	Box(Sx(30.f), H - Sx(60.f), Sx(288.f), Sx(16.f), FLinearColor(Ink.R, Ink.G, Ink.B, 0.25f));
 	Box(Sx(30.f), H - Sx(60.f), Sx(288.f) * Hp, Sx(16.f), Hp > 0.3f ? Ink : Red);
 	Text(TEXT("HEALTH"), Sx(30.f), H - Sx(88.f), Ink, 0.55f);
+	// R9: the crew's lives left this run.
+	Text(FString::Printf(TEXT("LIVES %d"), GS.CrewLives), Sx(240.f), H - Sx(88.f), GS.CrewLives > 0 ? Ink : Red, 0.55f, false);
 
 	// Slot bar: 1 rifle, 2 strike, 3 camera.
 	// R8: the gun slot names the weapon in hand (the row's short HUD label).

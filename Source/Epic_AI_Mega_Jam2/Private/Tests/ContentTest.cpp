@@ -66,7 +66,8 @@ bool FDCStrikeRowsTest::RunTest(const FString&)
 			TestTrue(*FString::Printf(TEXT("%s sound %s is a cue"), *Id, *Cue.ToString()), Cues.Contains(Cue));
 		}
 		TestTrue(*FString::Printf(TEXT("%s pattern is registered"), *Id), DCStrikePattern::Known(D.Pattern));
-		TestTrue(*FString::Printf(TEXT("%s has its own carve row"), *Id), Carves.ContainsByPredicate([&D](const FDCVoxelCarveDef& C) { return C.Stratagem == D.Id; }));
+		// Blast strikes carve; call effects such as the R7 supply drop (Effect=Supply) carve nothing and need no row.
+		TestTrue(*FString::Printf(TEXT("%s has its own carve row"), *Id), D.Effect != TEXT("Strike") || Carves.ContainsByPredicate([&D](const FDCVoxelCarveDef& C) { return C.Stratagem == D.Id; }));
 	}
 	// R12: the draft offers more strike types than the first run's three.
 	int32 DraftStrikes = 0;

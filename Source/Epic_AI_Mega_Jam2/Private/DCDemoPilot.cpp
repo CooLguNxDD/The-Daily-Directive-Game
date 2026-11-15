@@ -1,4 +1,5 @@
 #include "DCDemoPilot.h"
+#include "Camera/CameraActor.h"
 #include "DCObjective.h"
 #include "DCUnits.h"
 #include "DCVoxelCity.h"
@@ -557,6 +558,186 @@ void ADCDemoPilot::AddClashShot(const FString& S)
 	Add(0.8f, [this] { AimAt(ClashMid + FVector(0, 0, 80.f)); Shot(TEXT("clash_viewfinder")); return true; });
 	Add(0.1f, [this] { Tap(TEXT("Fire")); return true; });
 	Add(0.6f, [this, S] { Shot(S + TEXT("_clash_stamp")); LogPhoto(); Release(TEXT("Aim")); return true; });
+}
+
+void ADCDemoPilot::AddIndoors()
+{
+	// R6 evidence (-dcindoors): once the crew grace is over, the pawn is placed 3 m inside the standing tower nearest
+	// to it that has a door (a logged pilot aid), holds there 30 s and logs how many hostile ground units stand inside
+	// the same tower every 5 s (DEMO indoors), with frames.
+	Add(0.f, [this] { const ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>(); return GS && GS->Phase == EDCRunPhase::Sector; }, 120.f);
+	Add(18.f, [this]
+	{
+		APawn* Me = GetWorld()->GetFirstPlayerController() ? GetWorld()->GetFirstPlayerController()->GetPawn() : nullptr;
+		const ADCVoxelCity* City = ADCVoxelCity::Get(this);
+		IndoorLot = INDEX_NONE;
+		float Best = TNumericLimits<float>::Max();
+		for (int32 Lot = 0; Me && City && Lot < 64; ++Lot)
+		{
+			FVector Door;
+			if (City->NearestPortal(Lot, Me->GetActorLocation(), Door) && FVector::DistSquared2D(Door, Me->GetActorLocation()) < Best)
+			{
+				Best = FVector::DistSquared2D(Door, Me->GetActorLocation());
+				IndoorLot = Lot;
+				IndoorDoor = Door;
+			}
+		}
+		if (Me && IndoorLot != INDEX_NONE)
+		{
+			const FVector Into = (IndoorDoor - Me->GetActorLocation()).GetSafeNormal2D();
+			const FVector Inside = IndoorDoor + Into * 300.f + FVector(0, 0, Me->GetActorLocation().Z - IndoorDoor.Z + 20.f);
+			Me->SetActorLocation(Inside, false, nullptr, ETeleportType::TeleportPhysics);
+			UE_LOG(LogDCDemo, Display, TEXT("DEMO indoors: pawn placed inside lot %d at %s (door %s; pilot aid)"), IndoorLot, *Inside.ToCompactString(), *IndoorDoor.ToCompactString());
+		}
+		return true;
+	});
+	for (int32 i = 0; i < 12; ++i)
+	{
+		Add(5.f, [this, i]
+		{
+			const ADCVoxelCity* City = ADCVoxelCity::Get(this);
+			const UDCUnits* Units = UDCUnits::Get(this);
+			const TArray<FDCFactionDef>& Factions = UDCTuning::Get().Factions;
+			int32 Inside = 0;
+			int32 Near = 0;
+			const APawn* Me = GetWorld()->GetFirstPlayerController() ? GetWorld()->GetFirstPlayerController()->GetPawn() : nullptr;
+			for (const ADCEnemy* U : Units ? Units->All() : TArray<TObjectPtr<ADCEnemy>>())
+			{
+				const bool bHostile = U && U->IsAlive() && DCFactionRules::FightsCrew(Factions, U->GetFaction());
+				Inside += bHostile && City && City->StandingLotAt(U->GetActorLocation()) == IndoorLot ? 1 : 0;
+				Near += bHostile && Me && FVector::Dist(U->GetActorLocation(), Me->GetActorLocation()) < 1500.f ? 1 : 0;
+			}
+			UE_LOG(LogDCDemo, Display, TEXT("DEMO indoors t=%d s: lot %d hostiles inside=%d within 15 m=%d player inside=%d"), (i + 1) * 5, IndoorLot, Inside, Near,
+				Me && City && City->StandingLotAt(Me->GetActorLocation()) == IndoorLot ? 1 : 0);
+			Shot(FString::Printf(TEXT("indoors_%02d"), (i + 1) * 5));
+			return true;
+		});
+	}
+}
+
+void ADCDemoPilot::SideCam(bool bOn)
+{
+	// Evidence camera: 3.5 m to the pawn's right, chest height, looking at it (the shoulder camera hides the arms).
+	APlayerController* PC = GetWorld()->GetFirstPlayerController();
+	APawn* Me = PC ? PC->GetPawn() : nullptr;
+	if (!PC || !Me)
+	{
+		return;
+	}
+	if (!bOn)
+	{
+		PC->SetViewTargetWithBlend(Me, 0.f);
+		return;
+	}
+	if (!EvidenceCam)
+	{
+		EvidenceCam = GetWorld()->SpawnActor<ACameraActor>(ACameraActor::StaticClass(), FTransform::Identity);
+	}
+	const FVector Eye = Me->GetActorLocation() + Me->GetActorRightVector() * 350.f + Me->GetActorForwardVector() * 120.f + FVector(0, 0, 40.f);
+	EvidenceCam->SetActorLocationAndRotation(Eye, (Me->GetActorLocation() + FVector(0, 0, 30.f) - Eye).Rotation());
+	if (PC->GetViewTarget() != EvidenceCam)
+	{
+		PC->SetViewTargetWithBlend(EvidenceCam, 0.f);
+	}
+}
+
+void ADCDemoPilot::AddRunFire()
+{
+	// R10 evidence (-dcrunfire): rifle out, sprint and strafe with the real Move/Sprint actions while tapping Fire;
+	// frames mid-run show the raised rifle, the tracer from the barrel and the muzzle flash.
+	Add(0.f, [this] { const ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>(); return GS && GS->Phase == EDCRunPhase::Sector; }, 120.f);
+	Add(0.6f, [this] { Tap(TEXT("Slot1")); return true; });
+	Add(1.0f, [this] { Press(TEXT("Move"), FVector(0, 1, 0)); Press(TEXT("Sprint")); return true; });
+	Add(0.f, [this] { SideCam(true); return true; });
+	for (int32 i = 0; i < 14; ++i)
+	{
+		Add(0.11f, [this, i]
+		{
+			Tap(TEXT("Fire"));
+			SideCam(true);
+			if (i % 5 == 2)
+			{
+				Shot(FString::Printf(TEXT("runfire_fwd_%d"), i));
+			}
+			return true;
+		});
+	}
+	Add(0.2f, [this] { Release(TEXT("Sprint")); Press(TEXT("Move"), FVector(1, 0, 0)); return true; });
+	for (int32 i = 0; i < 10; ++i)
+	{
+		Add(0.11f, [this, i]
+		{
+			Tap(TEXT("Fire"));
+			SideCam(true);
+			if (i % 5 == 2)
+			{
+				Shot(FString::Printf(TEXT("runfire_strafe_%d"), i));
+			}
+			return true;
+		});
+	}
+	Add(0.3f, [this] { Release(TEXT("Move")); SideCam(true); Shot(TEXT("runfire_idle")); return true; });
+	Add(0.2f, [this] { SideCam(false); return true; });
+}
+
+void ADCDemoPilot::AddSupplyCall()
+{
+	// R7 evidence (-dcsupply): spend the rifle's magazine, then Slot2 + Q until the Supply Drop is selected, call it 6 m
+	// ahead with the real Fire action, frame the falling crate and walk into it (DCSUPPLY lines in the log).
+	Add(0.f, [this] { const ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>(); return GS && GS->Phase == EDCRunPhase::Sector; }, 120.f);
+	for (int32 i = 0; i < 20; ++i)
+	{
+		Add(0.12f, [this] { Tap(TEXT("Fire")); return true; });
+	}
+	Add(0.5f, [this] { Shot(TEXT("supply_ammo_spent")); Tap(TEXT("Slot2")); return true; });
+	for (int32 i = 0; i < 6; ++i)
+	{
+		Add(0.35f, [this]
+		{
+			const APlayerController* PC = GetWorld()->GetFirstPlayerController();
+			const ADCCharacter* Me = PC ? Cast<ADCCharacter>(PC->GetPawn()) : nullptr;
+			if (Me && Me->GetSelectedStratagem() != TEXT("SupplyDrop"))
+			{
+				Tap(TEXT("Cycle"));
+			}
+			return true;
+		});
+	}
+	Add(0.3f, [this]
+	{
+		const APawn* Me = GetWorld()->GetFirstPlayerController() ? GetWorld()->GetFirstPlayerController()->GetPawn() : nullptr;
+		if (Me)
+		{
+			SupplyAt = Me->GetActorLocation() + Me->GetActorForwardVector() * 600.f - FVector(0, 0, 90.f);
+			AimAt(SupplyAt);
+		}
+		Shot(TEXT("supply_aim"));
+		return true;
+	});
+	Add(0.2f, [this] { Tap(TEXT("Fire")); UE_LOG(LogDCDemo, Display, TEXT("DEMO supply drop called at %s"), *SupplyAt.ToCompactString()); return true; });
+	Add(2.0f, [this] { AimAt(SupplyAt + FVector(0, 0, 300.f)); Shot(TEXT("supply_falling")); return true; });
+	Add(1.5f, [this] { AimAt(SupplyAt); Shot(TEXT("supply_landed")); Tap(TEXT("Slot1")); return true; });
+	Add(0.f, [this]
+	{
+		// Walk to the landed pod nearest the called drop point with the real Move action until it opens (it is destroyed
+		// when opened). Nearest the call point, not the pawn: a redeploy pod may stand closer (bugs4 opened that one).
+		APawn* Me = GetWorld()->GetFirstPlayerController() ? GetWorld()->GetFirstPlayerController()->GetPawn() : nullptr;
+		const ADCSupplyPod* Pod = nullptr;
+		for (const ADCSupplyPod* P : TActorRange<ADCSupplyPod>(GetWorld()))
+		{
+			const bool bCloser = !Pod || FVector::Dist2D(P->GetActorLocation(), SupplyAt) < FVector::Dist2D(Pod->GetActorLocation(), SupplyAt);
+			Pod = P->HasLanded() && FVector::Dist2D(P->GetActorLocation(), SupplyAt) < 1500.f && bCloser ? P : Pod;
+		}
+		if (!Me || !Pod)
+		{
+			Release(TEXT("Move"));
+			return true;
+		}
+		AimAt(Pod->GetActorLocation() + FVector(0, 0, 60.f));
+		Press(TEXT("Move"), FVector(0, 1, 0));
+		return false;
+	}, 8.f);
+	Add(0.6f, [this] { Release(TEXT("Move")); Shot(TEXT("supply_opened")); return true; });
 }
 
 void ADCDemoPilot::AddLineupShot()
@@ -1143,6 +1324,19 @@ void ADCDemoPilot::BuildScript()
 		}
 		int32 Cycles = CyclesPerSector;
 		FParse::Value(FCommandLine::Get(), TEXT("dccycles="), Cycles); // more strike-and-snap cycles per sector
+		// Run-and-fire first, on the open street at the spawn (bugs4 framed it in dark rubble after the indoors hold).
+		if (Sector == 0 && FParse::Param(FCommandLine::Get(), TEXT("dcrunfire")))
+		{
+			AddRunFire();
+		}
+		if (Sector == 0 && FParse::Param(FCommandLine::Get(), TEXT("dcindoors")))
+		{
+			AddIndoors();
+		}
+		if (Sector == 0 && FParse::Param(FCommandLine::Get(), TEXT("dcsupply")))
+		{
+			AddSupplyCall();
+		}
 		// Before the first strike: a clean street, inside the crew grace.
 		if (Sector == 0 && FParse::Param(FCommandLine::Get(), TEXT("dclineup")))
 		{

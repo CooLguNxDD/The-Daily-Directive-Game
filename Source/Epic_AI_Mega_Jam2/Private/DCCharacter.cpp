@@ -128,6 +128,13 @@ ADCCharacter::ADCCharacter()
 	Tracer->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	Tracer->SetCastShadow(false);
 	Tracer->SetVisibility(false);
+	MuzzleFlash = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("MuzzleFlash"));
+	MuzzleFlash->SetupAttachment(RootComponent);
+	MuzzleFlash->SetUsingAbsoluteLocation(true);
+	MuzzleFlash->SetUsingAbsoluteScale(true);
+	MuzzleFlash->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	MuzzleFlash->SetCastShadow(false);
+	MuzzleFlash->SetVisibility(false);
 }
 
 void ADCCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -162,6 +169,16 @@ void ADCCharacter::BeginPlay()
 			GetMesh()->SetAnimInstanceClass(Anim);
 		}
 	}
+	// R10: the rifle locomotion clips load once here, never in Tick.
+	for (const FSoftObjectPath& P : T.Assets.RifleJogClips)
+	{
+		RifleJogLoaded.Add(Cast<UAnimSequenceBase>(P.TryLoad()));
+	}
+	for (const FSoftObjectPath& P : T.Assets.RifleWalkClips)
+	{
+		RifleWalkLoaded.Add(Cast<UAnimSequenceBase>(P.TryLoad()));
+	}
+	RifleIdleLoaded = Cast<UAnimSequenceBase>(T.Assets.RifleIdleClip.TryLoad());
 
 	UCharacterMovementComponent* Move = GetCharacterMovement();
 	Move->MaxAcceleration = T.Move.MaxAcceleration;
@@ -227,6 +244,8 @@ void ADCCharacter::BeginPlay()
 	StrikeMarker->SetMaterial(0, DCAssets::MakeFlatUnlit(this, Look.Accent, Look.DangerRingGlow)); // unlit: stays palette red, not lit to salmon
 	Tracer->SetStaticMesh(DCAssets::Cube());
 	Tracer->SetMaterial(0, DCAssets::MakeFlat(this, FLinearColor(1.f, 0.8f, 0.4f), 60.f));
+	MuzzleFlash->SetStaticMesh(DCAssets::Sphere());
+	MuzzleFlash->SetMaterial(0, DCAssets::MakeFlat(this, FLinearColor(1.f, 0.7f, 0.3f), 120.f));
 
 	InitWeapons();
 	if (HasAuthority())
@@ -601,6 +620,48 @@ void ADCCharacter::OnRep_Slot()
 		DrawnSlot = Slot;
 		const float PlayRate = Equip->GetPlayLength() / FMath::Max(T.Camera.DrawSeconds, 0.05f);
 		AnimInstance->PlaySlotAnimationAsDynamicMontage(Equip, T.Assets.DrawSlot, 0.05f, 0.1f, PlayRate);
+		LocoBlockedUntil = GetWorld()->GetTimeSeconds() + T.Camera.DrawSeconds; // the rifle loop resumes after the draw
+		LocoClip = nullptr;
+	}
+}
+
+void ADCCharacter::UpdateRifleLoco()
+{
+	// R10: rifle drawn -> the rifle locomotion clip for this pawn's movement loops on DrawSlot (legs run, rifle up).
+	const FDCAssetTuning& A = UDCTuning::Get().Assets;
+	UAnimInstance* AnimInstance = GetMesh() ? GetMesh()->GetAnimInstance() : nullptr;
+	if (!AnimInstance)
+	{
+		return;
+	}
+	UAnimSequenceBase* Want = nullptr;
+	const bool bRifleUp = Slot == EDCSlot::Rifle && !bDowned && GetWorld()->GetTimeSeconds() >= LocoBlockedUntil;
+	const FVector Flat(GetVelocity().X, GetVelocity().Y, 0.f);
+	const float Speed = Flat.Size();
+	if (bRifleUp && Speed < A.RifleIdleSpeedCm)
+	{
+		Want = RifleIdleLoaded;
+	}
+	else if (bRifleUp)
+	{
+		// Direction bucket, clockwise from forward in 45 degree steps (the clip tables' order).
+		const float Deg = FMath::RadiansToDegrees(FMath::Atan2(FVector::DotProduct(Flat, GetActorRightVector()), FVector::DotProduct(Flat, GetActorForwardVector())));
+		const int32 Bucket = (FMath::RoundToInt32(Deg / 45.f) + 8) % 8;
+		const TArray<TObjectPtr<UAnimSequenceBase>>& Gait = Speed >= A.RifleJogSpeedCm ? RifleJogLoaded : RifleWalkLoaded;
+		Want = Gait.IsValidIndex(Bucket) ? Gait[Bucket].Get() : nullptr;
+	}
+	if (Want == LocoClip)
+	{
+		return;
+	}
+	if (LocoClip && !Want)
+	{
+		AnimInstance->StopSlotAnimation(A.RifleLocoBlendSeconds, A.DrawSlot);
+	}
+	LocoClip = Want;
+	if (Want)
+	{
+		AnimInstance->PlaySlotAnimationAsDynamicMontage(Want, A.DrawSlot, A.RifleLocoBlendSeconds, A.RifleLocoBlendSeconds, 1.f, 100000);
 	}
 }
 
@@ -764,8 +825,16 @@ void ADCCharacter::MulticastRifleFx_Implementation(FVector_NetQuantize Start, FV
 	}
 }
 
-void ADCCharacter::PlayRifleFx(const FVector& Start, const FVector& End)
+void ADCCharacter::PlayRifleFx(const FVector& HostStart, const FVector& End)
 {
+	// R10: every machine starts the tracer at its own muzzle (rifle mesh + data offset): the host's idea of a remote
+	// pawn's pose can differ. A brief flash marks the barrel.
+	const FDCRifleTuning& RT = UDCTuning::Get().Rifle;
+	const FVector Start = RifleMesh ? RifleMesh->GetComponentTransform().TransformPosition(RT.MuzzleOffsetCm) : HostStart;
+	MuzzleFlash->SetWorldLocation(Start);
+	MuzzleFlash->SetWorldScale3D(FVector(RT.MuzzleFlashScale * FMath::FRandRange(0.8f, 1.2f)));
+	MuzzleFlash->SetVisibility(true);
+	MuzzleHideTime = GetWorld()->GetTimeSeconds() + RT.MuzzleFlashSeconds;
 	const FVector Mid = (Start + End) * 0.5f;
 	const float Len = FVector::Dist(Start, End);
 	Tracer->SetWorldLocationAndRotation(Mid, (End - Start).Rotation());
@@ -1488,6 +1557,11 @@ void ADCCharacter::Tick(float DeltaSeconds)
 	TickOutfit(); // every machine builds every pawn's replicated outfit (remote pawns too, CP7)
 	UpdateHeldItems(DeltaSeconds);
 	UpdateFootsteps(DeltaSeconds);
+	UpdateRifleLoco(); // R10: every machine, every pawn (cosmetic)
+	if (MuzzleFlash->IsVisible() && GetWorld()->GetTimeSeconds() >= MuzzleHideTime)
+	{
+		MuzzleFlash->SetVisibility(false);
+	}
 	if (HasAuthority())
 	{
 		UpdateRevive(DeltaSeconds);

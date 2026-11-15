@@ -26,6 +26,9 @@ struct FDCFactionDef
 	/** First sighting (once per run per machine): a short line naming the faction, its cue and whether it is friendly. */
 	UPROPERTY(EditAnywhere, Config, Category = "Faction") FString Callout;
 	UPROPERTY(EditAnywhere, Config, Category = "Faction") TArray<FDCFactionUnit> Units;
+	/** R6 (human playtest): its ground units walk into and through buildings by doors, breaches and rubble (walk
+	 *  masks) to reach foes inside, instead of treating a standing tower as one solid box. */
+	UPROPERTY(EditAnywhere, Config, Category = "Faction") bool bEntersBuildings = false;
 	/** Weight to be a map's main faction (0 = never owns a map, e.g. the friendly army). */
 	UPROPERTY(EditAnywhere, Config, Category = "Faction") float MainWeight = 1.f;
 	/** Weight to be picked as an invader (0 = never raids). */

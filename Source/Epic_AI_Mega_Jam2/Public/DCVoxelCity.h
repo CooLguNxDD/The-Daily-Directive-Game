@@ -61,6 +61,13 @@ public:
 	int32 GetBuiltSector() const { return BuiltSector; }
 	/** True once a build's cells are all up (the sector title card holds until then). */
 	bool IsLoaded() const { return BuiltSector != INDEX_NONE && !bLoading; }
+	/** R6 (advisor a-20): for units that enter buildings: inside a standing tower's footprint the walk mask decides
+	 *  (walls and floors-in-the-way block, doors and breaches are open); elsewhere the same as IsSolidAt. */
+	bool IsWalkBlocked(const FVector& Where) const;
+	/** The standing tower lot whose footprint holds Where (XY), or INDEX_NONE. */
+	int32 StandingLotAt(const FVector& Where) const;
+	/** The open footprint-edge cell of a standing lot nearest to From (a door or breach), in world cm. */
+	bool NearestPortal(int32 Lot, const FVector& From, FVector& Out) const;
 	class ADCVoxelFx* GetFx() const { return Fx; }
 	/** Surface wetness 0..1 from the weather (R18): every voxel material darkens and glosses its up faces. */
 	void SetWetness(float Wetness);
@@ -197,6 +204,19 @@ private:
 	bool bLoading = false;
 	/** A committed op hands the next queued op to the following Tick (R13: the detonation frame only commits). */
 	bool bStartOpNextTick = false;
+	/** R6 walk masks per tower lot (game thread; rebuilt when the city is loaded and after each op on touched lots,
+	 *  never while a worker writes). Open bit per footprint column; Portals = open edge cells. */
+	struct FWalkMask
+	{
+		TBitArray<> Open;
+		FIntPoint Min = FIntPoint::ZeroValue;
+		FIntPoint Size = FIntPoint::ZeroValue;
+		TArray<FIntPoint> Portals;
+		bool bValid = false;
+	};
+	TArray<FWalkMask> WalkMasks;
+	int32 WalkMaskBuildId = INDEX_NONE;
+	void RebuildWalkMask(int32 Lot);
 	/** R13: the last commit split (CommitOp/FinishOp vs the caller's OnDone), for DCHITCH. */
 	double LastCommitOpMs = 0.0, LastOnDoneMs = 0.0;
 	/** The current load came from an async (sector card) build. */

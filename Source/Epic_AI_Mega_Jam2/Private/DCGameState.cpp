@@ -55,6 +55,7 @@ void ADCGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLife
 	DOREPLIFETIME(ADCGameState, RunSeed);
 	DOREPLIFETIME(ADCGameState, PhaseEndTime);
 	DOREPLIFETIME(ADCGameState, bRunFailed);
+	DOREPLIFETIME(ADCGameState, CrewLives);
 	DOREPLIFETIME(ADCGameState, SectorPhotoPoints);
 	DOREPLIFETIME(ADCGameState, QuotaResults);
 	DOREPLIFETIME(ADCGameState, Collapses);

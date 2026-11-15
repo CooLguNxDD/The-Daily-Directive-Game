@@ -131,6 +131,10 @@ struct FDCVoxelCarveDef
 	 *  strikes use less so the crew's own shots keep the body budget. */
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 PhysicsPieces = -1;
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 PhysicsFragments = -1;
+	/** R11 (human playtest): how hard this strike throws the blown-out voxel blocks: outward speed and upward lift as
+	 *  multiples of Tuning ShardSpeedCms / ShardUpCms (crumbs too). Speed only: no extra bodies, same budget. */
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float ShardSpeedScale = 1.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float ShardLiftScale = 1.f;
 };
 
 /** Engine tuning (R1). Integer where the result must match across machines. */
@@ -280,6 +284,10 @@ struct FDCVoxelTuning
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 ShardMax = 110;
 	/** Physics shards spawned per frame at most (the rest follow next frames; R13 spawn burst). */
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 ShardSpawnsPerFrame = 28;
+	/** R6 walk masks: a standing tower's voxel column is walkable when nothing solid sits between WalkBandFromCm and
+	 *  WalkBandFromCm + WalkBandHeightCm above its base (a unit's body); open footprint-edge cells are the doors. */
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float WalkBandFromCm = 20.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float WalkBandHeightCm = 160.f;
 	/** Flying leaf pieces cast shadows (off: R13, advisor a-15; chunks always cast). */
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") bool PhysicsLeafShadows = false;
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float ShardGrowCm = 150.f;

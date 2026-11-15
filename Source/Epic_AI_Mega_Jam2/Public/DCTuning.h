@@ -59,6 +59,10 @@ struct FDCRifleTuning
 {
 	GENERATED_BODY()
 	UPROPERTY(EditAnywhere, Config, Category = "Rifle") int32 MagazineSize = 30;
+	/** R10: the muzzle in the rifle mesh's local space (tracer start and flash), and the flash's size and life. */
+	UPROPERTY(EditAnywhere, Config, Category = "Rifle") FVector MuzzleOffsetCm = FVector(55.f, 0.f, 6.f);
+	UPROPERTY(EditAnywhere, Config, Category = "Rifle") float MuzzleFlashScale = 0.22f;
+	UPROPERTY(EditAnywhere, Config, Category = "Rifle") float MuzzleFlashSeconds = 0.05f;
 	UPROPERTY(EditAnywhere, Config, Category = "Rifle") int32 StartReserve = 180;
 	UPROPERTY(EditAnywhere, Config, Category = "Rifle") float ShotsPerSecond = 9.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Rifle") float Damage = 14.f;
@@ -181,6 +185,13 @@ struct FDCStratagemDef
 	UPROPERTY(EditAnywhere, Config, Category = "Strike") float BlastScatterCm = 0.f;
 	/** Behaviour id resolved by the strike registry: Laser, SunDrop, Singularity, Decoy. */
 	UPROPERTY(EditAnywhere, Config, Category = "Strike") FName Behaviour = TEXT("Laser");
+	/** What the call does, by id in ADCGameMode's effect registry: Strike (orbital blasts) or Supply (R7: a supply pod
+	 *  lands at the aim point after TelegraphSeconds and refills every standing player within SupplyCrewRadiusCm). */
+	UPROPERTY(EditAnywhere, Config, Category = "Strike") FName Effect = TEXT("Strike");
+	UPROPERTY(EditAnywhere, Config, Category = "Strike") int32 SupplyAmmo = 0;
+	UPROPERTY(EditAnywhere, Config, Category = "Strike") int32 SupplyFilm = 0;
+	UPROPERTY(EditAnywhere, Config, Category = "Strike") float SupplyHealth = 0.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Strike") float SupplyCrewRadiusCm = 0.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Strike") bool bStartsUnlocked = true;
 	UPROPERTY(EditAnywhere, Config, Category = "Strike") FLinearColor BeamColor = FLinearColor(1.f, 0.1f, 0.05f);
 	/** R12: how the blasts of a multi-blast strike are laid out, resolved by the pattern registry in CallStrike:
@@ -621,6 +632,16 @@ struct FDCAssetTuning
 		{EDCSlot::Stratagem, FSoftObjectPath(TEXT("/Game/Characters/Mannequins/Anims/Unarmed/Attack/MM_Attack_01.MM_Attack_01"))},
 	};
 	UPROPERTY(EditAnywhere, Config, Category = "Assets") FName DrawSlot = TEXT("DefaultSlot");
+	/** R10 (human playtest): with the rifle drawn, every machine loops the rifle locomotion clip for the pawn's movement
+	 *  on DrawSlot, so the legs run and the rifle stays raised. Eight clips per gait, clockwise from forward (Fwd,
+	 *  Fwd_Right, Right, Bwd_Right, Bwd, Bwd_Left, Left, Fwd_Left); walk below RifleJogSpeedCm, the ADS idle below
+	 *  RifleIdleSpeedCm. Cosmetic: slot and velocity already replicate. */
+	UPROPERTY(EditAnywhere, Config, Category = "Assets") TArray<FSoftObjectPath> RifleJogClips = {FSoftObjectPath(TEXT("/Game/Characters/Mannequins/Anims/Rifle/Jog/MF_Rifle_Jog_Fwd.MF_Rifle_Jog_Fwd")), FSoftObjectPath(TEXT("/Game/Characters/Mannequins/Anims/Rifle/Jog/MF_Rifle_Jog_Fwd_Right.MF_Rifle_Jog_Fwd_Right")), FSoftObjectPath(TEXT("/Game/Characters/Mannequins/Anims/Rifle/Jog/MF_Rifle_Jog_Right.MF_Rifle_Jog_Right")), FSoftObjectPath(TEXT("/Game/Characters/Mannequins/Anims/Rifle/Jog/MF_Rifle_Jog_Bwd_Right.MF_Rifle_Jog_Bwd_Right")), FSoftObjectPath(TEXT("/Game/Characters/Mannequins/Anims/Rifle/Jog/MF_Rifle_Jog_Bwd.MF_Rifle_Jog_Bwd")), FSoftObjectPath(TEXT("/Game/Characters/Mannequins/Anims/Rifle/Jog/MF_Rifle_Jog_Bwd_Left.MF_Rifle_Jog_Bwd_Left")), FSoftObjectPath(TEXT("/Game/Characters/Mannequins/Anims/Rifle/Jog/MF_Rifle_Jog_Left.MF_Rifle_Jog_Left")), FSoftObjectPath(TEXT("/Game/Characters/Mannequins/Anims/Rifle/Jog/MF_Rifle_Jog_Fwd_Left.MF_Rifle_Jog_Fwd_Left"))};
+	UPROPERTY(EditAnywhere, Config, Category = "Assets") TArray<FSoftObjectPath> RifleWalkClips = {FSoftObjectPath(TEXT("/Game/Characters/Mannequins/Anims/Rifle/Walk/MF_Rifle_Walk_Fwd.MF_Rifle_Walk_Fwd")), FSoftObjectPath(TEXT("/Game/Characters/Mannequins/Anims/Rifle/Walk/MF_Rifle_Walk_Fwd_Right.MF_Rifle_Walk_Fwd_Right")), FSoftObjectPath(TEXT("/Game/Characters/Mannequins/Anims/Rifle/Walk/MF_Rifle_Walk_Right.MF_Rifle_Walk_Right")), FSoftObjectPath(TEXT("/Game/Characters/Mannequins/Anims/Rifle/Walk/MF_Rifle_Walk_Bwd_Right.MF_Rifle_Walk_Bwd_Right")), FSoftObjectPath(TEXT("/Game/Characters/Mannequins/Anims/Rifle/Walk/MF_Rifle_Walk_Bwd.MF_Rifle_Walk_Bwd")), FSoftObjectPath(TEXT("/Game/Characters/Mannequins/Anims/Rifle/Walk/MF_Rifle_Walk_Bwd_Left.MF_Rifle_Walk_Bwd_Left")), FSoftObjectPath(TEXT("/Game/Characters/Mannequins/Anims/Rifle/Walk/MF_Rifle_Walk_Left.MF_Rifle_Walk_Left")), FSoftObjectPath(TEXT("/Game/Characters/Mannequins/Anims/Rifle/Walk/MF_Rifle_Walk_Fwd_Left.MF_Rifle_Walk_Fwd_Left"))};
+	UPROPERTY(EditAnywhere, Config, Category = "Assets") FSoftObjectPath RifleIdleClip = FSoftObjectPath(TEXT("/Game/Characters/Mannequins/Anims/Rifle/MF_Rifle_Idle_ADS.MF_Rifle_Idle_ADS"));
+	UPROPERTY(EditAnywhere, Config, Category = "Assets") float RifleJogSpeedCm = 330.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Assets") float RifleIdleSpeedCm = 40.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Assets") float RifleLocoBlendSeconds = 0.18f;
 	UPROPERTY(EditAnywhere, Config, Category = "Assets") FName HandSocket = TEXT("hand_r");
 	/** The press camera worn on the chest whenever it is not in hand (R10: every player reads as a photographer). */
 	UPROPERTY(EditAnywhere, Config, Category = "Assets") FName ChestCamModel = TEXT("presscam");
@@ -743,6 +764,14 @@ struct FDCRunTuning
 	UPROPERTY(EditAnywhere, Config, Category = "Run") FVector PreviewLocation = FVector(0.f, 0.f, 30000.f);
 	UPROPERTY(EditAnywhere, Config, Category = "Run") float ScoopFirstSeconds = 35.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Run") float ScoopGapSeconds = 20.f;
+	/** R9 (human 2026-11-14): crew lives for the run by crew size (index = players - 1). A downed player not revived
+	 *  within BleedOutSeconds, or anyone down when the whole crew is down, spends one and redeploys: a drop pod lands
+	 *  over RedeployFallSeconds next to a standing teammate (or the player's start spot) and they stand up refilled.
+	 *  Out of lives, an all-down crew wipes (the reel still plays). */
+	UPROPERTY(EditAnywhere, Config, Category = "Run") TArray<int32> LivesByPlayers = {3, 4, 5, 6};
+	UPROPERTY(EditAnywhere, Config, Category = "Run") float BleedOutSeconds = 20.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Run") float RedeployFallSeconds = 2.5f;
+	UPROPERTY(EditAnywhere, Config, Category = "Run") float RedeployBesideCm = 400.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Run") int32 PodFilm = 4;
 	UPROPERTY(EditAnywhere, Config, Category = "Run") int32 PodAmmo = 90;
 	UPROPERTY(EditAnywhere, Config, Category = "Run") float PodHealth = 50.f;

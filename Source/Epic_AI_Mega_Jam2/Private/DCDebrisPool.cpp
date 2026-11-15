@@ -34,6 +34,7 @@ void ADCDebrisPool::BeginPlay()
 		Mesh->SetCollisionResponseToChannel(ECC_Camera, ECR_Ignore);
 		Mesh->SetCollisionResponseToChannel(ECC_Visibility, ECR_Ignore);
 		Mesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		Mesh->SetGenerateOverlapEvents(false); // R13 (advisor a-21): physics-moved, nobody listens for overlaps
 		Mesh->SetCastShadow(true);
 		Mesh->SetVisibility(false);
 		Mesh->SetupAttachment(RootComponent);

@@ -49,6 +49,14 @@ private:
 	void AddObjectiveRun(const FString& S);
 	void AddClashShot(const FString& S);
 	void AddLineupShot();
+	void AddSupplyCall();
+	void AddRunFire();
+	void AddIndoors();
+	void SideCam(bool bOn);
+	UPROPERTY() TObjectPtr<class ACameraActor> EvidenceCam;
+	int32 IndoorLot = INDEX_NONE;
+	FVector IndoorDoor = FVector::ZeroVector;
+	FVector SupplyAt = FVector::ZeroVector;
 	TArray<TWeakObjectPtr<class ADCEnemy>> Lineup;
 	FVector LineupMid = FVector::ZeroVector;
 	FVector ClashMid = FVector::ZeroVector;
