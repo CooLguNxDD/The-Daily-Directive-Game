@@ -197,6 +197,8 @@ private:
 	bool bLoading = false;
 	/** A committed op hands the next queued op to the following Tick (R13: the detonation frame only commits). */
 	bool bStartOpNextTick = false;
+	/** R13: the last commit split (CommitOp/FinishOp vs the caller's OnDone), for DCHITCH. */
+	double LastCommitOpMs = 0.0, LastOnDoneMs = 0.0;
 	/** The current load came from an async (sector card) build. */
 	bool bAsyncLoad = false;
 	/** An off-thread sector craft in flight (Build with bAsync); FinishBuild swaps it in. */
