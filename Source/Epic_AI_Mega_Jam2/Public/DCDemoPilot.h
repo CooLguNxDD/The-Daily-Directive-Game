@@ -42,6 +42,8 @@ private:
 	void AddRifleOnly();
 	/** R8 evidence: switch through every weapon with the real Cycle input, fire and frame each. */
 	void AddWeaponTour();
+	/** R12 evidence: the host calls each listed strike on the nearest tower; telegraph, peak and aftermath frames. */
+	void AddStrikeReel(const FString& Ids);
 	void BuildScript();
 	void AddCycle(const FString& Name);
 	void AddObjectiveRun(const FString& S);
