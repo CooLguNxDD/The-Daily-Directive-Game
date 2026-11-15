@@ -1,0 +1,25 @@
+# Seeker (Machines): a sniper drone. Hexagonal ink pod, a long steel rifle barrel to the front, a red scope lens on top
+# (its light cue), two rotor booms. Hangs back above the street and picks people off from far away. Fragile.
+name seeker
+grid 5
+size 32 22 12
+slot body Ink
+slot trim Steel
+slot eye Danger
+poly 3 9 body 4,7 14,6 20,8 20,14 14,16 4,15
+poly 9 11 trim 6,10 14,9 16,11 14,13 6,12
+beam 18 11 6 31 11 6 0.8 trim
+box 29 10 5 32 12 7 trim
+box 16 10 9 19 12 11 eye
+box 30 10 7 31 12 8 eye
+# Rotor booms and discs.
+beam 10 7 6 8 3 7 0.8 trim
+beam 10 15 6 8 19 7 0.8 trim
+cyl 7 3 7 8 3 trim
+cyl 7 19 7 8 3 trim
+box 6 2 6 8 4 7 eye
+box 6 18 6 8 20 7 eye
+pivot 14 11 0
+# R20 animation segments (Swarmer gait roles): the rotor booms rock (roll) about the pod's sides.
+part BladeL 0 0 0 32 6 12 9 6 6
+part BladeR 0 16 0 32 22 12 9 16 6

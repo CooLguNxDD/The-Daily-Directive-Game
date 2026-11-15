@@ -1,0 +1,35 @@
+# Bulwark (Machines): a heavy shield trooper. Wide wedge torso, steel shoulder pads, a tall riot plate on the off arm
+# with a red viewport slit, the trooper's red visor (its light cue). Slow, soaks fire in front of the march line.
+name bulwark
+grid 5
+size 18 16 40
+slot body Ink
+slot trim Steel
+slot eye Danger
+beam 7 5 18 9 5 8 1.5 trim
+beam 9 5 8 6 5 0 1.5 trim
+beam 7 11 18 9 11 8 1.5 trim
+beam 9 11 8 6 11 0 1.5 trim
+box 4 3 0 10 7 1 body
+box 4 9 0 10 13 1 body
+poly 18 31 body 3,3 11,4 12,8 11,12 3,13
+box 4 1 27 11 3 31 trim
+box 4 13 27 11 15 31 trim
+box 4 5 31 11 11 37 body
+box 10 5 33 11 11 34 eye
+# Riot plate on the off arm (ArmL): steel rim, ink face, red viewport slit.
+beam 7 2 27 12 2 22 1.2 trim
+box 13 0 6 15 10 31 trim
+box 14 1 7 15 9 30 body
+box 14 3 25 15 7 26 eye
+# Gun arm.
+beam 7 14 27 14 14 24 1.2 trim
+box 12 13 23 17 15 26 trim
+pivot 8 8 0
+# R20 animation segments (Trooper gait roles): legs from the hip, the plate and its arm from the left shoulder.
+part LegL 0 0 0 13 8 18 8 5 18
+part LegR 0 8 0 13 16 18 8 11 18
+part ArmL 0 0 19 13 3 31 7 2 27
+part ArmL 13 0 5 18 11 31 7 2 27
+part ArmR 0 13 19 18 16 31 7 14 27
+part Head 0 3 31 18 13 40 8 8 31
