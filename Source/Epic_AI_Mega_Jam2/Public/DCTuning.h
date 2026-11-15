@@ -824,6 +824,8 @@ struct FDCRunTuning
 	UPROPERTY(EditAnywhere, Config, Category = "Run") int32 HintLowAmmoRounds = 25;
 	UPROPERTY(EditAnywhere, Config, Category = "Run") float HintStrikeAfterSeconds = 10.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Run") FString HintDismissKey = TEXT("H");
+	/** No hint until this long after the sector's city is built (the sector card holds, then lifts). */
+	UPROPERTY(EditAnywhere, Config, Category = "Run") float HintAfterCardSeconds = 2.5f;
 	/** R1 frame time (advisor a-33): -dcperf logs a DCSPIKE line with its frame-scope owners for any frame longer than this (ms; 33 = a frame under 30 fps). */
 	UPROPERTY(EditAnywhere, Config, Category = "Run") float PerfSpikeMs = 33.f;
 	/** Solo (R12): how long a downed player has to finish the self-revive hold before the run fails. */

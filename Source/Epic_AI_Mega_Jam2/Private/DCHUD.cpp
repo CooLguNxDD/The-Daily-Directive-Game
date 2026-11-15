@@ -168,14 +168,14 @@ void ADCHUD::DrawHint()
 		return;
 	}
 	const FDCLookTuning& Look = UDCTuning::Get().Look;
-	const float W = Sx(430.f), X = Canvas->ClipX - W - Sx(40.f), Y = Canvas->ClipY * 0.36f;
+	const float W = Sx(580.f), X = Canvas->ClipX - W - Sx(40.f), Y = Canvas->ClipY * 0.45f;
 	TArray<FString> Words;
 	H->Text.ParseIntoArray(Words, TEXT(" "));
 	TArray<FString> Lines;
 	FString Line;
 	for (const FString& Word : Words)
 	{
-		if (Line.Len() + Word.Len() > 40)
+		if (Line.Len() + Word.Len() > 38)
 		{
 			Lines.Add(Line);
 			Line.Reset();
@@ -183,15 +183,15 @@ void ADCHUD::DrawHint()
 		Line += (Line.IsEmpty() ? TEXT("") : TEXT(" ")) + Word;
 	}
 	Lines.Add(Line);
-	const float Hgt = Sx(64.f) + Lines.Num() * Sx(24.f);
+	const float Hgt = Sx(78.f) + Lines.Num() * Sx(32.f);
 	Box(X, Y, W, Hgt, FLinearColor(0.02f, 0.02f, 0.03f, 0.82f));
 	Box(X, Y, Sx(5.f), Hgt, Look.HowToShineColor);
-	Text(H->Title.ToUpper(), X + Sx(18.f), Y + Sx(10.f), Look.HowToShineColor, 0.7f);
+	Text(H->Title.ToUpper(), X + Sx(18.f), Y + Sx(10.f), Look.HowToShineColor, 0.95f);
 	for (int32 i = 0; i < Lines.Num(); ++i)
 	{
-		Text(Lines[i], X + Sx(18.f), Y + Sx(42.f) + i * Sx(24.f), FLinearColor(0.85f, 0.85f, 0.8f, 1.f), 0.5f);
+		Text(Lines[i], X + Sx(18.f), Y + Sx(50.f) + i * Sx(32.f), FLinearColor(0.9f, 0.9f, 0.85f, 1.f), 0.68f);
 	}
-	Text(FString::Printf(TEXT("[%s] DISMISS   HINTS CAN BE TURNED OFF IN SETTINGS"), *UDCTuning::Get().Run.HintDismissKey), X + Sx(18.f), Y + Hgt - Sx(20.f), FLinearColor(0.55f, 0.55f, 0.55f, 1.f), 0.38f);
+	Text(FString::Printf(TEXT("[%s] DISMISS   HINTS CAN BE TURNED OFF IN SETTINGS"), *UDCTuning::Get().Run.HintDismissKey), X + Sx(18.f), Y + Hgt - Sx(24.f), FLinearColor(0.6f, 0.6f, 0.6f, 1.f), 0.48f);
 }
 
 void ADCHUD::DrawSector(ADCGameState& GS, ADCCharacter* Me)

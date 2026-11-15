@@ -1080,7 +1080,10 @@ void ADCPlayerController::TickHints(float DeltaSeconds)
 	{
 		return;
 	}
-	HintSectorSeconds = GS->Phase == EDCRunPhase::Sector ? HintSectorSeconds + DeltaSeconds : 0.f;
+	// Sector seconds count only once the city is built (the sector card lifts then), so no card hides under it.
+	const ADCVoxelCity* City = ADCVoxelCity::IsEnabled() ? ADCVoxelCity::Get(this) : nullptr;
+	const bool bPlayable = !City || (City->IsLoaded() && City->GetBuiltSector() == GS->SectorIndex);
+	HintSectorSeconds = GS->Phase != EDCRunPhase::Sector ? 0.f : (bPlayable ? HintSectorSeconds + DeltaSeconds : HintSectorSeconds);
 	const double Real = FPlatformTime::Seconds();
 	const UDCTuning& T = UDCTuning::Get();
 	if (!ActiveHint.IsNone() && (Real >= HintUntilReal || WasInputKeyJustPressed(FKey(*T.Run.HintDismissKey)) || Save->Settings.bHintsOff))
@@ -1088,7 +1091,8 @@ void ADCPlayerController::TickHints(float DeltaSeconds)
 		UE_LOG(LogTemp, Display, TEXT("DCHINT %s closed (%s)"), *ActiveHint.ToString(), Real >= HintUntilReal ? TEXT("time") : TEXT("dismissed"));
 		ActiveHint = NAME_None;
 	}
-	if (!ActiveHint.IsNone() || Save->Settings.bHintsOff || Real < NextHintPollReal)
+	const bool bUnderCard = GS->Phase == EDCRunPhase::Sector && HintSectorSeconds < T.Run.HintAfterCardSeconds;
+	if (!ActiveHint.IsNone() || Save->Settings.bHintsOff || Real < NextHintPollReal || bUnderCard)
 	{
 		return;
 	}
