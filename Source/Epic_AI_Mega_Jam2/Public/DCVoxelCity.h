@@ -149,6 +149,9 @@ private:
 	FDCChipLedger ChipLedger;
 	/** A Chip op is appended and not applied yet (at most one out: the pending set coalesces under load). */
 	bool bChipOpOut = false;
+	/** a-42 evidence: hits refused by a full pending list (run total), and when the oldest pending chip arrived (-1 none). */
+	int32 ChipDropped = 0;
+	float ChipPendingSince = -1.f;
 public:
 	/** Off for cities that never append ops (the reel's re-staged city replays the recorded Rest ops instead). */
 	bool bHostRests = true;
