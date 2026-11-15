@@ -5,6 +5,7 @@ name rifle
 grid 5
 size 18 3 5
 slot body Ink
+slot glow NeonCyanEdge
 slot wood InkBrown
 slot steel Steel
 box 0 0 1 4 2 4 wood
@@ -17,4 +18,6 @@ box 9 0 2 14 2 4 wood
 beam 10 1 3 17 1 3 1 steel
 box 16 0 3 17 2 4 body
 box 4 0 3 8 2 4 body
+# Readability stripe (h-content hand-off: dark guns vanished on the dark suit from behind): a glowing top line.
+paint box 3 0 3 10 2 4 glow
 pivot 6 1 2

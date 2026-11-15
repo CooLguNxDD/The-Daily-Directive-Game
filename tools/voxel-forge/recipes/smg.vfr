@@ -4,6 +4,7 @@ name smg
 grid 5
 size 14 3 7
 slot body Ink
+slot glow NeonCyanEdge
 slot steel Steel
 box 0 1 3 1 2 6 steel
 box 1 1 5 4 2 6 steel
@@ -14,4 +15,6 @@ box 7 0 0 9 2 3 steel
 box 10 0 4 12 2 6 steel
 box 12 1 5 14 2 6 steel
 box 5 0 6 7 2 7 body
+# Readability stripe (h-content hand-off: dark guns vanished on the dark suit from behind): a glowing top line.
+paint box 3 0 5 10 2 6 glow
 pivot 6 1 3
