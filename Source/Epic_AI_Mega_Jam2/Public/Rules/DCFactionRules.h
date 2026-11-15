@@ -106,6 +106,19 @@ struct FDCFactionMixRule
 	/** Unit damage to the crew by crew size (index = players - 1, the last entry for bigger crews): a solo
 	 *  photographer has nobody to revive them (packaged 1b41c0c solo: downed at 29 s and 39 s by raider fire). */
 	UPROPERTY(EditAnywhere, Config, Category = "Faction") TArray<float> CrewDamageByPlayers = {0.45f, 0.75f, 0.9f, 1.f};
+	/** Attack slots per crew member (advisor a-17): at most this many melee / ranged units may attack one player at a
+	 *  time, by crew size (index = players - 1); a slot is a lease of CrewSlotLeaseSeconds, renewed by each attack.
+	 *  Surplus units look for rival-faction foes instead. */
+	UPROPERTY(EditAnywhere, Config, Category = "Faction") TArray<int32> CrewMeleeSlotsByPlayers = {3, 4, 5, 6};
+	UPROPERTY(EditAnywhere, Config, Category = "Faction") TArray<int32> CrewRangedSlotsByPlayers = {2, 3, 3, 4};
+	UPROPERTY(EditAnywhere, Config, Category = "Faction") float CrewSlotLeaseSeconds = 1.5f;
+};
+
+/** One attack-slot lease on a crew member (pure rule data, host only). */
+struct FDCAttackSlot
+{
+	uint32 Holder = 0;
+	float Until = 0.f;
 };
 
 /** One map's factions: the owner and its raiders with their shares of the hostile drops (sum 1). */
@@ -143,4 +156,9 @@ namespace DCFactionRules
 	EPIC_AI_MEGA_JAM2_API int32 StepTerritory(TArray<FName>& Owners, const TArray<TPair<FVector, FName>>& Units, float HalfExtent, int32 ZonesPerSide, int32 MinUnits);
 	/** Which unit of the faction, from a 0..1 roll (None when it has none). */
 	EPIC_AI_MEGA_JAM2_API FName PickUnit(const FDCFactionDef& Faction, float Roll);
+	/** Attack slots (advisor a-17): drops expired leases, then renews Holder's lease or grants a free one while fewer
+	 *  than Cap are held. False = the target is saturated for this holder. */
+	EPIC_AI_MEGA_JAM2_API bool GrantSlot(TArray<FDCAttackSlot>& Slots, uint32 Holder, float Now, int32 Cap, float Lease);
+	/** Read-only: would GrantSlot succeed now. */
+	EPIC_AI_MEGA_JAM2_API bool HasSlot(const TArray<FDCAttackSlot>& Slots, uint32 Holder, float Now, int32 Cap);
 }

@@ -124,4 +124,25 @@ bool FDCFactionTerritoryTest::RunTest(const FString&)
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDCAttackSlotTest, "Epic_AI_Mega_Jam2.Faction.AttackSlots",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FDCAttackSlotTest::RunTest(const FString&)
+{
+	// Advisor a-17: at most Cap units hold a lease on one crew member; a holder renews; an expired lease frees a slot.
+	TArray<FDCAttackSlot> Slots;
+	TestTrue(TEXT("first unit gets a slot"), DCFactionRules::GrantSlot(Slots, 1, 0.f, 2, 1.5f));
+	TestTrue(TEXT("second unit gets a slot"), DCFactionRules::GrantSlot(Slots, 2, 0.1f, 2, 1.5f));
+	TestFalse(TEXT("a third unit waits at the cap"), DCFactionRules::GrantSlot(Slots, 3, 0.2f, 2, 1.5f));
+	TestFalse(TEXT("read-only check agrees"), DCFactionRules::HasSlot(Slots, 3, 0.2f, 2));
+	TestTrue(TEXT("a holder renews its own lease"), DCFactionRules::GrantSlot(Slots, 1, 1.0f, 2, 1.5f));
+	TestTrue(TEXT("holder passes the read-only check"), DCFactionRules::HasSlot(Slots, 2, 1.0f, 2));
+	TestTrue(TEXT("unit 2's lease (until 1.6) has expired at 1.7: a slot frees"), DCFactionRules::HasSlot(Slots, 3, 1.7f, 2));
+	TestTrue(TEXT("so the waiting unit is granted"), DCFactionRules::GrantSlot(Slots, 3, 1.7f, 2, 1.5f));
+	TestEqual(TEXT("expired leases are dropped"), Slots.Num(), 2);
+	const UDCTuning& T = UDCTuning::Get();
+	TestTrue(TEXT("shipped melee slots per crew size"), T.FactionMix.CrewMeleeSlotsByPlayers.Num() > 0 && T.FactionMix.CrewMeleeSlotsByPlayers[0] >= 1);
+	TestTrue(TEXT("shipped ranged slots per crew size"), T.FactionMix.CrewRangedSlotsByPlayers.Num() > 0 && T.FactionMix.CrewRangedSlotsByPlayers[0] >= 1);
+	return true;
+}
+
 #endif

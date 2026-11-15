@@ -106,6 +106,39 @@ namespace DCFactionRules
 		return Mix;
 	}
 
+	bool HasSlot(const TArray<FDCAttackSlot>& Slots, uint32 Holder, float Now, int32 Cap)
+	{
+		int32 Live = 0;
+		for (const FDCAttackSlot& S : Slots)
+		{
+			if (S.Until > Now)
+			{
+				if (S.Holder == Holder)
+				{
+					return true;
+				}
+				++Live;
+			}
+		}
+		return Live < Cap;
+	}
+
+	bool GrantSlot(TArray<FDCAttackSlot>& Slots, uint32 Holder, float Now, int32 Cap, float Lease)
+	{
+		Slots.RemoveAllSwap([Now](const FDCAttackSlot& S) { return S.Until <= Now; });
+		if (FDCAttackSlot* Mine = Slots.FindByPredicate([Holder](const FDCAttackSlot& S) { return S.Holder == Holder; }))
+		{
+			Mine->Until = Now + Lease;
+			return true;
+		}
+		if (Slots.Num() >= Cap)
+		{
+			return false;
+		}
+		Slots.Add({Holder, Now + Lease});
+		return true;
+	}
+
 	FName PickDropFaction(const FDCFactionMix& Mix, float Roll)
 	{
 		float At = FMath::Clamp(Roll, 0.f, 0.99999f);

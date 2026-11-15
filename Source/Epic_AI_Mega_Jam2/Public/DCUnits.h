@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "Subsystems/WorldSubsystem.h"
+#include "Rules/DCFactionRules.h"
 #include "DCUnits.generated.h"
 
 class ADCEnemy;
@@ -23,7 +24,14 @@ public:
 	/** R3, one owner (advisor a-9): a live unit of a hostile faction within RangeCm of this one (the CLASH tag and the
 	 *  pilot read it). Returns that unit, or null. Any machine can ask: factions and positions replicate. */
 	const ADCEnemy* InClash(const ADCEnemy& Unit, float RangeCm = 1500.f) const;
+	/** Host, one owner of crew attack slots (advisor a-17): may this unit attack this crew member now (takes or renews
+	 *  a lease)? CanEngage is the read-only check the foe search uses. */
+	bool TryEngage(const AActor& Victim, const ADCEnemy& Unit, bool bRanged, float Now);
+	bool CanEngage(const AActor& Victim, const ADCEnemy& Unit, bool bRanged, float Now) const;
 
 private:
+	int32 SlotCap(bool bRanged) const;
 	UPROPERTY() TArray<TObjectPtr<ADCEnemy>> Units;
+	/** Leases per crew member (by actor unique id), melee and ranged. */
+	TMap<uint32, TArray<FDCAttackSlot>> MeleeSlots, RangedSlots;
 };

@@ -460,6 +460,27 @@ const ADCEnemy* UDCUnits::InClash(const ADCEnemy& Unit, float RangeCm) const
 	return nullptr;
 }
 
+int32 UDCUnits::SlotCap(bool bRanged) const
+{
+	const FDCFactionMixRule& Mix = UDCTuning::Get().FactionMix;
+	const TArray<int32>& Caps = bRanged ? Mix.CrewRangedSlotsByPlayers : Mix.CrewMeleeSlotsByPlayers;
+	const AGameStateBase* GS = GetWorld() ? GetWorld()->GetGameState() : nullptr;
+	const int32 Players = GS ? FMath::Max(1, GS->PlayerArray.Num()) : 1;
+	return Caps.Num() > 0 ? Caps[FMath::Min(Players, Caps.Num()) - 1] : MAX_int32;
+}
+
+bool UDCUnits::TryEngage(const AActor& Victim, const ADCEnemy& Unit, bool bRanged, float Now)
+{
+	TArray<FDCAttackSlot>& Slots = (bRanged ? RangedSlots : MeleeSlots).FindOrAdd(Victim.GetUniqueID());
+	return DCFactionRules::GrantSlot(Slots, Unit.GetUniqueID(), Now, SlotCap(bRanged), UDCTuning::Get().FactionMix.CrewSlotLeaseSeconds);
+}
+
+bool UDCUnits::CanEngage(const AActor& Victim, const ADCEnemy& Unit, bool bRanged, float Now) const
+{
+	const TArray<FDCAttackSlot>* Slots = (bRanged ? RangedSlots : MeleeSlots).Find(Victim.GetUniqueID());
+	return !Slots || DCFactionRules::HasSlot(*Slots, Unit.GetUniqueID(), Now, SlotCap(bRanged));
+}
+
 FName ADCEnemy::GetFaction() const
 {
 	const FDCEnemyDef* Def = GetDef();
@@ -483,10 +504,16 @@ AActor* ADCEnemy::FindFoe(float Range) const
 	if (Mine.IsNone() || DCFactionRules::FightsCrew(Factions, Mine))
 	{
 		const float CrewD = InCrewGrace(GetWorld()) ? FMath::Min(BestD, FMath::Square(UDCTuning::Get().FactionMix.CrewSelfDefenceCm)) : BestD;
+		// A crew member whose attack slots are all held counts as out of range (advisor a-17): surplus units fight rivals.
+		const UDCUnits* SlotOwner = UDCUnits::Get(this);
+		const ADCGameState* SlotGS = GetWorld()->GetGameState<ADCGameState>();
+		const FDCEnemyDef* MyDef = GetDef();
+		const bool bRangedMe = MyDef && MyDef->ShotRange > 0.f;
 		for (ADCCharacter* C : TActorRange<ADCCharacter>(GetWorld()))
 		{
 			const float Dist = FVector::DistSquared(C->GetActorLocation(), Here);
-			const float D = C->IsDowned() || Dist >= CrewD ? BestD : Dist;
+			const bool bSaturated = SlotOwner && SlotGS && !SlotOwner->CanEngage(*C, *this, bRangedMe, SlotGS->Now());
+			const float D = C->IsDowned() || bSaturated || Dist >= CrewD ? BestD : Dist;
 			Best = D < BestD ? C : Best;
 			BestD = FMath::Min(BestD, D);
 		}
@@ -603,6 +630,13 @@ void ADCEnemy::HostAttack(AActor* Victim, float Now)
 	const float Reach = bRanged ? Def->ShotRange : FMath::Max(Def->AttackRange, CrewContactCm() + 40.f);
 	if (Dist > Reach)
 	{
+		return;
+	}
+	// Attack slots (advisor a-17): a crew member takes hits from a few units at a time; the rest wait their turn.
+	UDCUnits* SlotOwner = Cast<ADCCharacter>(Victim) ? UDCUnits::Get(this) : nullptr;
+	if (SlotOwner && !SlotOwner->TryEngage(*Victim, *this, bRanged, Now))
+	{
+		NextAttackTime = Now + 0.25f;
 		return;
 	}
 	if (bRanged)
@@ -918,6 +952,12 @@ void ADCEnemy::TryAttack(ADCCharacter* Target, float Now)
 	const FDCEnemyDef* Def = GetDef();
 	if (!Def || Now < NextAttackTime || FVector::Dist(Target->GetActorLocation(), GetActorLocation()) > Def->AttackRange)
 	{
+		return;
+	}
+	UDCUnits* SlotOwner = UDCUnits::Get(this);
+	if (SlotOwner && !SlotOwner->TryEngage(*Target, *this, false, Now))
+	{
+		NextAttackTime = Now + 0.25f;
 		return;
 	}
 	NextAttackTime = Now + Def->AttackInterval;
