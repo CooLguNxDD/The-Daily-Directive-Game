@@ -20,6 +20,10 @@ common=(-windowed -nosound -unattended -dcenemytrace)
 if [ "$mode" = online ]; then
   bash "$here/stage_eos_ini.sh" "${INI:?local EOS.ini}" "$PROJ"
   host_extra=(-dceoscodeout="$MARK/code.txt")
+  # B runs from its own copy: its own Saved/ (EOS cache, logs) beside A's.
+  rm -rf "$D/pkgB"; cp -r "$PKG" "$D/pkgB"
+  bash "$here/stage_eos_ini.sh" "$INI" "$D/pkgB/Windows/Epic_AI_Mega_Jam2"
+  XB="$D/pkgB/Windows/Epic_AI_Mega_Jam2.exe"
 else
   bash "$here/stage_eos_ini.sh" --remove "$PROJ"
   host_extra=(-dceoscreds="$MARK/no-such-EOS.ini")
@@ -36,13 +40,14 @@ else
   for _ in $(seq 1 60); do grep -q "DCEOS fallback" "$D/host.log" 2>/dev/null && break; sleep 1; done
   sleep 12 # the LAN listen map reopens
   join=(127.0.0.1:7777)
+  XB="$X"
 fi
-timeout -k 5 170 "$X" "${join[@]}" -ResX=960 -ResY=540 -WinX=900 -WinY=500 "${common[@]}" -dcshots="$MARK/client" -dcshotevery=5 \
+timeout -k 5 170 "$XB" "${join[@]}" -ResX=960 -ResY=540 -WinX=900 -WinY=500 "${common[@]}" -dcshots="$MARK/client" -dcshotevery=5 \
   -abslog="$MARK/client.log" &
 C=$!
 wait $C
 kill $H 2>/dev/null; kill_run; wait 2>/dev/null
-[ "$mode" = online ] && bash "$here/stage_eos_ini.sh" --remove "$PROJ" >/dev/null
+[ "$mode" = online ] && { bash "$here/stage_eos_ini.sh" --remove "$PROJ" >/dev/null; rm -rf "$D/pkgB"; }
 echo "--- host"; grep -h "DCEOS\|LogSocketSubsystemEOS.*\(Warning\|Error\)" "$D/host.log" | head -30
 echo "--- client"; grep -h "DCEOS\|LogNet.*\(Welcomed\|Join succeeded\|NetworkFailure\)\|LogSocketSubsystemEOS.*\(Warning\|Error\)" "$D/client.log" | head -30
 echo "client ops: $(grep -c 'DCVOXEL op .* match=host' "$D/client.log") match=host, $(grep -c 'MISMATCH=host' "$D/client.log") MISMATCH"
