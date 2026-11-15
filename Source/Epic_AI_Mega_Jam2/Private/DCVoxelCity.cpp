@@ -715,6 +715,7 @@ void ADCVoxelCity::EndPlay(const EEndPlayReason::Type Reason)
 		bHoldUploads = false; // a dropped held op never blocks later uploads
 		HeldCells.Reset();
 		CommitCells.Reset();
+		UnstageAll();
 	}
 	for (const TSharedPtr<FMeshJob>& Job : Jobs)
 	{
@@ -901,6 +902,7 @@ void ADCVoxelCity::Clear()
 		bHoldUploads = false; // a dropped held op never blocks later uploads
 		HeldCells.Reset();
 		CommitCells.Reset();
+		UnstageAll();
 	}
 	QueuedOps.Reset();
 	SurfaceCache.Reset();
@@ -919,6 +921,8 @@ void ADCVoxelCity::Clear()
 		}
 	}
 	MeshPool.Reset();
+	Staged.Reset();
+	SpareCells.Reset();
 	Cells.Reset();
 	CellChunks.Reset();
 	ChunkMeshes.Reset();
@@ -1069,7 +1073,10 @@ void ADCVoxelCity::FlushPendingCraft()
 	}
 	// An op that arrives mid-craft (review CP22) waits for the craft here instead of being dropped.
 	const TSharedPtr<FPendingCraft> Done = PendingCraft;
-	Done->Task.Wait();
+	{
+		DC_FRAME_SCOPE("CraftWait"); // a blocking wait on the game thread: a spike line names it (R24 chip spike hunt)
+		Done->Task.Wait();
+	}
 	Sector = MoveTemp(*Done->Out);
 	FinishBuild(Done->RunSeed, Done->SectorIndex, Done->BuildId, Done->Start, Done->Pads.Get(), *Done->HashOut);
 	PendingCraft.Reset();
@@ -1281,7 +1288,10 @@ void ADCVoxelCity::WaitInFlight()
 	{
 		return;
 	}
-	InFlightTask.Wait();
+	{
+		DC_FRAME_SCOPE("OpWait"); // a blocking wait on the game thread: a spike line names it (R24 chip spike hunt)
+		InFlightTask.Wait();
+	}
 	FinishInFlight();
 }
 
@@ -1878,6 +1888,105 @@ namespace
 	}
 }
 
+void ADCVoxelCity::StageHeldCells(const TSet<FIntVector4>& Busy)
+{
+	// A staged cell whose chunks are meshing again is stale: back to the spares, it stages again when ready.
+	for (auto It = Staged.CreateIterator(); It; ++It)
+	{
+		if (Busy.Contains(It.Key()) || (!HeldCells.Contains(It.Key()) && !CommitCells.Contains(It.Key()))) // held, or committing now
+		{
+			ParkSpare(It.Key().X, It.Value());
+			It.RemoveCurrent();
+		}
+	}
+	if (!bHoldUploads)
+	{
+		return;
+	}
+	const FDCVoxelTuning& Tn = UDCVoxelSettings::Get().Tuning;
+	const double Start = FPlatformTime::Seconds();
+	int32 Done = 0;
+	for (const FIntVector4& Cell : HeldCells)
+	{
+		if (Staged.Contains(Cell) || Busy.Contains(Cell) || !DirtyCells.Contains(Cell))
+		{
+			continue;
+		}
+		if (Done > 0 && (FPlatformTime::Seconds() - Start) * 1000.0 >= Tn.StageBudgetMs)
+		{
+			break;
+		}
+		FDCVoxelMeshData Merged;
+		MergeCell(Cell, Merged);
+		++Done;
+		if (Merged.IsEmpty())
+		{
+			continue; // a fully cleared cell: the commit clears the live one (no spare needed)
+		}
+		FProcMeshSection Section;
+		BuildSection(Merged, Section);
+		const int32 G = Cell.X;
+		const int32 Cm = GridAt(G).VoxelCm;
+		TArray<TObjectPtr<UProceduralMeshComponent>>& Free = SpareCells.FindOrAdd(Cm);
+		UProceduralMeshComponent* Spare = Free.Num() > 0 ? Free.Pop(EAllowShrinking::No).Get() : nullptr;
+		if (!Spare)
+		{
+			Spare = NewMesh(false, Cm);
+		}
+		const TObjectPtr<UProceduralMeshComponent>* Live = Cells.Find(Cell);
+		const FVector At = Live && *Live ? (*Live)->GetRelativeLocation() : GridAt(G).ToWorld(FIntVector::ZeroValue);
+		Spare->SetRelativeLocation(At - FVector(0.f, 0.f, Tn.StageParkDepthCm));
+		Spare->ComponentTags.Reset();
+		Spare->ComponentTags.Add(G == 0 ? FName(TEXT("Terrain")) : FName(*FString::Printf(TEXT("Lot%d"), G - 1)));
+		Spare->SetProcMeshSection(0, Section); // render proxy, ray-tracing build and collision cook happen now, parked
+		Staged.Add(Cell, Spare);
+	}
+	if (Done > 0 && (FPlatformTime::Seconds() - Start) * 1000.0 > Tn.HitchLogMs * 0.25)
+	{
+		UE_LOG(LogTemp, Display, TEXT("DCSTAGE cells=%d ms=%.1f staged=%d held=%d"), Done, (FPlatformTime::Seconds() - Start) * 1000.0, Staged.Num(), HeldCells.Num());
+	}
+}
+
+bool ADCVoxelCity::SwapStaged(const FIntVector4& Cell)
+{
+	TObjectPtr<UProceduralMeshComponent> Spare;
+	if (!Staged.RemoveAndCopyValue(Cell, Spare) || !Spare)
+	{
+		return false;
+	}
+	TObjectPtr<UProceduralMeshComponent>& Live = Cells.FindOrAdd(Cell);
+	const FVector At = Live ? Live->GetRelativeLocation() : GridAt(Cell.X).ToWorld(FIntVector::ZeroValue);
+	Spare->SetRelativeLocation(At);
+	Spare->SetCollisionProfileName(TEXT("BlockAll"));
+	if (Live)
+	{
+		ParkSpare(Cell.X, Live);
+	}
+	Live = Spare;
+	DirtyCells.Remove(Cell);
+	return true;
+}
+
+void ADCVoxelCity::ParkSpare(int32 G, UProceduralMeshComponent* Mesh)
+{
+	if (!Mesh)
+	{
+		return;
+	}
+	Mesh->SetCollisionProfileName(TEXT("NoCollision"));
+	Mesh->SetRelativeLocation(Mesh->GetRelativeLocation() - FVector(0.f, 0.f, UDCVoxelSettings::Get().Tuning.StageParkDepthCm));
+	SpareCells.FindOrAdd(GridAt(G).VoxelCm).Add(Mesh);
+}
+
+void ADCVoxelCity::UnstageAll()
+{
+	for (const TPair<FIntVector4, TObjectPtr<UProceduralMeshComponent>>& It : Staged)
+	{
+		ParkSpare(It.Key.X, It.Value);
+	}
+	Staged.Reset();
+}
+
 void ADCVoxelCity::UploadCells()
 {
 	if (DirtyCells.Num() == 0)
@@ -1896,6 +2005,8 @@ void ADCVoxelCity::UploadCells()
 	}
 	// 1. A committed op's own cells, all at once (the detonation frame shows the whole op). R1 (spikes-cb1f180: 12 of 13
 	//    sector-play spikes were this frame, 17-24 ms for 16-21 cells): the merges run in parallel, sections stay serial.
+	// R1 (advisor a-41): the held op's cells are staged ahead into parked spare components; the commit only swaps.
+	StageHeldCells(Busy);
 	TArray<FIntVector4> CommitNow;
 	// The whole op shows in one frame (advisor a-38): while any of its cells still waits for a chunk (PollChunkBudgetMs
 	// can defer chunk results), none of them uploads.
@@ -1911,6 +2022,20 @@ void ADCVoxelCity::UploadCells()
 			CommitNow.Add(*It);
 		}
 		It.RemoveCurrent();
+	}
+	const double TS0 = FPlatformTime::Seconds();
+	int32 Swapped = 0;
+	for (int32 i = CommitNow.Num() - 1; i >= 0; --i)
+	{
+		if (SwapStaged(CommitNow[i]))
+		{
+			CommitNow.RemoveAtSwap(i, EAllowShrinking::No);
+			++Swapped;
+		}
+	}
+	if (Swapped > 0 && (FPlatformTime::Seconds() - TS0) * 1000.0 > UDCVoxelSettings::Get().Tuning.HitchLogMs * 0.25)
+	{
+		UE_LOG(LogTemp, Display, TEXT("DCCOMMIT swapped=%d staged cells in %.1f ms (%d left to apply)"), Swapped, (FPlatformTime::Seconds() - TS0) * 1000.0, CommitNow.Num());
 	}
 	if (CommitNow.Num() > 0)
 	{
@@ -2511,6 +2636,7 @@ bool ADCVoxelCity::TickBodies(const TSharedPtr<FFalling>& Shared, float Dt)
 
 void ADCVoxelCity::OnBodyHit(UPrimitiveComponent* HitComp, AActor* Other, UPrimitiveComponent* OtherComp, FVector NormalImpulse, const FHitResult& Hit)
 {
+	DC_FRAME_SCOPE("BodyHit"); // runs in the engine's physics event dispatch, outside the City tick scope
 	const TWeakPtr<FFalling>* Found = Bodies.Find(HitComp);
 	const TSharedPtr<FFalling> F = Found ? Found->Pin() : nullptr;
 	FFalling::FFrag* Fr = F ? F->Frags.FindByPredicate([HitComp](const FFalling::FFrag& X) { return X.Body == HitComp; }) : nullptr;
@@ -3036,11 +3162,15 @@ void ADCVoxelCity::TickDissolveCam()
 		ShotCamera->GetCameraComponent()->SetFieldOfView(60.f);
 	}
 	const FVector At = Target->Bounds.Origin;
-	// From the player's own eye (a clear line: the player watched the strike), zoomed onto the piece with a narrow lens.
+	// From above the piece (see below), zoomed onto it with a narrow lens.
 	if (PC->GetViewTarget() != ShotCamera)
 	{
-		// Captured once, before the switch (afterwards the camera manager reports the shot camera itself).
-		DissolveCamEye = (PC->PlayerCameraManager ? PC->PlayerCameraManager->GetCameraLocation() : At + FVector(-1500.f, 0.f, 800.f)) + FVector(0.f, 0.f, 150.f);
+		// Captured once, before the switch. Above the resting piece, leaning toward the player's side: from the player's
+		// eye a toppled tower's rubble hid the piece (dissolve-6f4334f frames showed the inside of the pile).
+		const FVector From = PC->PlayerCameraManager ? PC->PlayerCameraManager->GetCameraLocation() : At + FVector(-1500.f, 0.f, 0.f);
+		const FVector Side = FVector(From.X - At.X, From.Y - At.Y, 0.f).GetSafeNormal();
+		const float Height = FMath::Max(700.f, Target->Bounds.SphereRadius * 5.f);
+		DissolveCamEye = At + Side * Height * 0.45f + FVector(0.f, 0.f, Height);
 	}
 	const FVector Eye = DissolveCamEye;
 	ShotCamera->GetCameraComponent()->SetFieldOfView(FMath::Clamp(FMath::RadiansToDegrees(2.f * FMath::Atan(Target->Bounds.SphereRadius * 1.6f / FMath::Max(FVector::Dist(Eye, At), 1.f))), 8.f, 60.f));

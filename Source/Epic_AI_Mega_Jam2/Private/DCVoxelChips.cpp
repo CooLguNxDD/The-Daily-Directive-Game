@@ -2,6 +2,7 @@
 // chip ledger (Rules/DCChipRules); every machine applies them like any op (DCVoxelOps kind registry). Kept out of
 // DCVoxelCity.cpp, which owns the op queue, uploads and commit timing.
 #include "DCVoxelCity.h"
+#include "DCFrameScopes.h"
 
 #include "DCBuilding.h"
 #include "DCEnvironment.h"
@@ -16,11 +17,16 @@
 
 namespace
 {
-	/** Tuning ChipsEnabled, or -dcchips on the host (evidence runs while the data default is off). */
+	/** Tuning ChipsEnabled, overridden on the host by -dcchips=0|1 (bare -dcchips = on): advisor a-42, so one package
+	 *  runs both arms of a chips on/off comparison whatever the data default is. */
 	bool ChipsOn(const FDCVoxelTuning& Tn)
 	{
-		static const bool bForce = FParse::Param(FCommandLine::Get(), TEXT("dcchips"));
-		return Tn.ChipsEnabled || bForce;
+		static const int32 Override = []
+		{
+			int32 V = -1;
+			return FParse::Value(FCommandLine::Get(), TEXT("dcchips="), V) ? (V != 0 ? 1 : 0) : (FParse::Param(FCommandLine::Get(), TEXT("dcchips")) ? 1 : -1);
+		}();
+		return Override >= 0 ? Override == 1 : Tn.ChipsEnabled;
 	}
 }
 
@@ -51,6 +57,7 @@ int32 ADCVoxelCity::ChipGridOf(const UPrimitiveComponent* Comp) const
 
 void ADCVoxelCity::HostChip(const FHitResult& Hit, const FDCWeaponDef& Weapon, const AActor* Shooter)
 {
+	DC_FRAME_SCOPE("ChipHit");
 	const FDCVoxelTuning& Tn = UDCVoxelSettings::Get().Tuning;
 	if (!ChipsOn(Tn) || Weapon.ChipDamage <= 0.f || !HasAuthority() || GetNetMode() == NM_Client || BuiltSector == INDEX_NONE || !bHostRests)
 	{
@@ -72,7 +79,14 @@ void ADCVoxelCity::HostChip(const FHitResult& Hit, const FDCWeaponDef& Weapon, c
 	const FVector Inside = Hit.ImpactPoint - Hit.ImpactNormal * (G.VoxelCm * 0.5f);
 	const FIntVector Center = G.CenterCm(G.ToLocal(DCVoxelMath::ToCm(Inside)));
 	const float Hp = Grid == DCVoxelOps::PropGrid ? Tn.ChipPropHp : Tn.ChipHp;
+	// a-42 evidence: hits refused by a full pending list, and how long the oldest pending chip has waited.
+	ChipDropped += ChipLedger.Pending.Num() >= FMath::Max(Tn.ChipMaxPending, 1) ? 1 : 0;
+	const bool bWasEmpty = ChipLedger.Pending.Num() == 0;
 	DCChipRules::AddHit(ChipLedger, Grid, Center, Tn.ChipBucketCm, Weapon.ChipDamage, Hp, Weapon.ChipRadiusCm, Tn.ChipMaxPending);
+	if (bWasEmpty && ChipLedger.Pending.Num() > 0)
+	{
+		ChipPendingSince = GetWorld()->GetTimeSeconds();
+	}
 }
 
 void ADCVoxelCity::SetChipProps(const FDCCityPlan& Plan)
@@ -129,6 +143,7 @@ void ADCVoxelCity::CheckChipHash()
 
 void ADCVoxelCity::TickChips()
 {
+	DC_FRAME_SCOPE("ChipTick");
 	CheckChipHash();
 	const FDCVoxelTuning& Tn = UDCVoxelSettings::Get().Tuning;
 	if (!ChipsOn(Tn) || !HasAuthority() || GetNetMode() == NM_Client || BuiltSector == INDEX_NONE || bLoading || !bHostRests)
@@ -167,8 +182,10 @@ void ADCVoxelCity::TickChips()
 	const float OpTime = Op.Time;
 	const FVector From(Op.CenterCm);
 	bChipOpOut = true;
-	UE_LOG(LogTemp, Display, TEXT("DCCHIP host op=%d chips=%d structure=%d breakprops=%d pending=%d merged=%d entry=%d history=%d"), Seq, Op.Chips.Num(), bStructure ? Op.StructureLots[0] : -1,
-		Op.BreakProps.Num(), ChipLedger.Pending.Num(), bMerged ? 1 : 0, GS->VoxelOps.Last().Chips.Num(), GS->VoxelOps.Num());
+	UE_LOG(LogTemp, Display, TEXT("DCCHIP host op=%d chips=%d structure=%d breakprops=%d pending=%d merged=%d entry=%d history=%d dropped=%d waited=%.2f"), Seq, Op.Chips.Num(), bStructure ? Op.StructureLots[0] : -1,
+		Op.BreakProps.Num(), ChipLedger.Pending.Num(), bMerged ? 1 : 0, GS->VoxelOps.Last().Chips.Num(), GS->VoxelOps.Num(), ChipDropped,
+		ChipPendingSince >= 0.f ? GetWorld()->GetTimeSeconds() - ChipPendingSince : 0.f);
+	ChipPendingSince = ChipLedger.Pending.Num() > 0 ? GetWorld()->GetTimeSeconds() : -1.f; // what is left starts waiting now
 	TWeakObjectPtr<ADCGameState> WeakGS(GS);
 	TWeakObjectPtr<ADCVoxelCity> WeakCity(this);
 	const int32 Build = BuiltId;
