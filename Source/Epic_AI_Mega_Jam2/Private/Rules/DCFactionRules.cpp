@@ -123,6 +123,19 @@ namespace DCFactionRules
 		return Live < Cap;
 	}
 
+	float SpendDamage(FDCDamageBucket& Bucket, float Amount, float Now, float Rate, float Burst)
+	{
+		if (Rate <= 0.f || Amount <= 0.f)
+		{
+			return FMath::Max(Amount, 0.f);
+		}
+		Bucket.Tokens = Bucket.Tokens < 0.f ? Burst : FMath::Min(Burst, Bucket.Tokens + FMath::Max(Now - Bucket.At, 0.f) * Rate);
+		Bucket.At = Now;
+		const float Landed = FMath::Min(Amount, Bucket.Tokens);
+		Bucket.Tokens -= Landed;
+		return Landed;
+	}
+
 	bool GrantSlot(TArray<FDCAttackSlot>& Slots, uint32 Holder, float Now, int32 Cap, float Lease)
 	{
 		Slots.RemoveAllSwap([Now](const FDCAttackSlot& S) { return S.Until <= Now; });

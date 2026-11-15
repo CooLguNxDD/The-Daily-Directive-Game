@@ -145,4 +145,19 @@ bool FDCAttackSlotTest::RunTest(const FString&)
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDCDamageBudgetTest, "Epic_AI_Mega_Jam2.Faction.DamageBudget",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FDCDamageBudgetTest::RunTest(const FString&)
+{
+	// Advisor a-18: a token bucket per crew member; starts full at Burst, refills at Rate per second.
+	FDCDamageBucket B;
+	TestEqual(TEXT("uncapped passes everything"), DCFactionRules::SpendDamage(B, 40.f, 0.f, 0.f, 25.f), 40.f);
+	TestEqual(TEXT("first contact lands up to the burst"), DCFactionRules::SpendDamage(B, 10.f, 0.f, 7.f, 25.f), 10.f);
+	TestEqual(TEXT("the rest of the burst"), DCFactionRules::SpendDamage(B, 20.f, 0.f, 7.f, 25.f), 15.f);
+	TestEqual(TEXT("empty: nothing lands the same instant"), DCFactionRules::SpendDamage(B, 5.f, 0.f, 7.f, 25.f), 0.f);
+	TestEqual(TEXT("one second later: Rate has refilled"), DCFactionRules::SpendDamage(B, 20.f, 1.f, 7.f, 25.f), 7.f);
+	TestEqual(TEXT("refill never passes the burst"), DCFactionRules::SpendDamage(B, 100.f, 60.f, 7.f, 25.f), 25.f);
+	return true;
+}
+
 #endif

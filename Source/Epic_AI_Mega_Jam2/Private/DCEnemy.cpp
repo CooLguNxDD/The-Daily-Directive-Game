@@ -475,6 +475,15 @@ bool UDCUnits::TryEngage(const AActor& Victim, const ADCEnemy& Unit, bool bRange
 	return DCFactionRules::GrantSlot(Slots, Unit.GetUniqueID(), Now, SlotCap(bRanged), UDCTuning::Get().FactionMix.CrewSlotLeaseSeconds);
 }
 
+float UDCUnits::SpendCrewDamage(const AActor& Victim, float Amount, float Now)
+{
+	const FDCFactionMixRule& Mix = UDCTuning::Get().FactionMix;
+	const AGameStateBase* GS = GetWorld() ? GetWorld()->GetGameState() : nullptr;
+	const int32 Players = GS ? FMath::Max(1, GS->PlayerArray.Num()) : 1;
+	const float Dps = Mix.CrewDpsByPlayers.Num() > 0 ? Mix.CrewDpsByPlayers[FMath::Min(Players, Mix.CrewDpsByPlayers.Num()) - 1] : 0.f;
+	return DCFactionRules::SpendDamage(DamageBuckets.FindOrAdd(Victim.GetUniqueID()), Amount, Now, Dps, Mix.CrewBurstHealth);
+}
+
 bool UDCUnits::CanEngage(const AActor& Victim, const ADCEnemy& Unit, bool bRanged, float Now) const
 {
 	const TArray<FDCAttackSlot>* Slots = (bRanged ? RangedSlots : MeleeSlots).Find(Victim.GetUniqueID());
@@ -664,7 +673,9 @@ void ADCEnemy::HostAttack(AActor* Victim, float Now)
 	}
 	if (ADCCharacter* C = Cast<ADCCharacter>(Victim))
 	{
-		C->HostApplyHurt(CrewDamage(GetWorld(), Def->Damage), GetActorLocation());
+		UDCUnits* Budget = UDCUnits::Get(this);
+		const float Hurt = CrewDamage(GetWorld(), Def->Damage);
+		C->HostApplyHurt(Budget ? Budget->SpendCrewDamage(*C, Hurt, Now) : Hurt, GetActorLocation());
 		return;
 	}
 	Victim->TakeDamage(Def->Damage, FDamageEvent(), nullptr, this);
@@ -961,7 +972,8 @@ void ADCEnemy::TryAttack(ADCCharacter* Target, float Now)
 		return;
 	}
 	NextAttackTime = Now + Def->AttackInterval;
-	Target->HostApplyHurt(CrewDamage(GetWorld(), Def->Damage), GetActorLocation());
+	const float Hurt = CrewDamage(GetWorld(), Def->Damage);
+	Target->HostApplyHurt(SlotOwner ? SlotOwner->SpendCrewDamage(*Target, Hurt, Now) : Hurt, GetActorLocation());
 }
 
 void ADCEnemy::Tick(float DeltaSeconds)

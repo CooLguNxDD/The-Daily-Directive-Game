@@ -112,6 +112,18 @@ struct FDCFactionMixRule
 	UPROPERTY(EditAnywhere, Config, Category = "Faction") TArray<int32> CrewMeleeSlotsByPlayers = {3, 4, 5, 6};
 	UPROPERTY(EditAnywhere, Config, Category = "Faction") TArray<int32> CrewRangedSlotsByPlayers = {2, 3, 3, 4};
 	UPROPERTY(EditAnywhere, Config, Category = "Faction") float CrewSlotLeaseSeconds = 1.5f;
+	/** Damage budget per crew member (advisor a-18): unit damage to one player refills at CrewDpsByPlayers[players-1]
+	 *  per second up to CrewBurstHealth; a hit beyond the budget lands only in part (0 = uncapped). Strikes never pass
+	 *  through it. */
+	UPROPERTY(EditAnywhere, Config, Category = "Faction") TArray<float> CrewDpsByPlayers = {0.f, 0.f, 0.f, 0.f};
+	UPROPERTY(EditAnywhere, Config, Category = "Faction") float CrewBurstHealth = 25.f;
+};
+
+/** A crew member's damage budget (pure rule data, host only); Tokens < 0 = not started (starts full). */
+struct FDCDamageBucket
+{
+	float Tokens = -1.f;
+	float At = 0.f;
 };
 
 /** One attack-slot lease on a crew member (pure rule data, host only). */
@@ -161,4 +173,6 @@ namespace DCFactionRules
 	EPIC_AI_MEGA_JAM2_API bool GrantSlot(TArray<FDCAttackSlot>& Slots, uint32 Holder, float Now, int32 Cap, float Lease);
 	/** Read-only: would GrantSlot succeed now. */
 	EPIC_AI_MEGA_JAM2_API bool HasSlot(const TArray<FDCAttackSlot>& Slots, uint32 Holder, float Now, int32 Cap);
+	/** Token bucket: how much of Amount lands now (Rate <= 0: all of it). Refills at Rate per second up to Burst. */
+	EPIC_AI_MEGA_JAM2_API float SpendDamage(FDCDamageBucket& Bucket, float Amount, float Now, float Rate, float Burst);
 }

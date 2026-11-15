@@ -28,10 +28,13 @@ public:
 	 *  a lease)? CanEngage is the read-only check the foe search uses. */
 	bool TryEngage(const AActor& Victim, const ADCEnemy& Unit, bool bRanged, float Now);
 	bool CanEngage(const AActor& Victim, const ADCEnemy& Unit, bool bRanged, float Now) const;
+	/** Host: how much of a unit hit on this crew member lands under its damage budget (advisor a-18). */
+	float SpendCrewDamage(const AActor& Victim, float Amount, float Now);
 
 private:
 	int32 SlotCap(bool bRanged) const;
 	UPROPERTY() TArray<TObjectPtr<ADCEnemy>> Units;
 	/** Leases per crew member (by actor unique id), melee and ranged. */
 	TMap<uint32, TArray<FDCAttackSlot>> MeleeSlots, RangedSlots;
+	TMap<uint32, FDCDamageBucket> DamageBuckets;
 };
