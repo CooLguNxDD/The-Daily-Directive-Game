@@ -20,7 +20,8 @@ namespace DCFrameScopes
 	EPIC_AI_MEGA_JAM2_API bool Enabled();
 	/** The previous frame's totals, largest first (engine phases World and GC included, flagged by name). */
 	EPIC_AI_MEGA_JAM2_API const TArray<FTotal>& LastFrame();
-	/** "owners=A:12.0x3,B:4.1 ours=16.1 world=20.3 gc=0.0 unowned=3.9" for a spike line; GameMs is the frame's game thread. */
+	/** "owners=A:12.0x3,B:4.1 ours=16.1 world=20.3 gc=0.0 unowned=3.9 outside_world=1.2 wait=0.4 shot=0" for a spike line;
+	 *  GameMs is the frame's game thread, wait its idle waits, shot=1 when a screenshot readback blocked the frame. */
 	EPIC_AI_MEGA_JAM2_API FString Describe(int32 TopN, double GameMs);
 	EPIC_AI_MEGA_JAM2_API void Add(FName Name, double Ms, bool bTop);
 

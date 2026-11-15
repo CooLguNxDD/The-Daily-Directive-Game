@@ -2,6 +2,7 @@
 // chip ledger (Rules/DCChipRules); every machine applies them like any op (DCVoxelOps kind registry). Kept out of
 // DCVoxelCity.cpp, which owns the op queue, uploads and commit timing.
 #include "DCVoxelCity.h"
+#include "DCFrameScopes.h"
 
 #include "DCBuilding.h"
 #include "DCEnvironment.h"
@@ -51,6 +52,7 @@ int32 ADCVoxelCity::ChipGridOf(const UPrimitiveComponent* Comp) const
 
 void ADCVoxelCity::HostChip(const FHitResult& Hit, const FDCWeaponDef& Weapon, const AActor* Shooter)
 {
+	DC_FRAME_SCOPE("ChipHit");
 	const FDCVoxelTuning& Tn = UDCVoxelSettings::Get().Tuning;
 	if (!ChipsOn(Tn) || Weapon.ChipDamage <= 0.f || !HasAuthority() || GetNetMode() == NM_Client || BuiltSector == INDEX_NONE || !bHostRests)
 	{
@@ -129,6 +131,7 @@ void ADCVoxelCity::CheckChipHash()
 
 void ADCVoxelCity::TickChips()
 {
+	DC_FRAME_SCOPE("ChipTick");
 	CheckChipHash();
 	const FDCVoxelTuning& Tn = UDCVoxelSettings::Get().Tuning;
 	if (!ChipsOn(Tn) || !HasAuthority() || GetNetMode() == NM_Client || BuiltSector == INDEX_NONE || bLoading || !bHostRests)
