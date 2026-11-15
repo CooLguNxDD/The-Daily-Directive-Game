@@ -694,12 +694,24 @@ void ADCDemoPilot::AddObjectiveRun(const FString& S)
 		const APlayerController* PC = GetWorld()->GetFirstPlayerController();
 		const ADCPlayerState* PS = PC ? PC->GetPlayerState<ADCPlayerState>() : nullptr;
 		const bool bStrikeReady = PS && PS->CooldownReadyTime(TEXT("OrbitalLaser")) <= GS->Now();
-		if (Def && Def->Kind == TEXT("Destroy") && O->Stage == EDCObjectiveStage::Active && Real >= ObjStrikeReal
-			&& (ObjStrikePhase > 0 || (bStrikeReady && FVector::Dist2D(Me->GetActorLocation(), At) < ObjStrikeRangeCm)))
+		// The waypoint sits on the marker above the tower: aim at the tower's lower floors (pawn height + 3 m) so the laser
+		// cuts the base and the tower falls (destroy4/objcard: strikes on the marker hit sky). Inside strike range the
+		// pilot holds there (never walks into the swarm at the tower's foot) until the laser is ready.
+		const bool bDestroyActive = Def && Def->Kind == TEXT("Destroy") && O->Stage == EDCObjectiveStage::Active;
+		const bool bInStrikeRange = FVector::Dist2D(Me->GetActorLocation(), At) < ObjStrikeRangeCm;
+		const FVector Base(At.X, At.Y, Me->GetActorLocation().Z + 300.f);
+		if (bDestroyActive && bInStrikeRange && !bStrikeReady && ObjStrikePhase == 0)
 		{
 			Release(TEXT("Move"));
 			Release(TEXT("Sprint"));
-			AimAt(FVector(At.X, At.Y, At.Z + 150.f));
+			AimAt(Base);
+			return false;
+		}
+		if (bDestroyActive && Real >= ObjStrikeReal && (ObjStrikePhase > 0 || (bStrikeReady && bInStrikeRange)))
+		{
+			Release(TEXT("Move"));
+			Release(TEXT("Sprint"));
+			AimAt(Base);
 			if (ObjStrikePhase == 0)
 			{
 				Tap(TEXT("Slot2"));
@@ -709,7 +721,7 @@ void ADCDemoPilot::AddObjectiveRun(const FString& S)
 			else if (ObjStrikePhase == 1)
 			{
 				Tap(TEXT("Fire"));
-				UE_LOG(LogDCDemo, Display, TEXT("DEMO objective strike on the marked tower at %s"), *At.ToCompactString());
+				UE_LOG(LogDCDemo, Display, TEXT("DEMO objective strike on the marked tower base at %s"), *Base.ToCompactString());
 				ObjStrikePhase = 2;
 				ObjStrikeReal = Real + 0.6;
 			}

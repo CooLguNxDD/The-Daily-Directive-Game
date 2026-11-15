@@ -56,7 +56,7 @@ private:
 	bool bObjDefending = false;
 	float ObjDefendCm = 700.f; // pilot only: self-defence radius in -dcobjrun
 	double ObjStrikeReal = 0.0;
-	float ObjStrikeRangeCm = 3500.f; // pilot only: how close it walks before calling the laser on a marked tower
+	float ObjStrikeRangeCm = 2500.f; // pilot only: it holds this far from a marked tower and calls the laser on its base
 	void AddEnemyFight(const FString& Sector);
 	void AddStratagemOnSwarm(const FString& Sector);
 	void AddWidestFrame(const FString& Sector);
