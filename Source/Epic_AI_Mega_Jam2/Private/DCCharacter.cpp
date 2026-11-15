@@ -1570,6 +1570,9 @@ void ADCCharacter::UpdateHeldItems(float DeltaSeconds)
 		FVector EyeAt;
 		FRotator EyeRot;
 		GetActorEyesViewPoint(EyeAt, EyeRot);
+		// A remote pawn on a client has no controller (its eye rotation is the actor's, pitch 0): use the replicated
+		// aim pitch so other players' rifles tilt with their aim (advisor a-53).
+		EyeRot.Pitch = IsLocallyControlled() || HasAuthority() ? EyeRot.Pitch : AimPitch;
 		const FVector Anchor = EyeAt + EyeRot.Vector() * Assets.AimRangeCm;
 		const FQuat Hand = RifleMesh->GetComponentQuat();
 		const FQuat Aimed = ((Anchor - RifleMesh->GetComponentLocation()).Rotation() + Swing).Quaternion();
