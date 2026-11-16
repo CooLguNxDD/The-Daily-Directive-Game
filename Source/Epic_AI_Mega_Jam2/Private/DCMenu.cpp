@@ -7,6 +7,8 @@
 
 #include "DCAudio.h"
 #include "DCGameState.h"
+#include "GameFramework/PlayerState.h"
+#include "GameFramework/GameStateBase.h"
 #include "DCLanBeacon.h"
 #include "DCOnline.h"
 #include "DCPlayerController.h"
@@ -44,6 +46,29 @@ namespace DCMenuStyle
 	TSharedRef<SWidget> Label(const FString& Text, int32 Size, const FLinearColor& Color)
 	{
 		return SNew(STextBlock).Text(FText::FromString(Text)).Font(Font(Size)).ColorAndOpacity(Color).Justification(ETextJustify::Center).AutoWrapText(false);
+	}
+
+	/** The co-op lobby's crew list (human 17:40): live from the replicated player list every frame, inside the lobby
+	 *  page itself (the HUD roster sat under this opaque menu, so players never saw who had joined). */
+	TSharedRef<SWidget> CrewRoster(ADCPlayerController* PC, int32 Size, const FLinearColor& Color)
+	{
+		const TWeakObjectPtr<ADCPlayerController> Weak(PC);
+		return SNew(STextBlock).Font(Font(Size)).ColorAndOpacity(Color).Justification(ETextJustify::Center)
+			.Text_Lambda([Weak]()
+			{
+				const ADCPlayerController* P = Weak.Get();
+				const AGameStateBase* GS = P && P->GetWorld() ? P->GetWorld()->GetGameState() : nullptr;
+				if (!GS)
+				{
+					return FText::GetEmpty();
+				}
+				FString Lines = FString::Printf(TEXT("CREW %d/4"), GS->PlayerArray.Num());
+				for (const APlayerState* PS : GS->PlayerArray)
+				{
+					Lines += TEXT("\n") + (PS ? PS->GetPlayerName().ToUpper() : FString(TEXT("?")));
+				}
+				return FText::FromString(Lines);
+			});
 	}
 
 	/** Dark-glass buttons (R25, V9.1: no solid yellow plates): a glass fill with a thin edge in the accent colour and
@@ -228,13 +253,15 @@ namespace DCMenu
 				const bool bCode = Online->GetState() == EDCOnlineState::Hosting && !Online->GetCode().IsEmpty() && Online->GetStatus().Contains(Online->GetCode());
 				Column->AddSlot().AutoHeight().HAlign(HAlign_Center).Padding(0, 6)[Label(Online->GetStatus(), bCode ? 30 : 15, Gold)];
 			}
-			Column->AddSlot().AutoHeight().HAlign(HAlign_Center).Padding(0, 6)[Label(TEXT("Players in the lobby are listed below. Start when everyone is in."), 14, Ink)];
+			Column->AddSlot().AutoHeight().HAlign(HAlign_Center).Padding(0, 6)[Label(TEXT("Start when everyone is in."), 14, Ink)];
+			Column->AddSlot().AutoHeight().HAlign(HAlign_Center).Padding(0, 6)[CrewRoster(PC, 20, Gold)];
 			Column->AddSlot().AutoHeight().HAlign(HAlign_Center)[Button(TEXT("START RUN"), Click(&ADCPlayerController::RequestStartRun))];
 			Column->AddSlot().AutoHeight().HAlign(HAlign_Center)[Button(TEXT("QUIT"), Click(&ADCPlayerController::MenuQuit), Ink)];
 		},
 		[&]()
 		{
 			Column->AddSlot().AutoHeight().HAlign(HAlign_Center)[Label(TEXT("CONNECTED. WAITING FOR THE HOST TO START THE RUN..."), 22, Ink)];
+			Column->AddSlot().AutoHeight().HAlign(HAlign_Center).Padding(0, 6)[CrewRoster(PC, 20, Gold)];
 			Column->AddSlot().AutoHeight().HAlign(HAlign_Center)[Button(TEXT("QUIT"), Click(&ADCPlayerController::MenuQuit), Ink)];
 		},
 		[&]()
