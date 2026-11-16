@@ -31,6 +31,8 @@ struct FDCSettingsSave
 	/** R25 tutorial: hints off, the "How to play" page opened once (its button stops shining), hints already shown. */
 	UPROPERTY() bool bHintsOff = false;
 	UPROPERTY() bool bHowToPlaySeen = false;
+	/** The host's first-ever run has started (human 17:37: it opens in Run.FirstRunWeather). New field, default off. */
+	UPROPERTY() bool bFirstRunDone = false;
 	UPROPERTY() TArray<FName> HintsSeen;
 };
 

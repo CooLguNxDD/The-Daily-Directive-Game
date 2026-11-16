@@ -331,7 +331,10 @@ void ADCEnvironment::UpdateWeather(float DeltaSeconds)
 	// Evidence (-dcweather=<Profile>): hold one weather profile for the whole run (look checks of rain, snow, ash).
 	static FString Forced;
 	static const bool bForced = FParse::Value(FCommandLine::Get(), TEXT("dcweather="), Forced);
-	const FDCWeatherProfile* Hold = bForced ? UDCTuning::Get().WeatherProfiles.FindByPredicate([](const FDCWeatherProfile& P) { return P.Id == FName(*Forced); }) : nullptr;
+	// Human 17:37: the host's first-ever run holds its first-run profile over sector 1 (replicated FirstSectorWeather).
+	const FName FirstRun = GS && GS->SectorIndex == 0 ? GS->FirstSectorWeather : NAME_None;
+	const FName HoldId = bForced ? FName(*Forced) : FirstRun;
+	const FDCWeatherProfile* Hold = HoldId.IsNone() ? nullptr : UDCTuning::Get().WeatherProfiles.FindByPredicate([HoldId](const FDCWeatherProfile& P) { return P.Id == HoldId; });
 	if (Hold)
 	{
 		Now.Blend = *Hold;

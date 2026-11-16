@@ -59,6 +59,8 @@ public:
 	/** Server time the sector began: with the run seed it drives the weather arc on every machine (R18). */
 	UPROPERTY(Replicated) float SectorStartTime = 0.f;
 	UPROPERTY(Replicated) int32 RunSeed = 0;
+	/** Host-decided weather profile held over sector 1 (first-ever run, human 17:37); None = the seeded roll. */
+	UPROPERTY(Replicated) FName FirstSectorWeather;
 	/** Server time the current timed phase (draft, final cut, vote) ends. */
 	UPROPERTY(Replicated) float PhaseEndTime = 0.f;
 	UPROPERTY(Replicated) bool bRunFailed = false;

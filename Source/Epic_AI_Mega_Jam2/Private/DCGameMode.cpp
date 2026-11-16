@@ -18,6 +18,7 @@
 #include "DCSupplyPod.h"
 #include "DCCompanion.h"
 #include "DCTuning.h"
+#include "DCSave.h"
 #include "DCUpgrades.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
@@ -360,6 +361,17 @@ void ADCGameMode::EnterSector(float Now)
 	BuildCity(GS->SectorIndex);
 	RollFactions();
 	StartObjective();
+	// Human 17:37: the host's first-ever run opens in Run.FirstRunWeather (save flag set as it starts); never in demo,
+	// pilot or gate runs, so seeds and evidence stay reproducible. Clients get it through FirstSectorWeather.
+	UDCSaveSubsystem* Save = GS->SectorIndex == 0 ? UDCSaveSubsystem::Get(this) : nullptr;
+	const bool bScripted = FParse::Param(FCommandLine::Get(), TEXT("dcdemo")) || FParse::Param(FCommandLine::Get(), TEXT("dcsmoke")) || FString(FCommandLine::Get()).Contains(TEXT("-dcseed="));
+	if (Save && !Save->Settings.bFirstRunDone && !bScripted && !T.Run.FirstRunWeather.IsNone())
+	{
+		GS->FirstSectorWeather = T.Run.FirstRunWeather;
+		Save->Settings.bFirstRunDone = true;
+		Save->SaveSettings();
+		UE_LOG(LogTemp, Display, TEXT("DCWEATHER first run: sector 1 holds %s"), *T.Run.FirstRunWeather.ToString());
+	}
 	if (GS->SectorIndex == 0)
 	{
 		// R9: the crew's lives for the whole run, dealt by crew size at the first sector.

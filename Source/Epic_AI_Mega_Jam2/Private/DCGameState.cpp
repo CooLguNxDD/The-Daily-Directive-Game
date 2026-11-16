@@ -65,6 +65,7 @@ void ADCGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLife
 	DOREPLIFETIME(ADCGameState, QuotaResults);
 	DOREPLIFETIME(ADCGameState, TowerHealthLeft);
 	DOREPLIFETIME(ADCGameState, TowerHealthBuild);
+	DOREPLIFETIME(ADCGameState, FirstSectorWeather);
 	DOREPLIFETIME(ADCGameState, Collapses);
 	DOREPLIFETIME(ADCGameState, Scoop);
 	DOREPLIFETIME(ADCGameState, Mutators);

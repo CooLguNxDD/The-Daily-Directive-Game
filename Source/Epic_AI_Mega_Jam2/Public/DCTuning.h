@@ -912,6 +912,9 @@ struct FDCRunTuning
 	UPROPERTY(EditAnywhere, Config, Category = "Run") float VolumeStep = 0.05f;
 	/** HDR OUTPUT setting (human 16:52): the display nits passed to EnableHDRDisplayOutput, and the row's labels. */
 	UPROPERTY(EditAnywhere, Config, Category = "Run") int32 HdrDisplayNits = 1000;
+	/** Human 17:37: the host's first-ever run holds this +WeatherProfiles id over sector 1 (None = off). Never with
+	 *  -dcdemo or -dcseed (evidence and gate runs stay reproducible). */
+	UPROPERTY(EditAnywhere, Config, Category = "Run") FName FirstRunWeather = TEXT("Snow");
 	UPROPERTY(EditAnywhere, Config, Category = "Run") FString HdrOnLabel = TEXT("ON");
 	UPROPERTY(EditAnywhere, Config, Category = "Run") FString HdrOffLabel = TEXT("OFF");
 	UPROPERTY(EditAnywhere, Config, Category = "Run") FString HdrUnsupportedLabel = TEXT("NOT SUPPORTED ON THIS DISPLAY");
