@@ -70,6 +70,8 @@ Unreal Engine 5.9 jam game. Engine: `L:/unreal/UE_5.9` (registered source build,
 - More cards (h-cards2, data only): each new card is a `+Upgrades` row on an existing effect; a new strike also needs a
   `+Stratagems` row (`bStartsUnlocked=False`) and its own `+Carves` row (test `Content.Strikes`); art `T_Card_<name>`
   from `Content/DC/Art/Source/card-<name>.png` through the `TEXTURES` table of `tools/content/build_content.py`.
+  Companion/Deploy cards also need a `+Companions` row and a call-in `Card` entry (copy `DroneCall`/`SentryCall`), a
+  LastStand card a `bStatus` entry (copy `DeadMansArmed`); `CompanionPoolMax` covers every companion kind x 4 players.
 
 ## Weapon chips (R24, final run)
 - Every weapon hit wears the city (advisor a-37): `+Weapons` rows carry `ChipDamage`, `ChipRadiusCm`, `ChipsPerSecond`;
