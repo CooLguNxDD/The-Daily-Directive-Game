@@ -64,6 +64,7 @@ void ADCGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLife
 	DOREPLIFETIME(ADCGameState, SectorPhotoPoints);
 	DOREPLIFETIME(ADCGameState, QuotaResults);
 	DOREPLIFETIME(ADCGameState, TowerHealthLeft);
+	DOREPLIFETIME(ADCGameState, TowerHealthBuild);
 	DOREPLIFETIME(ADCGameState, Collapses);
 	DOREPLIFETIME(ADCGameState, Scoop);
 	DOREPLIFETIME(ADCGameState, Mutators);
@@ -161,6 +162,7 @@ TArray<int32> ADCGameState::HostStrikeTowers(const FVector& Center, float BlastR
 	if (HostTowerBuild != CityBuildId)
 	{
 		HostTowerBuild = CityBuildId;
+		TowerHealthBuild = CityBuildId;
 		HostTowerDamage.Reset();
 		HostTowerHealth.Reset();
 		TowerHealthLeft.Reset();

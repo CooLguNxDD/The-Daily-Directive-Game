@@ -70,6 +70,8 @@ public:
 	UPROPERTY(Replicated) TArray<bool> QuotaResults;
 	/** Building HP (human 16:32): health left per lot (0..1, index = lot) for the HUD bars; host-written. */
 	UPROPERTY(Replicated) TArray<float> TowerHealthLeft;
+	/** The city build TowerHealthLeft belongs to: a new sector's towers read full until its first strike. */
+	UPROPERTY(Replicated) int32 TowerHealthBuild = -1;
 	/** Host: a strike of Damage at Center (world) with BlastRadius: adds its structural damage to every standing tower
 	 *  in reach and returns the standing lots still under their health (the op's HoldLots). */
 	TArray<int32> HostStrikeTowers(const FVector& Center, float BlastRadius, float Damage);

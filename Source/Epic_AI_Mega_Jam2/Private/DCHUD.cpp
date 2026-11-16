@@ -1069,7 +1069,8 @@ void ADCHUD::DrawTowerHealth(ADCGameState& GS, const ADCObjective& O)
 			continue;
 		}
 		const int32 Lot = Tower->GetLotIndex();
-		const float Left = GS.TowerHealthLeft.IsValidIndex(Lot) ? GS.TowerHealthLeft[Lot] : 1.f;
+		const bool bThisCity = GS.TowerHealthBuild == GS.CityBuildId; // a new sector's ledger starts at its first strike
+		const float Left = bThisCity && GS.TowerHealthLeft.IsValidIndex(Lot) ? GS.TowerHealthLeft[Lot] : 1.f;
 		const FDCBuildingSpec& S = Tower->GetSpec();
 		const FVector Top = Tower->GetCenter() + FVector(0, 0, S.Floors * S.BlockSize * 0.5f + 300.f);
 		const FVector P = Project(Top, false);
