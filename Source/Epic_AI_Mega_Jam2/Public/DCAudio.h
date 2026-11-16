@@ -91,4 +91,6 @@ namespace DCAudio
 	EPIC_AI_MEGA_JAM2_API TArray<int16> Render(FName Cue);
 	/** A seamless looping wave of a synth recipe (the whole render requeued on underflow); null when the recipe is unknown. */
 	EPIC_AI_MEGA_JAM2_API class USoundWaveProcedural* MakeLoop(UObject* Outer, FName Recipe);
+	/** One loop cycle of a synth recipe in seconds (the playlist timer; the wave itself loops forever). */
+	EPIC_AI_MEGA_JAM2_API float LoopSeconds(FName Recipe);
 }

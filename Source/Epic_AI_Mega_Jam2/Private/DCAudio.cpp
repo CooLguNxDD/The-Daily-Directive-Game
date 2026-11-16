@@ -291,9 +291,9 @@ namespace DCAudio
 		return Data ? RenderData(*Data) : TArray<int16>();
 	}
 
-	USoundWaveProcedural* MakeLoop(UObject* Outer, FName Recipe)
+	/** One loop cycle of a synth recipe, rendered once per recipe (a fresh wave per music deck reuses the bytes). */
+	TSharedPtr<TArray<uint8>> RenderedLoop(FName Recipe)
 	{
-		// Rendered once per recipe (a fresh wave per music deck reuses the bytes; human 16:00).
 		static TMap<FName, TSharedPtr<TArray<uint8>>> Rendered;
 		TSharedPtr<TArray<uint8>> Loop = Rendered.FindRef(Recipe);
 		if (!Loop.IsValid())
@@ -308,10 +308,28 @@ namespace DCAudio
 			FMemory::Memcpy(Loop->GetData(), Samples.GetData(), Loop->Num());
 			Rendered.Add(Recipe, Loop);
 		}
+		return Loop;
+	}
+
+	float LoopSeconds(FName Recipe)
+	{
+		const TSharedPtr<TArray<uint8>> Loop = RenderedLoop(Recipe);
+		return Loop.IsValid() ? Loop->Num() / (2.f * UDCAudioSubsystem::SampleRate) : 0.f;
+	}
+
+	USoundWaveProcedural* MakeLoop(UObject* Outer, FName Recipe)
+	{
+		const TSharedPtr<TArray<uint8>> Loop = RenderedLoop(Recipe);
+		if (!Loop.IsValid())
+		{
+			return nullptr;
+		}
 		USoundWaveProcedural* Wave = NewObject<USoundWaveProcedural>(Outer);
 		Wave->SetSampleRate(UDCAudioSubsystem::SampleRate);
 		Wave->NumChannels = 1;
-		Wave->Duration = Loop->Num() / (2.f * UDCAudioSubsystem::SampleRate); // one loop cycle, for playlists
+		// Ship blocker (human 18:05): a finite Duration made the mixer stop the sound after one 16 s cycle before the
+		// underflow requeue ran. The wave loops forever; playlists read the cycle from LoopSeconds(recipe).
+		Wave->Duration = INDEFINITELY_LOOPING_DURATION;
 		Wave->bLooping = true;
 		Wave->OnSoundWaveProceduralUnderflow.BindLambda([Loop](USoundWaveProcedural* W, int32 /*SamplesRequired*/)
 		{

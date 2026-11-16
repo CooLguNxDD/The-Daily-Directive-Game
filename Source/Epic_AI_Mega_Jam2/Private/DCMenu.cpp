@@ -330,8 +330,10 @@ namespace DCMenu
 						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[SNew(SBox).WidthOverride(300.f)[Label(FString::Printf(TEXT("%s: %s"), R.Value, *PC->SettingsValue(Id)), 20, Ink)]]
 						+ SHorizontalBox::Slot().AutoWidth()[SNew(SBox).WidthOverride(70.f).HeightOverride(52.f)[Button(TEXT(">"), Stepper(1))]]];
 			}
-			// Keys: click a row, then press the new key (Esc cancels).
-			Column->AddSlot().AutoHeight().HAlign(HAlign_Center).Padding(0, 10, 0, 4)[Label(TEXT("KEYS (CLICK, THEN PRESS A KEY)"), 14, Ink)];
+			// Keys: click a row, then press the new key (Esc cancels). Human 18:02: no rows in the shipped data (Run
+			// RebindableActions empty): the fixed controls are on the How to play page; the code stays for later.
+			const bool bKeyRows = UDCTuning::Get().Run.RebindableActions.Num() > 0;
+			Column->AddSlot().AutoHeight().HAlign(HAlign_Center).Padding(0, 10, 0, 4)[bKeyRows ? Label(TEXT("KEYS (CLICK, THEN PRESS A KEY)"), 14, Ink) : SNullWidget::NullWidget];
 			TSharedRef<SUniformGridPanel> Keys = SNew(SUniformGridPanel).SlotPadding(FMargin(3.f));
 			int32 Cell = 0;
 			for (const FName& Action : UDCTuning::Get().Run.RebindableActions)
@@ -343,7 +345,7 @@ namespace DCMenu
 				++Cell;
 			}
 			Column->AddSlot().AutoHeight().HAlign(HAlign_Center)[Keys];
-			Column->AddSlot().AutoHeight().HAlign(HAlign_Center).Padding(0, 4, 0, 0)[SNew(SBox).WidthOverride(260.f)[Button(TEXT("RESET KEYS"), Click(&ADCPlayerController::ResetKeys))]];
+			Column->AddSlot().AutoHeight().HAlign(HAlign_Center).Padding(0, 4, 0, 0)[bKeyRows ? StaticCastSharedRef<SWidget>(SNew(SBox).WidthOverride(260.f)[Button(TEXT("RESET KEYS"), Click(&ADCPlayerController::ResetKeys))]) : SNullWidget::NullWidget];
 			Column->AddSlot().AutoHeight().HAlign(HAlign_Center).Padding(0, 10, 0, 0)[Button(TEXT("BACK"), Click(&ADCPlayerController::CloseSettings), Ink)];
 		},
 		[&]()

@@ -338,6 +338,12 @@ float UDCMusicSubsystem::TrackLevel(FName Track) const
 
 float UDCMusicSubsystem::TrackSeconds(FName Track) const
 {
+	// A synth track loops forever: its playlist length is one rendered cycle (human 18:05).
+	const FDCMusicTrack* Row = UDCTuning::Get().FindMusicTrack(Track);
+	if (Row && !Row->Synth.IsNone())
+	{
+		return DCAudio::LoopSeconds(Row->Synth);
+	}
 	const USoundWave* Wave = Cast<USoundWave>(Sounds.FindRef(Track));
 	return Wave ? Wave->Duration : 0.f; // GetDuration() reports "forever" for a looping wave
 }
