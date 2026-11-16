@@ -62,6 +62,11 @@ Unreal Engine 5.9 jam game. Engine: `L:/unreal/UE_5.9` (registered source build,
   one pooled actor `ADCCompanion` (`DCCompanion.cpp`, pool `UDCCompanions`, `CompanionPrewarm`/`CompanionPoolMax`):
   host targets and damages, every machine places its copy from the replicated owner/anchor, shots multicast.
   Models `tools/voxel-forge/recipes/companion_{drone,sentry}.vfr`. Logs: `DCCOMPANION`, `DCREINFORCE`, `DCLASTSTAND`.
+- Call-in list (human 15:58): a card the player uses has `CallIn=` (None | Active | Status, registry in
+  `DCUpgrades.cpp`) and `CallStratagem=`, a `+Stratagems` row with `Effect="Card"`, `Card=<upgrade id>` (`bStatus`,
+  `CallRangeCm`). Active cards get Count charges per sector, spent by the entry (GameMode call effect `Card` ->
+  `DCUpgrades::CallCard` -> the effect's `Call` hook); charges replicate (`ADCPlayerState::CardCharges`). Passive cards
+  draw as icons on quest tracker row 3. Test `Content.Strikes` pins the contract; evidence `-dccallin`, logs `DCCALLIN`.
 - More cards (h-cards2, data only): each new card is a `+Upgrades` row on an existing effect; a new strike also needs a
   `+Stratagems` row (`bStartsUnlocked=False`) and its own `+Carves` row (test `Content.Strikes`); art `T_Card_<name>`
   from `Content/DC/Art/Source/card-<name>.png` through the `TEXTURES` table of `tools/content/build_content.py`.

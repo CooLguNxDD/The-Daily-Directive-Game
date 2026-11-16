@@ -595,6 +595,7 @@ UMaterialInterface* ADCVoxelCity::VoxelMaterialFor(int32 VoxelCm)
 	Mid->SetScalarParameterValue(TEXT("EdgeWidth"), Tn.VoxelEdgeWidth);
 	Mid->SetScalarParameterValue(TEXT("EdgeDark"), Tn.VoxelEdgeDark);
 	Mid->SetScalarParameterValue(TEXT("Jitter"), Tn.VoxelJitter);
+	Mid->SetScalarParameterValue(TEXT("GlowScale"), Tn.VoxelMaterialGlowScale); // lit voxels (neon, windows): HDR look (human 16:52)
 	Mid->SetScalarParameterValue(TEXT("Wetness"), Wetness);
 	// Ground roughness (human 15:30): puddle patches gloss, asphalt between them stays rough (data, FDCVoxelTuning).
 	const TPair<const TCHAR*, float> Ground[] = {{TEXT("GroundPuddleScaleCm"), Tn.GroundPuddleScaleCm}, {TEXT("GroundPuddleFineCm"), Tn.GroundPuddleFineCm},

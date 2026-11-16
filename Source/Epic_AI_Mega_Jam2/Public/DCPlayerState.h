@@ -62,6 +62,12 @@ public:
 
 	/** R22 host-only charges per owned card id (turret deploys, last stands), dealt at each sector start. */
 	TMap<FName, int32> HostCardCharges;
+	/** Host: mirror HostCardCharges into the replicated list the HUD's call-in entries read (after every change). */
+	void SyncCardCharges();
+	/** Charges left on an owned card on any machine (the replicated mirror); 0 when the card has none. */
+	int32 CardCharges(FName CardId) const;
+	UPROPERTY(Replicated) TArray<FName> CardChargeIds;
+	UPROPERTY(Replicated) TArray<int32> CardChargeLeft;
 
 	/** Host: the press call sign every screen shows (R8). The engine's player name (the PC's network name on LAN
 	 *  or online subsystems) is never shown: GetPlayerName() returns this through GetPlayerNameCustom. */

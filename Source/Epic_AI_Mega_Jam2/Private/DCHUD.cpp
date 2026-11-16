@@ -2,6 +2,7 @@
 #include "DCFrameScopes.h"
 #include "Rules/DCFactionRules.h"
 #include "DCObjective.h"
+#include "DCBuilding.h"
 #include "DCEnemy.h"
 #include "EngineUtils.h"
 #include "DCFonts.h"
@@ -219,6 +220,7 @@ void ADCHUD::DrawSector(ADCGameState& GS, ADCCharacter* Me)
 	DrawObjective(GS, *Me);
 	DrawTerritory(GS, *Me);
 	DrawScoop(GS);
+	DrawPassiveCards(GS, *Me);
 	DrawHurt(*Me);
 	if (ADCPlayerController* PC = Cast<ADCPlayerController>(PlayerOwner))
 	{
@@ -391,15 +393,20 @@ void ADCHUD::DrawStrikeInfo(ADCCharacter& Me)
 			continue;
 		}
 		const float Ready = PS->CooldownReadyTime(Id) - GS->Now();
-		const bool bSel = Id == Me.GetSelectedStratagem();
-		const bool bAfford = PS->Points >= Def->Cost;
-		FString Line = FString::Printf(TEXT("%s %s  %s"), bSel ? TEXT(">") : TEXT(" "), *Def->DisplayName.ToString().ToUpper(), Def->Cost > 0 ? *FString::Printf(TEXT("%d PP"), Def->Cost) : TEXT("FREE"));
+		const bool bSel = Id == Me.GetSelectedStratagem() && !Def->bStatus;
+		// Card entries (human 15:58) price in charges: xN, grey at 0; a status entry reads ARMED while held.
+		const int32 Charges = PS->CardCharges(Def->Card);
+		const bool bCard = !Def->Card.IsNone();
+		const bool bAfford = bCard ? Charges > 0 : PS->Points >= Def->Cost;
+		const FString Price = !bCard ? (Def->Cost > 0 ? FString::Printf(TEXT("%d PP"), Def->Cost) : FString(TEXT("FREE")))
+			: Def->bStatus ? FString(Charges > 0 ? TEXT("ARMED") : TEXT("SPENT")) : FString::Printf(TEXT("x%d"), Charges);
+		FString Line = FString::Printf(TEXT("%s %s  %s"), bSel ? TEXT(">") : TEXT(" "), *Def->DisplayName.ToString().ToUpper(), *Price);
 		Line += Ready > 0.f ? FString::Printf(TEXT("  [%.0fs]"), Ready) : TEXT("");
 		if (bSel)
 		{
 			Box(X - Sx(6.f), Y - Sx(1.f), Sx(450.f), Sx(25.f), bAfford && Ready <= 0.f ? Gold : FLinearColor(Red.R, Red.G, Red.B, 0.25f));
 		}
-		Text(Line, X, Y, bSel ? (bAfford && Ready <= 0.f ? Night : Ink) : FLinearColor(Ink.R, Ink.G, Ink.B, 0.6f), 0.65f);
+		Text(Line, X, Y, bSel ? (bAfford && Ready <= 0.f ? Night : Ink) : FLinearColor(Ink.R, Ink.G, Ink.B, bCard && !bAfford ? 0.3f : 0.6f), 0.65f);
 		Y += Sx(26.f);
 	}
 	Text(TEXT("LMB CALL   Q / WHEEL SWITCH"), X, Y + Sx(6.f), FLinearColor(Ink.R, Ink.G, Ink.B, 0.7f), 0.55f);
@@ -972,6 +979,7 @@ void ADCHUD::DrawObjective(ADCGameState& GS, ADCCharacter& Me)
 	Box(X - Sx(4.f), Y, Sx(4.f), Sx(44.f), Gold);
 	Text(TEXT("HQ ORDER  <>"), X + Sx(8.f), Y, FLinearColor(1.f, 1.f, 1.f, 0.7f), 0.5f);
 	Text(Line ? *Line : FString(), X + Sx(8.f), Y + Sx(16.f), O->Stage == EDCObjectiveStage::Failed ? Red : Gold, Q.QuestTextScale + 0.1f);
+	DrawTowerHealth(GS, *O);
 	FVector At;
 	if (!O->Waypoint(Me.GetActorLocation(), At))
 	{
@@ -995,6 +1003,84 @@ void ADCHUD::DrawObjective(ADCGameState& GS, ADCCharacter& Me)
 	DrawLine(P.X + R, P.Y, P.X, P.Y + R, C, 3.f);
 	DrawLine(P.X, P.Y + R, P.X - R, P.Y, C, 3.f);
 	Text(FString::Printf(TEXT("%.0f M"), FVector::Dist2D(Me.GetActorLocation(), At) / 100.f), P.X, P.Y + R + Sx(4.f), C, 0.55f, true);
+}
+
+void ADCHUD::DrawPassiveCards(ADCGameState& GS, ADCCharacter& Me)
+{
+	// Quest tracker row 3 (human 15:58): passive cards (gear, mutators: CallIn None and no strike of their own) as small
+	// icons; cards the player uses sit in the call-in list instead.
+	const ADCPlayerState* PS = Me.GetPlayerState<ADCPlayerState>();
+	if (!PS)
+	{
+		return;
+	}
+	const UDCTuning& T = UDCTuning::Get();
+	TArray<FName> Ids;
+	for (const FName& Id : PS->Upgrades)
+	{
+		const FDCUpgradeDef* Def = T.FindUpgrade(Id);
+		if (Def && Def->CallIn.IsNone() && Def->Unlock.IsNone())
+		{
+			Ids.AddUnique(Id);
+		}
+	}
+	for (const FName& Id : GS.Mutators)
+	{
+		Ids.AddUnique(Id);
+	}
+	const FDCLookTuning& Q = T.Look;
+	const float S = Sx(Q.PassiveIconSize), Gap = Sx(Q.PassiveIconGap);
+	float X = Sx(Q.QuestTrackerX);
+	const float Y = Sx(Q.QuestTrackerY + 2.f * Q.QuestRowGap);
+	for (const FName& Id : Ids)
+	{
+		const TObjectPtr<UTexture2D>* Icon = CardIcons.Find(Id);
+		if (!Icon || !*Icon)
+		{
+			continue;
+		}
+		Box(X - Sx(2.f), Y - Sx(2.f), S + Sx(4.f), S + Sx(4.f), Ink);
+		DrawTexture(*Icon, X, Y, S, S, 0.f, 0.f, 1.f, 1.f, FLinearColor::White, BLEND_Opaque);
+		X += S + Gap;
+	}
+}
+
+void ADCHUD::DrawTowerHealth(ADCGameState& GS, const ADCObjective& O)
+{
+	// Building HP (human 16:32): a thin bar over every HQ-marked tower still standing, from the host's replicated
+	// health left (the tower is the building nearest the marker, found on this machine).
+	for (int32 i = 0; i < O.TargetAt.Num(); ++i)
+	{
+		if (O.TargetDown.IsValidIndex(i) && O.TargetDown[i])
+		{
+			continue;
+		}
+		const FVector Mark = O.TargetAt[i];
+		const ADCBuilding* Tower = nullptr;
+		float Best = TNumericLimits<float>::Max();
+		for (const ADCBuilding* B : TActorRange<ADCBuilding>(GetWorld()))
+		{
+			const float D = FVector::Dist2D(B->GetCenter(), Mark);
+			Tower = D < Best ? B : Tower;
+			Best = FMath::Min(Best, D);
+		}
+		if (!Tower || Tower->IsCollapsed())
+		{
+			continue;
+		}
+		const int32 Lot = Tower->GetLotIndex();
+		const float Left = GS.TowerHealthLeft.IsValidIndex(Lot) ? GS.TowerHealthLeft[Lot] : 1.f;
+		const FDCBuildingSpec& S = Tower->GetSpec();
+		const FVector Top = Tower->GetCenter() + FVector(0, 0, S.Floors * S.BlockSize * 0.5f + 300.f);
+		const FVector P = Project(Top, false);
+		if (P.Z <= 0.f)
+		{
+			continue;
+		}
+		const float W = Sx(90.f), Hb = Sx(6.f);
+		Box(P.X - W * 0.5f - 1.f, P.Y - 1.f, W + 2.f, Hb + 2.f, FLinearColor(0.f, 0.f, 0.f, 0.7f));
+		Box(P.X - W * 0.5f, P.Y, W * Left, Hb, Left > 0.34f ? Gold : Red);
+	}
 }
 
 void ADCHUD::DrawScoop(ADCGameState& GS)

@@ -234,6 +234,16 @@ struct FDCVoxelTuning
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float FallGravityCm = 2400.f;
 	/** Degrees a toppling piece leans before it breaks apart (cosmetic). */
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float ToppleDegrees = 38.f;
+	/** Building HP (human 16:32, Rules/DCTowerHealth.h): tower health = TowerHealthPerFloor x floors x footprint scale
+	 *  in [TowerHealthMin, TowerHealthMax]; a strike deals its stratagem Damage at the footprint, TowerDamageEdge x
+	 *  Damage at the blast edge. Below its health a struck tower keeps its base (no bite, no topple): holes only. */
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") bool bTowerHealth = true;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float TowerHealthPerFloor = 110.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float TowerHealthMin = 550.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float TowerHealthMax = 2000.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float TowerDamageEdge = 0.6f;
+	/** HQ-marked towers (Destroy objective) have this share of their health, so the order stays doable in time. */
+	UPROPERTY(EditAnywhere, Config, Category = "Voxel") float TowerHealthTargetScale = 0.6f;
 	/** Chunk mesh uploads per frame (time slicing on the game thread; meshing itself runs on worker threads). */
 	UPROPERTY(EditAnywhere, Config, Category = "Voxel") int32 UploadsPerFrame = 24;
 	/** Game-thread milliseconds per frame for cell uploads (merge + mesh section); UploadsPerFrame stays a cap. At
@@ -623,6 +633,9 @@ struct FDCVoxelOp
 	 *  pass after them (the host lists a lot once enough of it was shot away, CenterCm = where the chips came from). */
 	UPROPERTY() TArray<FDCVoxelChip> Chips;
 	UPROPERTY() TArray<int32> StructureLots;
+	/** Kind "Strike" (building HP, human 16:32): standing lots still under their health after this strike; the strike
+	 *  carves them but never bites their base. Decided by the host when the op is planned, replayed as is. */
+	UPROPERTY() TArray<int32> HoldLots;
 	/** Props shot past their break fraction: each entry clears a column of the prop grid (CenterCm X/Y = the prop's
 	 *  foot, CenterCm Z = its top, RadiusCm = its reach) and the prop flies apart as pieces and crumbs. */
 	UPROPERTY() TArray<FDCVoxelChip> BreakProps;

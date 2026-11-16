@@ -118,17 +118,22 @@ void ADCGameMode::StartSmoke()
 {
 	// Packaged-build smoke (-dcsmoke, run by the gate's full tier on the archived exe): the run starts, HQ drops a
 	// laser on a tower, the tower collapses, then the game quits with one DCSMOKE line the gate checks.
+	// Building HP (human 16:32): one laser no longer fells a tower, so HQ lands four lasers on the lowest tower;
+	// the smoke then also proves the health ledger adding up to a fall in the packaged build.
 	FTimerHandle Strike, Verdict;
 	GetWorldTimerManager().SetTimer(Strike, FTimerDelegate::CreateWeakLambda(this, [this]
 	{
 		const FDCStratagemDef* Def = UDCTuning::Get().FindStratagem(TEXT("OrbitalLaser"));
+		ADCBuilding* Low = nullptr;
 		for (ADCBuilding* B : TActorRange<ADCBuilding>(GetWorld()))
 		{
-			if (Def && !B->IsCollapsed())
-			{
-				CallStrike(*Def, B->GetActorLocation(), nullptr);
-				break;
-			}
+			Low = !B->IsCollapsed() && (!Low || B->GetSpec().Floors < Low->GetSpec().Floors) ? B : Low;
+		}
+		for (int32 i = 0; Def && Low && i < 4; ++i)
+		{
+			FTimerHandle Each;
+			const FVector At = Low->GetActorLocation();
+			GetWorldTimerManager().SetTimer(Each, FTimerDelegate::CreateWeakLambda(this, [this, Def, At] { CallStrike(*Def, At, nullptr); }), 0.01f + i * 0.6f, false);
 		}
 	}), 2.f, false);
 	GetWorldTimerManager().SetTimer(Verdict, FTimerDelegate::CreateWeakLambda(this, [this]
@@ -143,7 +148,7 @@ void ADCGameMode::StartSmoke()
 		UE_LOG(LogTemp, Display, TEXT("DCSMOKE %s phase=%d towers=%d blasts=%d collapses=%d players=%d"), bPass ? TEXT("PASS") : TEXT("FAIL"),
 			GS ? static_cast<int32>(GS->Phase) : -1, Towers, GS ? GS->Blasts.Num() : 0, GS ? GS->Collapses.Num() : 0, Players().Num());
 		FGenericPlatformMisc::RequestExit(false);
-	}), 9.f, false);
+	}), 12.f, false);
 }
 
 TArray<ADCPlayerState*> ADCGameMode::Players() const
@@ -477,8 +482,8 @@ void ADCGameMode::TickSectorPhase(float Now)
 	{
 		if (ADCCharacter* C = PS->GetPawn<ADCCharacter>())
 		{
-			C->HostToast(bQuotaMet ? FString::Printf(TEXT("QUOTA MET: %d / %d. HQ IS PLEASED."), GS->SectorPhotoPoints, Quota)
-				: FString::Printf(TEXT("QUOTA MISSED: %d / %d. HQ WITHHOLDS YOUR REQUISITION."), GS->SectorPhotoPoints, Quota));
+			const FString& Toast = bQuotaMet ? T.Run.QuotaMetToast : T.Run.QuotaMissedToast;
+			C->HostToast(Toast.Replace(TEXT("{X}"), *FString::FromInt(GS->SectorPhotoPoints)).Replace(TEXT("{Y}"), *FString::FromInt(Quota)));
 		}
 	}
 	if (!bMore)
@@ -486,14 +491,8 @@ void ADCGameMode::TickSectorPhase(float Now)
 		EnterPhase(EDCRunPhase::Reel);
 		return;
 	}
-	if (bQuotaMet)
-	{
-		EnterPhase(EDCRunPhase::Draft);
-		return;
-	}
-	// Quota missed (R6): no draft, straight into the next sector.
-	GS->SectorIndex += 1;
-	EnterPhase(EDCRunPhase::Sector);
+	// The draft always happens (human 16:28); a missed quota deals the smaller, plainer hand (EnterDraft).
+	EnterPhase(EDCRunPhase::Draft);
 }
 
 void ADCGameMode::TickWaves(float Now)
@@ -718,11 +717,14 @@ void ADCGameMode::EnterDraft(float Now)
 	const UDCTuning& T = UDCTuning::Get();
 	GS->PhaseEndTime = Now + T.Run.DraftSeconds;
 	int32 Index = 0;
+	const bool bMissed = GS->QuotaResults.Num() > 0 && !GS->QuotaResults.Last();
+	const int32 HandSize = bMissed ? T.Run.DraftHandSizeMissed : T.Run.DraftHandSize;
+	const FName MaxRarity = bMissed ? T.Run.DraftMissedMaxRarity : NAME_None;
 	for (ADCPlayerState* PS : Players())
 	{
 		TArray<FName> Taken = PS->Upgrades;
 		Taken.Append(GS->Mutators);
-		PS->DraftOffer = DCRunRules::DraftHand(DCCityRules::SectorSeed(GS->RunSeed, GS->SectorIndex) ^ (++Index * 7919), T.Upgrades, T.CardRarities, Taken, T.Run.DraftHandSize);
+		PS->DraftOffer = DCRunRules::DraftHand(DCCityRules::SectorSeed(GS->RunSeed, GS->SectorIndex) ^ (++Index * 7919), T.Upgrades, T.CardRarities, Taken, HandSize, MaxRarity);
 		UE_LOG(LogTemp, Display, TEXT("DCDRAFT %s dealt %s"), *PS->GetPlayerName(), *FString::JoinBy(PS->DraftOffer, TEXT(","), [&T](FName Id) { const FDCUpgradeDef* D = T.FindUpgrade(Id); return Id.ToString() + TEXT("/") + (D ? D->Rarity.ToString() : FString(TEXT("?"))); }));
 		PS->bDraftDone = PS->DraftOffer.Num() == 0;
 	}
@@ -1479,11 +1481,29 @@ namespace
 		}), FMath::Max(Def.TelegraphSeconds + Def.SupportDelaySeconds, 0.01f), false);
 		return true;
 	}
+	/** Call-in cards (human 15:58): the entry spends a charge of the owned card it names (Def.Card); the aim point is
+	 *  clamped to the entry's CallRangeCm around the caller, then the card's own Call hook places or launches. */
+	bool EffectCard(ADCGameMode& GM, const FDCStratagemDef& Def, const FVector& Target, AController* Caller)
+	{
+		ADCCharacter* Player = Caller ? Cast<ADCCharacter>(Caller->GetPawn()) : nullptr;
+		ADCPlayerState* PS = Caller ? Caller->GetPlayerState<ADCPlayerState>() : nullptr;
+		if (!Player || !PS)
+		{
+			return false;
+		}
+		const FVector From = Player->GetActorLocation();
+		const FVector2D Offset(Target - From);
+		const float Range = Def.CallRangeCm > 0.f ? Def.CallRangeCm : Offset.Size();
+		const FVector2D Clamped = Offset.GetClampedToMaxSize(Range);
+		const FVector At(From.X + Clamped.X, From.Y + Clamped.Y, Target.Z);
+		return DCUpgrades::CallCard(GM, *PS, *Player, Def.Card, At);
+	}
 	const TMap<FName, FCallEffectFn>& CallEffects()
 	{
 		static const TMap<FName, FCallEffectFn> Map = {
 			{TEXT("Supply"), &EffectSupply},
 			{TEXT("Reinforce"), &EffectReinforce},
+			{TEXT("Card"), &EffectCard},
 		};
 		return Map;
 	}

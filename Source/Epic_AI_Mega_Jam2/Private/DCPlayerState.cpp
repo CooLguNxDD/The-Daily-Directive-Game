@@ -38,6 +38,8 @@ void ADCPlayerState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLi
 	DOREPLIFETIME(ADCPlayerState, VotedFor);
 	DOREPLIFETIME(ADCPlayerState, CallSign);
 	DOREPLIFETIME(ADCPlayerState, OutfitCode);
+	DOREPLIFETIME(ADCPlayerState, CardChargeIds);
+	DOREPLIFETIME(ADCPlayerState, CardChargeLeft);
 }
 
 void ADCPlayerState::BeginPlay()
@@ -58,6 +60,24 @@ void ADCPlayerState::BeginPlay()
 			OwnedStratagems.AddUnique(Def.Id);
 		}
 	}
+}
+
+void ADCPlayerState::SyncCardCharges()
+{
+	CardChargeIds.Reset();
+	CardChargeLeft.Reset();
+	for (const TPair<FName, int32>& Pair : HostCardCharges)
+	{
+		CardChargeIds.Add(Pair.Key);
+		CardChargeLeft.Add(Pair.Value);
+	}
+	ForceNetUpdate();
+}
+
+int32 ADCPlayerState::CardCharges(FName CardId) const
+{
+	const int32 Index = CardChargeIds.IndexOfByKey(CardId);
+	return CardChargeLeft.IsValidIndex(Index) ? CardChargeLeft[Index] : 0;
 }
 
 void ADCPlayerState::AddPhoto(const FDCPhotoRecord& Record)

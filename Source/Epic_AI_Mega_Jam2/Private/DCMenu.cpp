@@ -320,7 +320,7 @@ namespace DCMenu
 								.OnMouseCaptureEnd_Lambda([Weak]() { if (ADCPlayerController* P = Weak.Get()) { P->SaveSettingsNow(); } })]]];
 			}
 			for (const TPair<FName, const TCHAR*>& R : {TPair<FName, const TCHAR*>(TEXT("Mouse"), TEXT("MOUSE")),
-				TPair<FName, const TCHAR*>(TEXT("Quality"), TEXT("QUALITY")), TPair<FName, const TCHAR*>(TEXT("Window"), TEXT("WINDOW")), TPair<FName, const TCHAR*>(TEXT("Hints"), TEXT("HINTS"))})
+				TPair<FName, const TCHAR*>(TEXT("Quality"), TEXT("QUALITY")), TPair<FName, const TCHAR*>(TEXT("Window"), TEXT("WINDOW")), TPair<FName, const TCHAR*>(TEXT("Hints"), TEXT("HINTS")), TPair<FName, const TCHAR*>(TEXT("Hdr"), TEXT("HDR OUTPUT"))})
 			{
 				const FName Id = R.Key;
 				auto Stepper = [Weak, Id](int32 D) { return [Weak, Id, D]() { if (ADCPlayerController* P = Weak.Get()) { P->SettingsStep(Id, D); } }; };
@@ -393,10 +393,12 @@ namespace DCMenu
 				KeyArt.DrawAs = ESlateBrushDrawType::Image;
 			}
 		}
+		// The ESC menu (human 16:05) overlays play: a dim veil instead of the paper backdrop and the key art.
+		const bool bOverPlay = PC->IsPauseOpen();
 		TSharedRef<SOverlay> Root = SNew(SOverlay);
 		Root->AddSlot().HAlign(HAlign_Fill).VAlign(VAlign_Fill)
-			[SNew(SBorder).BorderImage(FCoreStyle::Get().GetBrush("WhiteBrush")).BorderBackgroundColor(Paper)];
-		if (KeyArt.GetResourceObject())
+			[SNew(SBorder).BorderImage(FCoreStyle::Get().GetBrush("WhiteBrush")).BorderBackgroundColor(bOverPlay ? FLinearColor(0.f, 0.f, 0.f, 0.45f) : Paper)];
+		if (KeyArt.GetResourceObject() && !bOverPlay)
 		{
 			Root->AddSlot().HAlign(HAlign_Fill).VAlign(VAlign_Fill)[SNew(SScaleBox).Stretch(EStretch::ScaleToFill)[SNew(SImage).Image(&KeyArt)]];
 		}

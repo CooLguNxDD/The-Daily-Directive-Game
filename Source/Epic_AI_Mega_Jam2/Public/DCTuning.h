@@ -248,6 +248,12 @@ struct FDCStratagemDef
 	UPROPERTY(EditAnywhere, Config, Category = "Strike") int32 SupportCount = 0;
 	UPROPERTY(EditAnywhere, Config, Category = "Strike") float SupportSpreadCm = 400.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Strike") float SupportDelaySeconds = 1.6f;
+	/** Call-in cards (human 15:58): the owned +Upgrades card whose charges this list entry spends (Effect="Card"), a
+	 *  status entry that only shows the card is held (bStatus: never selected or called), and the furthest the card's
+	 *  placement may land from the caller (0 = the strike range; the host clamps the aim point to it). */
+	UPROPERTY(EditAnywhere, Config, Category = "Strike") FName Card;
+	UPROPERTY(EditAnywhere, Config, Category = "Strike") bool bStatus = false;
+	UPROPERTY(EditAnywhere, Config, Category = "Strike") float CallRangeCm = 0.f;
 };
 
 USTRUCT(BlueprintType)
@@ -350,6 +356,9 @@ struct FDCLookTuning
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float QuestTrackerY = 104.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float QuestTrackerWidth = 440.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float QuestRowGap = 66.f;
+	/** Passive cards (gear, mutators) as small icons on quest tracker row 3 (human 15:58): icon size and gap. */
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float PassiveIconSize = 34.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float PassiveIconGap = 6.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float QuestTextScale = 0.62f;
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float ScoopFiledSeconds = 3.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float HintCardDraftY = 0.715f;
@@ -605,6 +614,12 @@ struct FDCEnemyDef
 	 *  ShotRange it can see (host voxel sight line), Damage per hit, ShotSpread degrees of miss. */
 	UPROPERTY(EditAnywhere, Config, Category = "Enemy") float ShotRange = 0.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Enemy") float ShotSpread = 2.f;
+	/** Big-machine ranged shot (Walker, human 16:25): 0 = none. Every AttackInterval, a crew member in sight within
+	 *  RangedRangeCm makes the unit stop and charge for ChargeSeconds (LaserCharge cue, red sight line from its eye to a
+	 *  fixed point), then a beam and a blast of ShotBlastCm land there: Damage to every crew member inside. */
+	UPROPERTY(EditAnywhere, Config, Category = "Enemy") float RangedRangeCm = 0.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Enemy") float ChargeSeconds = 1.2f;
+	UPROPERTY(EditAnywhere, Config, Category = "Enemy") float ShotBlastCm = 300.f;
 	/** Hit and run: a foe closer than this makes the unit back off while it keeps firing (0 = holds its ground). */
 	UPROPERTY(EditAnywhere, Config, Category = "Enemy") float KiteCm = 0.f;
 	/** A sound every machine hears from the unit every IdleCueSeconds (+-40 %, staggered per unit); None = silent. */
@@ -790,6 +805,11 @@ struct FDCUpgradeDef
 	/** Toasts to the owner: at sector start and when the card acts. {N} = charges left. Empty = none. */
 	UPROPERTY(EditAnywhere, Config, Category = "Run") FString ReadyToast;
 	UPROPERTY(EditAnywhere, Config, Category = "Run") FString UseToast;
+	/** Call-in list (human 15:58), by id in DCUpgrades' call-in registry: None = passive (a small icon under the quest
+	 *  tracker), Active = the CallStratagem entry in the strike list spends this card's charges (dealt Count per sector),
+	 *  Status = the CallStratagem entry only shows that the card is held. */
+	UPROPERTY(EditAnywhere, Config, Category = "Run") FName CallIn;
+	UPROPERTY(EditAnywhere, Config, Category = "Run") FName CallStratagem;
 };
 
 /** An HQ Scoop template (R8): a photo condition with a time limit. */
@@ -872,6 +892,14 @@ struct FDCRunTuning
 	UPROPERTY(EditAnywhere, Config, Category = "Run") float DraftSeconds = 25.f;
 	/** R21: cards dealt per draft hand (from every pool, rarity-weighted). */
 	UPROPERTY(EditAnywhere, Config, Category = "Run") int32 DraftHandSize = 3;
+	/** Human 16:28: a missed quota still drafts, from a smaller hand capped at this +CardRarities id (rarity table
+	 *  order: rows after it are never dealt), under its own header. Toasts: {X} = sector photo points, {Y} = quota. */
+	UPROPERTY(EditAnywhere, Config, Category = "Run") int32 DraftHandSizeMissed = 2;
+	UPROPERTY(EditAnywhere, Config, Category = "Run") FName DraftMissedMaxRarity = TEXT("Common");
+	UPROPERTY(EditAnywhere, Config, Category = "Run") FString DraftHeader = TEXT("HQ REQUISITION: DRAFT ONE UPGRADE");
+	UPROPERTY(EditAnywhere, Config, Category = "Run") FString DraftHeaderMissed = TEXT("QUOTA MISSED: HQ SENDS THE LEFTOVERS");
+	UPROPERTY(EditAnywhere, Config, Category = "Run") FString QuotaMetToast = TEXT("QUOTA MET: {X} / {Y}. HQ IS PLEASED.");
+	UPROPERTY(EditAnywhere, Config, Category = "Run") FString QuotaMissedToast = TEXT("QUOTA MISSED: {X} / {Y}. REDUCED REQUISITION.");
 	/** R25 hints: trigger poll rate, the ranges their triggers read, and the key that dismisses a card. */
 	UPROPERTY(EditAnywhere, Config, Category = "Run") float HintPollSeconds = 0.25f;
 	UPROPERTY(EditAnywhere, Config, Category = "Run") float HintEnemyRangeCm = 4500.f;
@@ -882,6 +910,11 @@ struct FDCRunTuning
 	UPROPERTY(EditAnywhere, Config, Category = "Run") float HintAfterCardSeconds = 2.5f;
 	/** Settings volume sliders (Master, Music, SFX): the slider step (0..1). */
 	UPROPERTY(EditAnywhere, Config, Category = "Run") float VolumeStep = 0.05f;
+	/** HDR OUTPUT setting (human 16:52): the display nits passed to EnableHDRDisplayOutput, and the row's labels. */
+	UPROPERTY(EditAnywhere, Config, Category = "Run") int32 HdrDisplayNits = 1000;
+	UPROPERTY(EditAnywhere, Config, Category = "Run") FString HdrOnLabel = TEXT("ON");
+	UPROPERTY(EditAnywhere, Config, Category = "Run") FString HdrOffLabel = TEXT("OFF");
+	UPROPERTY(EditAnywhere, Config, Category = "Run") FString HdrUnsupportedLabel = TEXT("NOT SUPPORTED ON THIS DISPLAY");
 	/** R1 frame time (advisor a-33): -dcperf logs a DCSPIKE line with its frame-scope owners for any frame longer than this (ms; 33 = a frame under 30 fps). */
 	UPROPERTY(EditAnywhere, Config, Category = "Run") float PerfSpikeMs = 33.f;
 	/** Solo (R12): how long a downed player has to finish the self-revive hold before the run fails. */

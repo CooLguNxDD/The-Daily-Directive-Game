@@ -63,6 +63,11 @@ public:
 	ADCCharacter* FindTarget(float Range, bool bPreferPhotographers) const;
 	void SteerTowards(const FVector& Goal, float Speed, float DeltaSeconds, float Hover);
 	void TryAttack(ADCCharacter* Target, float Now);
+	/** Host, big-machine ranged shot (RangedRangeCm rows): starts a charge on a crew member in sight, fires when it ends.
+	 *  True while charging (the unit holds still). */
+	bool HostTickRanged(const FDCEnemyDef& Def, ADCCharacter* Target, float Now);
+	/** Any machine: the charge sight line is up (evidence frames). */
+	bool IsRangedCharging() const;
 	/** Host: a sound every machine hears at this enemy. */
 	void Cue(FName CueName) { MulticastCue(CueName); }
 	/** Host: Strobe Flash gear stuns the enemy until this server time. */
@@ -96,6 +101,18 @@ private:
 	UFUNCTION(NetMulticast, Unreliable) void MulticastCue(FName Cue);
 	/** Every machine draws the shot's tracer in the faction's cue colour. */
 	UFUNCTION(NetMulticast, Unreliable) void MulticastShot(FVector_NetQuantize From, FVector_NetQuantize To);
+	/** Ranged charge and shot (every machine): the sight line and cue, then the beam and the blast. */
+	UFUNCTION(NetMulticast, Reliable) void MulticastRangedCharge(FVector_NetQuantize From, FVector_NetQuantize To, float Seconds);
+	UFUNCTION(NetMulticast, Reliable) void MulticastRangedFire(FVector_NetQuantize From, FVector_NetQuantize To, float BlastCm);
+	void HostRangedFire(const FDCEnemyDef& Def, float Now);
+	/** Local: redraw the charge sight line while it lasts. */
+	void TickRangedLine(const FDCEnemyDef& Def);
+	float RangedChargeEnd = -1.f; // host server time
+	FVector RangedAt = FVector::ZeroVector;
+	FVector ChargeLineFrom = FVector::ZeroVector;
+	FVector ChargeLineTo = FVector::ZeroVector;
+	double ChargeLineEndReal = -1.0;
+	double NextChargeLineReal = 0.0;
 	/** Gait read for rigid voxel models (local, every machine): bob and sway while the actor moves. */
 	void TickGait(float DeltaSeconds);
 	/** The rigid bob and sway for units without a gait row (before R20). */

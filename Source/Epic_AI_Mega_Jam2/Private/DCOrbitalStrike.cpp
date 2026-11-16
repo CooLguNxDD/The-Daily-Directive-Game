@@ -409,6 +409,7 @@ void ADCOrbitalStrike::QueueVoxelOp(const FDCStratagemDef& Def)
 	Op.Stratagem = Def.Id;
 	Op.CenterCm = DCVoxelMath::ToCm(FVector(Here.X, Here.Y, 0.f));
 	Op.BlastRadiusCm = FMath::RoundToInt32(Def.BlastRadius);
+	Op.HoldLots = GS->HostStrikeTowers(Here, Def.BlastRadius, Def.Damage); // building HP: under-health towers keep their base
 	const int32 Seq = GS->AddVoxelOp(Op, FMath::Max(DetonateTime, GS->Now())).Seq;
 	TWeakObjectPtr<ADCGameState> WeakGS(GS);
 	const FVector Epicenter = Here;

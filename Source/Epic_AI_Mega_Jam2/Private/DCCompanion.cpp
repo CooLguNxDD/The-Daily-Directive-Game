@@ -331,7 +331,7 @@ int32 UDCCompanions::HostLaunchOrbiters(ADCPlayerState& Owner, const FDCCompanio
 	return Up;
 }
 
-bool UDCCompanions::HostDeploy(ADCCharacter& Player, ADCPlayerState& Owner, const FDCCompanionDef& Def)
+bool UDCCompanions::HostDeploy(ADCCharacter& Player, ADCPlayerState& Owner, const FDCCompanionDef& Def, const FVector* Called)
 {
 	UWorld* World = GetWorld();
 	const FVector Centre = Player.GetActorLocation();
@@ -344,7 +344,7 @@ bool UDCCompanions::HostDeploy(ADCCharacter& Player, ADCPlayerState& Owner, cons
 		}
 	}
 	const float FeetZ = Centre.Z - Player.GetSimpleCollisionHalfHeight();
-	const FVector Aim = DCCompanionRules::PlaceAim(Def, FVector(Centre.X, Centre.Y, FeetZ), Player.GetControlRotation().Vector());
+	const FVector Aim = Called ? *Called : DCCompanionRules::PlaceAim(Def, FVector(Centre.X, Centre.Y, FeetZ), Player.GetControlRotation().Vector());
 	FHitResult Hit;
 	FCollisionQueryParams Params(SCENE_QUERY_STAT(DCCompanionDeploy), false, &Player);
 	const FVector Top = Aim + FVector(0, 0, Def.MaxStepCm + 50.f);

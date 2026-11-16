@@ -86,7 +86,9 @@ public:
 	int32 HostLaunchOrbiters(ADCPlayerState& Owner, const FDCCompanionDef& Def, int32 Count);
 	/** Host: set a Fixed companion down ahead of the player when the ground there is valid (the oldest of the owner
 	 *  is recalled past MaxAlive). False (nothing placed) on bad ground, near a downed teammate, or a full pool. */
-	bool HostDeploy(ADCCharacter& Player, ADCPlayerState& Owner, const FDCCompanionDef& Def);
+	/** Called = the call-in list's aim point (already clamped to the entry's range); null = ahead of the player (Interact).
+	 *  Same placement rules either way: ground under the spot within MaxStepCm, clear line from the player. */
+	bool HostDeploy(ADCCharacter& Player, ADCPlayerState& Owner, const FDCCompanionDef& Def, const FVector* Called = nullptr);
 
 private:
 	UPROPERTY() TArray<TObjectPtr<ADCCompanion>> Pool;

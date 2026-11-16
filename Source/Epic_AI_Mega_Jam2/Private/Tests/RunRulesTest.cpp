@@ -65,6 +65,17 @@ bool FDCDraftHandTest::RunTest(const FString&)
 	TestTrue(TEXT("no card twice"), TSet<FName>(Hand).Num() == Hand.Num());
 	TestTrue(TEXT("taken cards never come back"), !DCRunRules::DraftHand(9, Ups, Rar, {TEXT("A1"), TEXT("A2")}, 3).Contains(TEXT("A1")));
 	TestEqual(TEXT("a small pool deals what is open"), DCRunRules::DraftHand(9, Ups, Rar, {TEXT("A1"), TEXT("A2"), TEXT("B1")}, 3).Num(), 2);
+	// Human 16:28: a missed quota deals 2 cards, Common only (capped by the rarity table's order).
+	for (int32 Seed = 1; Seed <= 40; ++Seed)
+	{
+		const TArray<FName> Missed = DCRunRules::DraftHand(Seed, Ups, Rar, {}, 2, Rar[0].Id);
+		TestEqual(TEXT("missed quota: a hand of 2"), FMath::Min(Missed.Num(), 2), 2);
+		for (const FName& Id : Missed)
+		{
+			const FDCUpgradeDef* U = Ups.FindByPredicate([Id](const FDCUpgradeDef& Row) { return Row.Id == Id; });
+			TestTrue(TEXT("missed quota: only the lowest rarity"), U && U->Rarity == Rar[0].Id);
+		}
+	}
 	int32 EpicSeen = 0, CommonSeen = 0;
 	for (int32 Seed = 0; Seed < 400; ++Seed)
 	{

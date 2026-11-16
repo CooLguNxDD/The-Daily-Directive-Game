@@ -3,6 +3,7 @@
 #include "Misc/AutomationTest.h"
 #include "DCAudio.h"
 #include "DCTuning.h"
+#include "DCUpgrades.h"
 #include "Rules/DCStrikePattern.h"
 #include "Voxel/DCVoxelModel.h"
 #include "Voxel/DCVoxelSettings.h"
@@ -76,6 +77,22 @@ bool FDCStrikeRowsTest::RunTest(const FString&)
 		DraftStrikes += U.Effect == TEXT("UnlockStratagem") && T.FindStratagem(U.Unlock) ? 1 : 0;
 	}
 	TestTrue(TEXT("R12: six or more strike unlocks in the draft"), DraftStrikes >= 6);
+	// Call-in cards (human 15:58): a card with a CallIn mode names a list entry (Effect="Card") that points back at it;
+	// every Card entry belongs to a call-in card; the cards the player uses (Deploy, Companion) are in the list.
+	for (const FDCUpgradeDef& U : T.Upgrades)
+	{
+		const FString Id = U.Id.ToString();
+		TestTrue(*FString::Printf(TEXT("%s CallIn %s is a known mode"), *Id, *U.CallIn.ToString()), DCUpgrades::IsKnownCallIn(U.CallIn));
+		const FDCStratagemDef* Entry = U.CallIn.IsNone() ? nullptr : T.FindStratagem(U.CallStratagem);
+		TestTrue(*FString::Printf(TEXT("%s call-in entry is a Card row naming it"), *Id), U.CallIn.IsNone() || (Entry && Entry->Effect == TEXT("Card") && Entry->Card == U.Id && !Entry->bStartsUnlocked));
+		TestTrue(*FString::Printf(TEXT("%s status entry matches its mode"), *Id), !Entry || Entry->bStatus == (U.CallIn == TEXT("Status")));
+		TestTrue(*FString::Printf(TEXT("%s (a card the player uses) is in the call-in list"), *Id), (U.Effect != TEXT("Deploy") && U.Effect != TEXT("Companion")) || U.CallIn == TEXT("Active"));
+	}
+	for (const FDCStratagemDef& D : T.Stratagems)
+	{
+		const FDCUpgradeDef* Card = D.Card.IsNone() ? nullptr : T.FindUpgrade(D.Card);
+		TestTrue(*FString::Printf(TEXT("%s Card row belongs to a call-in card"), *D.Id.ToString()), D.Effect != TEXT("Card") || (Card && Card->CallStratagem == D.Id));
+	}
 	// The line pattern spans the whole pass, centred on the target.
 	FRandomStream Rng(1);
 	const FVector2D First = DCStrikePattern::Offset(TEXT("Line"), {0, 5, 1000.f, FVector2D(1.f, 0.f)}, Rng);
