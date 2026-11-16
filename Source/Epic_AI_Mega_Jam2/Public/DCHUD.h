@@ -55,6 +55,10 @@ private:
 	void DrawTerritory(ADCGameState& GS, ADCCharacter& Me);
 	void DrawScoop(ADCGameState& GS);
 	void DrawPassiveCards(ADCGameState& GS, ADCCharacter& Me);
+	/** Human 17:40-17:45: crew name with the unnamed fallback, teammate markers, the hold-E progress bar. */
+	FString CrewName(const class APlayerState* PS) const;
+	void DrawTeammates(ADCCharacter& Me);
+	void DrawHoldBar(ADCCharacter& Me);
 	void DrawTowerHealth(ADCGameState& GS, const class ADCObjective& O);
 	void DrawCrosshair(ADCCharacter& Me);
 	void DrawViewfinder(ADCCharacter& Me);

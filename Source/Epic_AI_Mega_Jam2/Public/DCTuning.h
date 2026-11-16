@@ -359,6 +359,22 @@ struct FDCLookTuning
 	/** Passive cards (gear, mutators) as small icons on quest tracker row 3 (human 15:58): icon size and gap. */
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float PassiveIconSize = 34.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float PassiveIconGap = 6.f;
+	/** Crew names (human 17:40): a player without a name (EOS/LAN device login) shows this ({N} = crew slot). */
+	UPROPERTY(EditAnywhere, Config, Category = "Look") FString UnnamedCrewName = TEXT("PHOTOGRAPHER {N}");
+	/** Teammate markers (human 17:42): height above the pawn, text scale, screen-edge margin (px), the distance past
+	 *  which a marker fades out, and the colour when the outfit has no glow. Downed mates pulse red. */
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float MateMarkerHeightCm = 120.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float MateMarkerScale = 0.55f;
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float MateMarkerEdgePx = 50.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float MateMarkerFadeCm = 12000.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Look") FLinearColor MateMarkerColor = FLinearColor(0.17f, 0.77f, 0.85f, 1.f);
+	UPROPERTY(EditAnywhere, Config, Category = "Look") FString MateDownLabel = TEXT("DOWN");
+	/** Hold-E bar (human 17:45): under the reticle, from the replicated revive progress; labels by hold kind. */
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float HoldBarWidth = 240.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float HoldBarOffsetY = 48.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Look") float HoldReviveRangeCm = 300.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Look") FString HoldReviveLabel = TEXT("REVIVING {NAME}");
+	UPROPERTY(EditAnywhere, Config, Category = "Look") FString HoldGetUpLabel = TEXT("GETTING UP");
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float QuestTextScale = 0.62f;
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float ScoopFiledSeconds = 3.f;
 	UPROPERTY(EditAnywhere, Config, Category = "Look") float HintCardDraftY = 0.715f;

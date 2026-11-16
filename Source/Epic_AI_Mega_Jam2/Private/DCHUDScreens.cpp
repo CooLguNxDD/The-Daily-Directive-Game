@@ -106,7 +106,7 @@ void ADCHUD::DrawLobby(ADCGameState& GS, ADCCharacter* Me)
 	Text(FString::Printf(TEXT("CREW %d/4"), GS.PlayerArray.Num()), X, Y - Sx(44.f), Gold, 0.7f);
 	for (int32 i = 0; i < GS.PlayerArray.Num(); ++i)
 	{
-		Text(GS.PlayerArray[i] ? GS.PlayerArray[i]->GetPlayerName() : TEXT("?"), X, Y + i * Sx(36.f), Ink, 0.7f);
+		Text(CrewName(GS.PlayerArray[i]), X, Y + i * Sx(36.f), Ink, 0.7f);
 	}
 }
 

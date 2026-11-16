@@ -3,6 +3,10 @@
 #include "Rules/DCFactionRules.h"
 #include "DCObjective.h"
 #include "DCBuilding.h"
+#include "GameFramework/GameStateBase.h"
+#include "GameFramework/PlayerState.h"
+#include "Voxel/DCVoxelSettings.h"
+#include "DCOutfitBuild.h"
 #include "DCEnemy.h"
 #include "EngineUtils.h"
 #include "DCFonts.h"
@@ -221,6 +225,11 @@ void ADCHUD::DrawSector(ADCGameState& GS, ADCCharacter* Me)
 	DrawTerritory(GS, *Me);
 	DrawScoop(GS);
 	DrawPassiveCards(GS, *Me);
+	if (!(Me->IsCameraRaised() && Me->GetSlot() == EDCSlot::Camera)) // hidden while framing a photo
+	{
+		DrawTeammates(*Me);
+	}
+	DrawHoldBar(*Me);
 	DrawHurt(*Me);
 	if (ADCPlayerController* PC = Cast<ADCPlayerController>(PlayerOwner))
 	{
@@ -1082,6 +1091,107 @@ void ADCHUD::DrawTowerHealth(ADCGameState& GS, const ADCObjective& O)
 		Box(P.X - W * 0.5f - 1.f, P.Y - 1.f, W + 2.f, Hb + 2.f, FLinearColor(0.f, 0.f, 0.f, 0.7f));
 		Box(P.X - W * 0.5f, P.Y, W * Left, Hb, Left > 0.34f ? Gold : Red);
 	}
+}
+
+FString ADCHUD::CrewName(const APlayerState* PS) const
+{
+	if (!PS)
+	{
+		return TEXT("?");
+	}
+	const FString Name = PS->GetPlayerName();
+	if (!Name.TrimStartAndEnd().IsEmpty())
+	{
+		return Name;
+	}
+	const AGameStateBase* GS = GetWorld()->GetGameState();
+	const int32 Slot = GS ? GS->PlayerArray.IndexOfByKey(PS) + 1 : 0;
+	return UDCTuning::Get().Look.UnnamedCrewName.Replace(TEXT("{N}"), *FString::FromInt(FMath::Max(Slot, 1)));
+}
+
+void ADCHUD::DrawTeammates(ADCCharacter& Me)
+{
+	const FDCLookTuning& L = UDCTuning::Get().Look;
+	const float W = Canvas->ClipX, H = Canvas->ClipY, Edge = Sx(L.MateMarkerEdgePx);
+	for (ADCCharacter* Mate : TActorRange<ADCCharacter>(GetWorld()))
+	{
+		const ADCPlayerState* PS = Mate->GetPlayerState<ADCPlayerState>();
+		if (Mate == &Me || !PS)
+		{
+			continue;
+		}
+		const float Dist = FVector::Dist(Mate->GetActorLocation(), Me.GetActorLocation());
+		const float Fade = 1.f - FMath::Clamp((Dist - L.MateMarkerFadeCm * 0.8f) / FMath::Max(L.MateMarkerFadeCm * 0.2f, 1.f), 0.f, 1.f);
+		if (Fade <= 0.f)
+		{
+			continue;
+		}
+		// The mate's outfit glow colour (their share code -> glow swatch -> palette), else the Look colour.
+		const FDCOutfit Outfit = DCOutfitBuild::FromCode(PS->OutfitCode);
+		const TArray<FDCOutfitSwatch>& Glows = UDCTuning::Get().OutfitGlows;
+		const FName GlowMat = Glows.IsValidIndex(Outfit.Glow) ? Glows[Outfit.Glow].Material : NAME_None;
+		const FDCVoxelMaterial* Pal = GlowMat.IsNone() ? nullptr : UDCVoxelSettings::Get().Palette.FindByPredicate([GlowMat](const FDCVoxelMaterial& M) { return M.Id == GlowMat; });
+		const bool bDown = Mate->IsDowned();
+		const float Pulse = 0.6f + 0.4f * FMath::Sin(RealNow * 7.f);
+		FLinearColor C = bDown ? FLinearColor(Red.R, Red.G, Red.B, Pulse) : (Pal ? Pal->Color : L.MateMarkerColor);
+		C.A *= Fade;
+		const FVector S = Project(Mate->GetActorLocation() + FVector(0, 0, L.MateMarkerHeightCm), false);
+		const bool bOn = S.Z > 0.f && S.X >= Edge && S.X <= W - Edge && S.Y >= Edge && S.Y <= H - Edge;
+		const FString Label = FString::Printf(TEXT("%s  %.0f M"), bDown ? *L.MateDownLabel : *CrewName(PS), Dist / 100.f);
+		if (bOn)
+		{
+			const float R = Sx(7.f);
+			DrawLine(S.X - R, S.Y - R, S.X, S.Y, C, 3.f);
+			DrawLine(S.X, S.Y, S.X + R, S.Y - R, C, 3.f);
+			Text(Label, S.X, S.Y - Sx(30.f), C, L.MateMarkerScale, true);
+			continue;
+		}
+		// Off screen or behind the camera: an arrow on the screen edge pointing at them.
+		FVector2D Dir(S.X - W * 0.5f, S.Y - H * 0.5f);
+		Dir = S.Z <= 0.f ? -Dir : Dir;
+		Dir = Dir.IsNearlyZero() ? FVector2D(0.f, 1.f) : Dir.GetSafeNormal();
+		const float Reach = FMath::Min((W * 0.5f - Edge) / FMath::Max(FMath::Abs(Dir.X), 0.001f), (H * 0.5f - Edge) / FMath::Max(FMath::Abs(Dir.Y), 0.001f));
+		const FVector2D P = FVector2D(W * 0.5f, H * 0.5f) + Dir * Reach;
+		const FVector2D Side(-Dir.Y, Dir.X);
+		const float A = Sx(14.f);
+		const FVector2D Tip = P + Dir * A, B1 = P + Side * A * 0.6f, B2 = P - Side * A * 0.6f;
+		DrawLine(B1.X, B1.Y, Tip.X, Tip.Y, C, 3.f);
+		DrawLine(B2.X, B2.Y, Tip.X, Tip.Y, C, 3.f);
+		DrawLine(B1.X, B1.Y, B2.X, B2.Y, C, 3.f);
+		Text(Label, P.X - Dir.X * Sx(40.f), P.Y - Dir.Y * Sx(30.f), C, L.MateMarkerScale, true);
+	}
+}
+
+void ADCHUD::DrawHoldBar(ADCCharacter& Me)
+{
+	// One generic hold bar under the reticle (human 17:45): the hold kinds are entries of a small table read from the
+	// replicated revive progress (getting up yourself, reviving the nearest downed mate in reach).
+	const FDCLookTuning& L = UDCTuning::Get().Look;
+	float Progress = 0.f;
+	FString Label;
+	if (Me.IsDowned())
+	{
+		Progress = Me.GetReviveProgress();
+		Label = L.HoldGetUpLabel;
+	}
+	for (ADCCharacter* Mate : TActorRange<ADCCharacter>(GetWorld()))
+	{
+		const bool bMine = !Me.IsDowned() && Mate != &Me && Mate->IsDowned() && Mate->GetReviveProgress() > Progress
+			&& FVector::Dist(Mate->GetActorLocation(), Me.GetActorLocation()) < L.HoldReviveRangeCm;
+		if (bMine)
+		{
+			Progress = Mate->GetReviveProgress();
+			Label = L.HoldReviveLabel.Replace(TEXT("{NAME}"), *CrewName(Mate->GetPlayerState()));
+		}
+	}
+	if (Progress <= 0.f)
+	{
+		return;
+	}
+	const float W = Sx(L.HoldBarWidth), X = Canvas->ClipX * 0.5f - W * 0.5f, Y = Canvas->ClipY * 0.5f + Sx(L.HoldBarOffsetY);
+	Box(X - 2.f, Y - 2.f, W + 4.f, Sx(8.f) + 4.f, FLinearColor(0.f, 0.f, 0.f, 0.6f));
+	Box(X, Y, W * FMath::Clamp(Progress, 0.f, 1.f), Sx(8.f), Gold);
+	Text(Label, Canvas->ClipX * 0.5f, Y + Sx(12.f), Gold, 0.5f, true);
 }
 
 void ADCHUD::DrawScoop(ADCGameState& GS)
