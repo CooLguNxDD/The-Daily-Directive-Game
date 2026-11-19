@@ -1,0 +1,23 @@
+# Cycle cab (R23 vehicle): a pedal rickshaw with a hooded passenger bench and a small warm lamp. Faces +x.
+grid 5
+size 44 20 34
+slot frame Steel
+slot hood InkBlue
+slot seat InkBrown
+slot wheel Ink
+slot lamp Lamp
+beam 36 10 5 36 10 5 4.6 wheel
+carve beam 36 8 5 36 12 5 3
+beam 6 2 5 6 2 5 4.6 wheel
+beam 6 18 5 6 18 5 4.6 wheel
+carve beam 6 0 5 6 4 5 3
+carve beam 6 16 5 6 20 5 3
+beam 6 2 5 6 18 5 0.8 frame
+beam 10 10 8 36 10 5 0.8 frame
+beam 30 10 8 34 10 20 0.8 frame
+box 31 6 20 36 14 21 frame
+box 2 2 10 14 18 13 seat
+box 2 2 13 4 18 22 seat
+poly 22 32 hood 0,2 12,2 14,10 12,18 0,18
+carve box 3 4 22 14 16 30
+box 37 9 8 40 11 10 lamp

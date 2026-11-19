@@ -59,4 +59,27 @@ public:
 	UPROPERTY(Replicated) int32 VotedFor = 0;
 
 	bool HasGear(FName Id) const { return Gear.Contains(Id); }
+
+	/** R22 host-only charges per owned card id (turret deploys, last stands), dealt at each sector start. */
+	TMap<FName, int32> HostCardCharges;
+	/** Host: mirror HostCardCharges into the replicated list the HUD's call-in entries read (after every change). */
+	void SyncCardCharges();
+	/** Charges left on an owned card on any machine (the replicated mirror); 0 when the card has none. */
+	int32 CardCharges(FName CardId) const;
+	UPROPERTY(Replicated) TArray<FName> CardChargeIds;
+	UPROPERTY(Replicated) TArray<int32> CardChargeLeft;
+
+	/** Host: the press call sign every screen shows (R8). The engine's player name (the PC's network name on LAN
+	 *  or online subsystems) is never shown: GetPlayerName() returns this through GetPlayerNameCustom. */
+	void SetCallSign(const FString& InSign) { CallSign = InSign; ForceNetUpdate(); }
+	const FString& GetCallSign() const { return CallSign; }
+	virtual FString GetPlayerNameCustom() const override;
+
+private:
+	UPROPERTY(Replicated) FString CallSign;
+public:
+	/** The photographer's outfit share code (R23), validated by the host; every machine builds the same voxels. */
+	UPROPERTY(Replicated) FString OutfitCode;
+	void SetOutfitCode(const FString& Code) { OutfitCode = Code; ForceNetUpdate(); }
+private:
 };

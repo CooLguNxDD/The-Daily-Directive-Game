@@ -1,0 +1,12 @@
+# Street litter (R12 ground cover): torn newspaper sheets and scraps scattered flat on the asphalt (pale Paint, sparse).
+grid 5
+size 30 24 1
+slot paper Paint
+slot ink Trim
+box 3 4 0 10 9 1 paper
+box 15 2 0 20 6 1 paper
+box 20 14 0 28 19 1 paper
+box 8 15 0 12 18 1 paper
+paint box 4 5 0 9 6 1 ink
+paint box 21 15 0 27 16 1 ink
+noise 0.3 6 paper

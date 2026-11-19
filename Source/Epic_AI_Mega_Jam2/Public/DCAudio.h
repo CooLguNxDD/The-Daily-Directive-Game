@@ -4,6 +4,8 @@
 
 #include "CoreMinimal.h"
 #include "Subsystems/GameInstanceSubsystem.h"
+#include "Containers/Ticker.h"
+#include "Rules/DCSoundQueue.h"
 #include "DCAudio.generated.h"
 
 class USoundAttenuation;
@@ -16,12 +18,15 @@ class EPIC_AI_MEGA_JAM2_API UDCAudioSubsystem : public UGameInstanceSubsystem
 
 public:
 	virtual void Initialize(FSubsystemCollectionBase& Collection) override;
+	virtual void Deinitialize() override;
 
 	void PlayAt(const UObject* WorldContext, FName Cue, const FVector& Location, float Volume, float Pitch);
 	void Play2D(const UObject* WorldContext, FName Cue, float Volume, float Pitch);
 	/** Starts (or keeps) the looping music bed. */
 	void StartMusic(const UObject* WorldContext, FName Cue, float Volume);
 	void SetMusicVolume(float Volume);
+	/** Re-applies the saved master volume to the playing music (settings change, R24). */
+	void ApplyMasterVolume(const UObject* WorldContext);
 
 	bool HasCue(FName Cue) const { return Bank.Contains(Cue); }
 	int32 NumCues() const { return Bank.Num(); }
@@ -35,10 +40,35 @@ public:
 
 private:
 	class USoundWaveProcedural* MakeWave(FName Cue) const;
+	/** R13: a pooled wave for the cue whose last play has ended (refilled), a new pool entry, or null when the pool is full. */
+	class USoundWaveProcedural* AcquireWave(FName Cue, float Pitch, int32 Priority);
+	/** R13: once per frame: merge, budget and start the queued plays (DCAUDIO lines log what was dropped). */
+	bool FlushQueue(float DeltaSeconds);
+	void Start(const FDCSoundRequest& R);
+
+	TArray<FDCSoundRequest> Queue;
+	TArray<FDCSoundVoice> Voices;
+	UPROPERTY() TArray<TObjectPtr<class USoundWaveProcedural>> PoolWaves;
+	TArray<double> PoolFreeAt;
+	/** Synth one-shots still sounding: component and the real time it is stopped (frees the voice, a-40). */
+	TArray<TPair<TWeakObjectPtr<class UAudioComponent>, double>> LiveShots;
+	double NextVoicesLog = 0.0;
+	TMap<FName, TArray<int32>> PoolOf;
+	FTSTicker::FDelegateHandle FlushHandle;
+	int32 Dropped = 0;
+	int32 MergedCount = 0;
+	/** R13 remix (h-audio +CueMix rows): remixed recordings loaded once at Initialize, played instead of the synth wave. */
+	UPROPERTY() TMap<FName, TObjectPtr<class USoundBase>> MixSounds;
+	/** Ducking state: until DuckUntil (real seconds), plays of classes below DuckPriority are scaled by DuckScale. */
+	double DuckUntil = 0.0;
+	int32 DuckPriority = 0;
+	float DuckScale = 1.f;
 
 	TMap<FName, TSharedPtr<TArray<uint8>>> Bank;
 	UPROPERTY() TObjectPtr<USoundAttenuation> Attenuation;
 	UPROPERTY() TObjectPtr<UAudioComponent> Music;
+	/** The music level a caller asked for, before the master volume. */
+	float MusicBase = 1.f;
 	FName MusicCue;
 	void LogCue(const UObject* WorldContext, FName Cue, const FVector* Location) const;
 	double RecordStart = -1.0;
@@ -49,9 +79,18 @@ namespace DCAudio
 {
 	EPIC_AI_MEGA_JAM2_API void PlayAt(const UObject* WorldContext, FName Cue, const FVector& Location, float Volume = 1.f, float Pitch = 1.f);
 	EPIC_AI_MEGA_JAM2_API void Play2D(const UObject* WorldContext, FName Cue, float Volume = 1.f, float Pitch = 1.f);
+	/** The saved master volume (R24), 0..1. */
+	EPIC_AI_MEGA_JAM2_API float Master(const UObject* WorldContext);
+	/** Settings sliders (human 16:03): master x music for the score, master x sfx for every other sound. */
+	EPIC_AI_MEGA_JAM2_API float MusicLevel(const UObject* WorldContext);
+	EPIC_AI_MEGA_JAM2_API float SfxLevel(const UObject* WorldContext);
 
 	/** Pure synthesis, used by the subsystem and the tests: the registered cue names. */
 	EPIC_AI_MEGA_JAM2_API TArray<FName> CueNames();
 	/** Renders one cue to mono 16-bit samples; empty when the cue is unknown. */
 	EPIC_AI_MEGA_JAM2_API TArray<int16> Render(FName Cue);
+	/** A seamless looping wave of a synth recipe (the whole render requeued on underflow); null when the recipe is unknown. */
+	EPIC_AI_MEGA_JAM2_API class USoundWaveProcedural* MakeLoop(UObject* Outer, FName Recipe);
+	/** One loop cycle of a synth recipe in seconds (the playlist timer; the wave itself loops forever). */
+	EPIC_AI_MEGA_JAM2_API float LoopSeconds(FName Recipe);
 }

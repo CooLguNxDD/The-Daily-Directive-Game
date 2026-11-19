@@ -1,0 +1,12 @@
+# Security camera (R23 wall mount): a boxy ink camera on a steel arm, a tiny dim cyan status lamp (no red).
+grid 5
+size 12 6 10
+slot arm Steel
+slot body Ink
+slot lens Trim
+slot led NeonCyan
+pivot 0 3 0
+box 0 2 6 4 4 8 arm
+box 3 1 3 11 5 8 body
+box 11 2 4 12 4 7 lens
+box 8 1 7 9 2 8 led

@@ -1,0 +1,9 @@
+dcvox 1
+name body_leg
+grid_cm 5
+size 8 3 3
+pivot 0 1 1
+slots SwatchMain Ink
+solid 72
+rle
+7*1 1*2 7*1 1*2 7*1 1*2 7*1 1*2 7*1 1*2 7*1 1*2 7*1 1*2 7*1 1*2 7*1 1*2

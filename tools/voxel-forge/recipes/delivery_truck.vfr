@@ -1,0 +1,37 @@
+# Box truck (R23 vehicle): steel-grey cab, tall ink cargo box with a torn magenta poster strip, rear roll door.
+# Faces +x (cab at +x).
+grid 5
+size 130 44 64
+slot cab Steel
+slot box Ink
+slot glass WindowOff
+slot wheel Rubble
+slot door Trim
+slot poster Paper
+slot edge PaperEdge
+slot lamp Lamp
+shell 2 2 8 92 42 62 2 box
+shell 92 4 8 126 40 40 2 cab
+poly 40 50 cab 92,4 112,4 120,22 112,40 92,40
+box 112 6 26 124 38 38 glass
+carve box 116 4 10 126 40 24
+box 116 4 8 126 40 10 cab
+paint box 0 4 10 2 40 60 door
+paint box 1 4 10 2 40 11 box
+paint box 1 4 20 2 40 21 box
+paint box 1 4 30 2 40 31 box
+paint box 1 4 40 2 40 41 box
+paint box 1 4 50 2 40 51 box
+paint box 20 2 30 72 3 46 poster
+paint box 20 2 30 72 3 31 edge
+paint box 20 2 45 72 3 46 edge
+paint box 20 41 30 72 42 46 poster
+paint box 20 41 30 72 42 31 edge
+paint box 20 41 45 72 42 46 edge
+ellipsoid 22 3 7 7 3 7 wheel
+ellipsoid 22 41 7 7 3 7 wheel
+ellipsoid 104 3 7 7 3 7 wheel
+ellipsoid 104 41 7 7 3 7 wheel
+box 126 6 22 128 12 26 lamp
+box 126 32 22 128 38 26 lamp
+noise 0.04 7 box

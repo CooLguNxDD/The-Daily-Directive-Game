@@ -1,0 +1,15 @@
+# Burnt-out car: blocky ink sedan.
+grid 5
+size 90 36 30
+slot body Ink
+slot glass Char
+slot wheel Rubble
+box 2 2 6 88 34 16 body
+poly 16 26 body 22,4 66,4 74,18 66,32 22,32 16,18
+box 26 4 17 64 32 24 glass
+carve box 5 5 8 85 31 15
+ellipsoid 18 3 6 6 3 6 wheel
+ellipsoid 18 33 6 6 3 6 wheel
+ellipsoid 72 3 6 6 3 6 wheel
+ellipsoid 72 33 6 6 3 6 wheel
+noise 0.06 3 body

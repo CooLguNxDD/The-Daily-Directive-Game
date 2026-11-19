@@ -1,0 +1,10 @@
+# Voxel photographer body: head with a dim cyan visor, placed on the head bone in actor space (x forward, y side,
+# z up), like an outfit part. A hat from the Head slot sits on top.
+name body_head
+grid 5
+size 5 4 5
+slot skin SwatchMain
+slot visor NeonCyan
+box 0 0 0 5 4 5 skin
+box 4 0 2 5 4 3 visor
+pivot 2 2 0

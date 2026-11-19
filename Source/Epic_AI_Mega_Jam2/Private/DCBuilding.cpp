@@ -1,4 +1,5 @@
 #include "DCBuilding.h"
+#include "DCFrameScopes.h"
 
 #include "Components/InstancedStaticMeshComponent.h"
 #include "DCAssets.h"
@@ -8,6 +9,8 @@
 #include "DCGameMode.h"
 #include "DCGameState.h"
 #include "DCTuning.h"
+#include "DCVoxelCity.h"
+#include "Voxel/DCVoxelGrid.h"
 #include "Engine/World.h"
 #include "Net/UnrealNetwork.h"
 
@@ -78,6 +81,7 @@ void ADCBuilding::BeginPlay()
 
 void ADCBuilding::Tick(float DeltaSeconds)
 {
+	DC_FRAME_SCOPE("Buildings");
 	Super::Tick(DeltaSeconds);
 	const ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>();
 	if (!GS || bCollapsed || !GetIsReplicated())
@@ -94,6 +98,14 @@ void ADCBuilding::Tick(float DeltaSeconds)
 	const float Amp = UDCTuning::Get().City.CondemnedShakeCm * U * U;
 	const float T = GetWorld()->GetRealTimeSeconds();
 	const FVector Offset = Amp > 0.f ? FVector(FMath::Sin(T * 41.f) * Amp, FMath::Cos(T * 37.f) * Amp, 0.f) : FVector::ZeroVector;
+	if (ADCVoxelCity* City = ADCVoxelCity::IsEnabled() ? ADCVoxelCity::Get(this) : nullptr)
+	{
+		if (!LastShake.Equals(Offset))
+		{
+			City->SetTowerOffset(LotIndex, Offset);
+		}
+		LastShake = Offset;
+	}
 	for (UInstancedStaticMeshComponent* Ism : {Walls.Get(), Windows.Get(), Trim.Get(), Banners.Get(), Emblems.Get()})
 	{
 		if (!Ism->GetRelativeLocation().Equals(Offset))
@@ -133,6 +145,10 @@ void ADCBuilding::BuildBlocks()
 		return;
 	}
 	bBuilt = true;
+	if (ADCVoxelCity::IsEnabled())
+	{
+		return; // the voxel city draws and collides this tower; this actor keeps the gameplay record
+	}
 	UStaticMesh* Cube = DCAssets::Cube();
 	for (UInstancedStaticMeshComponent* Ism : {Walls.Get(), Windows.Get(), Trim.Get(), Rubble.Get(), Banners.Get(), Emblems.Get()})
 	{
@@ -224,7 +240,7 @@ void ADCBuilding::GetSamplePoints(TArray<FVector>& Out) const
 	Out.Add(C + FVector(-Hx, Hy, H * 0.7f));
 }
 
-void ADCBuilding::Collapse(const FVector& InEpicenter)
+void ADCBuilding::Collapse(const FVector& InEpicenter, float AtTime)
 {
 	if (!HasAuthority() || bCollapsed)
 	{
@@ -232,8 +248,31 @@ void ADCBuilding::Collapse(const FVector& InEpicenter)
 	}
 	bCollapsed = true;
 	Epicenter = InEpicenter;
-	const ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>();
-	CollapseTime = GS ? GS->Now() : GetWorld()->GetTimeSeconds();
+	ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>();
+	CollapseTime = AtTime >= 0.f ? AtTime : (GS ? GS->Now() : GetWorld()->GetTimeSeconds());
+	// Voxel city: a collapse the voxels have not already made (walker topple, domino) becomes a Fell op that bites the
+	// base on the epicentre side, so the structure pass drops the tower the same way on every machine.
+	ADCVoxelCity* City = ADCVoxelCity::IsEnabled() ? ADCVoxelCity::Get(this) : nullptr;
+	// The committed fallen state (game thread), never the sector a worker may be planning into (CP4 review).
+	if (City && GS && City->GetSector().Towers.IsValidIndex(LotIndex) && !City->IsTowerFallen(LotIndex))
+	{
+		FDCVoxelOp Op;
+		Op.Kind = TEXT("Fell");
+		Op.Lot = LotIndex;
+		Op.CenterCm = DCVoxelMath::ToCm(FVector(InEpicenter.X, InEpicenter.Y, 0.f));
+		const int32 Seq = GS->AddVoxelOp(Op).Seq;
+		TWeakObjectPtr<ADCGameState> WeakGS(GS);
+		City->ApplyOpAsync(GS->VoxelOps.Last(), true, [WeakGS, Seq](const FDCVoxelOpResult&, uint32 Hash)
+		{
+			if (ADCGameState* State = WeakGS.Get())
+			{
+				if (FDCVoxelOp* Rec = State->VoxelOps.FindByPredicate([Seq](const FDCVoxelOp& O) { return O.Seq == Seq; }))
+				{
+					Rec->ResultHash = Hash;
+				}
+			}
+		});
+	}
 	ForceNetUpdate();
 	SimulateCollapse(true);
 	if (ADCGameMode* GM = GetWorld()->GetAuthGameMode<ADCGameMode>())
@@ -278,6 +317,10 @@ void ADCBuilding::SimulateCollapse(bool bAnimateRequested)
 		return;
 	}
 	bSimulated = true;
+	if (ADCVoxelCity::IsEnabled())
+	{
+		return; // the voxel city plays the fall and keeps the rubble
+	}
 	const FDCCityTuning& City = UDCTuning::Get().City;
 	const FDCLookTuning& Look = UDCTuning::Get().Look;
 	const ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>();

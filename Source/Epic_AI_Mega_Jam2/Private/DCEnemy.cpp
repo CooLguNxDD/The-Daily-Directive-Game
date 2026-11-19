@@ -1,6 +1,21 @@
 #include "DCEnemy.h"
+#include "DCFrameScopes.h"
+#include "DCUnits.h"
+#include "DCVoxelFx.h"
+#include "Engine/DamageEvents.h"
+#include "Rules/DCFactionRules.h"
 
+#include "DCVoxelCity.h"
+
+#include "ProceduralMeshComponent.h"
+#include "Voxel/DCVoxelModel.h"
+#include "Voxel/DCVoxelSettings.h"
+#include "DCUnitAnimator.h"
+#include "TimerManager.h"
+
+#include "Components/CapsuleComponent.h"
 #include "Components/SphereComponent.h"
+#include "Components/PointLightComponent.h"
 #include "Components/SpotLightComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "DCAssets.h"
@@ -47,6 +62,22 @@ namespace
 			return;
 		}
 		ADCCharacter* Target = E.FindTarget(FMath::Max(Def.SenseRange, Aggro), true);
+		if (!Target)
+		{
+			// R3: no crew in reach: a hostile faction's unit in sense range comes before hunting the crew (fights the
+			// player did not start).
+			if (Now >= E.NextRetarget)
+			{
+				E.NextRetarget = Now + 0.25f;
+				E.Foe = E.FindFoe(Def.SenseRange);
+			}
+			if (AActor* Foe = E.Foe.Get(); Foe && !Cast<ADCCharacter>(Foe) && Cast<ADCEnemy>(Foe)->IsAlive())
+			{
+				E.SteerTowards(Foe->GetActorLocation() + FVector(0, 0, 60.f), Def.Speed, Dt, Def.HoverHeight);
+				E.HostAttack(Foe, Now);
+				return;
+			}
+		}
 		const ADCCharacter* Hunted = Target ? nullptr : E.FindTarget(Def.HuntRangeCm, false);
 		if (Hunted)
 		{
@@ -112,6 +143,12 @@ namespace
 	{
 		// R11: a walker marches on the nearest standing tower and shoulders it over; with none left it hunts players.
 		ADCCharacter* Target = E.FindTarget(Def.SenseRange, false);
+		// Human 16:25: a crew member in range gets a telegraphed big shot; the walker stands while it charges, then
+		// walks on (shoot, walk, shoot).
+		if (E.HostTickRanged(Def, Target, Now))
+		{
+			return;
+		}
 		const ADCBuilding* Tower = nullptr;
 		float Best = TNumericLimits<float>::Max();
 		for (ADCBuilding* B : TActorRange<ADCBuilding>(E.GetWorld()))
@@ -127,7 +164,8 @@ namespace
 			E.Heading = FMath::VInterpNormalRotationTo(E.Heading, Want, Dt, 12.f);
 		}
 		const FVector Next = E.GetActorLocation() + E.Heading * Def.Speed * Dt;
-		E.SetActorLocation(FVector(Next.X, Next.Y, Def.HoverHeight));
+		const ADCVoxelCity* City = ADCVoxelCity::Get(&E);
+		E.SetActorLocation(FVector(Next.X, Next.Y, (City ? City->SurfaceZCm(Next) : 0.f) + Def.HoverHeight)); // stands on the street and its rubble
 		E.SetActorRotation(E.Heading.Rotation());
 		// A walker shoulders straight through towers: every tower it touches comes down.
 		for (ADCBuilding* B : TActorRange<ADCBuilding>(E.GetWorld()))
@@ -153,6 +191,220 @@ namespace
 		}
 	}
 
+	bool IsLiveFoe(const AActor* A)
+	{
+		if (const ADCCharacter* C = Cast<ADCCharacter>(A))
+		{
+			return !C->IsDowned();
+		}
+		const ADCEnemy* U = Cast<ADCEnemy>(A);
+		return U && U->IsAlive();
+	}
+
+	// Squad goals without a foe in sight (R3), by the row's Goal id. True when a goal was found.
+	// Crew grace (advisor a-10, FactionMix.CrewGraceSeconds): early in a sector units leave the crew alone unless
+	// it comes within CrewSelfDefenceCm. One rule for the opening clash, nests, hunters and early raiders.
+	// Unit damage to a crew member, scaled by crew size (FactionMix.CrewDamageByPlayers).
+	float CrewDamage(const UWorld* World, float Base)
+	{
+		const TArray<float>& Scale = UDCTuning::Get().FactionMix.CrewDamageByPlayers;
+		const AGameStateBase* GS = World ? World->GetGameState() : nullptr;
+		const int32 Players = GS ? FMath::Max(1, GS->PlayerArray.Num()) : 1;
+		return Scale.Num() > 0 ? Base * Scale[FMath::Min(Players, Scale.Num()) - 1] : Base;
+	}
+
+	bool InCrewGrace(const UWorld* World)
+	{
+		const ADCGameState* GS = World ? World->GetGameState<ADCGameState>() : nullptr;
+		return GS && GS->Phase == EDCRunPhase::Sector && GS->Now() - GS->SectorStartTime < UDCTuning::Get().FactionMix.CrewGraceSeconds;
+	}
+
+	// R6: a foe inside a standing tower that the unit is not in yet: walk to the tower's nearest door or breach first
+	// (a step past it, inside), then straight at the foe. Units of factions that stay out keep the direct goal.
+	FVector EntryGoal(const ADCEnemy& E, const FVector& Here, const FVector& Goal)
+	{
+		const ADCVoxelCity* City = ADCVoxelCity::Get(&E);
+		const FDCFactionDef* F = DCFactionRules::Find(UDCTuning::Get().Factions, E.GetFaction());
+		const int32 GoalLot = City && F && F->bEntersBuildings ? City->StandingLotAt(Goal) : INDEX_NONE;
+		FVector Door;
+		if (GoalLot == INDEX_NONE || City->StandingLotAt(Here) == GoalLot || !City->NearestPortal(GoalLot, Here, Door))
+		{
+			return Goal;
+		}
+		return FVector::Dist2D(Here, Door) > 150.f ? Door : Door + (Goal - Door).GetSafeNormal2D() * 200.f;
+	}
+
+	bool FoeInOtherTower(const ADCEnemy& E, const FVector& Here, const FVector& At)
+	{
+		const ADCVoxelCity* City = ADCVoxelCity::Get(&E);
+		const FDCFactionDef* F = DCFactionRules::Find(UDCTuning::Get().Factions, E.GetFaction());
+		const int32 FoeLot = City && F && F->bEntersBuildings ? City->StandingLotAt(At) : INDEX_NONE;
+		return FoeLot != INDEX_NONE && City->StandingLotAt(Here) != FoeLot;
+	}
+
+	using FGoalFn = bool (*)(const ADCEnemy&, const FDCEnemyDef&, float, FVector&);
+	bool GoalPlayers(const ADCEnemy& E, const FDCEnemyDef& Def, float Now, FVector& Out)
+	{
+		if (InCrewGrace(E.GetWorld()))
+		{
+			return false;
+		}
+		const ADCCharacter* C = E.FindTarget(Def.HuntRangeCm > 0.f ? Def.HuntRangeCm : 1e7f, false);
+		Out = C ? C->GetActorLocation() : Out;
+		return C != nullptr;
+	}
+	bool GoalRubble(const ADCEnemy& E, const FDCEnemyDef& Def, float Now, FVector& Out)
+	{
+		// Looters (pirates): the newest collapse on the server clock, then the crew.
+		const ADCGameState* GS = E.GetWorld()->GetGameState<ADCGameState>();
+		for (int32 i = GS ? GS->Collapses.Num() - 1 : -1; i >= 0; --i)
+		{
+			if (GS->Collapses[i].Time <= Now)
+			{
+				Out = GS->Collapses[i].Epicenter;
+				return true;
+			}
+		}
+		return GoalPlayers(E, Def, Now, Out);
+	}
+	bool GoalFront(const ADCEnemy& E, const FDCEnemyDef& Def, float Now, FVector& Out)
+	{
+		// The friendly army pushes on the nearest hostile unit anywhere; with none, it walks with the crew.
+		const UDCUnits* Units = UDCUnits::Get(&E);
+		const TArray<FDCFactionDef>& Factions = UDCTuning::Get().Factions;
+		float Best = TNumericLimits<float>::Max();
+		if (Units)
+		{
+			for (const ADCEnemy* U : Units->All())
+			{
+				if (U && U != &E && U->IsAlive() && DCFactionRules::IsHostile(Factions, E.GetFaction(), U->GetFaction()))
+				{
+					const float D = FVector::DistSquared2D(U->GetActorLocation(), E.GetActorLocation());
+					Out = D < Best ? U->GetActorLocation() : Out;
+					Best = FMath::Min(Best, D);
+				}
+			}
+		}
+		return Best < TNumericLimits<float>::Max() || GoalPlayers(E, Def, Now, Out);
+	}
+	const TMap<FName, FGoalFn>& Goals()
+	{
+		static const TMap<FName, FGoalFn> Map = {
+			{TEXT("Players"), &GoalPlayers},
+			{TEXT("Rubble"), &GoalRubble},
+			{TEXT("Front"), &GoalFront},
+		};
+		return Map;
+	}
+
+	// Formation slot offsets (XY, cm) from the squad's goal, by the row's Formation id.
+	using FFormationFn = FVector (*)(int32 Slot, int32 Size, const FVector& Facing, float Spacing, uint32 Hash);
+	FVector FormCrowd(int32 Slot, int32 Size, const FVector& Facing, float Spacing, uint32 Hash)
+	{
+		const float Angle = (Hash % 3600) * 0.1f;
+		const float R = Spacing * FMath::Sqrt(static_cast<float>(Size)) * ((Hash >> 12) % 1000) / 1000.f;
+		return FVector(R, 0.f, 0.f).RotateAngleAxis(Angle, FVector::UpVector);
+	}
+	FVector FormLine(int32 Slot, int32 Size, const FVector& Facing, float Spacing, uint32 Hash)
+	{
+		const FVector Right(-Facing.Y, Facing.X, 0.f);
+		return Right * (Slot - (Size - 1) * 0.5f) * Spacing;
+	}
+	FVector FormSkirmish(int32 Slot, int32 Size, const FVector& Facing, float Spacing, uint32 Hash)
+	{
+		const FVector Right(-Facing.Y, Facing.X, 0.f);
+		return Right * (Slot - (Size - 1) * 0.5f) * Spacing * 1.8f - Facing * ((Slot % 2) * Spacing);
+	}
+	const TMap<FName, FFormationFn>& Formations()
+	{
+		static const TMap<FName, FFormationFn> Map = {
+			{TEXT("Crowd"), &FormCrowd},
+			{TEXT("Line"), &FormLine},
+			{TEXT("Skirmish"), &FormSkirmish},
+		};
+		return Map;
+	}
+
+	void TickInfantry(ADCEnemy& E, const FDCEnemyDef& Def, float Dt, float Now)
+	{
+		// R3 ground unit: fight the nearest foe in sense range (crew or a hostile faction), else follow the squad goal.
+		if (!Def.IdleCue.IsNone() && Now >= E.NextCueTime)
+		{
+			E.NextCueTime = Now + Def.IdleCueSeconds * (0.6f + 0.8f * ((E.GetUniqueID() * 2654435761u) % 1000) / 1000.f);
+			E.Cue(Def.IdleCue);
+		}
+		if (Now >= E.NextRetarget || !IsLiveFoe(E.Foe.Get()))
+		{
+			E.NextRetarget = Now + 0.25f + (E.GetUniqueID() % 8) * 0.01f; // ~4 Hz, staggered (advisor a-2)
+			E.Foe = E.FindFoe(Def.SenseRange);
+		}
+		const FVector Here = E.GetActorLocation();
+		if (AActor* Foe = IsLiveFoe(E.Foe.Get()) ? E.Foe.Get() : nullptr)
+		{
+			const FVector At = Foe->GetActorLocation();
+			const FVector To = (At - Here).GetSafeNormal2D();
+			const float Dist = FVector::Dist2D(At, Here);
+			// R6: a foe inside a standing tower this unit is not in yet is out of sight behind its walls: shooters do not
+			// hold at range there, they keep walking door-first until they share the tower (checked only when in range).
+			const float RangeHold = FMath::Max((Def.ShotRange > 0.f ? Def.ShotRange : Def.AttackRange) * 0.6f, E.CrewContactCm());
+			const float Hold = Dist > RangeHold || !FoeInOtherTower(E, Here, At) ? RangeHold : E.CrewContactCm();
+			if (Def.KiteCm > 0.f && Dist < Def.KiteCm && !FoeInOtherTower(E, Here, At))
+			{
+				// Hit and run (Scavengers): back off at speed, still firing.
+				E.GroundMove(Here - To * 600.f, Def.Speed, Dt, Def.HoverHeight);
+				E.SetActorRotation(FMath::RInterpTo(E.GetActorRotation(), To.Rotation(), Dt, 8.f));
+			}
+			else if (Dist > Hold)
+			{
+				const float Speed = Def.Speed * (Def.ShotRange > 0.f ? 1.f : Def.RushMultiplier);
+				E.GroundMove(EntryGoal(E, Here, At + E.SlotOffset(Def, To) * 0.3f), Speed, Dt, Def.HoverHeight);
+			}
+			else if (!To.IsNearlyZero())
+			{
+				E.SetActorRotation(FMath::RInterpTo(E.GetActorRotation(), To.Rotation(), Dt, 8.f));
+			}
+			E.HostAttack(Foe, Now);
+			return;
+		}
+		FVector Goal = Here + E.Heading * 800.f;
+		const FGoalFn* Fn = Goals().Find(Def.Goal);
+		if (Fn && (*Fn)(E, Def, Now, Goal))
+		{
+			if (!Def.GoalActCue.IsNone() && FVector::Dist2D(Goal, Here) < Def.GoalActRadiusCm)
+			{
+				// At the goal: act there (loot) instead of milling about.
+				if (Now >= E.NextAttackTime)
+				{
+					E.NextAttackTime = Now + Def.GoalActSeconds;
+					E.Cue(Def.GoalActCue);
+				}
+				return;
+			}
+			const FVector Facing = (Goal - Here).GetSafeNormal2D();
+			E.GroundMove(EntryGoal(E, Here, Goal + E.SlotOffset(Def, Facing.IsNearlyZero() ? E.Heading : Facing)), Def.Speed * 0.7f, Dt, Def.HoverHeight); // R6: door first
+			return;
+		}
+		E.Heading = E.Heading.RotateAngleAxis(15.f * Dt, FVector::UpVector);
+		E.GroundMove(Here + E.Heading * 600.f, Def.Speed * 0.35f, Dt, Def.HoverHeight);
+	}
+
+	void TickNest(ADCEnemy& E, const FDCEnemyDef& Def, float Dt, float Now)
+	{
+		// R3 Hive nest: stays put, pulses its faction out while it stands.
+		if (Def.SpawnEverySeconds <= 0.f || Def.SpawnCount <= 0 || Now < E.NextAttackTime)
+		{
+			return;
+		}
+		E.NextAttackTime = Now + Def.SpawnEverySeconds;
+		const UDCUnits* Units = UDCUnits::Get(&E);
+		ADCGameMode* GM = E.GetWorld()->GetAuthGameMode<ADCGameMode>();
+		if (GM && Units && Units->CountAlive(E.GetFaction()) < Def.SpawnMaxAlive)
+		{
+			GM->HostSpawnSquad(E.GetFaction(), Def.SpawnCount, E.GetActorLocation(), 250.f);
+			E.Cue(TEXT("Groan"));
+		}
+	}
+
 	using FBehaviour = void (*)(ADCEnemy&, const FDCEnemyDef&, float, float);
 	const TMap<FName, FBehaviour>& Behaviours()
 	{
@@ -160,9 +412,12 @@ namespace
 			{Swarmer, &TickSwarmer},
 			{Spotlight, &TickSpotlight},
 			{Walker, &TickWalker},
+			{TEXT("Infantry"), &TickInfantry},
+			{TEXT("Nest"), &TickNest},
 		};
 		return Map;
 	}
+
 }
 
 ADCEnemy::ADCEnemy()
@@ -195,16 +450,334 @@ ADCEnemy::ADCEnemy()
 	Spot->SetupAttachment(Body);
 	Spot->SetVisibility(false);
 	Spot->SetCastShadows(false);
+	GlowLight = CreateDefaultSubobject<UPointLightComponent>(TEXT("GlowLight"));
+	GlowLight->SetupAttachment(Body);
+	GlowLight->SetVisibility(false);
+	GlowLight->SetCastShadows(false);
 }
 
 void ADCEnemy::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	DOREPLIFETIME(ADCEnemy, Kind);
+	DOREPLIFETIME_CONDITION(ADCEnemy, SpawnServerTime, COND_InitialOnly);
 	DOREPLIFETIME(ADCEnemy, Health);
 	DOREPLIFETIME(ADCEnemy, StunnedUntil);
 	DOREPLIFETIME(ADCEnemy, LightTarget);
+	DOREPLIFETIME(ADCEnemy, AttackSeq);
 }
+
+UDCUnits* UDCUnits::Get(const UObject* WorldContext)
+{
+	const UWorld* World = WorldContext ? WorldContext->GetWorld() : nullptr;
+	return World ? World->GetSubsystem<UDCUnits>() : nullptr;
+}
+
+int32 UDCUnits::CountAlive(FName Faction) const
+{
+	int32 N = 0;
+	for (const ADCEnemy* U : Units)
+	{
+		N += U && U->IsAlive() && U->GetFaction() == Faction ? 1 : 0;
+	}
+	return N;
+}
+
+const ADCEnemy* UDCUnits::InClash(const ADCEnemy& Unit, float RangeCm) const
+{
+	const TArray<FDCFactionDef>& Factions = UDCTuning::Get().Factions;
+	for (const ADCEnemy* U : Units)
+	{
+		if (U && U != &Unit && U->IsAlive() && FVector::DistSquared(U->GetActorLocation(), Unit.GetActorLocation()) < RangeCm * RangeCm
+			&& DCFactionRules::IsHostile(Factions, Unit.GetFaction(), U->GetFaction()))
+		{
+			return U;
+		}
+	}
+	return nullptr;
+}
+
+int32 UDCUnits::SlotCap(bool bRanged) const
+{
+	const FDCFactionMixRule& Mix = UDCTuning::Get().FactionMix;
+	const TArray<int32>& Caps = bRanged ? Mix.CrewRangedSlotsByPlayers : Mix.CrewMeleeSlotsByPlayers;
+	const AGameStateBase* GS = GetWorld() ? GetWorld()->GetGameState() : nullptr;
+	const int32 Players = GS ? FMath::Max(1, GS->PlayerArray.Num()) : 1;
+	return Caps.Num() > 0 ? Caps[FMath::Min(Players, Caps.Num()) - 1] : MAX_int32;
+}
+
+bool UDCUnits::TryEngage(const AActor& Victim, const ADCEnemy& Unit, bool bRanged, float Now)
+{
+	TArray<FDCAttackSlot>& Slots = (bRanged ? RangedSlots : MeleeSlots).FindOrAdd(Victim.GetUniqueID());
+	return DCFactionRules::GrantSlot(Slots, Unit.GetUniqueID(), Now, SlotCap(bRanged), UDCTuning::Get().FactionMix.CrewSlotLeaseSeconds);
+}
+
+float UDCUnits::SpendCrewDamage(const AActor& Victim, float Amount, float Now)
+{
+	const FDCFactionMixRule& Mix = UDCTuning::Get().FactionMix;
+	const AGameStateBase* GS = GetWorld() ? GetWorld()->GetGameState() : nullptr;
+	const int32 Players = GS ? FMath::Max(1, GS->PlayerArray.Num()) : 1;
+	const float Dps = Mix.CrewDpsByPlayers.Num() > 0 ? Mix.CrewDpsByPlayers[FMath::Min(Players, Mix.CrewDpsByPlayers.Num()) - 1] : 0.f;
+	return DCFactionRules::SpendDamage(DamageBuckets.FindOrAdd(Victim.GetUniqueID()), Amount, Now, Dps, Mix.CrewBurstHealth);
+}
+
+bool UDCUnits::CanEngage(const AActor& Victim, const ADCEnemy& Unit, bool bRanged, float Now) const
+{
+	const TArray<FDCAttackSlot>* Slots = (bRanged ? RangedSlots : MeleeSlots).Find(Victim.GetUniqueID());
+	return !Slots || DCFactionRules::HasSlot(*Slots, Unit.GetUniqueID(), Now, SlotCap(bRanged));
+}
+
+FName ADCEnemy::GetFaction() const
+{
+	const FDCEnemyDef* Def = GetDef();
+	return Def ? Def->Faction : NAME_None;
+}
+
+FVector ADCEnemy::SlotOffset(const FDCEnemyDef& Def, const FVector& Facing) const
+{
+	const FFormationFn* Fn = Formations().Find(Def.Formation);
+	const uint32 Hash = HashCombine(GetTypeHash(Squad), GetTypeHash(Slot * 7919 + 1));
+	return Fn ? (*Fn)(Slot, SquadSize, Facing.GetSafeNormal2D(), Def.FormationSpacingCm, Hash) : FVector::ZeroVector;
+}
+
+AActor* ADCEnemy::FindFoe(float Range) const
+{
+	const TArray<FDCFactionDef>& Factions = UDCTuning::Get().Factions;
+	const FName Mine = GetFaction();
+	const FVector Here = GetActorLocation();
+	AActor* Best = nullptr;
+	float BestD = Range * Range;
+	if (Mine.IsNone() || DCFactionRules::FightsCrew(Factions, Mine))
+	{
+		const float CrewD = InCrewGrace(GetWorld()) ? FMath::Min(BestD, FMath::Square(UDCTuning::Get().FactionMix.CrewSelfDefenceCm)) : BestD;
+		// A crew member whose attack slots are all held counts as out of range (advisor a-17): surplus units fight rivals.
+		const UDCUnits* SlotOwner = UDCUnits::Get(this);
+		const ADCGameState* SlotGS = GetWorld()->GetGameState<ADCGameState>();
+		const FDCEnemyDef* MyDef = GetDef();
+		const bool bRangedMe = MyDef && MyDef->ShotRange > 0.f;
+		for (ADCCharacter* C : TActorRange<ADCCharacter>(GetWorld()))
+		{
+			const float Dist = FVector::DistSquared(C->GetActorLocation(), Here);
+			const bool bSaturated = SlotOwner && SlotGS && !SlotOwner->CanEngage(*C, *this, bRangedMe, SlotGS->Now());
+			const float D = C->IsDowned() || bSaturated || Dist >= CrewD ? BestD : Dist;
+			Best = D < BestD ? C : Best;
+			BestD = FMath::Min(BestD, D);
+		}
+	}
+	const UDCUnits* Units = UDCUnits::Get(this);
+	if (Mine.IsNone() || !Units)
+	{
+		return Best;
+	}
+	for (ADCEnemy* U : Units->All())
+	{
+		if (!U || U == this || !U->IsAlive() || !DCFactionRules::IsHostile(Factions, Mine, U->GetFaction()))
+		{
+			continue;
+		}
+		const float D = FVector::DistSquared(U->GetActorLocation(), Here);
+		Best = D < BestD ? U : Best;
+		BestD = FMath::Min(BestD, D);
+	}
+	return Best;
+}
+
+void ADCEnemy::GroundMove(const FVector& Goal, float Speed, float DeltaSeconds, float Hover)
+{
+	const FVector Here = GetActorLocation();
+	FVector To = Goal - Here;
+	To.Z = 0.f;
+	if (To.SizeSquared() < 60.f * 60.f)
+	{
+		return;
+	}
+	// Separation: a light 2D push off packmates, so a crowd spreads instead of stacking.
+	FVector Push = FVector::ZeroVector;
+	if (const UDCUnits* Units = UDCUnits::Get(this))
+	{
+		for (const ADCEnemy* U : Units->All())
+		{
+			FVector D = U && U != this ? Here - U->GetActorLocation() : FVector::ZeroVector;
+			D.Z = 0.f;
+			const float Dist = D.Size();
+			Push += Dist > 1.f && Dist < 160.f ? D / Dist * (160.f - Dist) / 160.f : FVector::ZeroVector;
+		}
+	}
+	const FVector Want = (To.GetSafeNormal() + Push * 0.8f).GetSafeNormal2D();
+	// Crew contact ring (advisor a-10): unswept moves never step inside body + capsule + margin of a standing player
+	// (stepping out of it is always allowed), so a crowd rings the player instead of pinning the capsule.
+	TArray<FVector, TInlineAllocator<4>> Crew;
+	for (const ADCCharacter* C : TActorRange<ADCCharacter>(GetWorld()))
+	{
+		if (!C->IsDowned())
+		{
+			Crew.Add(C->GetActorLocation());
+		}
+	}
+	const float Contact = CrewContactCm();
+	auto IntoCrew = [&Crew, &Here, Contact](const FVector& Next)
+	{
+		for (const FVector& At : Crew)
+		{
+			const float D = FVector::Dist2D(Next, At);
+			if (D < Contact && D < FVector::Dist2D(Here, At))
+			{
+				return true;
+			}
+		}
+		return false;
+	};
+	const ADCVoxelCity* City = ADCVoxelCity::Get(this);
+	const float GroundHere = City ? City->SurfaceZCm(Here) : 0.f;
+	// R6: factions that enter buildings step by the walk mask (doors, breaches) instead of a tower's solid box.
+	const FDCFactionDef* MyFaction = DCFactionRules::Find(UDCTuning::Get().Factions, GetFaction());
+	const bool bEnters = MyFaction && MyFaction->bEntersBuildings;
+	const float Step = Speed * DeltaSeconds;
+	// The first heading that does not walk into a wall wins: straight, then fanning out both ways (climbs rubble,
+	// never a tower face: a column top more than a step above is a wall).
+	static const float Fan[] = {0.f, 35.f, -35.f, 70.f, -70.f, 110.f, -110.f};
+	for (const float Deg : Fan)
+	{
+		const FVector Dir = Want.RotateAngleAxis(Deg, FVector::UpVector);
+		const FVector Next = Here + Dir * Step;
+		const FVector Probe = Here + Dir * FMath::Max(Step, 120.f);
+		const float Ground = City ? City->SurfaceZCm(Probe) : 0.f;
+		const FVector BodyAt(Probe.X, Probe.Y, Ground + 120.f);
+		if (IntoCrew(Next) || Ground - GroundHere > 160.f || (City && !City->IsInsideBounds(BodyAt)) || (City && (bEnters ? City->IsWalkBlocked(BodyAt) : City->IsSolidAt(BodyAt))))
+		{
+			continue;
+		}
+		const float NextGround = City ? City->SurfaceZCm(Next) : 0.f;
+		const float Z = FMath::FInterpTo(Here.Z, NextGround + Hover, DeltaSeconds, 12.f);
+		SetActorLocation(FVector(Next.X, Next.Y, Z));
+		Heading = Dir;
+		SetActorRotation(FMath::RInterpTo(GetActorRotation(), Dir.Rotation(), DeltaSeconds, 8.f));
+		return;
+	}
+	Heading = Heading.RotateAngleAxis(90.f, FVector::UpVector); // boxed in: turn and try another way next tick
+}
+
+float ADCEnemy::CrewContactCm() const
+{
+	// Body radius + the player capsule radius + data margin (the player capsule radius from the class default).
+	const ADCCharacter* Cdo = GetDefault<ADCCharacter>();
+	const float Capsule = Cdo && Cdo->GetCapsuleComponent() ? Cdo->GetCapsuleComponent()->GetUnscaledCapsuleRadius() : 42.f;
+	return (Body ? Body->GetScaledSphereRadius() : 45.f) + Capsule + UDCTuning::Get().FactionMix.CrewContactMarginCm;
+}
+
+void ADCEnemy::HostAttack(AActor* Victim, float Now)
+{
+	const FDCEnemyDef* Def = GetDef();
+	if (!Def || !Victim || Now < NextAttackTime)
+	{
+		return;
+	}
+	const FVector From = GetActorLocation() + FVector(0, 0, 40.f);
+	const FVector At = Victim->GetActorLocation();
+	const float Dist = FVector::Dist(From, At);
+	const bool bRanged = Def->ShotRange > 0.f;
+	// Melee reaches at least past the crew contact ring (units hold there and must still land their hits).
+	const float Reach = bRanged ? Def->ShotRange : FMath::Max(Def->AttackRange, CrewContactCm() + 40.f);
+	if (Dist > Reach)
+	{
+		return;
+	}
+	// Attack slots (advisor a-17): a crew member takes hits from a few units at a time; the rest wait their turn.
+	UDCUnits* SlotOwner = Cast<ADCCharacter>(Victim) ? UDCUnits::Get(this) : nullptr;
+	if (SlotOwner && !SlotOwner->TryEngage(*Victim, *this, bRanged, Now))
+	{
+		NextAttackTime = Now + 0.25f;
+		return;
+	}
+	if (bRanged)
+	{
+		// Shots need a clear line through the voxel city (host-only, at the attack rate, not per tick).
+		const ADCVoxelCity* City = ADCVoxelCity::Get(this);
+		// R6: a shooter in the same building as its target sees through that building's own walls box.
+		const int32 SameLot = City ? City->StandingLotAt(At) : INDEX_NONE;
+		const TArray<int32> Ignore = SameLot != INDEX_NONE && City->StandingLotAt(From) == SameLot ? TArray<int32>{SameLot} : TArray<int32>();
+		if (City && City->IsSightBlocked(From, At, Ignore))
+		{
+			NextAttackTime = Now + 0.3f;
+			return;
+		}
+	}
+	NextAttackTime = Now + Def->AttackInterval;
+	++AttackSeq; // R20: every machine plays the attack clip
+	// Spread: the miss chance grows with range (ShotSpread degrees per 10 m).
+	const float MissDeg = Def->ShotSpread * Dist / 1000.f;
+	const bool bHit = !bRanged || FMath::FRand() > FMath::Clamp(MissDeg / 30.f, 0.f, 0.7f);
+	if (bRanged)
+	{
+		const FVector Miss = bHit ? FVector::ZeroVector : FMath::VRand() * FMath::Min(Dist * 0.08f, 300.f);
+		MulticastShot(From, At + Miss);
+	}
+	if (!bHit)
+	{
+		return;
+	}
+	if (ADCCharacter* C = Cast<ADCCharacter>(Victim))
+	{
+		UDCUnits* Budget = UDCUnits::Get(this);
+		const float Hurt = CrewDamage(GetWorld(), Def->Damage);
+		C->HostApplyHurt(Budget ? Budget->SpendCrewDamage(*C, Hurt, Now) : Hurt, GetActorLocation());
+		return;
+	}
+	Victim->TakeDamage(Def->Damage, FDamageEvent(), nullptr, this);
+}
+
+void ADCEnemy::MulticastShot_Implementation(FVector_NetQuantize From, FVector_NetQuantize To)
+{
+	const FDCFactionDef* F = DCFactionRules::Find(UDCTuning::Get().Factions, GetFaction());
+	const ADCVoxelCity* City = ADCVoxelCity::Get(this);
+	if (ADCVoxelFx* Fx = City ? City->GetFx() : nullptr)
+	{
+		Fx->Tracer(From, To, F ? F->Cue : FLinearColor::White, UDCVoxelSettings::Get().Tuning.TracerGlow);
+	}
+	DCAudio::PlayAt(this, TEXT("FactionShot"), From, 0.35f, FMath::FRandRange(0.9f, 1.15f));
+}
+
+void ADCEnemy::TickGait(float DeltaSeconds)
+{
+	const FDCEnemyDef* Def = GetDef();
+	if (Anim && ModelComp && Def && DeltaSeconds > 0.f)
+	{
+		// R20 (h-anim): the animator poses the segments; the model component takes the root's move about the feet.
+		Anim->Advance(DeltaSeconds, GetActorLocation(), GetActorRotation().Yaw, Health, AttackSeq, IsAlive());
+		Anim->ApplyRoot(*Def);
+	}
+	else if (!ModelComp || !Def || (Def->BobCm <= 0.f && Def->SwayDeg <= 0.f) || DeltaSeconds <= 0.f)
+	{
+		return;
+	}
+	else
+	{
+		TickBob(*Def, DeltaSeconds);
+	}
+	if (HasAuthority())
+	{
+		return;
+	}
+	// Clients (advisor a-3): infantry replicates at 15-20 Hz, so the model eases toward the replicated root instead of
+	// stepping with each update; a big jump (spawn, teleport) snaps.
+	const FVector Want = ModelComp->GetComponentLocation();
+	SmoothModel = SmoothModel.IsZero() || FVector::DistSquared(SmoothModel, Want) > 500.f * 500.f ? Want : FMath::VInterpTo(SmoothModel, Want, DeltaSeconds, 18.f);
+	ModelComp->SetWorldLocation(SmoothModel);
+}
+
+void ADCEnemy::TickBob(const FDCEnemyDef& InDef, float DeltaSeconds)
+{
+	const FDCEnemyDef* Def = &InDef;
+	const FVector Here = GetActorLocation();
+	const bool bMoving = FVector::Dist2D(Here, GaitLast) / DeltaSeconds > 30.f;
+	GaitLast = Here;
+	GaitPhase += bMoving ? DeltaSeconds * Def->StepHz * PI : 0.f;
+	const float Bob = bMoving ? FMath::Abs(FMath::Sin(GaitPhase)) * Def->BobCm : 0.f;
+	const float Sway = bMoving ? FMath::Sin(GaitPhase) * Def->SwayDeg : 0.f;
+	ModelComp->SetRelativeLocation(Def->ModelOffset + FVector(0, 0, Bob));
+	ModelComp->SetRelativeRotation(FRotator(0.f, 0.f, Sway));
+}
+
 
 const FDCEnemyDef* ADCEnemy::GetDef() const
 {
@@ -219,6 +792,10 @@ bool ADCEnemy::IsWalker() const
 
 void ADCEnemy::BeginPlay()
 {
+	if (HasAuthority() && GetWorld() && GetWorld()->GetGameState())
+	{
+		SpawnServerTime = static_cast<float>(GetWorld()->GetGameState()->GetServerWorldTimeSeconds());
+	}
 	Super::BeginPlay();
 	if (const FDCEnemyDef* Def = GetDef())
 	{
@@ -229,12 +806,88 @@ void ADCEnemy::BeginPlay()
 		BuildVisual();
 	}
 	Heading = GetActorForwardVector();
+	if (UDCUnits* Units = UDCUnits::Get(this))
+	{
+		Units->Add(this);
+	}
+	if (const FDCEnemyDef* Def = GetDef())
+	{
+		SetNetUpdateFrequency(Def->NetHz);
+	}
+	GaitLast = GetActorLocation();
+	const FDCFactionDef* F = DCFactionRules::Find(UDCTuning::Get().Factions, GetFaction());
+	const FDCEnemyDef* CueDef = GetDef();
+	const int32 CueEvery = F ? FMath::RoundToInt32(F->CueLightEvery / ADCEnvironment::EffectScaleOf(this)) : 0; // rarer on low tiers
+	if (F && CueDef && CueEvery > 0 && CueDef->GlowLight <= 0.f && GetUniqueID() % CueEvery == 0)
+	{
+		GlowLight->SetVisibility(true);
+		GlowLight->SetIntensityUnits(ELightUnits::Candelas);
+		GlowLight->SetIntensity(F->CueLightCandela);
+		GlowLight->SetAttenuationRadius(F->CueLightRadiusCm);
+		GlowLight->SetLightColor(F->Cue);
+		GlowLight->SetRelativeLocation(FVector(30.f, 0.f, 60.f));
+	}
+	const ADCVoxelCity* City = ADCVoxelCity::Get(this);
+	if (ADCVoxelFx* Fx = F && !F->SpawnFx.IsNone() && City ? City->GetFx() : nullptr)
+	{
+		Fx->Emit(F->SpawnFx, FVector(GetActorLocation().X, GetActorLocation().Y, City->SurfaceZCm(GetActorLocation())), 150.f);
+	}
+}
+
+void ADCEnemy::EndPlay(const EEndPlayReason::Type Reason)
+{
+	if (Reason == EEndPlayReason::Destroyed && bDeathFxPlayed && !bBodyBurst)
+	{
+		BurstBody(); // R20: destroyed before the death clip ended (a client a little behind the host)
+	}
+	if (UDCUnits* Units = UDCUnits::Get(this))
+	{
+		Units->Remove(this);
+	}
+	Super::EndPlay(Reason);
+}
+
+bool ADCEnemy::BuildModel(const FDCEnemyDef& Def)
+{
+	DC_FRAME_SCOPE("EnemyBuild");
+	const FDCVoxelMeshData* Mesh = DCVoxelModels::Mesh(Def.Model);
+	if (!Mesh)
+	{
+		return false;
+	}
+	UProceduralMeshComponent* Model = NewObject<UProceduralMeshComponent>(this, TEXT("VoxelModel"));
+	Model->SetupAttachment(Body);
+	Model->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	Model->RegisterComponent();
+	Model->SetRelativeLocation(Def.ModelOffset);
+	Model->SetRelativeScale3D(FVector(Def.ModelScale));
+	const AGameStateBase* SpawnGS = GetWorld() ? GetWorld()->GetGameState() : nullptr;
+	const float SpawnAge = SpawnGS && SpawnServerTime >= 0.f ? static_cast<float>(SpawnGS->GetServerWorldTimeSeconds()) - SpawnServerTime : 0.f;
+	Anim = UDCUnitAnimator::Attach(*this, *Model, Def, SpawnAge); // R20: a unit with a gait gets its segmented mesh there
+	if (!Anim)
+	{
+		Model->CreateMeshSection(0, Mesh->Positions, Mesh->Indices, Mesh->Normals, Mesh->UVs, Mesh->Colors, {}, false);
+		Model->SetMaterial(0, Cast<UMaterialInterface>(UDCVoxelSettings::Get().VoxelMaterial.TryLoad()));
+	}
+	ModelComp = Model;
+	for (UStaticMeshComponent* Part : {Visual.Get(), Eye.Get(), LegA.Get(), LegB.Get(), LegC.Get()})
+	{
+		Part->SetVisibility(false);
+	}
+	return true;
 }
 
 void ADCEnemy::BuildVisual()
 {
 	const FDCEnemyDef& Def = *GetDef();
 	const float S = Def.Scale;
+	BuildModel(Def); // the basic shapes below stay hidden behind a model, as the fallback, and set collision sizes
+	// The eye glow (data): a small red light so a dark machine reads in the dark street.
+	GlowLight->SetVisibility(Def.GlowLight > 0.f);
+	GlowLight->SetIntensity(Def.GlowLight);
+	GlowLight->SetAttenuationRadius(Def.GlowLightRadiusCm);
+	GlowLight->SetLightColor(Def.EyeColor);
+	GlowLight->SetRelativeLocation(Def.GlowLightOffset);
 	Visual->SetMaterial(0, DCAssets::MakeFlat(this, Def.Color));
 	Eye->SetStaticMesh(DCAssets::Sphere());
 	Eye->SetMaterial(0, DCAssets::MakeFlat(this, Def.EyeColor, 40.f));
@@ -380,6 +1033,108 @@ void ADCEnemy::SteerTowards(const FVector& Goal, float Speed, float DeltaSeconds
 	}
 }
 
+bool ADCEnemy::HostTickRanged(const FDCEnemyDef& Def, ADCCharacter* Target, float Now)
+{
+	if (Def.RangedRangeCm <= 0.f)
+	{
+		return false;
+	}
+	if (RangedChargeEnd >= 0.f)
+	{
+		if (Now < RangedChargeEnd)
+		{
+			return true;
+		}
+		RangedChargeEnd = -1.f;
+		HostRangedFire(Def, Now);
+		return false;
+	}
+	if (!Target || Target->IsDowned() || Now < NextAttackTime)
+	{
+		return false;
+	}
+	const FVector From = GetActorLocation();
+	const FVector At = Target->GetActorLocation();
+	if (FVector::Dist2D(From, At) > Def.RangedRangeCm)
+	{
+		return false;
+	}
+	const ADCVoxelCity* City = ADCVoxelCity::Get(this);
+	if (City && City->IsSightBlocked(From, At, TArray<int32>()))
+	{
+		NextAttackTime = Now + 0.5f; // look again soon, not every tick
+		return false;
+	}
+	RangedAt = At; // a fixed point: the crew can step out of the line
+	RangedChargeEnd = Now + Def.ChargeSeconds;
+	MulticastRangedCharge(From, At, Def.ChargeSeconds);
+	UE_LOG(LogTemp, Display, TEXT("DCWALKER %s charges at %s (%.0f m)"), *GetName(), *At.ToCompactString(), FVector::Dist2D(From, At) / 100.f);
+	return true;
+}
+
+void ADCEnemy::HostRangedFire(const FDCEnemyDef& Def, float Now)
+{
+	NextAttackTime = Now + Def.AttackInterval;
+	++AttackSeq; // R20: every machine plays the attack clip
+	MulticastRangedFire(GetActorLocation(), RangedAt, Def.ShotBlastCm);
+	UDCUnits* Budget = UDCUnits::Get(this);
+	int32 Hit = 0;
+	for (ADCCharacter* C : TActorRange<ADCCharacter>(GetWorld()))
+	{
+		if (C->IsDowned() || FVector::Dist(C->GetActorLocation(), RangedAt) > Def.ShotBlastCm)
+		{
+			continue;
+		}
+		const float Hurt = CrewDamage(GetWorld(), Def.Damage);
+		C->HostApplyHurt(Budget ? Budget->SpendCrewDamage(*C, Hurt, Now) : Hurt, RangedAt);
+		++Hit;
+	}
+	UE_LOG(LogTemp, Display, TEXT("DCWALKER %s fired at %s blast=%.0f hit=%d"), *GetName(), *RangedAt.ToCompactString(), Def.ShotBlastCm, Hit);
+}
+
+void ADCEnemy::MulticastRangedCharge_Implementation(FVector_NetQuantize From, FVector_NetQuantize To, float Seconds)
+{
+	ChargeLineFrom = From;
+	ChargeLineTo = To;
+	ChargeLineEndReal = GetWorld()->GetRealTimeSeconds() + Seconds;
+	NextChargeLineReal = 0.0;
+	DCAudio::PlayAt(this, TEXT("LaserCharge"), From, 0.8f, 0.7f);
+}
+
+void ADCEnemy::MulticastRangedFire_Implementation(FVector_NetQuantize From, FVector_NetQuantize To, float BlastCm)
+{
+	ChargeLineEndReal = -1.0;
+	const FDCEnemyDef* Def = GetDef();
+	const ADCVoxelCity* City = ADCVoxelCity::Get(this);
+	if (ADCVoxelFx* Fx = City ? City->GetFx() : nullptr)
+	{
+		const FLinearColor Beam = Def ? Def->EyeColor : FLinearColor::Red;
+		Fx->Tracer(From, To, Beam, UDCVoxelSettings::Get().Tuning.TracerGlow * 3.f);
+		Fx->Emit(TEXT("Crater"), To, BlastCm);
+	}
+	DCAudio::PlayAt(this, TEXT("Detonation"), To, 0.45f, 1.35f);
+}
+
+bool ADCEnemy::IsRangedCharging() const
+{
+	return GetWorld() && GetWorld()->GetRealTimeSeconds() < ChargeLineEndReal;
+}
+
+void ADCEnemy::TickRangedLine(const FDCEnemyDef& Def)
+{
+	const double Real = GetWorld()->GetRealTimeSeconds();
+	if (Real >= ChargeLineEndReal || Real < NextChargeLineReal)
+	{
+		return;
+	}
+	NextChargeLineReal = Real + 0.08;
+	const ADCVoxelCity* City = ADCVoxelCity::Get(this);
+	if (ADCVoxelFx* Fx = City ? City->GetFx() : nullptr)
+	{
+		Fx->Tracer(ChargeLineFrom, ChargeLineTo, Def.EyeColor, UDCVoxelSettings::Get().Tuning.TracerGlow);
+	}
+}
+
 void ADCEnemy::TryAttack(ADCCharacter* Target, float Now)
 {
 	const FDCEnemyDef* Def = GetDef();
@@ -387,12 +1142,21 @@ void ADCEnemy::TryAttack(ADCCharacter* Target, float Now)
 	{
 		return;
 	}
+	UDCUnits* SlotOwner = UDCUnits::Get(this);
+	if (SlotOwner && !SlotOwner->TryEngage(*Target, *this, false, Now))
+	{
+		NextAttackTime = Now + 0.25f;
+		return;
+	}
 	NextAttackTime = Now + Def->AttackInterval;
-	Target->HostApplyHurt(Def->Damage, GetActorLocation());
+	++AttackSeq; // R20: every machine plays the attack clip
+	const float Hurt = CrewDamage(GetWorld(), Def->Damage);
+	Target->HostApplyHurt(SlotOwner ? SlotOwner->SpendCrewDamage(*Target, Hurt, Now) : Hurt, GetActorLocation());
 }
 
 void ADCEnemy::Tick(float DeltaSeconds)
 {
+	DC_FRAME_SCOPE("Enemies");
 	Super::Tick(DeltaSeconds);
 	const FDCEnemyDef* Def = GetDef();
 	if (!Def)
@@ -402,6 +1166,14 @@ void ADCEnemy::Tick(float DeltaSeconds)
 	if (Spot->IsVisible())
 	{
 		Spot->SetWorldRotation((FVector(LightTarget) - GetActorLocation()).Rotation());
+	}
+	if (IsAlive() || Anim)
+	{
+		TickGait(DeltaSeconds); // R20: an animated unit keeps posing through its death clip
+	}
+	if (IsAlive())
+	{
+		TickRangedLine(*Def); // the charge sight line, every machine
 	}
 	if (!IsAlive())
 	{
@@ -441,7 +1213,7 @@ void ADCEnemy::Tick(float DeltaSeconds)
 
 float ADCEnemy::TakeDamage(float Damage, const FDamageEvent& DamageEvent, AController* EventInstigator, AActor* DamageCauser)
 {
-	if (!HasAuthority() || !IsAlive())
+	if (!HasAuthority() || !IsAlive() || !CanBeDamaged())
 	{
 		return 0.f;
 	}
@@ -461,8 +1233,15 @@ void ADCEnemy::Die(AController* Killer)
 	{
 		if (ADCPlayerState* PS = Killer->GetPlayerState<ADCPlayerState>())
 		{
-			PS->AddPoints(Def ? Def->KillPoints : UDCTuning::Get().Economy.KillPoints);
-			++PS->Kills;
+			// R3: shooting the friendly army pays nothing and HQ notices (advisor a-7).
+			const bool bAlly = !GetFaction().IsNone() && !DCFactionRules::FightsCrew(UDCTuning::Get().Factions, GetFaction());
+			PS->AddPoints(bAlly ? 0 : (Def ? Def->KillPoints : UDCTuning::Get().Economy.KillPoints));
+			PS->Kills += bAlly ? 0 : 1;
+			ADCCharacter* Shooter = bAlly ? PS->GetPawn<ADCCharacter>() : nullptr;
+			if (Shooter)
+			{
+				Shooter->HostToast(TEXT("FRIENDLY FIRE. HQ WILL BILL YOU FOR THE UNIFORM."));
+			}
 		}
 	}
 	SetActorEnableCollision(false);
@@ -482,7 +1261,7 @@ void ADCEnemy::Die(AController* Killer)
 		}
 	}
 	PlayDeathFx();
-	SetLifeSpan(Def && Def->Behaviour == Walker ? 2.5f : 0.3f);
+	SetLifeSpan(Def && Def->Behaviour == Walker ? 2.5f : 0.3f + (Anim ? Anim->DeathSeconds() : 0.f)); // R20: the death clip plays first
 }
 
 void ADCEnemy::OnRep_Health()
@@ -501,7 +1280,29 @@ void ADCEnemy::PlayDeathFx()
 	}
 	bDeathFxPlayed = true;
 	Spot->SetVisibility(false);
+	GlowLight->SetVisibility(false);
 	DCAudio::PlayAt(this, TEXT("Kill"), GetActorLocation(), 0.4f, 0.7f);
+	// R20: an animated unit falls first (its death clip), then bursts; EndPlay bursts if the actor goes before.
+	const float Delay = Anim ? Anim->DeathSeconds() : 0.f;
+	if (Delay > 0.f)
+	{
+		GetWorldTimerManager().SetTimer(BurstTimer, this, &ADCEnemy::BurstBody, Delay, false);
+		return;
+	}
+	BurstBody();
+}
+
+void ADCEnemy::BurstBody()
+{
+	if (bBodyBurst)
+	{
+		return;
+	}
+	bBodyBurst = true;
+	if (Anim && ModelComp)
+	{
+		ModelComp->SetVisibility(false);
+	}
 	const ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>();
 	ADCDebrisPool* Pool = GS && GS->GetEnvironment() ? GS->GetEnvironment()->GetDebrisPool() : nullptr;
 	const FDCEnemyDef* Def = GetDef();
@@ -509,7 +1310,13 @@ void ADCEnemy::PlayDeathFx()
 	{
 		return;
 	}
-	for (int32 i = 0; i < 6; ++i)
+	// R3: a unit bursts into voxel crumbs of its body and its light cue (instanced, cheap), plus a couple of tumbling
+	// debris blocks.
+	if (ADCVoxelCity* City = ADCVoxelCity::Get(this))
+	{
+		City->BurstCrumbs(GetActorLocation(), Def->Color * 3.f, Def->EyeColor, FMath::RoundToInt32(24 * FMath::Max(Def->Scale, 0.5f)), 5.f * FMath::Max(Def->Scale, 1.f) * 2.f);
+	}
+	for (int32 i = 0; i < 2; ++i)
 	{
 		FDCDebrisSpawn D;
 		D.Transform = FTransform(FRotator(FMath::FRandRange(0.f, 360.f), FMath::FRandRange(0.f, 360.f), 0.f), GetActorLocation(), FVector(0.2f * Def->Scale));

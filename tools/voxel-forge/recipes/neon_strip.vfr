@@ -1,0 +1,13 @@
+# Neon strip (R23 wall mount): a tall thin magenta tube running up a pier on standoff brackets, a few dead segments.
+grid 10
+size 3 3 60
+slot tube PaperEdge
+slot dead Paper
+slot bracket Steel
+pivot 0 1 0
+box 0 1 4 2 2 5 bracket
+box 0 1 30 2 2 31 bracket
+box 0 1 56 2 2 57 bracket
+box 2 1 2 3 2 60 tube
+box 2 1 20 3 2 24 dead
+box 2 1 44 3 2 46 dead

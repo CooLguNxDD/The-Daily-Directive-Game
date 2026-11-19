@@ -1,0 +1,21 @@
+# Swarmer: small, low, angular. Ink wedge body, one red eye (danger), blade fins.
+grid 5
+size 28 20 14
+slot body Ink
+slot trim Steel
+slot eye Danger
+# wedge body: pointed nose toward +x
+poly 3 10 body 2,4 18,2 27,10 18,18 2,16
+poly 10 12 body 6,6 18,5 24,10 18,15 6,14
+# blade fins on the back
+poly 10 13 trim 3,9 9,9 6,10 3,11
+beam 5 4 8 2 0 2 1 trim
+beam 5 16 8 2 20 2 1 trim
+beam 14 3 7 14 0 1 1 trim
+beam 14 17 7 14 20 1 1 trim
+# eye
+box 23 8 7 27 12 10 eye
+mirror y
+# R20 animation segments: the four blade legs flutter (roll) about the hull edge on each side.
+part BladeL 0 0 0 28 3 14 9 3 7
+part BladeR 0 17 0 28 20 14 9 17 7

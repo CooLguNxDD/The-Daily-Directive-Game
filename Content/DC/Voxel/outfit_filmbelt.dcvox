@@ -1,0 +1,10 @@
+dcvox 1
+name outfit_filmbelt
+grid_cm 5
+size 2 9 11
+pivot 0 4 5
+slots SwatchAccent Steel
+solid 37
+rle
+1*1 1*0 1*1 15*0 1*1 1*0 4*2 14*0 4*2 16*0 1*1 1*0 1*1 17*0 4*2 14*0 4*2 1*1 17*0 4*2 14*0 4*2 1*1 15*0
+1*1 1*0 1*1 1*0 1*1 15*0 1*1 1*0 1*1 17*0 1*1 1*0

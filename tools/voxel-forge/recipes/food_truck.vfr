@@ -1,0 +1,28 @@
+# Food truck (R23 vehicle): boxy ink-brown van with an open serving hatch (warm lit), a small cyan menu board on the
+# roof and an awning flap. Faces +x (cab at +x); the hatch opens on the +y side.
+grid 5
+size 100 44 60
+slot body InkBrown
+slot cab InkBlue
+slot glass WindowOff
+slot warm Window
+slot flap InkBlue
+slot sign NeonCyan
+slot edge NeonCyanEdge
+slot wheel Rubble
+shell 2 2 6 76 42 52 2 body
+shell 76 4 6 98 40 38 2 cab
+box 88 6 24 98 38 36 glass
+carve box 90 4 8 98 40 22
+box 90 4 6 98 40 8 cab
+carve box 16 40 22 64 42 42
+box 16 39 22 64 40 42 warm
+poly 42 44 flap 16,42 64,42 64,44 16,44
+box 14 40 42 66 44 43 flap
+box 26 14 52 52 30 53 body
+box 28 20 53 50 24 60 edge
+box 29 20 54 49 24 59 sign
+ellipsoid 18 3 6 7 3 6 wheel
+ellipsoid 18 41 6 7 3 6 wheel
+ellipsoid 84 3 6 7 3 6 wheel
+ellipsoid 84 41 6 7 3 6 wheel

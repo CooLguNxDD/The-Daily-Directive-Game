@@ -1,0 +1,22 @@
+# Rooftop sign column (R23 roof sign, RoofEdge): a tall vertical neon board on a steel frame, dim panel, lit edge,
+# dark glyph bars down its length (reads as lettering, no real word). Magenta.
+grid 10
+size 8 12 76
+slot steel Steel
+slot panel Paper
+slot edge PaperEdge
+slot glyph Ink
+pivot 0 6 0
+box 1 1 0 3 3 12 steel
+box 1 9 0 3 11 12 steel
+box 1 1 10 3 11 12 steel
+box 3 0 10 8 12 76 edge
+box 3 1 11 8 11 75 panel
+paint box 7 2 16 8 10 18 glyph
+paint box 7 3 22 8 9 27 glyph
+paint box 7 2 31 8 10 33 glyph
+paint box 7 3 37 8 9 43 glyph
+paint box 7 2 47 8 10 49 glyph
+paint box 7 3 53 8 9 58 glyph
+paint box 7 2 62 8 10 64 glyph
+paint box 7 3 67 8 9 72 glyph

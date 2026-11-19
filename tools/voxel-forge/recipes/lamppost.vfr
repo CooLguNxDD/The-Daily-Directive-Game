@@ -1,0 +1,9 @@
+# Street lamp: ink post, cream lamp.
+grid 5
+size 16 8 90
+slot post Ink
+slot lamp Lamp
+cyl 4 4 0 84 1.4 post
+box 2 2 0 6 6 3 post
+beam 4 4 82 13 4 86 1 post
+box 10 2 80 15 6 83 lamp

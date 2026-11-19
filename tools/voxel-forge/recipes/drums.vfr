@@ -1,0 +1,13 @@
+# Oil drums (R12, Ruins): three ink drums, one on its side, a smouldering warm top on one (Char glow). Faces +x.
+grid 5
+size 22 22 18
+slot drum InkBlue
+slot ring Steel
+slot ember Char
+cyl 5 5 0 17 4.5 drum
+cyl 5 5 6 7 4.6 ring
+cyl 5 5 12 13 4.6 ring
+cyl 5 5 17 18 4 ember
+cyl 15 6 0 17 4.5 drum
+cyl 15 6 8 9 4.6 ring
+beam 4 16 4.5 20 16 4.5 4.5 drum

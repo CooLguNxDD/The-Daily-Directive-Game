@@ -1,0 +1,10 @@
+# Concrete planter with a clipped dark shrub (R12, Ministry): grey box, olive bush. Faces +x.
+grid 5
+size 20 20 18
+slot box Kerb
+slot soil InkBrown
+slot bush Olive
+box 0 0 0 20 20 8 box
+box 1 1 7 19 19 8 soil
+ellipsoid 10 10 12 8 8 6 bush
+noise 0.25 5 bush

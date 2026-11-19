@@ -1,0 +1,34 @@
+# Medic (friendly Army): a support trooper. The soldier's rounded helmet with a pale stripe and the steady blue lamp,
+# a big pale med pack on the back with a blue plus (no red: Danger is for threats only), a hip satchel, a short
+# carbine, the blue chest band (its light cue). Friendly shapes are rounded.
+name medic
+grid 5
+size 16 14 36
+slot body Olive
+slot dark Ink
+slot lamp AllyBlue
+slot steel Steel
+slot paper Snow
+box 6 3 0 9 6 14 body
+box 6 8 0 9 11 14 body
+box 4 2 0 9 6 1 dark
+box 4 8 0 9 12 1 dark
+box 5 3 14 11 11 27 body
+box 2 3 16 5 11 27 paper
+paint box 2 6 18 3 8 26 lamp
+paint box 2 4 21 3 10 23 lamp
+box 7 11 12 11 13 17 paper
+paint box 10 11 14 11 13 15 lamp
+box 6 5 27 11 9 31 dark
+ellipsoid 8 7 32 3.4 3 2.2 body
+paint box 4 3 32 13 11 33 paper
+box 11 4 30 13 10 32 lamp
+# Cue band round the chest, readable from every side.
+box 4 2 22 12 12 23 lamp
+beam 8 2 24 13 4 25 0.9 steel
+pivot 8 7 0
+# R20 animation segments (Soldier gait roles): legs from the hip, the carbine (ArmR) from the grip, head at the neck.
+part LegL 0 0 0 16 7 14 7.5 4.5 14
+part LegR 0 7 0 16 11 14 7.5 9.5 14
+part ArmR 11 0 22 16 7 27 11 3 24
+part Head 0 0 27 16 14 36 8 7 27

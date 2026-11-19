@@ -1,0 +1,10 @@
+dcvox 1
+name outfit_backpack
+grid_cm 5
+size 4 7 8
+pivot 4 3 2
+slots SwatchMain SwatchAccent Trim
+solid 160
+rle
+24*1 4*0 24*1 4*0 24*1 4*0 24*1 4*0 24*2 4*0 2*3 2*2 2*3 2*2 2*3 2*2 2*3 2*2 2*3 2*2 2*3 2*2 2*3 2*0
+2*3 2*0 2*3 2*0 2*3 2*0 2*3 2*0 2*3 2*0 2*3 2*0 2*3 30*0

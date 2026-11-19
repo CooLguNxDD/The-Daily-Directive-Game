@@ -3,6 +3,7 @@
 #include "DCTuning.h"
 #include "DCUpgrades.h"
 #include "DCLanBeacon.h"
+#include "DCHints.h"
 #include "Misc/AutomationTest.h"
 #include "Rules/DCPhotoRules.h"
 #include "Rules/DCRunRules.h"
@@ -42,6 +43,47 @@ bool FDCDraftOfferTest::RunTest(const FString&)
 	TestEqual(TEXT("a fully taken pool offers nothing"), Taken.Num(), 3);
 	TestTrue(TEXT("taken options never come back"), !Taken.Contains(TEXT("A1")) && Taken.Contains(TEXT("A2")));
 	TestEqual(TEXT("a pool larger than PerPool is cut to PerPool"), DCRunRules::DraftOffer(1, Ups, {}, 1).Num(), 3);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDCDraftHandTest, "Epic_AI_Mega_Jam2.Run.DraftHand",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FDCDraftHandTest::RunTest(const FString&)
+{
+	// R21: three cards from every pool, weighted by rarity, seeded, never a taken card, never twice in one hand.
+	TArray<FDCUpgradeDef> Ups = {Up(TEXT("A1"), TEXT("A")), Up(TEXT("A2"), TEXT("A")), Up(TEXT("B1"), TEXT("B")), Up(TEXT("C1"), TEXT("C")), Up(TEXT("E1"), TEXT("C"))};
+	Ups[4].Rarity = TEXT("Epic");
+	TArray<FDCCardRarity> Rar;
+	Rar.AddDefaulted(2);
+	Rar[0].Id = TEXT("Common");
+	Rar[0].Weight = 70.f;
+	Rar[1].Id = TEXT("Epic");
+	Rar[1].Weight = 5.f;
+	const TArray<FName> Hand = DCRunRules::DraftHand(42, Ups, Rar, {}, 3);
+	TestEqual(TEXT("three cards"), Hand.Num(), 3);
+	TestEqual(TEXT("same seed, same hand (host and clients)"), DCRunRules::DraftHand(42, Ups, Rar, {}, 3), Hand);
+	TestTrue(TEXT("no card twice"), TSet<FName>(Hand).Num() == Hand.Num());
+	TestTrue(TEXT("taken cards never come back"), !DCRunRules::DraftHand(9, Ups, Rar, {TEXT("A1"), TEXT("A2")}, 3).Contains(TEXT("A1")));
+	TestEqual(TEXT("a small pool deals what is open"), DCRunRules::DraftHand(9, Ups, Rar, {TEXT("A1"), TEXT("A2"), TEXT("B1")}, 3).Num(), 2);
+	// Human 16:28: a missed quota deals 2 cards, Common only (capped by the rarity table's order).
+	for (int32 Seed = 1; Seed <= 40; ++Seed)
+	{
+		const TArray<FName> Missed = DCRunRules::DraftHand(Seed, Ups, Rar, {}, 2, Rar[0].Id);
+		TestEqual(TEXT("missed quota: a hand of 2"), FMath::Min(Missed.Num(), 2), 2);
+		for (const FName& Id : Missed)
+		{
+			const FDCUpgradeDef* U = Ups.FindByPredicate([Id](const FDCUpgradeDef& Row) { return Row.Id == Id; });
+			TestTrue(TEXT("missed quota: only the lowest rarity"), U && U->Rarity == Rar[0].Id);
+		}
+	}
+	int32 EpicSeen = 0, CommonSeen = 0;
+	for (int32 Seed = 0; Seed < 400; ++Seed)
+	{
+		const TArray<FName> H = DCRunRules::DraftHand(Seed, Ups, Rar, {}, 1);
+		EpicSeen += H.Contains(TEXT("E1")) ? 1 : 0;
+		CommonSeen += H.Contains(TEXT("A1")) ? 1 : 0;
+	}
+	TestTrue(TEXT("the epic is dealt far less often than a common"), EpicSeen * 4 < CommonSeen && EpicSeen > 0);
 	return true;
 }
 
@@ -178,15 +220,17 @@ bool FDCRunDataTest::RunTest(const FString&)
 	{
 		PerPool.FindOrAdd(U.Pool) += 1;
 		TestTrue(FString::Printf(TEXT("upgrade %s has a known effect"), *U.Id.ToString()), DCUpgrades::IsKnownEffect(U.Effect));
+		TestNotNull(FString::Printf(TEXT("upgrade %s rarity %s has a +CardRarities row (R21)"), *U.Id.ToString(), *U.Rarity.ToString()), T.FindRarity(U.Rarity));
 		if (U.Effect == TEXT("UnlockStratagem"))
 		{
 			TestNotNull(FString::Printf(TEXT("upgrade %s unlocks a defined stratagem"), *U.Id.ToString()), T.FindStratagem(U.Unlock));
 		}
 	}
-	TestEqual(TEXT("R10: three draft pools"), PerPool.Num(), 3);
+	TestTrue(TEXT("R10: at least three draft pools (R22 adds Support)"), PerPool.Num() >= 3);
 	for (const TPair<FName, int32>& Pool : PerPool)
 	{
-		TestEqual(FString::Printf(TEXT("R10: pool %s has three options"), *Pool.Key.ToString()), Pool.Value, 3);
+		// R12 (final run): a pool may hold more than three; the draft offers three of the open ones (DraftOffer PerPool).
+		TestTrue(FString::Printf(TEXT("R10: pool %s has at least three options"), *Pool.Key.ToString()), Pool.Value >= 3);
 	}
 	TestTrue(TEXT("R8: about five scoop templates"), T.Scoops.Num() >= 5);
 	TestEqual(TEXT("R9: three sectors"), T.Sectors.Num(), 3);
@@ -200,7 +244,75 @@ bool FDCRunDataTest::RunTest(const FString&)
 	TestTrue(TEXT("R4: Overexposed 1.5x at 0.0 s"), Over && Over->Label == TEXT("OVEREXPOSED") && FMath::IsNearlyEqual(Over->Multiplier, 1.5f));
 	TestTrue(TEXT("R4: Peak Cinema 3.0x in 0.2-0.8 s"), Peak && Peak->Label == TEXT("PEAK CINEMA") && FMath::IsNearlyEqual(Peak->Multiplier, 3.f));
 	TestTrue(TEXT("R15: headline templates exist"), T.Run.Headlines.Num() > 0);
+	// R25 tutorial: a how-to page of at least three sections, and every hint card names a known trigger.
+	TestTrue(TEXT("R25: how-to page has at least three sections"), T.HowToPlay.Num() >= 3);
+	for (const FDCHowToSection& Sec : T.HowToPlay)
+	{
+		TestTrue(FString::Printf(TEXT("R25: how-to section %s has lines"), *Sec.Title), !Sec.Title.IsEmpty() && Sec.Lines.Num() > 0);
+	}
+	TestTrue(TEXT("R25: hint cards exist"), T.Hints.Num() > 0);
+	for (const FDCHintDef& H : T.Hints)
+	{
+		TestTrue(FString::Printf(TEXT("R25: hint %s names a known trigger"), *H.Id.ToString()), DCHints::IsKnown(H.Id));
+		TestTrue(FString::Printf(TEXT("R25: hint %s has text and time"), *H.Id.ToString()), !H.Text.IsEmpty() && H.Seconds > 0.f);
+	}
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDCHeadlineTest, "Epic_AI_Mega_Jam2.Run.FullEditionHeadlines", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FDCHeadlineTest::RunTest(const FString&)
+{
+	// R22: rows for every photo category, ANY and CORRECTION; a session never repeats a line until its row runs dry.
+	const TArray<FDCHeadlineRow>& Rows = UDCTuning::Get().HeadlineRows;
+	for (const FDCCategoryRule& Cat : UDCTuning::Get().Photo.Categories)
+	{
+		TestTrue(FString::Printf(TEXT("rows for %s"), *Cat.Tag.ToString()), Rows.ContainsByPredicate([&Cat](const FDCHeadlineRow& R) { return R.Category == Cat.Tag && R.Lines.Num() >= 4; }));
+	}
+	for (const TCHAR* Id : {TEXT("ANY"), TEXT("CORRECTION"), TEXT("CO-STAR"), TEXT("LAST FRAME")})
+	{
+		TestTrue(FString::Printf(TEXT("rows for %s"), Id), Rows.ContainsByPredicate([Id](const FDCHeadlineRow& R) { return R.Category == FName(Id) && R.Lines.Num() >= 4; }));
+	}
+	const FDCHeadlineRow* Demo = Rows.FindByPredicate([](const FDCHeadlineRow& R) { return R.Category == TEXT("DEMOLITION"); });
+	TSet<FString> Used;
+	TSet<FString> Printed;
+	for (int32 i = 0; Demo && i < Demo->Lines.Num(); ++i)
+	{
+		const FString L = DCRunRules::PickHeadline(1000 + i, Rows, {FName(TEXT("DEMOLITION"))}, TEXT("Sgt. Shutter"), TEXT("Old Town"), FString(), Used);
+		TestFalse(TEXT("no line twice before the row runs dry"), Printed.Contains(L));
+		Printed.Add(L);
+		TestFalse(TEXT("tokens filled"), L.Contains(TEXT("{")));
+	}
+	const FString Next = DCRunRules::PickHeadline(77, Rows, {FName(TEXT("DEMOLITION"))}, TEXT("A"), TEXT("B"), FString(), Used);
+	TestFalse(TEXT("a dry row starts over"), Next.IsEmpty());
+	const FString Fallback = DCRunRules::PickHeadline(5, Rows, {FName(TEXT("NO SUCH TAG"))}, TEXT("A"), TEXT("B"), FString(), Used);
+	TestFalse(TEXT("unknown category falls back to ANY"), Fallback.IsEmpty() || Fallback.StartsWith(TEXT("VICTORY IN")));
 	return true;
 }
 
 #endif
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDCFrontPageCopyTest, "Epic_AI_Mega_Jam2.Run.FrontPageCopy",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FDCFrontPageCopyTest::RunTest(const FString&)
+{
+	// R28: the page deck is a seeded permutation (each sentence once), the shipped copy has no duplicate sentence, and a
+	// winning run's footer never prints a zero count as "0/N".
+	const TArray<int32> Deck = DCNewsprint::CopyDeck(48, 5151);
+	TSet<int32> Seen(Deck);
+	TestEqual(TEXT("R28: the deck holds every sentence"), Deck.Num(), 48);
+	TestEqual(TEXT("R28: each sentence once"), Seen.Num(), 48);
+	TestTrue(TEXT("R28: the deck is seeded"), Deck == DCNewsprint::CopyDeck(48, 5151) && Deck != DCNewsprint::CopyDeck(48, 77));
+	const UDCTuning& T = UDCTuning::Get();
+	TSet<FString> Unique(T.FrontPageCopy);
+	TestEqual(TEXT("R28: no duplicate body sentence in +FrontPageCopy"), Unique.Num(), T.FrontPageCopy.Num());
+	TestTrue(TEXT("R28: a pool large enough for a page"), T.FrontPageCopy.Num() >= 40);
+	const TMap<FString, FString> Tokens = {{TEXT("LEAD"), TEXT("ALL SECTORS LIBERATED")}, {TEXT("CREW"), TEXT("1")}, {TEXT("S"), TEXT("")},
+		{TEXT("POINTS"), TEXT("9,000")}, {TEXT("QUOTAS"), TEXT("0")}, {TEXT("QUOTASOF"), TEXT("3")}, {TEXT("ORDERS"), TEXT("0")},
+		{TEXT("ORDERSOF"), TEXT("3")}, {TEXT("SEED"), TEXT("5151")}};
+	const FString Won = DCNewsprint::Footer(T.FooterParts, Tokens, {FName(TEXT("Quotas")), FName(TEXT("Orders"))}, TEXT("  |  "));
+	TestFalse(FString::Printf(TEXT("R28: a won run's footer has no 0/3 (%s)"), *Won), Won.Contains(TEXT("0/3")));
+	TestTrue(TEXT("R28: the footer keeps its lead and seed"), Won.Contains(TEXT("ALL SECTORS LIBERATED")) && Won.Contains(TEXT("5151")));
+	const FString Lost = DCNewsprint::Footer(T.FooterParts, Tokens, {}, TEXT("  |  "));
+	TestTrue(TEXT("R28: a lost run still counts honestly"), Lost.Contains(TEXT("QUOTAS MET 0/3")));
+	return true;
+}

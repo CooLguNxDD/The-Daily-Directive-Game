@@ -1,0 +1,21 @@
+# Outfit head (R18): gas mask: face plate, two big glowing eye lenses, a snout with a valve and two steel filter cans
+# angled forward and down at the cheeks (the respirator silhouette), accent straps round the back.
+# Head frame: the head fills x 1..6, y 2..6, z 0..5 (pivot 3 4 0).
+name outfit_gasmask
+grid 5
+size 10 8 5
+slot mask SwatchMain
+slot strap SwatchAccent
+slot lens SwatchGlow
+slot can Steel
+box 6 2 0 7 6 4 mask
+box 7 3 0 8 5 2 mask
+box 8 3 0 9 5 1 can
+beam 7.5 2.5 1.2 9.2 0.9 0.5 0.9 can
+beam 7.5 5.5 1.2 9.2 7.1 0.5 0.9 can
+box 6 2 2 7 3 4 lens
+box 6 5 2 7 6 4 lens
+box 0 2 3 1 6 4 strap
+box 1 1 3 6 2 4 strap
+box 1 6 3 6 7 4 strap
+pivot 3 4 0

@@ -1,0 +1,18 @@
+# Newspaper vending box (R23 street, "Front Page"): a squat steel dispenser with a dim lit window showing a cream front
+# page with dark headline bars (no real words) and a coin slot. Faces +x.
+grid 5
+size 10 12 22
+slot box Steel
+slot dark Ink
+slot page Paint
+slot head Trim
+slot glow WindowDim
+box 0 0 0 10 12 2 dark
+box 1 1 2 9 11 20 box
+box 0 0 20 10 12 22 dark
+box 9 2 8 10 10 17 glow
+paint box 9 3 9 10 9 16 page
+paint box 9 3 14 10 9 15 head
+paint box 9 3 12 10 7 13 head
+paint box 9 3 10 10 8 11 head
+box 9 4 4 10 8 6 dark

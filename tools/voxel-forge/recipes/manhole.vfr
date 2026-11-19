@@ -1,0 +1,10 @@
+# Manhole cover (R12 ground cover): a steel disc with a kerb-grey rim and a cross grip pattern. One voxel high.
+grid 5
+size 16 16 1
+slot rim Kerb
+slot lid Steel
+slot grip Trim
+cyl 8 8 0 1 7.6 rim
+cyl 8 8 0 1 6.4 lid
+paint box 3 7 0 13 9 1 grip
+paint box 7 3 0 9 13 1 grip

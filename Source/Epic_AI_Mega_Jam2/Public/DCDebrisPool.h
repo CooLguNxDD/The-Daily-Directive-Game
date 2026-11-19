@@ -42,6 +42,8 @@ private:
 		TObjectPtr<UStaticMeshComponent> Mesh;
 		float DieTime = 0.f;
 		FVector BaseScale = FVector::OneVector;
+		FLinearColor Color = FLinearColor::Gray;
+		float Glow = 0.f;
 	};
 
 	UMaterialInstanceDynamic* MaterialFor(const FLinearColor& Color, float Glow);

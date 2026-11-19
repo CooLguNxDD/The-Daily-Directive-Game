@@ -1,0 +1,9 @@
+# Voxel photographer body: thigh or shin (x along the bone), a darker knee band.
+name body_leg
+grid 5
+size 8 3 3
+slot suit SwatchMain
+slot knee Ink
+box 0 0 0 8 3 3 suit
+box 7 0 0 8 3 3 knee
+pivot 0 1 1

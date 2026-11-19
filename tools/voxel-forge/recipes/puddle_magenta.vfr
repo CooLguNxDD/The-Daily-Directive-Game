@@ -1,0 +1,10 @@
+# Street puddle (R12 ground cover): dark sheen with dim magenta neon reflections. One voxel high. Long axis +x.
+grid 5
+size 36 22 1
+slot water WindowOff
+slot glint Paper
+ellipsoid 18 11 0 17 10 1 water
+noise 0.35 4 water
+ellipsoid 18 11 0 14 8 1 water
+paint box 10 8 0 24 9 1 glint
+paint box 16 13 0 28 14 1 glint

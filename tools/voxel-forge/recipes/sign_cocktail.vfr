@@ -1,0 +1,15 @@
+# Wall sign (R12, wall mount): a cocktail glass in magenta neon line art quantized from generated art
+# (tools/voxel-forge/art/bb_cocktail.png, local ComfyUI Qwen-Image); magenta tube edge.
+grid 10
+size 4 28 28
+slot frame Ink
+slot face Paper
+slot edge PaperEdge
+slot bracket Steel
+pivot 0 14 0
+box 0 4 4 2 6 24 bracket
+box 0 22 4 2 24 24 bracket
+box 2 0 0 3 28 28 frame
+box 3 0 0 4 28 28 edge
+box 3 1 1 4 27 27 frame
+image ../art/bb_cocktail.png 3 2 2 24 24 frame 0.07 face 0.5 edge

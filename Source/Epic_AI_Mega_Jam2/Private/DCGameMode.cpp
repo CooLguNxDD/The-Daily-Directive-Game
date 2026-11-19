@@ -1,4 +1,7 @@
 #include "DCGameMode.h"
+#include "DCFrameScopes.h"
+#include "Rules/DCStrikePattern.h"
+#include "Voxel/DCVoxelSettings.h"
 
 #include "DCBuilding.h"
 #include "DCCharacter.h"
@@ -7,17 +10,22 @@
 #include "DCGameState.h"
 #include "DCHUD.h"
 #include "DCLanBeacon.h"
+#include "DCOnline.h"
 #include "DCOrbitalStrike.h"
 #include "DCPlayerController.h"
 #include "DCPlayerState.h"
+#include "DCVoxelCity.h"
 #include "DCSupplyPod.h"
+#include "DCCompanion.h"
 #include "DCTuning.h"
+#include "DCSave.h"
 #include "DCUpgrades.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "GameFramework/WorldSettings.h"
 #include "Kismet/GameplayStatics.h"
 #include "Rules/DCRunRules.h"
+#include "Rules/DCFactionRules.h"
 #include "TimerManager.h"
 
 namespace
@@ -44,7 +52,9 @@ void ADCGameMode::InitGame(const FString& MapName, const FString& Options, FStri
 	RequestedSeed = UGameplayStatics::GetIntOption(Options, TEXT("seed"), 0);
 	FParse::Value(FCommandLine::Get(), TEXT("dcseed="), RequestedSeed);
 	// Solo from the menu (?solo) and the scripted demo start at once; a listen host waits in the lobby.
-	bAutoStart = UGameplayStatics::HasOption(Options, TEXT("solo")) || ADCDemoPilot::IsRequested() || FParse::Param(FCommandLine::Get(), TEXT("dcsolo"))
+	// With -dcmenuflow the pilot starts from the title menu (a real click on SOLO RUN reopens the map with ?solo).
+	const bool bMenuFirst = FCString::Strifind(FCommandLine::Get(), TEXT("dcmenuflow=")) != nullptr;
+	bAutoStart = UGameplayStatics::HasOption(Options, TEXT("solo")) || (ADCDemoPilot::IsRequested() && !bMenuFirst) || FParse::Param(FCommandLine::Get(), TEXT("dcsolo"))
 		|| FParse::Param(FCommandLine::Get(), TEXT("dcsmoke"));
 }
 
@@ -79,8 +89,10 @@ void ADCGameMode::BeginPlay()
 	Super::BeginPlay();
 	ADCGameState* GS = GetGameState<ADCGameState>();
 	GS->RunSeed = RequestedSeed != 0 ? RequestedSeed : FMath::RandRange(1000, 999999);
+	GS->VoxelOps.Reset();
 	BuildCity(0); // the lobby's backdrop is the first sector
-	if (GetNetMode() == NM_ListenServer)
+	const UDCOnline* Online = UDCOnline::Get(this);
+	if (GetNetMode() == NM_ListenServer && !(Online && Online->IsCarrying())) // an online (EOS) host has no IP listener to announce
 	{
 		if (UDCLanBeacon* Beacon = GetGameInstance()->GetSubsystem<UDCLanBeacon>())
 		{
@@ -107,17 +119,22 @@ void ADCGameMode::StartSmoke()
 {
 	// Packaged-build smoke (-dcsmoke, run by the gate's full tier on the archived exe): the run starts, HQ drops a
 	// laser on a tower, the tower collapses, then the game quits with one DCSMOKE line the gate checks.
+	// Building HP (human 16:32): one laser no longer fells a tower, so HQ lands four lasers on the lowest tower;
+	// the smoke then also proves the health ledger adding up to a fall in the packaged build.
 	FTimerHandle Strike, Verdict;
 	GetWorldTimerManager().SetTimer(Strike, FTimerDelegate::CreateWeakLambda(this, [this]
 	{
 		const FDCStratagemDef* Def = UDCTuning::Get().FindStratagem(TEXT("OrbitalLaser"));
+		ADCBuilding* Low = nullptr;
 		for (ADCBuilding* B : TActorRange<ADCBuilding>(GetWorld()))
 		{
-			if (Def && !B->IsCollapsed())
-			{
-				CallStrike(*Def, B->GetActorLocation(), nullptr);
-				break;
-			}
+			Low = !B->IsCollapsed() && (!Low || B->GetSpec().Floors < Low->GetSpec().Floors) ? B : Low;
+		}
+		for (int32 i = 0; Def && Low && i < 4; ++i)
+		{
+			FTimerHandle Each;
+			const FVector At = Low->GetActorLocation();
+			GetWorldTimerManager().SetTimer(Each, FTimerDelegate::CreateWeakLambda(this, [this, Def, At] { CallStrike(*Def, At, nullptr); }), 0.01f + i * 0.6f, false);
 		}
 	}), 2.f, false);
 	GetWorldTimerManager().SetTimer(Verdict, FTimerDelegate::CreateWeakLambda(this, [this]
@@ -132,7 +149,7 @@ void ADCGameMode::StartSmoke()
 		UE_LOG(LogTemp, Display, TEXT("DCSMOKE %s phase=%d towers=%d blasts=%d collapses=%d players=%d"), bPass ? TEXT("PASS") : TEXT("FAIL"),
 			GS ? static_cast<int32>(GS->Phase) : -1, Towers, GS ? GS->Blasts.Num() : 0, GS ? GS->Collapses.Num() : 0, Players().Num());
 		FGenericPlatformMisc::RequestExit(false);
-	}), 9.f, false);
+	}), 12.f, false);
 }
 
 TArray<ADCPlayerState*> ADCGameMode::Players() const
@@ -161,6 +178,8 @@ void ADCGameMode::PreLogin(const FString& Options, const FString& Address, const
 void ADCGameMode::Logout(AController* Exiting)
 {
 	Super::Logout(Exiting);
+	ReelStaged.Remove(Cast<APlayerController>(Exiting));
+	TryRollReel(); // review CP37: the last unstaged machine leaving rolls the clip for everyone else
 	if (UDCLanBeacon* Beacon = GetGameInstance()->GetSubsystem<UDCLanBeacon>())
 	{
 		Beacon->SetPlayerCount(GameState->PlayerArray.Num()); // the LAN list shows who is still in the lobby
@@ -175,15 +194,36 @@ void ADCGameMode::PostLogin(APlayerController* NewPlayer)
 	{
 		Beacon->SetPlayerCount(GameState->PlayerArray.Num());
 	}
-	const int32 Index = FMath::Max(0, GameState->PlayerArray.IndexOfByKey(NewPlayer->PlayerState));
-	const FString Sign = Signs.Num() > 0 ? Signs[Index % Signs.Num()] : FString::Printf(TEXT("CORRESPONDENT %d"), Index + 1);
-	ChangeName(NewPlayer, Sign, false);
+	// First call sign no other player holds (a rejoin after a leave must not duplicate one) (R8).
+	ADCPlayerState* Mine = NewPlayer->GetPlayerState<ADCPlayerState>();
+	if (!Mine)
+	{
+		return;
+	}
+	TSet<FString> Taken;
+	for (const APlayerState* Other : GameState->PlayerArray)
+	{
+		const ADCPlayerState* DC = Cast<ADCPlayerState>(Other);
+		if (DC && DC != Mine && !DC->GetCallSign().IsEmpty())
+		{
+			Taken.Add(DC->GetCallSign());
+		}
+	}
+	const FString* Free = Signs.FindByPredicate([&Taken](const FString& S) { return !Taken.Contains(S); });
+	Mine->SetCallSign(Free ? *Free : FString::Printf(TEXT("CORRESPONDENT %d"), GameState->PlayerArray.Num()));
 }
 
 FTransform ADCGameMode::SpawnTransformFor(int32 PlayerIndex) const
 {
 	// Spawn on the outer street, facing the city centre.
-	const FVector Edge(-CityPlan.HalfExtent - 600.f, (PlayerIndex - 1.5f) * 250.f, 120.f);
+	FVector Edge(-CityPlan.HalfExtent - 600.f, (PlayerIndex - 1.5f) * 250.f, 120.f);
+	// R19: never outside this sector's ring (the fall net would pull the player back to a stale safe spot).
+	const ADCGameState* GS = GetGameState<ADCGameState>();
+	const ADCVoxelCity* City = GS ? GS->GetVoxelCity() : nullptr;
+	if (City && City->GetBuiltSector() == GS->CitySector)
+	{
+		Edge = City->ClampInsideBounds(Edge, UDCVoxelSettings::Get().Tuning.SpawnRingInsetCm);
+	}
 	return FTransform(FRotator(0, 0, 0), Edge);
 }
 
@@ -242,6 +282,7 @@ void ADCGameMode::RestartRun()
 
 void ADCGameMode::ClearCombat()
 {
+	PendingSpawns.Reset();
 	for (ADCEnemy* E : TActorRange<ADCEnemy>(GetWorld()))
 	{
 		E->Destroy();
@@ -255,6 +296,10 @@ void ADCGameMode::ClearCombat()
 		P->Destroy();
 	}
 	GetGameState<ADCGameState>()->Lures.Reset();
+	if (UDCCompanions* Companions = UDCCompanions::Get(this))
+	{
+		Companions->ReleaseAll(); // R22 drones and turrets go back to the pool between sectors
+	}
 }
 
 void ADCGameMode::ClearCity()
@@ -265,6 +310,16 @@ void ADCGameMode::ClearCity()
 	}
 	DominoGeneration.Reset();
 	PendingCollapses.Reset();
+	ADCGameState* GS = GetGameState<ADCGameState>();
+	if (GS && GS->CitySector != INDEX_NONE)
+	{
+		GS->CitySector = INDEX_NONE;
+		++GS->CityBuildId;
+		if (ADCVoxelCity* City = GS->GetVoxelCity())
+		{
+			City->Clear();
+		}
+	}
 }
 
 void ADCGameMode::BuildCity(int32 SectorIndex)
@@ -274,7 +329,17 @@ void ADCGameMode::BuildCity(int32 SectorIndex)
 	const UDCTuning& T = UDCTuning::Get();
 	const int32 Seed = DCCityRules::SectorSeed(GS->RunSeed, SectorIndex);
 	SectorRng.Initialize(Seed);
-	CityPlan = DCCityRules::PlanCity(Seed, T.City, T.Look.BuildingColors.Num());
+	CityPlan = ADCVoxelCity::PlanSector(GS->RunSeed, SectorIndex); // recipes applied when the voxel city is on (R2)
+	{
+		// Every machine's voxel city follows these two fields; the host's builds now when it exists already.
+		ADCGameState* MutableGS = GetGameState<ADCGameState>();
+		MutableGS->CitySector = SectorIndex;
+		++MutableGS->CityBuildId;
+		if (ADCVoxelCity* City = GS->GetVoxelCity())
+		{
+			City->Build(GS->RunSeed, SectorIndex, MutableGS->CityBuildId, UDCVoxelSettings::Get().Tuning.bAsyncSectorCraft);
+		}
+	}
 	for (int32 Lot = 0; Lot < CityPlan.Buildings.Num(); ++Lot)
 	{
 		const FDCLotPlan& Plan = CityPlan.Buildings[Lot];
@@ -294,6 +359,27 @@ void ADCGameMode::EnterSector(float Now)
 	HitstopEndReal = 0.0;
 	ClearCombat();
 	BuildCity(GS->SectorIndex);
+	RollFactions();
+	StartObjective();
+	// Human 17:37: the host's first-ever run opens in Run.FirstRunWeather (save flag set as it starts); never in demo,
+	// pilot or gate runs, so seeds and evidence stay reproducible. Clients get it through FirstSectorWeather.
+	UDCSaveSubsystem* Save = GS->SectorIndex == 0 ? UDCSaveSubsystem::Get(this) : nullptr;
+	const bool bScripted = FParse::Param(FCommandLine::Get(), TEXT("dcdemo")) || FParse::Param(FCommandLine::Get(), TEXT("dcsmoke")) || FString(FCommandLine::Get()).Contains(TEXT("-dcseed="));
+	if (Save && !Save->Settings.bFirstRunDone && !bScripted && !T.Run.FirstRunWeather.IsNone())
+	{
+		GS->FirstSectorWeather = T.Run.FirstRunWeather;
+		Save->Settings.bFirstRunDone = true;
+		Save->SaveSettings();
+		UE_LOG(LogTemp, Display, TEXT("DCWEATHER first run: sector 1 holds %s"), *T.Run.FirstRunWeather.ToString());
+	}
+	if (GS->SectorIndex == 0)
+	{
+		// R9: the crew's lives for the whole run, dealt by crew size at the first sector.
+		const TArray<int32>& Lives = T.Run.LivesByPlayers;
+		GS->CrewLives = Lives.Num() > 0 ? Lives[FMath::Min(FMath::Max(Players().Num(), 1), Lives.Num()) - 1] : 0;
+		PendingRedeploy.Reset();
+		UE_LOG(LogTemp, Display, TEXT("DCLIVES run start: %d players, %d lives"), Players().Num(), GS->CrewLives);
+	}
 
 	SectorStartTime = Now;
 	LastPackTime = -1e6f;
@@ -302,6 +388,7 @@ void ADCGameMode::EnterSector(float Now)
 	float Duration = Sector ? Sector->DurationSeconds : 240.f;
 	FParse::Value(FCommandLine::Get(), TEXT("dcsectorseconds="), Duration); // short sectors for scripted test runs
 	GS->SectorEndTime = SectorStartTime + Duration;
+	GS->SectorStartTime = SectorStartTime;
 	const int32 Waves = Sector ? Sector->Waves.Num() : 0;
 	WaveSpawned.Init(0, Waves);
 	WaveNextTime.Init(0.f, Waves);
@@ -314,6 +401,10 @@ void ADCGameMode::EnterSector(float Now)
 	NextScoopTime = Now + T.Run.ScoopFirstSeconds;
 	NextRogueTime = Now + RogueInterval();
 
+	if (UDCCompanions* Companions = UDCCompanions::Get(this))
+	{
+		Companions->Prewarm(T.CompanionPrewarm);
+	}
 	int32 PlayerIndex = 0;
 	for (ADCPlayerState* PS : Players())
 	{
@@ -323,6 +414,25 @@ void ADCGameMode::EnterSector(float Now)
 			C->HostRevive();
 			C->HostRefill();
 		}
+		// Evidence runs (-dccards=GunDrone+Sentry+...): every player holds these cards from the first sector, so the
+		// proof pass needs no draft. Never active otherwise.
+		FString ForcedCards;
+		if (GS->SectorIndex == 0 && FParse::Value(FCommandLine::Get(), TEXT("dccards="), ForcedCards))
+		{
+			TArray<FString> Ids;
+			ForcedCards.ParseIntoArray(Ids, TEXT("+"));
+			for (const FString& Id : Ids)
+			{
+				const FDCUpgradeDef* Card = T.FindUpgrade(FName(*Id));
+				if (Card && !PS->Upgrades.Contains(Card->Id))
+				{
+					PS->Upgrades.Add(Card->Id);
+					DCUpgrades::Apply(*GS, *PS, *Card);
+					UE_LOG(LogTemp, Display, TEXT("DCCARDS %s forced %s"), *PS->GetPlayerName(), *Card->Id.ToString());
+				}
+			}
+		}
+		DCUpgrades::SectorStart(*this, *PS); // R22: drones up, deploy and last-stand charges dealt
 		++PlayerIndex;
 	}
 }
@@ -332,8 +442,11 @@ void ADCGameMode::TickSectorPhase(float Now)
 	// Evidence runs (-dcdownhost=S): the host player is knocked down S seconds into the first sector, so a
 	// teammate's revive can be recorded. Never active otherwise.
 	// -dcdownall=S knocks every player down instead (a co-op wipe: the run fails and the reel still plays).
-	static const TPair<const TCHAR*, int32> DownSwitches[] = {{TEXT("dcdownhost="), 1}, {TEXT("dcdownall="), MAX_int32}};
-	for (const TPair<const TCHAR*, int32>& Switch : DownSwitches)
+	// -dcdownclient=S knocks down every player but the host (R21: the dying client's own slow motion).
+	struct FDownSwitch { const TCHAR* Key; int32 First; int32 Last; const TCHAR* Who; };
+	static const FDownSwitch DownSwitches[] = {
+		{TEXT("dcdownhost="), 0, 1, TEXT("host")}, {TEXT("dcdownall="), 0, MAX_int32, TEXT("all")}, {TEXT("dcdownclient="), 1, MAX_int32, TEXT("client")}};
+	for (const FDownSwitch& Switch : DownSwitches)
 	{
 		float DownAt = 0.f;
 		if (bScriptedDownDone || !FParse::Value(FCommandLine::Get(), Switch.Key, DownAt) || Now < SectorStartTime + DownAt)
@@ -342,14 +455,14 @@ void ADCGameMode::TickSectorPhase(float Now)
 		}
 		bScriptedDownDone = true;
 		const TArray<ADCPlayerState*> All = Players();
-		for (int32 i = 0; i < All.Num() && i < Switch.Value; ++i)
+		for (int32 i = Switch.First; i < All.Num() && i < Switch.Last; ++i)
 		{
 			if (ADCCharacter* C = All[i]->GetPawn<ADCCharacter>())
 			{
 				C->HostApplyHurt(10000.f, C->GetActorLocation() + FVector(500, 0, 0));
 			}
 		}
-		UE_LOG(LogTemp, Display, TEXT("DCDOWN scripted %s players knocked down"), Switch.Value == 1 ? TEXT("host") : TEXT("all"));
+		UE_LOG(LogTemp, Display, TEXT("DCDOWN scripted %s players knocked down"), Switch.Who);
 	}
 	CheckWipe();
 	if (GetGameState<ADCGameState>()->Phase != EDCRunPhase::Sector)
@@ -358,6 +471,10 @@ void ADCGameMode::TickSectorPhase(float Now)
 	}
 	TickWaves(Now);
 	TickPressure(Now);
+	TickFactions(Now);
+	TickRedeploy(Now);
+	TickSpawns();
+	TickObjective(Now);
 	TickPendingCollapses(Now);
 	TickScoop(Now);
 	TickRogueStrikes(Now);
@@ -366,6 +483,7 @@ void ADCGameMode::TickSectorPhase(float Now)
 	{
 		return;
 	}
+	EndObjective();
 	ClearCombat();
 	const UDCTuning& T = UDCTuning::Get();
 	const bool bMore = T.Sectors.IsValidIndex(GS->SectorIndex + 1);
@@ -376,8 +494,8 @@ void ADCGameMode::TickSectorPhase(float Now)
 	{
 		if (ADCCharacter* C = PS->GetPawn<ADCCharacter>())
 		{
-			C->HostToast(bQuotaMet ? FString::Printf(TEXT("QUOTA MET: %d / %d. HQ IS PLEASED."), GS->SectorPhotoPoints, Quota)
-				: FString::Printf(TEXT("QUOTA MISSED: %d / %d. HQ WITHHOLDS YOUR REQUISITION."), GS->SectorPhotoPoints, Quota));
+			const FString& Toast = bQuotaMet ? T.Run.QuotaMetToast : T.Run.QuotaMissedToast;
+			C->HostToast(Toast.Replace(TEXT("{X}"), *FString::FromInt(GS->SectorPhotoPoints)).Replace(TEXT("{Y}"), *FString::FromInt(Quota)));
 		}
 	}
 	if (!bMore)
@@ -385,18 +503,13 @@ void ADCGameMode::TickSectorPhase(float Now)
 		EnterPhase(EDCRunPhase::Reel);
 		return;
 	}
-	if (bQuotaMet)
-	{
-		EnterPhase(EDCRunPhase::Draft);
-		return;
-	}
-	// Quota missed (R6): no draft, straight into the next sector.
-	GS->SectorIndex += 1;
-	EnterPhase(EDCRunPhase::Sector);
+	// The draft always happens (human 16:28); a missed quota deals the smaller, plainer hand (EnterDraft).
+	EnterPhase(EDCRunPhase::Draft);
 }
 
 void ADCGameMode::TickWaves(float Now)
 {
+	DC_FRAME_SCOPE("Waves");
 	const ADCGameState* GS = GetGameState<ADCGameState>();
 	const UDCTuning& T = UDCTuning::Get();
 	if (!T.Sectors.IsValidIndex(GS->SectorIndex) || CityPlan.StreetPoints.Num() == 0)
@@ -417,7 +530,10 @@ void ADCGameMode::TickWaves(float Now)
 			continue;
 		}
 		const FDCEnemyDef* Def = T.FindEnemy(Wave.EnemyId);
-		if (!Def)
+		// R3: a faction's special units only come to maps that faction owns or raids.
+		const FDCFactionMix& Mix = GS->FactionMix;
+		const bool bAbsent = Def && !Def->Faction.IsNone() && FactionMode() && Def->Faction != Mix.Main && !Mix.Invaders.Contains(Def->Faction);
+		if (!Def || bAbsent)
 		{
 			WaveSpawned[W] = Wave.Count;
 			continue;
@@ -436,6 +552,7 @@ void ADCGameMode::TickWaves(float Now)
 
 void ADCGameMode::TickPressure(float Now)
 {
+	DC_FRAME_SCOPE("Pressure");
 	const ADCGameState* GS = GetGameState<ADCGameState>();
 	const UDCTuning& T = UDCTuning::Get();
 	if (!T.Sectors.IsValidIndex(GS->SectorIndex) || CityPlan.StreetPoints.Num() == 0)
@@ -459,10 +576,16 @@ void ADCGameMode::TickPressure(float Now)
 	{
 		In.SinceCollapse = C.Time <= Now ? FMath::Min(In.SinceCollapse, Now - C.Time) : In.SinceCollapse;
 	}
+	const bool bFactions = FactionMode();
+	float AliveWeight = 0.f;
 	for (ADCEnemy* E : TActorRange<ADCEnemy>(GetWorld()))
 	{
-		In.Alive += E->IsAlive() && E->GetKind() == Def->Id ? 1 : 0;
+		// R3: every unit that fights the crew counts against the pressure, weighted by its faction (crowds are cheap).
+		const bool bCounts = bFactions ? DCFactionRules::FightsCrew(T.Factions, E->GetFaction()) : E->GetKind() == Def->Id;
+		const FDCFactionDef* EF = bFactions ? DCFactionRules::Find(T.Factions, E->GetFaction()) : nullptr;
+		AliveWeight += E->IsAlive() && bCounts ? (EF ? EF->PressureWeight : 1.f) : 0.f;
 	}
+	In.Alive = FMath::RoundToInt32(AliveWeight);
 	TArray<ADCCharacter*> Standing;
 	for (ADCPlayerState* PS : Players())
 	{
@@ -480,6 +603,19 @@ void ADCGameMode::TickPressure(float Now)
 	}
 	// A pack lands on a street point in a ring around one standing player, then hunts.
 	const FVector Near = Standing[SectorRng.RandRange(0, Standing.Num() - 1)]->GetActorLocation();
+	if (bFactions)
+	{
+		// R3: the pack belongs to the map's main faction (big share) or an invader crossing in from the edge.
+		const FName Faction = DCFactionRules::PickDropFaction(GS->FactionMix, SectorRng.FRand());
+		const bool bInvader = Faction != GS->FactionMix.Main;
+		const FDCFactionDef* PackF = DCFactionRules::Find(T.Factions, Faction);
+		const int32 Pack = FMath::Max(1, FMath::RoundToInt32(D.PackSize * (PackF ? PackF->PackScale : 1.f)));
+		const int32 Landed = SpawnSquad(Faction, Pack, DropPoint(Near, bInvader, Sector.Pressure, bInvader ? Faction : FName()), 400.f);
+		LastPackTime = Now;
+		UE_LOG(LogTemp, Display, TEXT("DCPACK sector=%d t=%.0f pack=%d (%s%s) landed=%d alive=%d target=%d lag=%.2f photo=%d/%d"), GS->SectorIndex + 1, In.SectorElapsed, D.PackSize,
+			*Faction.ToString(), bInvader ? TEXT(" invader") : TEXT(""), Landed, In.Alive, D.TargetAlive, D.Lag, In.PhotoPoints, In.QuotaPoints);
+		return;
+	}
 	TArray<FVector> Ring;
 	for (const FVector& P : CityPlan.StreetPoints)
 	{
@@ -593,11 +729,15 @@ void ADCGameMode::EnterDraft(float Now)
 	const UDCTuning& T = UDCTuning::Get();
 	GS->PhaseEndTime = Now + T.Run.DraftSeconds;
 	int32 Index = 0;
+	const bool bMissed = GS->QuotaResults.Num() > 0 && !GS->QuotaResults.Last();
+	const int32 HandSize = bMissed ? T.Run.DraftHandSizeMissed : T.Run.DraftHandSize;
+	const FName MaxRarity = bMissed ? T.Run.DraftMissedMaxRarity : NAME_None;
 	for (ADCPlayerState* PS : Players())
 	{
 		TArray<FName> Taken = PS->Upgrades;
 		Taken.Append(GS->Mutators);
-		PS->DraftOffer = DCRunRules::DraftOffer(DCCityRules::SectorSeed(GS->RunSeed, GS->SectorIndex) ^ (++Index * 7919), T.Upgrades, Taken);
+		PS->DraftOffer = DCRunRules::DraftHand(DCCityRules::SectorSeed(GS->RunSeed, GS->SectorIndex) ^ (++Index * 7919), T.Upgrades, T.CardRarities, Taken, HandSize, MaxRarity);
+		UE_LOG(LogTemp, Display, TEXT("DCDRAFT %s dealt %s"), *PS->GetPlayerName(), *FString::JoinBy(PS->DraftOffer, TEXT(","), [&T](FName Id) { const FDCUpgradeDef* D = T.FindUpgrade(Id); return Id.ToString() + TEXT("/") + (D ? D->Rarity.ToString() : FString(TEXT("?"))); }));
 		PS->bDraftDone = PS->DraftOffer.Num() == 0;
 	}
 }
@@ -647,6 +787,21 @@ void ADCGameMode::OnPhotoGraded(ADCCharacter* Photographer, const FDCPhotoRecord
 	}
 	FDCPhotoRecord Booked = Record;
 	Booked.Sector = GS->SectorIndex;
+	// Co-star (R20): both names on the byline, and the teammate earns a share of the photo's points.
+	if (Record.Grade.CoStarMultiplier > 1.f && Inputs.CoStarPlayerId >= 0)
+	{
+		Booked.CoStar = Inputs.CoStarName;
+		for (APlayerState* Other : GS->PlayerArray)
+		{
+			ADCPlayerState* Mate = Cast<ADCPlayerState>(Other);
+			if (Mate && Mate->GetPlayerId() == Inputs.CoStarPlayerId)
+			{
+				const int32 Share = FMath::RoundToInt32(Record.Grade.Score * UDCTuning::Get().Photo.CoStarShare);
+				Mate->AddPoints(Share);
+				UE_LOG(LogTemp, Display, TEXT("DCCOSTAR photo=%d by=%s costar=%s x%.2f share=%d"), Record.PhotoId, *PS->GetPlayerName(), *Inputs.CoStarName, Record.Grade.CoStarMultiplier, Share);
+			}
+		}
+	}
 	PS->AddPhoto(Booked);
 	PhotoPoses.Add(Record.PhotoId, MoveTemp(Poses));
 	GS->SectorPhotoPoints += Record.Grade.Score;
@@ -680,7 +835,7 @@ void ADCGameMode::OnPhotoGraded(ADCCharacter* Photographer, const FDCPhotoRecord
 void ADCGameMode::OnBuildingCollapsed(ADCBuilding* Building)
 {
 	ADCGameState* GS = GetGameState<ADCGameState>();
-	GS->AddCollapse(GS->SectorIndex, Building->GetLotIndex(), Building->GetEpicenter());
+	GS->AddCollapse(GS->SectorIndex, Building->GetLotIndex(), Building->GetEpicenter(), Building->GetCollapseTime());
 	const TArray<const FDCUpgradeDef*> Active = GS->ActiveMutators();
 	const FDCUpgradeDef* const* Domino = Active.FindByPredicate([](const FDCUpgradeDef* D) { return D->DominoReachCm > 0.f; });
 	if (!Domino)
@@ -706,7 +861,7 @@ void ADCGameMode::OnBuildingCollapsed(ADCBuilding* Building)
 	}
 }
 
-void ADCGameMode::ScheduleCollapse(ADCBuilding* Building, const FVector& Epicenter, FName Kind, float Delay)
+void ADCGameMode::ScheduleCollapse(ADCBuilding* Building, const FVector& Epicenter, FName Kind, float Delay, float AtTime)
 {
 	ADCGameState* GS = GetGameState<ADCGameState>();
 	if (!Building || Building->IsCollapsed())
@@ -724,7 +879,7 @@ void ADCGameMode::ScheduleCollapse(ADCBuilding* Building, const FVector& Epicent
 			const int32 Sector = GS->SectorIndex;
 			GS->Blasts.RemoveAll([Now, Lot, Sector](const FDCBlastRecord& R) { return R.LotIndex == Lot && R.Sector == Sector && R.Time > Now; });
 		}
-		Building->Collapse(Epicenter);
+		Building->Collapse(Epicenter, AtTime);
 		return;
 	}
 	if (PendingCollapses.ContainsByPredicate([Building](const FPendingCollapse& P) { return P.Building == Building; }))
@@ -759,7 +914,91 @@ void ADCGameMode::TickPendingCollapses(float Now)
 void ADCGameMode::OnPlayerDowned(ADCCharacter* Player)
 {
 	LastDownTime = GetGameState<ADCGameState>()->Now(); // pressure relief: no pack right after a down
+	if (ADCPlayerState* DownPS = Player ? Player->GetPlayerState<ADCPlayerState>() : nullptr)
+	{
+		DCUpgrades::Downed(*this, *DownPS, *Player); // R22 Dead Man's Switch and other cards that act on a down
+	}
+	// Last Frame (R21): slow motion only for the dying player. Solo: the shared clock slows. Co-op: the dying
+	// player's own machine slows locally (ADCCharacter::ClientLastFrameSlowMo); everyone else keeps real time.
+	const FDCPhotoTuning& P = UDCTuning::Get().Photo;
+	if (P.LastFrameSlowMo > 0.f && GetNumPlayers() == 1)
+	{
+		SetDilation(P.LastFrameSlowMo);
+		HitstopEndReal = GetWorld()->GetRealTimeSeconds() + P.LastFrameSlowMoSeconds;
+	}
+	else if (P.LastFrameSlowMo > 0.f && Player)
+	{
+		Player->ClientLastFrameSlowMo(P.LastFrameSlowMo, P.LastFrameSlowMoSeconds);
+		UE_LOG(LogTemp, Display, TEXT("DCLASTFRAME co-op: local slow motion %.2f for %.1f s sent to %s; shared clock stays %.2f"), P.LastFrameSlowMo, P.LastFrameSlowMoSeconds,
+			Player->GetPlayerState() ? *Player->GetPlayerState()->GetPlayerName() : TEXT("?"), GetWorldSettings()->TimeDilation);
+	}
 	CheckWipe();
+}
+
+void ADCGameMode::TickRedeploy(float Now)
+{
+	// R9 bleed-out: a downed player nobody revived within BleedOutSeconds spends a crew life and redeploys.
+	const float BleedOut = UDCTuning::Get().Run.BleedOutSeconds;
+	for (ADCPlayerState* PS : Players())
+	{
+		ADCCharacter* C = PS->GetPawn<ADCCharacter>();
+		if (C && C->IsDowned() && !PendingRedeploy.Contains(C) && Now - C->GetDownedAt() >= BleedOut)
+		{
+			HostRedeploy(C);
+		}
+	}
+}
+
+bool ADCGameMode::HostRedeploy(ADCCharacter* Downed)
+{
+	ADCGameState* GS = GetGameState<ADCGameState>();
+	if (!Downed || !GS || GS->CrewLives <= 0 || PendingRedeploy.Contains(Downed))
+	{
+		return false;
+	}
+	const FDCRunTuning& Run = UDCTuning::Get().Run;
+	// Beside a standing teammate, else the player's own start spot.
+	FVector Spot = FVector::ZeroVector;
+	bool bBeside = false;
+	int32 MyIndex = 0;
+	int32 Index = 0;
+	for (ADCPlayerState* PS : Players())
+	{
+		const ADCCharacter* C = PS->GetPawn<ADCCharacter>();
+		MyIndex = C == Downed ? Index : MyIndex;
+		if (!bBeside && C && C != Downed && !C->IsDowned())
+		{
+			Spot = C->GetActorLocation() + C->GetActorRightVector() * Run.RedeployBesideCm;
+			bBeside = true;
+		}
+		++Index;
+	}
+	Spot = bBeside ? Spot : SpawnTransformFor(MyIndex).GetLocation();
+	if (const ADCVoxelCity* City = GS->GetVoxelCity())
+	{
+		Spot = City->ClampInsideBounds(Spot, UDCVoxelSettings::Get().Tuning.SpawnRingInsetCm);
+	}
+	--GS->CrewLives;
+	PendingRedeploy.Add(Downed);
+	ADCSupplyPod::DropLoad(GetWorld(), Spot, 0, 0, 0.f, 0.f, 0.f); // the drop pod (an empty crate: nothing to pick up)
+	UE_LOG(LogTemp, Display, TEXT("DCREDEPLOY %s spends a life (%d left), pod at %s %s"), *Downed->GetName(), GS->CrewLives, *Spot.ToCompactString(), bBeside ? TEXT("beside a teammate") : TEXT("at the start spot"));
+	TWeakObjectPtr<ADCCharacter> Who = Downed;
+	FTimerHandle Land;
+	GetWorldTimerManager().SetTimer(Land, FTimerDelegate::CreateWeakLambda(this, [this, Who, Spot]
+	{
+		ADCCharacter* C = Who.Get();
+		PendingRedeploy.Remove(TWeakObjectPtr<const ADCCharacter>(C));
+		const ADCGameState* State = GetGameState<ADCGameState>();
+		if (!C || !State || State->Phase != EDCRunPhase::Sector)
+		{
+			return;
+		}
+		C->TeleportTo(Spot + FVector(0, 0, 120.f), C->GetActorRotation());
+		C->HostRevive();
+		C->HostRefill();
+		UE_LOG(LogTemp, Display, TEXT("DCREDEPLOY %s is back at %s"), *C->GetName(), *Spot.ToCompactString());
+	}), FMath::Max(Run.RedeployFallSeconds, 0.1f), false);
+	return true;
 }
 
 void ADCGameMode::CheckWipe()
@@ -772,15 +1011,47 @@ void ADCGameMode::CheckWipe()
 	for (ADCPlayerState* PS : Players())
 	{
 		const ADCCharacter* C = PS->GetPawn<ADCCharacter>();
-		// Anyone standing, or a solo player still inside the self-revive window, keeps the run alive.
-		if (C && (!C->IsDowned() || C->CanSelfRevive()))
+		// Anyone standing, a solo player still inside the self-revive window, or a redeploy on its way keeps the run alive.
+		if (C && (!C->IsDowned() || C->CanSelfRevive() || PendingRedeploy.Contains(C)))
 		{
+			WipeGraceUntil = -1.f; // someone got up: a later all-down gets its own Last Frame grace
 			return;
 		}
+	}
+	// Everyone is down. A downed player still holding a Last Frame (R21) gets a short grace to take it first.
+	bool bLastFramePending = false;
+	for (ADCPlayerState* PS : Players())
+	{
+		const ADCCharacter* C = PS->GetPawn<ADCCharacter>();
+		bLastFramePending |= C && C->HasLastFrame();
+	}
+	const float Now = GS->Now();
+	if (bLastFramePending && (WipeGraceUntil < 0.f || Now < WipeGraceUntil))
+	{
+		if (WipeGraceUntil < 0.f)
+		{
+			WipeGraceUntil = Now + UDCTuning::Get().Photo.LastFrameWipeGraceSeconds;
+			FTimerHandle Recheck;
+			GetWorldTimerManager().SetTimer(Recheck, FTimerDelegate::CreateWeakLambda(this, [this] { CheckWipe(); }), UDCTuning::Get().Photo.LastFrameWipeGraceSeconds + 0.05f, false);
+		}
+		return;
+	}
+	WipeGraceUntil = -1.f;
+	// R9: everyone is down but the crew has lives: each downed player redeploys while lives last; no wipe.
+	bool bAnyRedeploy = false;
+	for (ADCPlayerState* PS : Players())
+	{
+		ADCCharacter* C = PS->GetPawn<ADCCharacter>();
+		bAnyRedeploy |= C && C->IsDowned() && HostRedeploy(C);
+	}
+	if (bAnyRedeploy)
+	{
+		return;
 	}
 	// Everyone is down: the run fails, but the reel still plays (R12).
 	UE_LOG(LogTemp, Display, TEXT("DCWIPE all %d players down in sector %d: run failed, rolling the reel"), Players().Num(), GS->SectorIndex + 1);
 	GS->bRunFailed = true;
+	EndObjective(); // the sector's order fails with the crew (R4: the reel still plays)
 	ClearCombat();
 	EnterPhase(EDCRunPhase::Reel);
 }
@@ -823,6 +1094,7 @@ void ADCGameMode::EnterReel(float Now)
 			FDCReelClip& Clip = GS->ReelClips.AddDefaulted_GetRef();
 			Clip.Photo = All[P]->Photos[Ranked[P][Rank]];
 			Clip.PlayerName = All[P]->GetPlayerName();
+			Clip.OutfitCode = All[P]->OutfitCode;
 			if (const TArray<FDCPoseSample>* Poses = PhotoPoses.Find(Clip.Photo.PhotoId))
 			{
 				Clip.Poses = *Poses;
@@ -848,10 +1120,50 @@ void ADCGameMode::BeginReelClip(int32 Index)
 	ADCGameState* GS = GetGameState<ADCGameState>();
 	GS->ReelIndex = Index;
 	GS->ReelStage = 0;
-	GS->ReelClipStart = GS->Now() + 0.3f; // a beat for every machine to re-stage the scene
+	ReelStaged.Reset();
+	// Async restage (review CP34): the clock is held until the host's reel director has the clip's city in (it sets
+	// the real start); ReelRestageMaxSeconds is the fallback. Synchronous: a beat for every machine to re-stage.
+	const bool bHold = UDCVoxelSettings::Get().Tuning.bAsyncReelRestage;
+	GS->bReelClipLive = !bHold;
+	GS->ReelClipStart = GS->Now() + (bHold ? UDCTuning::Get().Run.ReelRestageMaxSeconds : 0.3f);
 	ReelStageReal = GetWorld()->GetRealTimeSeconds();
 	SetDilation(UDCTuning::Get().Run.ReelSlowMo);
 	GS->ForceNetUpdate();
+}
+
+void ADCGameMode::NoteReelStaged(APlayerController* PC, int32 ClipIndex)
+{
+	ADCGameState* GS = GetGameState<ADCGameState>();
+	if (!GS || !PC || GS->Phase != EDCRunPhase::Reel || GS->ReelIndex != ClipIndex || GS->bReelClipLive)
+	{
+		return;
+	}
+	ReelStaged.Add(PC);
+	TryRollReel();
+}
+
+void ADCGameMode::TryRollReel()
+{
+	ADCGameState* GS = GetGameState<ADCGameState>();
+	if (!GS || GS->Phase != EDCRunPhase::Reel || !GS->ReelClips.IsValidIndex(GS->ReelIndex) || GS->bReelClipLive || ReelStaged.Num() == 0)
+	{
+		return;
+	}
+	for (auto It = ReelStaged.CreateIterator(); It; ++It)
+	{
+		if (!It->IsValid())
+		{
+			It.RemoveCurrent(); // review CP36: a disconnected machine's entry never counts
+		}
+	}
+	if (ReelStaged.Num() < GetNumPlayers())
+	{
+		return; // another machine is still restaging (the ReelRestageMaxSeconds cap rolls it anyway)
+	}
+	GS->ReelClipStart = FMath::Min(GS->ReelClipStart, GS->Now() + 0.3f);
+	GS->bReelClipLive = true;
+	GS->ForceNetUpdate();
+	UE_LOG(LogTemp, Display, TEXT("DCREEL all %d players staged clip=%d: rolling"), ReelStaged.Num(), GS->ReelIndex);
 }
 
 void ADCGameMode::TickReel(float Now)
@@ -874,7 +1186,13 @@ void ADCGameMode::SetReelStage(uint8 Stage, float Dilation)
 
 void ADCGameMode::TickReelPlay(float Now)
 {
-	if (Now >= GetGameState<ADCGameState>()->ReelClipStart + UDCTuning::Get().Run.ClipSeconds)
+	ADCGameState* GS = GetGameState<ADCGameState>();
+	if (!GS->bReelClipLive && Now >= GS->ReelClipStart)
+	{
+		GS->bReelClipLive = true; // the hold ran out (no director here, or a stuck restage): play from the cap
+		GS->ForceNetUpdate();
+	}
+	if (Now >= GS->ReelClipStart + UDCTuning::Get().Run.ClipSeconds)
 	{
 		SetReelStage(1, FreezeDilation);
 	}
@@ -1043,20 +1361,60 @@ void ADCGameMode::EnterFrontPage(float Now)
 		UE_LOG(LogTemp, Display, TEXT("DCPAGE photo=%d by=%s critic=%d votes=%d page=%d%s"), Pick.Photo.PhotoId, *Pick.PlayerName, Pick.Photo.Grade.Score, Pick.Votes, Pick.PageScore,
 			GS->PagePicks.IsValidIndex(GS->HeadlineIndex) && &GS->PagePicks[GS->HeadlineIndex] == &Pick ? TEXT(" HEADLINE") : TEXT(""));
 	}
+	// Full edition (R22): the winner and up to two runner-ups each get a satirical headline from the data rows, never a
+	// line this session already printed; a wiped run prints the mock-heroic CORRECTION edition.
+	static TSet<FString> PrintedThisSession;
+	TArray<int32> Order;
+	for (int32 i = 0; i < GS->PagePicks.Num(); ++i)
+	{
+		Order.Add(i);
+	}
+	Order.StableSort([GS](int32 A, int32 B) { return GS->PagePicks[A].PageScore > GS->PagePicks[B].PageScore; });
+	Order.Remove(GS->HeadlineIndex);
 	if (GS->PagePicks.IsValidIndex(GS->HeadlineIndex))
 	{
-		const FDCPagePick& Top = GS->PagePicks[GS->HeadlineIndex];
-		const FString SectorName = T.Sectors.IsValidIndex(Top.Photo.Sector) ? T.Sectors[Top.Photo.Sector].Name.ToString() : TEXT("THE FRONT");
-		GS->Headline = DCRunRules::MakeHeadline(GS->RunSeed ^ Top.Photo.PhotoId, T.Run.Headlines, T.Run.Subjects, Top.Photo.Grade, SectorName, Top.PlayerName);
+		Order.Insert(GS->HeadlineIndex, 0);
+	}
+	for (int32 k = 0; k < FMath::Min(3, Order.Num()); ++k)
+	{
+		FDCPagePick& Pick = GS->PagePicks[Order[k]];
+		const FString SectorName = T.Sectors.IsValidIndex(Pick.Photo.Sector) ? T.Sectors[Pick.Photo.Sector].Name.ToString() : TEXT("THE FRONT");
+		Pick.Headline = DCRunRules::PickHeadline(GS->RunSeed ^ Pick.Photo.PhotoId, T.HeadlineRows, Pick.Photo.Grade.Categories, Pick.PlayerName, SectorName, Pick.Photo.CoStar, PrintedThisSession);
+	}
+	if (GS->bRunFailed)
+	{
+		const FString Correction = DCRunRules::PickHeadline(GS->RunSeed, T.HeadlineRows, {FName(TEXT("CORRECTION"))}, GS->PagePicks.IsValidIndex(GS->HeadlineIndex) ? GS->PagePicks[GS->HeadlineIndex].PlayerName : FString(TEXT("OUR CORRESPONDENTS")),
+			TEXT("THE CITY"), FString(), PrintedThisSession);
+		GS->Headline = TEXT("CORRECTION: ") + Correction;
+	}
+	else if (GS->PagePicks.IsValidIndex(GS->HeadlineIndex))
+	{
+		GS->Headline = GS->PagePicks[GS->HeadlineIndex].Headline;
 	}
 	else
 	{
 		GS->Headline = TEXT("CAMERAS SILENT AS CITY STANDS: NO PHOTOS FILED");
 	}
+	UE_LOG(LogTemp, Display, TEXT("DCPAGE headline=\"%s\"%s"), *GS->Headline, GS->bRunFailed ? TEXT(" CORRECTION EDITION") : TEXT(""));
 	const int32 QuotasMet = GS->QuotaResults.FilterByPredicate([](bool b) { return b; }).Num();
-	GS->Subhead = FString::Printf(TEXT("%s  |  %d PHOTOGRAPHER%s  |  %s PROPAGANDA POINTS RAISED  |  QUOTAS MET %d/%d  |  RUN SEED %d"),
-		GS->bRunFailed ? TEXT("UNIT LOST IN ACTION, REEL RECOVERED") : TEXT("ALL SECTORS LIBERATED"),
-		All.Num(), All.Num() == 1 ? TEXT("") : TEXT("S"), *FText::AsNumber(Total).ToString(), QuotasMet, GS->QuotaResults.Num(), GS->RunSeed);
+	const int32 Extracted = GS->ObjectiveResults.FilterByPredicate([](uint8 b) { return b != 0; }).Num();
+	// R28: footer parts are data; on a winning run a zero count prints the part's ZeroText (never "0/3").
+	const TMap<FString, FString> Tokens = {
+		{TEXT("LEAD"), GS->bRunFailed ? TEXT("UNIT LOST IN ACTION, REEL RECOVERED") : TEXT("ALL SECTORS LIBERATED")},
+		{TEXT("CREW"), FString::FromInt(All.Num())}, {TEXT("S"), All.Num() == 1 ? TEXT("") : TEXT("S")},
+		{TEXT("POINTS"), FText::AsNumber(Total).ToString()},
+		{TEXT("QUOTAS"), FString::FromInt(QuotasMet)}, {TEXT("QUOTASOF"), FString::FromInt(GS->QuotaResults.Num())},
+		{TEXT("ORDERS"), FString::FromInt(Extracted)}, {TEXT("ORDERSOF"), FString::FromInt(GS->ObjectiveResults.Num())},
+		{TEXT("SEED"), FString::FromInt(GS->RunSeed)},
+	};
+	TSet<FName> Zero;
+	if (!GS->bRunFailed)
+	{
+		Zero.Append(QuotasMet == 0 ? TArray<FName>{FName(TEXT("Quotas"))} : TArray<FName>());
+		Zero.Append(Extracted == 0 ? TArray<FName>{FName(TEXT("Orders"))} : TArray<FName>());
+	}
+	GS->Subhead = DCNewsprint::Footer(T.FooterParts, Tokens, Zero, TEXT("  |  "));
+	UE_LOG(LogTemp, Display, TEXT("DCPAGE footer=\"%s\""), *GS->Subhead);
 	GS->ForceNetUpdate();
 }
 
@@ -1064,6 +1422,7 @@ void ADCGameMode::EnterFrontPage(float Now)
 
 void ADCGameMode::Tick(float DeltaSeconds)
 {
+	DC_FRAME_SCOPE("GameMode");
 	Super::Tick(DeltaSeconds);
 	ADCGameState* GS = GetGameState<ADCGameState>();
 	if (!GS)
@@ -1109,13 +1468,75 @@ bool ADCGameMode::IsCombatLive() const
 	return GS && GS->Phase == EDCRunPhase::Sector;
 }
 
+namespace
+{
+	// Call effects by id (R7): a stratagem row's Effect picks how the call lands. A new kind is a new entry.
+	using FCallEffectFn = bool (*)(ADCGameMode&, const FDCStratagemDef&, const FVector&, AController*);
+	bool EffectSupply(ADCGameMode& GM, const FDCStratagemDef& Def, const FVector& Target, AController* Caller)
+	{
+		ADCSupplyPod::DropLoad(GM.GetWorld(), Target, Def.SupplyFilm, Def.SupplyAmmo, Def.SupplyHealth, Def.SupplyCrewRadiusCm, Def.TelegraphSeconds);
+		UE_LOG(LogTemp, Display, TEXT("DCSUPPLY %s called at %s"), *Def.Id.ToString(), *Target.ToCompactString());
+		return true;
+	}
+	/** R22 call support: a drop pod lands on the target and a crew-friendly squad steps out of it (the faction
+	 *  director's squad spawn), unless the sector ended meanwhile. */
+	bool EffectReinforce(ADCGameMode& GM, const FDCStratagemDef& Def, const FVector& Target, AController* Caller)
+	{
+		ADCSupplyPod::DropLoad(GM.GetWorld(), Target, 0, 0, 0.f, 0.f, Def.TelegraphSeconds); // the pod they ride (empty)
+		const FName Faction = Def.SupportFaction;
+		const int32 Count = Def.SupportCount;
+		const float Spread = Def.SupportSpreadCm;
+		FTimerHandle Handle;
+		GM.GetWorldTimerManager().SetTimer(Handle, FTimerDelegate::CreateWeakLambda(&GM, [&GM, Faction, Count, Spread, Target]() {
+			const int32 Landed = GM.IsCombatLive() ? GM.HostSpawnSquad(Faction, Count, Target, Spread) : 0;
+			UE_LOG(LogTemp, Display, TEXT("DCREINFORCE %s squad landed=%d of %d at %s"), *Faction.ToString(), Landed, Count, *Target.ToCompactString());
+		}), FMath::Max(Def.TelegraphSeconds + Def.SupportDelaySeconds, 0.01f), false);
+		return true;
+	}
+	/** Call-in cards (human 15:58): the entry spends a charge of the owned card it names (Def.Card); the aim point is
+	 *  clamped to the entry's CallRangeCm around the caller, then the card's own Call hook places or launches. */
+	bool EffectCard(ADCGameMode& GM, const FDCStratagemDef& Def, const FVector& Target, AController* Caller)
+	{
+		ADCCharacter* Player = Caller ? Cast<ADCCharacter>(Caller->GetPawn()) : nullptr;
+		ADCPlayerState* PS = Caller ? Caller->GetPlayerState<ADCPlayerState>() : nullptr;
+		if (!Player || !PS)
+		{
+			return false;
+		}
+		const FVector From = Player->GetActorLocation();
+		const FVector2D Offset(Target - From);
+		const float Range = Def.CallRangeCm > 0.f ? Def.CallRangeCm : Offset.Size();
+		const FVector2D Clamped = Offset.GetClampedToMaxSize(Range);
+		const FVector At(From.X + Clamped.X, From.Y + Clamped.Y, Target.Z);
+		return DCUpgrades::CallCard(GM, *PS, *Player, Def.Card, At);
+	}
+	const TMap<FName, FCallEffectFn>& CallEffects()
+	{
+		static const TMap<FName, FCallEffectFn> Map = {
+			{TEXT("Supply"), &EffectSupply},
+			{TEXT("Reinforce"), &EffectReinforce},
+			{TEXT("Card"), &EffectCard},
+		};
+		return Map;
+	}
+}
+
 void ADCGameMode::CallStrike(const FDCStratagemDef& Def, const FVector& Target, AController* Caller)
 {
+	if (const FCallEffectFn* Effect = CallEffects().Find(Def.Effect))
+	{
+		(*Effect)(*this, Def, Target, Caller);
+		return;
+	}
 	const ADCGameState* GS = GetGameState<ADCGameState>();
 	FRandomStream Rng(GetTypeHash(Target) ^ GS->RunSeed);
+	// R12: the blast layout is a registry entry named by the stratagem row (Pattern, Rules/DCStrikePattern.h).
+	const APawn* CallerPawn = Caller ? Caller->GetPawn() : nullptr;
+	const FVector2D Along = CallerPawn ? FVector2D(Target - CallerPawn->GetActorLocation()).GetSafeNormal() : FVector2D(1.f, 0.f);
 	for (int32 i = 0; i < FMath::Max(Def.Blasts, 1); ++i)
 	{
-		const FVector2D Scatter = i == 0 ? FVector2D::ZeroVector : FVector2D(Rng.FRandRange(-1.f, 1.f), Rng.FRandRange(-1.f, 1.f)).GetSafeNormal() * Rng.FRandRange(0.3f, 1.f) * Def.BlastScatterCm;
+		const DCStrikePattern::FLayout Layout{i, FMath::Max(Def.Blasts, 1), Def.BlastScatterCm, Along.IsNearlyZero() ? FVector2D(1.f, 0.f) : Along};
+		const FVector2D Scatter = DCStrikePattern::Offset(Def.Pattern, Layout, Rng);
 		const FTransform Xf(FVector(Target.X + Scatter.X, Target.Y + Scatter.Y, Target.Z));
 		ADCOrbitalStrike* Strike = GetWorld()->SpawnActorDeferred<ADCOrbitalStrike>(ADCOrbitalStrike::StaticClass(), Xf);
 		Strike->Init(Def.Id, GS->Now() + Def.TelegraphSeconds + i * Def.BlastSpacing, Caller);

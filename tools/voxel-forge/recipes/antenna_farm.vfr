@@ -1,0 +1,17 @@
+# Antenna farm (R23 roof): a cluster of masts of different heights with cross bars and two small dishes.
+grid 10
+size 24 20 70
+slot steel Steel
+slot trim Trim
+slot dish Ink
+slot tip WindowDim
+box 2 2 0 22 18 2 trim
+box 4 4 2 6 6 68 steel
+box 11 13 2 13 15 50 steel
+box 18 5 2 20 7 38 steel
+box 1 4 52 10 6 53 steel
+box 1 4 60 10 6 61 steel
+box 8 13 40 16 15 41 steel
+box 4 4 68 6 6 70 tip
+ellipsoid 17 10 30 1.5 4 4 dish
+ellipsoid 12 9 22 4 1.5 4 dish

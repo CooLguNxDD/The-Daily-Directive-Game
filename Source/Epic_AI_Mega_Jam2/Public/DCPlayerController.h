@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Rules/DCOutfit.h"
 #include "GameFramework/PlayerController.h"
 #include "DCPhotoProbe.h"
 #include "DCTypes.h"
@@ -17,8 +18,13 @@ struct FDCLocalPhoto
 {
 	GENERATED_BODY()
 	UPROPERTY() int32 PhotoId = 0;
-	UPROPERTY() TObjectPtr<UTextureRenderTarget2D> Image;
+	/** The printed photo (newsprint treatment, R5) every screen shows. */
+	UPROPERTY() TObjectPtr<UTexture> Image;
 	UPROPERTY() FDCPhotoGrade Grade;
+	/** The print's pixels (BGRA), uploaded as JPEG when the shot makes the final cut. */
+	TArray<FColor> Pixels;
+	int32 Width = 0;
+	int32 Height = 0;
 	UPROPERTY() bool bConfirmed = false;
 	FDCShotView View;
 	float ShotTime = 0.f;
@@ -45,6 +51,38 @@ public:
 	virtual void EndPlay(const EEndPlayReason::Type Reason) override;
 	virtual void SetupInputComponent() override;
 	virtual void PlayerTick(float DeltaTime) override;
+	/** -dcperf: once a real second, logs DCPERF with this machine's frame and GPU times (R13 evidence). */
+	void TickPerf();
+	/** -dcmenuflow=<dir>: frames the title menu, moves the real cursor onto SOLO RUN, clicks it with Slate mouse events
+	 *  (the same path as a player), and frames the travel and the first street, then quits (menu evidence). */
+	void TickMenuFlow();
+	void TickBuilderFlow();
+	/** Front page (R24): this player's own printed picks and the page itself go into the saved photo album, once. */
+	void TickAlbum();
+	bool bAlbumSaved = false;
+	bool bOutfitSent = false;
+	bool bBuilderOpen = false;
+	bool bSettingsOpen = false;
+	/** R25 tutorial page open, and whether its PLAY button starts the solo run (offered before the first run). */
+	bool bHowToOpen = false;
+	bool bPauseOpen = false;
+	/** The pause action waiting for its confirm click (QUIT TO MENU). */
+	FName PauseArmed;
+	bool bHowToThenSolo = false;
+	FName AwaitingKey;
+	FDCOutfit BuilderOutfit;
+	int32 BuilderSlot = 0;
+	/** R18: the OutfitPresets row last applied (-1 = none yet; the PRESET row starts at the first). */
+	int32 BuilderPresetIndex = -1;
+	FString BuilderMessage;
+	UPROPERTY() TObjectPtr<class ADCOutfitPreview> OutfitPreview;
+	/** Stores the builder's outfit in its save slot and rebuilds the preview and the menu. */
+	void BuilderChanged(const FString& Message);
+	TArray<float> PerfFrameMs;
+	double PerfGameMsSum = 0.0, PerfRenderMsSum = 0.0; // R13 (advisor a-15): which thread a slow second sits on
+	double PerfWindowStart = 0.0;
+	int32 PerfMaxFalling = 0;
+	bool bPerfLoading = false;
 	virtual void Tick(float DeltaSeconds) override;
 
 	UDCInputSet* GetInputSet();
@@ -72,11 +110,21 @@ public:
 	class ADCReelDirector* GetReelDirector() const { return Director; }
 	/** R16: send a second take to the host for grading (the image stays here until the reel uploads it). */
 	void RequestSecondTake(int32 PhotoId, const FDCShotView& View, int32 ClipIndex) { ServerSecondTake(PhotoId, View.Location, View.Rotation, View.FOV, ClipIndex); }
+	/** Reel (advisor CP33): this machine has the clip's city in; the host rolls the clip once every player reported. */
+	void ReportReelStaged(int32 ClipIndex) { ServerReelStaged(ClipIndex); }
 
 	// Menu (local).
 	void MenuSolo();
+	void TickHints(float DeltaSeconds);
+	FName ActiveHint;
+	double HintUntilReal = 0.0;
+	double NextHintPollReal = 0.0;
+	float HintSectorSeconds = 0.f;
 	void MenuHost();
 	void MenuJoin(const FString& Address);
+	/** R26 internet co-op (UDCOnline): host with a join code / join by code; both fall back to LAN/IP with a message. */
+	void MenuHostOnline();
+	void MenuJoinCode(const FString& Code);
 	void MenuQuit();
 
 	/** Host to the owning client: send these photo images so every machine can show them in the reel and vote. */
@@ -95,12 +143,77 @@ private:
 	void UpdateAutoVote();
 	bool bAutoVoted = false;
 	void PumpSends();
+	/** R1 frame time: finishes prints whose capture was read back and developed off the game thread. */
+	void PumpPrints();
+	void FinishPrint(int32 PhotoId, TArray<FColor>&& Pixels, int32 Width, int32 Height);
 	void HostReceivedPhoto(int32 PhotoId, const TArray<uint8>& Bytes);
 	void StoreImage(int32 PhotoId, const TArray<uint8>& Bytes);
 	void Reassemble(int32 PhotoId, int32 Index, int32 Count, const TArray<uint8>& Bytes, bool bOnHost);
 
 	UFUNCTION(Server, Reliable) void ServerStartRun();
+	/** R23: the client's outfit share code; the host decodes it (untrusted text) and stores the canonical code. */
+	UFUNCTION(Server, Reliable) void ServerSetOutfit(const FString& Code);
+public:
+	/** Sends the active saved outfit (or the default) to the host. */
+	void SendOutfit();
+
+	// Photographer builder (R23), a title-menu screen with a live turntable; saves through the save manager (R24).
+	/** Settings screen (R24): rows by id, each a handler that steps its value, applies it and saves. */
+	void OpenSettings() { bSettingsOpen = true; MenuMode = 254; }
+	/** R25: the "How to play" page; opening it once stops the menu button shining (saved). */
+	void OpenHowTo();
+	void CloseHowTo() { bHowToOpen = false; bHowToThenSolo = false; MenuMode = 254; }
+	/** Settings sliders (human 16:03): Id Volume (master), Music or Sfx; applied live while dragging, saved on release. */
+	float GetVolume(FName Id) const;
+	/** In-game ESC menu (human 16:05): open/close, the data-row buttons dispatch through PauseAction. */
+	bool IsPauseOpen() const { return bPauseOpen; }
+	bool IsPauseArmed(FName Action) const { return PauseArmed == Action; }
+	void SetPauseOpen(bool bOpen);
+	void PauseAction(FName Action);
+	void SetVolumeLive(FName Id, float Value);
+	void SaveSettingsNow();
+	/** The page's PLAY button: the solo run it was offered before. */
+	void HowToPlaySolo();
+	bool IsHowToThenSolo() const { return bHowToThenSolo; }
+	/** R25 hint card on screen (none = no card), seconds left, and real seconds since this sector began. */
+	const struct FDCHintDef* GetActiveHint() const;
+	float GetHintSectorSeconds() const { return HintSectorSeconds; }
+	void CloseSettings() { bSettingsOpen = false; MenuMode = 254; }
+	void SettingsStep(FName Row, int32 Step);
+	/** Key rebinding (R24): the next key pressed is saved for Action, the input mapping rebuilt. */
+	void BeginRebind(FName Action) { AwaitingKey = Action; MenuMode = 254; }
+	void ResetKeys();
+	FName GetAwaitingKey() const { return AwaitingKey; }
+	FString KeyFor(FName Action) const;
+	virtual bool InputKey(const FInputKeyEventArgs& Params) override;
+	void RebuildInput();
+	FString SettingsValue(FName Row) const;
+	void OpenBuilder();
+	void CloseBuilder();
+	void BuilderCycle(int32 SlotIndex, int32 Step);
+	void BuilderSwatch(bool bMain, int32 Step);
+	/** R18: steps the accent glow colour (OutfitGlows). */
+	void BuilderGlow(int32 Step);
+	/** R18: steps through OutfitPresets and wears the one it lands on. */
+	void BuilderPreset(int32 Step);
+	/** R18: a random outfit (every slot, both swatches, the glow). */
+	void BuilderRandom();
+	/** R18: the display name of the last applied preset (empty before one was picked). */
+	FString GetBuilderPresetName() const;
+	void BuilderSelectSlot(int32 Slot);
+	void BuilderImport(const FString& Code);
+	void BuilderCopyCode();
+	/** R5: writes the shareable turntable ID card PNG (Saved/IdCards). */
+	void BuilderExportCard();
+	bool IsBuilderOpen() const { return bBuilderOpen; }
+	const FDCOutfit& GetBuilderOutfit() const { return BuilderOutfit; }
+	int32 GetBuilderSlot() const { return BuilderSlot; }
+	const FString& GetBuilderMessage() const { return BuilderMessage; }
+	class UTextureRenderTarget2D* GetBuilderImage() const;
+	float GetBuilderImageAlpha() const;
+private:
 	UFUNCTION(Server, Reliable) void ServerRestartRun();
+	UFUNCTION(Server, Reliable) void ServerReelStaged(int32 ClipIndex);
 	UFUNCTION(Server, Reliable) void ServerPickUpgrade(FName Id);
 	UFUNCTION(Server, Reliable) void ServerSubmitFinalCut(const TArray<int32>& PhotoIds);
 	UFUNCTION(Server, Reliable) void ServerVote(int32 PhotoId);
@@ -118,6 +231,10 @@ private:
 	UPROPERTY() TMap<int32, TObjectPtr<UTexture>> Library;
 	TMap<int32, TArray<TArray<uint8>>> Incoming;
 	TArray<FDCPhotoSend> Outgoing;
+	/** Prints in flight (render-thread readback, then a worker develops and prints): photo id -> job. */
+	TMap<int32, TSharedPtr<struct FDCPrintJob, ESPMode::ThreadSafe>> PendingPrints;
+	/** Uploads the host asked for while their print was still developing. */
+	TSet<int32> UploadWhenPrinted;
 	TArray<int32> LocalPicks;
 	TSharedPtr<SWidget> MenuWidget;
 	UPROPERTY() TObjectPtr<class ADCReelDirector> Director;

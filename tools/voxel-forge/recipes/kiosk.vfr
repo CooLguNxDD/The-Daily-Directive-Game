@@ -1,0 +1,23 @@
+# Noodle kiosk: ink box, warm lit serving hatch, slanted awning, small cyan roof sign (faces +x).
+grid 5
+size 40 30 64
+slot body InkBlue
+slot warm Window
+slot roof Ink
+slot cloth InkBrown
+slot sign NeonCyan
+slot edge NeonCyanEdge
+shell 2 2 0 32 28 44 2 body
+carve box 30 5 16 32 25 34
+box 28 5 16 29 25 34 warm
+box 32 4 14 36 26 16 roof
+box 0 0 44 34 30 47 roof
+box 32 0 42 35 30 44 cloth
+box 35 0 40 38 30 42 cloth
+box 38 0 38 40 30 40 cloth
+box 8 8 47 26 22 49 roof
+box 12 9 49 24 21 60 edge
+box 12 10 50 24 20 59 sign
+box 14 10 52 15 20 57 roof
+box 18 10 52 19 20 57 roof
+box 21 10 54 22 20 56 roof

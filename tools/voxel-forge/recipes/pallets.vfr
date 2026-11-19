@@ -1,0 +1,16 @@
+# Pallet stack (R23 street, yards): wooden pallets in two stacks, one leaning, a tarp-covered load on top.
+grid 5
+size 26 40 18
+slot wood InkBrown
+slot slat Rubble
+slot tarp InkBlue
+box 0 0 0 24 18 2 wood
+box 0 0 3 24 18 5 wood
+box 0 0 6 24 18 8 wood
+paint box 0 0 1 24 18 2 slat
+paint box 0 0 4 24 18 5 slat
+paint box 0 0 7 24 18 8 slat
+box 2 2 8 22 16 16 tarp
+noise 0.1 8 tarp
+box 0 22 0 24 40 2 wood
+box 0 22 3 24 40 5 wood

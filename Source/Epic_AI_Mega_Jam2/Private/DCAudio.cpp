@@ -1,4 +1,11 @@
 #include "DCAudio.h"
+#include "Engine/Engine.h"
+#include "AudioDevice.h"
+#include "Misc/App.h"
+#include "DCFrameScopes.h"
+#include "DCSave.h"
+#include "DCTuning.h"
+#include "Rules/DCCueMix.h"
 
 #include "AudioMixerBlueprintLibrary.h"
 #include "Camera/PlayerCameraManager.h"
@@ -8,6 +15,7 @@
 #include "Engine/World.h"
 #include "Kismet/GameplayStatics.h"
 #include "Sound/SoundAttenuation.h"
+#include "Sound/SoundBase.h"
 #include "Sound/SoundWaveProcedural.h"
 
 namespace
@@ -121,6 +129,58 @@ namespace
 		return S.Finish(0.9f);
 	}
 
+	// Human 15:35: synthesized score on one grid (120 bpm, 8 bars of 4 beats = 16 s) so the layers line up bar for bar.
+	// A minor: Am Am F F C C G G (roots in semitones from middle C).
+	constexpr int32 NoirRoots[8] = {-15, -15, -19, -19, -12, -12, -17, -17};
+	constexpr bool NoirMinor[8] = {true, true, false, false, false, false, false, false};
+
+	TArray<int16> CalmLoop()
+	{
+		// Slow noir calm layer: sparse bass on beats 1 and 3, soft minor pads per bar, quiet off-beat hats.
+		const float Beat = 0.5f;
+		FSynth S(32 * Beat, 13);
+		for (int32 Bar = 0; Bar < 8; ++Bar)
+		{
+			const float T0 = Bar * 4 * Beat;
+			const int32 Root = NoirRoots[Bar];
+			S.Tone(T0, Beat * 1.8f, Note(Root - 12), Note(Root - 12), EWave::Tri, 0.42f, 1.6f, 0.01f);
+			S.Tone(T0 + 2 * Beat, Beat * 1.4f, Note(Root - 5), Note(Root - 5), EWave::Tri, 0.3f, 2.f, 0.01f);
+			for (int32 C : {0, NoirMinor[Bar] ? 3 : 4, 7})
+			{
+				S.Tone(T0, 4 * Beat, Note(Root + 12 + C), Note(Root + 12 + C), EWave::Saw, 0.045f, 0.4f, 0.6f, 0.004f);
+			}
+			for (int32 B4 = 0; B4 < 4; ++B4)
+			{
+				S.Noise(T0 + (B4 + 0.5f) * Beat, 0.04f, 0.06f, 9000.f, 8000.f, 70.f); // soft hat on the off-beat
+			}
+		}
+		return S.Finish(0.85f);
+	}
+
+	TArray<int16> MenuLoop()
+	{
+		// Menu: the same progression as a plucked arpeggio over the bass, a little brighter than the calm layer.
+		const float Beat = 0.5f;
+		FSynth S(32 * Beat, 17);
+		for (int32 Bar = 0; Bar < 8; ++Bar)
+		{
+			const float T0 = Bar * 4 * Beat;
+			const int32 Root = NoirRoots[Bar];
+			const int32 Third = NoirMinor[Bar] ? 3 : 4;
+			S.Tone(T0, Beat * 3.6f, Note(Root - 12), Note(Root - 12), EWave::Tri, 0.38f, 1.2f, 0.01f);
+			const int32 Arp[8] = {0, Third, 7, 12, 7, Third, 7, 12};
+			for (int32 i = 0; i < 8; ++i)
+			{
+				S.Tone(T0 + i * Beat * 0.5f, Beat * 0.45f, Note(Root + 12 + Arp[i]), Note(Root + 12 + Arp[i]), EWave::Sine, 0.16f, 7.f, 0.004f);
+			}
+			for (int32 C : {0, Third, 7})
+			{
+				S.Tone(T0, 4 * Beat, Note(Root + C), Note(Root + C), EWave::Saw, 0.03f, 0.3f, 0.8f, 0.004f);
+			}
+		}
+		return S.Finish(0.85f);
+	}
+
 	using FRecipe = TArray<int16> (*)();
 
 	/** The cue registry: name -> recipe. A new sound is a new row. */
@@ -135,6 +195,9 @@ namespace
 			{TEXT("Reload"), [] { FSynth S(1.3f); S.Noise(0.05f, 0.05f, 0.6f, 4000, 2000, 50.f); S.Tone(0.05f, 0.05f, 500, 300, EWave::Square, 0.12f, 50.f); S.Noise(0.9f, 0.06f, 0.8f, 5000, 2500, 45.f); S.Noise(1.12f, 0.05f, 0.7f, 6000, 3000, 50.f); return S.Finish(); }},
 			{TEXT("LowAmmo"), [] { FSynth S(0.12f); S.Tone(0.f, 0.1f, 1400, 1400, EWave::Square, 0.18f, 25.f); return S.Finish(); }},
 			{TEXT("HitMarker"), [] { FSynth S(0.06f); S.Tone(0.f, 0.05f, 2400, 2200, EWave::Sine, 0.6f, 60.f); return S.Finish(); }},
+			{TEXT("FactionShot"), [] { FSynth S(0.18f); S.Noise(0.f, 0.12f, 0.8f, 5000, 1200, 30.f, 0.001f); S.Tone(0.f, 0.08f, 900, 300, EWave::Square, 0.2f, 30.f); return S.Finish(1.2f); }},
+			{TEXT("Groan"), [] { FSynth S(0.9f); S.Tone(0.f, 0.85f, 95, 70, EWave::Saw, 0.35f, 1.5f, 0.15f, 0.06f); S.Noise(0.f, 0.8f, 0.2f, 700, 300, 2.f); return S.Finish(); }},
+			{TEXT("FactionStrike"), [] { FSynth S(1.2f); for (int32 i = 0; i < 3; ++i) { S.Tone(i * 0.3f, 0.22f, 520, 520, EWave::Square, 0.3f, 6.f); } return S.Finish(); }},
 			{TEXT("Kill"), [] { FSynth S(0.35f); S.Tone(0.f, 0.12f, 1200, 1200, EWave::Square, 0.25f, 20.f); S.Tone(0.09f, 0.22f, 1800, 1800, EWave::Square, 0.25f, 12.f); return S.Finish(); }},
 			{TEXT("Beacon"), [] { FSynth S(0.5f); S.Tone(0.f, 0.45f, 300, 1500, EWave::Square, 0.25f, 3.f); return S.Finish(); }},
 			{TEXT("Telegraph"), [] { FSynth S(0.12f); S.Tone(0.f, 0.1f, 990, 990, EWave::Square, 0.35f, 12.f); return S.Finish(); }},
@@ -162,8 +225,38 @@ namespace
 			{TEXT("Down"), [] { FSynth S(1.2f); S.Tone(0.f, 1.1f, 400, 80, EWave::Saw, 0.4f, 1.5f); return S.Finish(); }},
 			{TEXT("Revive"), [] { FSynth S(0.7f); for (int32 i = 0; i < 4; ++i) { S.Tone(i * 0.12f, 0.2f, Note(i * 4), Note(i * 4), EWave::Tri, 0.35f, 6.f); } return S.Finish(); }},
 			{TEXT("Music"), &MarchLoop},
+			{TEXT("March"), &MarchLoop}, // R14 Fight layer (human 15:25): a +MusicTracks row names it with Synth="March"
+			{TEXT("Calm"), &CalmLoop},   // R14 Calm layer and menu loop (human 15:35): same 16 s grid as the march
+			{TEXT("Menu"), &MenuLoop},
 		};
 		return Map;
+	}
+
+	/** A data recipe (+SoundRecipes) through the same synth: layers dispatched by wave name, no branches per kind. */
+	TArray<int16> RenderData(const FDCSoundRecipe& Recipe)
+	{
+		FSynth S(FMath::Clamp(Recipe.Seconds, 0.01f, 20.f), Recipe.Seed);
+		using FLayerFn = void (*)(FSynth&, const FDCSoundLayer&, float Start);
+		static const TMap<FName, FLayerFn> Layers = {
+			{TEXT("Noise"), [](FSynth& Sy, const FDCSoundLayer& L, float At) { Sy.Noise(At, L.Dur, L.Amp, L.F0, L.F1, L.Decay, L.Attack); }},
+			{TEXT("Sine"), [](FSynth& Sy, const FDCSoundLayer& L, float At) { Sy.Tone(At, L.Dur, L.F0, L.F1, EWave::Sine, L.Amp, L.Decay, L.Attack, L.Vibrato); }},
+			{TEXT("Square"), [](FSynth& Sy, const FDCSoundLayer& L, float At) { Sy.Tone(At, L.Dur, L.F0, L.F1, EWave::Square, L.Amp, L.Decay, L.Attack, L.Vibrato); }},
+			{TEXT("Saw"), [](FSynth& Sy, const FDCSoundLayer& L, float At) { Sy.Tone(At, L.Dur, L.F0, L.F1, EWave::Saw, L.Amp, L.Decay, L.Attack, L.Vibrato); }},
+			{TEXT("Tri"), [](FSynth& Sy, const FDCSoundLayer& L, float At) { Sy.Tone(At, L.Dur, L.F0, L.F1, EWave::Tri, L.Amp, L.Decay, L.Attack, L.Vibrato); }},
+		};
+		for (const FDCSoundLayer& L : Recipe.Layers)
+		{
+			const FLayerFn* Fn = Layers.Find(L.Wave);
+			if (!Fn || L.F0 <= 0.f || L.F1 <= 0.f)
+			{
+				continue; // untrusted data: an unknown wave or a zero frequency is skipped, never a crash
+			}
+			for (int32 r = 0; r < FMath::Clamp(L.Repeat, 1, 64); ++r)
+			{
+				(*Fn)(S, L, L.Start + r * L.RepeatGap);
+			}
+		}
+		return S.Finish(Recipe.Gain);
 	}
 
 	TArray<uint8> ToBytes(const TArray<int16>& Samples)
@@ -181,13 +274,69 @@ namespace DCAudio
 	{
 		TArray<FName> Names;
 		Recipes().GetKeys(Names);
+		for (const FDCSoundRecipe& Data : UDCTuning::Get().SoundRecipes)
+		{
+			Names.AddUnique(Data.Id);
+		}
 		return Names;
 	}
 
 	TArray<int16> Render(FName Cue)
 	{
-		const FRecipe* Recipe = Recipes().Find(Cue);
-		return Recipe ? (*Recipe)() : TArray<int16>();
+		if (const FRecipe* Recipe = Recipes().Find(Cue))
+		{
+			return (*Recipe)();
+		}
+		const FDCSoundRecipe* Data = UDCTuning::Get().FindSoundRecipe(Cue);
+		return Data ? RenderData(*Data) : TArray<int16>();
+	}
+
+	/** One loop cycle of a synth recipe, rendered once per recipe (a fresh wave per music deck reuses the bytes). */
+	TSharedPtr<TArray<uint8>> RenderedLoop(FName Recipe)
+	{
+		static TMap<FName, TSharedPtr<TArray<uint8>>> Rendered;
+		TSharedPtr<TArray<uint8>> Loop = Rendered.FindRef(Recipe);
+		if (!Loop.IsValid())
+		{
+			const TArray<int16> Samples = Render(Recipe);
+			if (Samples.Num() == 0)
+			{
+				return nullptr;
+			}
+			Loop = MakeShared<TArray<uint8>>();
+			Loop->SetNumUninitialized(Samples.Num() * sizeof(int16));
+			FMemory::Memcpy(Loop->GetData(), Samples.GetData(), Loop->Num());
+			Rendered.Add(Recipe, Loop);
+		}
+		return Loop;
+	}
+
+	float LoopSeconds(FName Recipe)
+	{
+		const TSharedPtr<TArray<uint8>> Loop = RenderedLoop(Recipe);
+		return Loop.IsValid() ? Loop->Num() / (2.f * UDCAudioSubsystem::SampleRate) : 0.f;
+	}
+
+	USoundWaveProcedural* MakeLoop(UObject* Outer, FName Recipe)
+	{
+		const TSharedPtr<TArray<uint8>> Loop = RenderedLoop(Recipe);
+		if (!Loop.IsValid())
+		{
+			return nullptr;
+		}
+		USoundWaveProcedural* Wave = NewObject<USoundWaveProcedural>(Outer);
+		Wave->SetSampleRate(UDCAudioSubsystem::SampleRate);
+		Wave->NumChannels = 1;
+		// Ship blocker (human 18:05): a finite Duration made the mixer stop the sound after one 16 s cycle before the
+		// underflow requeue ran. The wave loops forever; playlists read the cycle from LoopSeconds(recipe).
+		Wave->Duration = INDEFINITELY_LOOPING_DURATION;
+		Wave->bLooping = true;
+		Wave->OnSoundWaveProceduralUnderflow.BindLambda([Loop](USoundWaveProcedural* W, int32 /*SamplesRequired*/)
+		{
+			W->QueueAudio(Loop->GetData(), Loop->Num()); // the full 16 s again: seamless (it renders as a whole loop)
+		});
+		Wave->QueueAudio(Loop->GetData(), Loop->Num());
+		return Wave;
 	}
 
 	static UDCAudioSubsystem* Get(const UObject* WorldContext)
@@ -197,11 +346,30 @@ namespace DCAudio
 		return GI ? GI->GetSubsystem<UDCAudioSubsystem>() : nullptr;
 	}
 
+	/** The saved master volume (R24), applied to every cue. */
+	float Master(const UObject* WorldContext)
+	{
+		const UDCSaveSubsystem* Save = UDCSaveSubsystem::Get(WorldContext);
+		return Save ? FMath::Clamp(Save->Settings.MasterVolume, 0.f, 1.f) : 1.f;
+	}
+
+	float MusicLevel(const UObject* WorldContext)
+	{
+		const UDCSaveSubsystem* Save = UDCSaveSubsystem::Get(WorldContext);
+		return Master(WorldContext) * (Save ? FMath::Clamp(Save->Settings.MusicVolume, 0.f, 1.f) : 1.f);
+	}
+
+	float SfxLevel(const UObject* WorldContext)
+	{
+		const UDCSaveSubsystem* Save = UDCSaveSubsystem::Get(WorldContext);
+		return Master(WorldContext) * (Save ? FMath::Clamp(Save->Settings.SfxVolume, 0.f, 1.f) : 1.f);
+	}
+
 	void PlayAt(const UObject* WorldContext, FName Cue, const FVector& Location, float Volume, float Pitch)
 	{
 		if (UDCAudioSubsystem* Audio = Get(WorldContext))
 		{
-			Audio->PlayAt(WorldContext, Cue, Location, Volume, Pitch);
+			Audio->PlayAt(WorldContext, Cue, Location, Volume * SfxLevel(WorldContext), Pitch);
 		}
 	}
 
@@ -209,7 +377,7 @@ namespace DCAudio
 	{
 		if (UDCAudioSubsystem* Audio = Get(WorldContext))
 		{
-			Audio->Play2D(WorldContext, Cue, Volume, Pitch);
+			Audio->Play2D(WorldContext, Cue, Volume * SfxLevel(WorldContext), Pitch);
 		}
 	}
 }
@@ -221,16 +389,195 @@ void UDCAudioSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 	{
 		Bank.Add(Pair.Key, MakeShared<TArray<uint8>>(ToBytes(Pair.Value())));
 	}
+	for (const FDCSoundRecipe& Data : UDCTuning::Get().SoundRecipes)
+	{
+		if (!Bank.Contains(Data.Id)) // a code cue of the same name wins
+		{
+			Bank.Add(Data.Id, MakeShared<TArray<uint8>>(ToBytes(RenderData(Data))));
+		}
+	}
 	Attenuation = NewObject<USoundAttenuation>(this);
 	Attenuation->Attenuation.bAttenuate = true;
 	Attenuation->Attenuation.bSpatialize = true;
 	Attenuation->Attenuation.AttenuationShape = EAttenuationShape::Sphere;
 	Attenuation->Attenuation.AttenuationShapeExtents = FVector(1500.f, 0.f, 0.f);
 	Attenuation->Attenuation.FalloffDistance = 14000.f;
+	for (const FDCCueMix& Mix : UDCTuning::Get().CueMix)
+	{
+		USoundBase* Remix = Mix.Sound.IsNull() ? nullptr : Cast<USoundBase>(Mix.Sound.TryLoad());
+		if (Remix)
+		{
+			Remix->bBypassVolumeScaleForPriority = true; // a far strike must not lose its voice to a near click (a-40)
+			MixSounds.Add(Mix.Cue, Remix);
+		}
+		if (!Mix.Sound.IsNull())
+		{
+			// R13 trace (human 02:38: no detonation in play): which remix recordings the packaged build actually has.
+			UE_LOG(LogTemp, Display, TEXT("DCAUDIO remix %s -> %s loaded=%d duration=%.2f"), *Mix.Cue.ToString(), *Mix.Sound.ToString(), Remix ? 1 : 0, Remix ? Remix->GetDuration() : 0.f);
+		}
+	}
+	FlushHandle = FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateUObject(this, &UDCAudioSubsystem::FlushQueue));
+}
+
+void UDCAudioSubsystem::Deinitialize()
+{
+	FTSTicker::GetCoreTicker().RemoveTicker(FlushHandle);
+	Queue.Reset();
+	Super::Deinitialize();
+}
+
+bool UDCAudioSubsystem::FlushQueue(float DeltaSeconds)
+{
+	DC_FRAME_SCOPE("SoundQueue");
+	const double NowReal = FPlatformTime::Seconds();
+	for (int32 i = LiveShots.Num() - 1; i >= 0; --i)
+	{
+		UAudioComponent* C = LiveShots[i].Key.Get();
+		if (C && NowReal < LiveShots[i].Value)
+		{
+			continue;
+		}
+		if (C)
+		{
+			C->Stop();
+		}
+		LiveShots.RemoveAtSwap(i, EAllowShrinking::No);
+	}
+	if (RecordStart >= 0.0 && NowReal >= NextVoicesLog)
+	{
+		NextVoicesLog = NowReal + 1.0;
+		const FAudioDevice* Device = GEngine ? GEngine->GetMainAudioDeviceRaw() : nullptr;
+		UE_LOG(LogTemp, Display, TEXT("DCAUDIO voices t=%.1f active_sources=%d max_channels=%d synth_shots=%d"), NowReal - RecordStart,
+			Device ? Device->GetNumActiveSources() : -1, Device ? Device->GetMaxChannels() : -1, LiveShots.Num());
+	}
+	if (Queue.Num() == 0)
+	{
+		return true;
+	}
+	const UDCTuning& T = UDCTuning::Get();
+	TArray<FDCSoundRequest> Plays;
+	TArray<FDCSoundDropped> Drops;
+	DCSoundQueue::Flush(T.SoundClasses, T.SoundMix, FPlatformTime::Seconds(), [this](FName Cue) { return CueSeconds(Cue); }, Queue, Voices, Plays, Drops);
+	for (const FDCSoundRequest& R : Plays)
+	{
+		Start(R);
+	}
+	for (const FDCSoundDropped& D : Drops)
+	{
+		const bool bMerged = D.Why == EDCSoundDrop::Merged;
+		(bMerged ? MergedCount : Dropped) += 1;
+		if (RecordStart >= 0.0 || !bMerged)
+		{
+			UE_LOG(LogTemp, Display, TEXT("DCAUDIO %s %s after %d frames (dropped %d, merged %d so far)"), bMerged ? TEXT("merged") : TEXT("drop"), *D.Request.Cue.ToString(), D.Request.WaitedFrames, Dropped, MergedCount);
+		}
+	}
+	return true;
+}
+
+void UDCAudioSubsystem::Start(const FDCSoundRequest& R)
+{
+	const UGameInstance* GI = GetGameInstance();
+	const UWorld* World = GI ? GI->GetWorld() : nullptr;
+	if (!World)
+	{
+		return;
+	}
+	const UDCTuning& T = UDCTuning::Get();
+	const TArray<FDCSoundClassDef>& Classes = T.SoundClasses;
+	const int32 Ci = DCSoundQueue::ClassOf(Classes, R.Cue);
+	const int32 Priority = Classes.IsValidIndex(Ci) ? Classes[Ci].Priority : 50;
+	LogCue(World, R.Cue, R.b2D ? nullptr : &R.Location);
+	// Mixer pass: the cue's own trim (+CueMix), then ducking under a recent strike for lower-priority classes.
+	const double Real = FPlatformTime::Seconds();
+	float Volume = R.Volume * DCCueMix::Trim(T.CueMix, R.Cue);
+	Volume *= Real < DuckUntil && Priority < DuckPriority ? DuckScale : 1.f;
+	if (Classes.IsValidIndex(Ci) && Classes[Ci].DuckOthers > 0.f)
+	{
+		DuckUntil = Real + Classes[Ci].DuckSeconds;
+		DuckPriority = Priority;
+		DuckScale = FMath::Clamp(1.f - Classes[Ci].DuckOthers, 0.f, 1.f);
+	}
+	// A remixed recording plays instead of the synth wave (a normal sound wave: no pool needed).
+	USoundBase* Sound = MixSounds.FindRef(R.Cue);
+	USoundWaveProcedural* Wave = Sound ? nullptr : AcquireWave(R.Cue, R.Pitch, Priority);
+	Sound = Sound ? Sound : Wave;
+	if (Sound && Sound != Wave)
+	{
+		// The remix asset kept the engine default priority 1.0, under every synth wave (class Priority / 25: units 1.6,
+		// strikes 4): past AudioMaxChannels the engine culled the remixed detonation first (R13, human 02:38).
+		Sound->Priority = static_cast<float>(Priority) / 25.f;
+	}
+	if (!Sound)
+	{
+		UE_LOG(LogTemp, Display, TEXT("DCAUDIO drop %s: wave pool full"), *R.Cue.ToString());
+		return;
+	}
+	if (RecordStart >= 0.0 || Priority >= 100)
+	{
+		// R13 trace: the sound that actually starts for a cue (remix or synth), its final volume, ducking and 2D/3D.
+		UE_LOG(LogTemp, Display, TEXT("DCAUDIO start %s via=%s vol=%.2f pitch=%.2f 2d=%d ducked=%d"), *R.Cue.ToString(), *Sound->GetName(), Volume, R.Pitch, R.b2D ? 1 : 0,
+			Real < DuckUntil && Priority < DuckPriority ? 1 : 0);
+	}
+	// R13/R14 cutout (advisor a-40, audio-8f17486): a generator-less procedural source never reports finished, so every
+	// synth one-shot held a voice for good; past AudioMaxChannels (~37 s into a fight) the engine dropped the music and the
+	// remixed boom. Synth plays get a component that is stopped when its PCM ends, which frees the voice before reuse.
+	UAudioComponent* Shot = R.b2D ? UGameplayStatics::SpawnSound2D(World, Sound, Volume, R.Pitch)
+		: UGameplayStatics::SpawnSoundAtLocation(World, Sound, R.Location, FRotator::ZeroRotator, Volume, R.Pitch, 0.f, Attenuation);
+	if (Shot && Wave)
+	{
+		LiveShots.Add({Shot, FPlatformTime::Seconds() + CueSeconds(R.Cue) / FMath::Max(R.Pitch, 0.1f) + 0.05});
+	}
+}
+
+USoundWaveProcedural* UDCAudioSubsystem::AcquireWave(FName Cue, float Pitch, int32 Priority)
+{
+	// One small pool of procedural waves per cue: a procedural wave plays one source at a time, so a wave is refilled
+	// and reused only after its last play ended (plus a guard); no NewObject per play once the pool is warm.
+	const TSharedPtr<TArray<uint8>>* Data = Bank.Find(Cue);
+	if (!Data)
+	{
+		return nullptr;
+	}
+	const FDCSoundMixTuning& Mix = UDCTuning::Get().SoundMix;
+	const double Now = FPlatformTime::Seconds();
+	TArray<int32>& Pool = PoolOf.FindOrAdd(Cue);
+	int32 Pick = INDEX_NONE;
+	for (const int32 i : Pool)
+	{
+		Pick = Pick == INDEX_NONE && PoolFreeAt[i] <= Now ? i : Pick;
+	}
+	if (Pick == INDEX_NONE)
+	{
+		if (Pool.Num() >= FMath::Max(1, Mix.PoolPerCue))
+		{
+			return nullptr;
+		}
+		Pick = PoolWaves.Add(MakeWave(Cue));
+		PoolFreeAt.Add(0.0);
+		Pool.Add(Pick);
+	}
+	else
+	{
+		PoolWaves[Pick]->ResetAudio();
+		PoolWaves[Pick]->QueueAudio((*Data)->GetData(), (*Data)->Num());
+	}
+	USoundWaveProcedural* Wave = PoolWaves[Pick];
+	Wave->Priority = static_cast<float>(Priority) / 25.f; // the engine culls lower priority first past AudioMaxChannels
+	PoolFreeAt[Pick] = Now + CueSeconds(Cue) / FMath::Max(Pitch, 0.1f) + Mix.ReuseGuardSeconds;
+	return Wave;
 }
 
 float UDCAudioSubsystem::CueSeconds(FName Cue) const
 {
+	// A remixed recording is what plays: its own length holds the class voice and the merge window (review F25).
+	if (const USoundBase* Remix = MixSounds.FindRef(Cue))
+	{
+		const float D = Remix->GetDuration();
+		if (D > 0.f && !Remix->IsLooping())
+		{
+			return D;
+		}
+	}
 	const TSharedPtr<TArray<uint8>>* Data = Bank.Find(Cue);
 	return Data ? (*Data)->Num() / (2.f * SampleRate) : 0.f;
 }
@@ -258,9 +605,26 @@ void UDCAudioSubsystem::StartEvidenceRecording(const UObject* WorldContext)
 	{
 		return;
 	}
+	// Evidence runs share the desktop with other windows: an unfocused game is muted by the engine (audio-6f4334f had
+	// 44 s stretches of digital silence). The recording hears the game as a focused player would.
+	FApp::SetUnfocusedVolumeMultiplier(1.f);
 	UAudioMixerBlueprintLibrary::StartRecordingOutput(WorldContext, 1800.f);
 	RecordStart = FPlatformTime::Seconds();
 	UE_LOG(LogTemp, Display, TEXT("DCCUE recording started to %s"), *RecordDir);
+	// -dcaudiorecseconds=N: stop and write the mix after N real seconds (a job's timeout may end the run first).
+	float Seconds = 0.f;
+	if (FParse::Value(FCommandLine::Get(), TEXT("dcaudiorecseconds="), Seconds) && Seconds > 0.f)
+	{
+		TWeakObjectPtr<const UObject> Context(WorldContext);
+		FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateWeakLambda(this, [this, Context](float)
+		{
+			if (Context.IsValid())
+			{
+				StopEvidenceRecording(Context.Get());
+			}
+			return false;
+		}), Seconds);
+	}
 }
 
 void UDCAudioSubsystem::StopEvidenceRecording(const UObject* WorldContext)
@@ -288,24 +652,25 @@ void UDCAudioSubsystem::LogCue(const UObject* WorldContext, FName Cue, const FVe
 
 void UDCAudioSubsystem::PlayAt(const UObject* WorldContext, FName Cue, const FVector& Location, float Volume, float Pitch)
 {
-	LogCue(WorldContext, Cue, &Location);
-	if (USoundWaveProcedural* Wave = MakeWave(Cue))
+	// R13: queued; FlushQueue merges, budgets and starts it this frame or a few frames later.
+	if (Bank.Contains(Cue))
 	{
-		UGameplayStatics::PlaySoundAtLocation(WorldContext, Wave, Location, Volume, Pitch, 0.f, Attenuation);
+		Queue.Add({Cue, Location, false, Volume, Pitch});
 	}
 }
 
 void UDCAudioSubsystem::Play2D(const UObject* WorldContext, FName Cue, float Volume, float Pitch)
 {
-	LogCue(WorldContext, Cue, nullptr);
-	if (USoundWaveProcedural* Wave = MakeWave(Cue))
+	if (Bank.Contains(Cue))
 	{
-		UGameplayStatics::PlaySound2D(WorldContext, Wave, Volume, Pitch);
+		Queue.Add({Cue, FVector::ZeroVector, true, Volume, Pitch});
 	}
 }
 
 void UDCAudioSubsystem::StartMusic(const UObject* WorldContext, FName Cue, float Volume)
 {
+	MusicBase = Volume;
+	Volume *= DCAudio::MusicLevel(WorldContext);
 	if (Music && Music->IsPlaying() && MusicCue == Cue)
 	{
 		Music->SetVolumeMultiplier(Volume);
@@ -341,8 +706,17 @@ void UDCAudioSubsystem::StartMusic(const UObject* WorldContext, FName Cue, float
 
 void UDCAudioSubsystem::SetMusicVolume(float Volume)
 {
+	MusicBase = Volume;
 	if (Music)
 	{
-		Music->SetVolumeMultiplier(Volume);
+		Music->SetVolumeMultiplier(Volume * DCAudio::MusicLevel(Music));
+	}
+}
+
+void UDCAudioSubsystem::ApplyMasterVolume(const UObject* WorldContext)
+{
+	if (Music)
+	{
+		Music->SetVolumeMultiplier(MusicBase * DCAudio::MusicLevel(WorldContext));
 	}
 }

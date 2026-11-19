@@ -1,0 +1,17 @@
+# Wall billboard (wall mount): brackets, ink frame, cyan panel with a dark camera pictogram.
+grid 10
+size 4 36 24
+slot frame Ink
+slot face NeonCyan
+slot edge NeonCyanEdge
+slot bracket Steel
+pivot 0 18 0
+box 0 4 4 2 6 20 bracket
+box 0 30 4 2 32 20 bracket
+box 2 0 0 3 36 24 frame
+box 3 1 1 4 35 23 edge
+box 3 2 2 4 34 22 face
+paint box 3 10 7 4 26 16 frame
+paint box 3 12 16 4 17 18 frame
+paint sphere 3.5 18 11.5 3.2 face
+paint sphere 3.5 18 11.5 1.6 frame

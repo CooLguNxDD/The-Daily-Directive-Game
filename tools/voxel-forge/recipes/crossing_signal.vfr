@@ -1,0 +1,15 @@
+# Crossing signal (R23 street): a tall ink pole with a two-lamp head (warm walk lamp, cyan wait lamp; no red: red is
+# danger only) and a push box. Faces +x.
+grid 5
+size 12 10 80
+slot pole Ink
+slot head InkBlue
+slot warm Lamp
+slot cyan NeonCyanEdge
+slot steel Steel
+box 3 3 0 7 7 2 steel
+cyl 5 5 2 66 1.1 pole
+box 2 2 66 9 8 79 head
+paint box 8 3 73 9 7 77 cyan
+paint box 8 3 67 9 7 71 warm
+box 6 4 30 9 6 35 steel

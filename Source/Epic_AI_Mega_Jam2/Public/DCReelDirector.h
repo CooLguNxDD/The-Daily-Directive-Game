@@ -5,6 +5,8 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Voxel/DCVoxelTypes.h"
+#include "DCTypes.h"
 #include "GameFramework/Actor.h"
 #include "DCReelDirector.generated.h"
 
@@ -21,6 +23,7 @@ class EPIC_AI_MEGA_JAM2_API ADCReelDirector : public AActor
 	GENERATED_BODY()
 
 public:
+	bool IsSlating() const { return SlateFramesLeft >= 0 || FPlatformTime::Seconds() < SlateUntilReal; }
 	ADCReelDirector();
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type Reason) override;
@@ -43,7 +46,7 @@ public:
 private:
 	struct FPendingCollapse
 	{
-		float At = 0.f;
+		float At = 0.f; // content time of the collapse (clip time), not server time
 		TWeakObjectPtr<ADCBuilding> Building;
 		FVector Epicenter = FVector::ZeroVector;
 		float ContentTime = 0.f;
@@ -58,6 +61,10 @@ private:
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UCameraComponent> Camera;
 	UPROPERTY(VisibleAnywhere) TObjectPtr<class USceneCaptureComponent2D> TakeCapture;
 	UPROPERTY(VisibleAnywhere) TObjectPtr<USkeletalMeshComponent> Puppet;
+	/** Restage slate: frames left before the restage runs (-1 = none pending) and when it lifts (real seconds). */
+	int32 SlateFramesLeft = -1;
+	double SlateUntilReal = 0.0;
+	UPROPERTY() TArray<TObjectPtr<class UProceduralMeshComponent>> PuppetParts;
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UStaticMeshComponent> PuppetCamera;
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UStaticMeshComponent> PuppetFlash;
 	UPROPERTY() TArray<TObjectPtr<AActor>> Staged;
@@ -65,7 +72,27 @@ private:
 	UPROPERTY() TObjectPtr<UAnimSequence> IdleAnim;
 
 	TArray<FPendingCollapse> Pending;
+	/** Voxel city: the clip sector's ops that happen during the clip, at their replay server time. */
+	TArray<TPair<float, FDCVoxelOp>> PendingVoxelOps;
+	/** Async restage (Tuning.bAsyncReelRestage): the slate stays up while the city crafts and these ops (the clip
+	 *  sector's ops before its window) replay on the worker; then the clip plays. */
+	TArray<FDCVoxelOp> PreWindowOps;
+	bool bRestaging = false;
+	bool bPreWindowQueued = false;
+	/** Restaged; waiting for the host's clip clock (GS->bReelClipLive) before the slate lifts and the strikes spawn. */
+	bool bAwaitLive = false;
+	bool bReportedStaged = false;
+	TArray<FDCBlastRecord> PendingBlasts;
 	int32 StagedIndex = -1;
+	/** R27: the angle on screen (for the cut log and the -dcreelshots frames) and the clip it belongs to. */
+	int32 ShotOnScreen = -1;
+	/** R27: the clip's blast (the latest strike at or before the shutter), the reel angles' anchor. */
+	bool bClipBlast = false;
+	FVector ClipBlastAt = FVector::ZeroVector;
+	float ClipBlastRadius = 0.f;
+	float ClipBlastTime = 0.f;
+	int32 ShotClip = -1;
+	int32 ShotFramed = -1;
 	float WindowStart = 0.f;
 	float ShotTime = 0.f;
 	bool bRunning = false;

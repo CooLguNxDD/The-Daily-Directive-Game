@@ -1,0 +1,19 @@
+# Outfit gear (R18): a press satchel at the left hip: a soft bag with a rounded bottom, the accent flap folded over the
+# top and down the outer face with a steel buckle, the strap running up the side, a glowing press tag.
+# The outer face is y 0 (the bag hangs on the left side).
+name outfit_satchel
+grid 5
+size 7 4 15
+slot bag SwatchMain
+slot flap SwatchAccent
+slot buckle Steel
+slot tag SwatchGlow
+box 0 1 1 7 4 6 bag
+box 1 1 0 6 4 1 bag
+box 0 0 2 7 1 6 bag
+box 0 0 6 7 4 7 flap
+box 0 0 3 7 1 6 flap
+box 3 0 3 4 1 4 buckle
+box 3 2 7 4 3 15 flap
+box 5 0 1 6 1 2 tag
+pivot 3 2 0

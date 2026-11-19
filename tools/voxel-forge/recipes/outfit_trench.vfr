@@ -1,0 +1,28 @@
+# Outfit body: long trench coat with an accent belt and collar (R23). V5.5: shaped, not a slab: an octagonal torso
+# around the mannequin (wide enough to stay outside the body), a belt, a flared skirt split at the front, and a
+# turned-up collar. Hollow.
+# Regridded to 5 cm voxels (R1 floor, CP7).
+name outfit_trench
+grid 5
+size 9 11 14
+slot coat SwatchMain
+slot belt SwatchAccent
+# Torso: chamfered octagon around the chest.
+poly 6 13 coat 0,2 2,1 7,1 8,2 8,8 7,10 2,10 0,8
+# Skirt: wider at the hem, stepped out one voxel per band (a voxel flare).
+poly 0 3 coat 0,1 1,0 8,0 9,1 9,9 8,10 1,10 0,9
+poly 2 6 coat 0,2 2,0 7,0 8,2 8,9 7,10 2,10 0,9
+# Belt between them, one voxel proud.
+poly 5 7 belt 0,2 2,0 7,0 9,2 9,9 7,10 2,10 0,9
+# Collar: a turned-up ring above the shoulders.
+poly 12 14 coat 1,2 2,1 6,1 8,2 8,8 6,9 2,9 1,8
+# Hollow it: the mannequin stands inside.
+carve poly 0 5 1,2 2,1 6,1 8,2 8,8 6,9 2,9 1,8
+carve poly 6 12 1,3 2,2 6,2 8,3 8,8 6,9 2,9 1,8
+carve poly 13 13 2,3 3,2 6,2 7,3 7,7 6,8 3,8 2,7
+# Open front below the belt, and a V at the neck.
+carve box 8 5 0 8 6 5
+carve box 7 4 12 8 6 13
+# Belt buckle.
+box 8 4 5 9 6 7 belt
+pivot 4 5 3

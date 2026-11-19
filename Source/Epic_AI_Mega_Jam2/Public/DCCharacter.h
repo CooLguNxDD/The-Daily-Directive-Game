@@ -41,6 +41,16 @@ public:
 
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 	virtual void BeginPlay() override;
+	/** Binds the input actions again (after a key rebind rebuilt the mapping, R24). */
+	void RebindInput()
+	{
+		DestroyPlayerInputComponent();
+		PawnClientRestart();
+	}
+	/** Voxel city meshes are built locally on every machine and are not net-addressable: never a movement base (the
+	 *  city never moves), so co-op movement replication carries no unresolvable component (CP4 review). */
+	virtual void SetBase(FMovementBaseInterfaceData* MovementBaseInterfaceData, const FName BoneName = NAME_None, bool bNotifyActor = true) override;
+	using ACharacter::SetBase;
 	virtual void Tick(float DeltaSeconds) override;
 	virtual void SetupPlayerInputComponent(UInputComponent* PlayerInputComponent) override;
 	virtual void Landed(const FHitResult& Hit) override;
@@ -49,13 +59,27 @@ public:
 	// --- State the HUD and enemies read ---
 	EDCSlot GetSlot() const { return Slot; }
 	bool IsCameraRaised() const { return bCameraRaised; }
+	/** R16: aiming the gun (replicated, so every machine shows the aim pose). */
+	bool IsRifleAiming() const { return bRifleAim; }
+	/** Aim pitch (degrees, the control pitch; replicated from the owner) for the aim pose on every machine. */
+	float GetAimPitch() const { return AimPitch; }
+	/** The rifle loop runs (the draw is over): the aim pose may bend the spine. */
+	bool IsRifleLocoActive() const { return GetWorld() && GetWorld()->GetTimeSeconds() >= LocoBlockedUntil; }
+	float GetDownedAt() const { return DownedAt; }
 	bool IsDowned() const { return bDowned; }
+	bool HasLastFrame() const { return bDowned && bLastFrameReady; }
+	/** Last Frame in co-op (R21): slow motion on the dying player's own machine only, as presentation
+	 *  (UDCPresentationClock: fx and animation slow, simulation stays real time). Same on a listen host and a client. */
+	UFUNCTION(Client, Reliable) void ClientLastFrameSlowMo(float Dilation, float Seconds);
 	bool IsDrawing() const;
 	bool IsReloading() const;
 	bool IsSpotlit() const;
 	float GetHealth() const { return Health; }
 	int32 GetAmmo() const { return Ammo; }
 	int32 GetReserve() const { return Reserve; }
+	/** R8: the weapon in the gun slot (index into UDCTuning::Weapons) and its row. */
+	int32 GetWeaponIndex() const { return WeaponIndex; }
+	const struct FDCWeaponDef& ActiveWeapon() const;
 	float GetZoomFOV() const { return LensFOV(); }
 	/** Viewfinder FOV: the wheel zoom plus lens gear (Fisheye ExtraFOV). */
 	float LensFOV() const;
@@ -86,8 +110,21 @@ public:
 
 	/** Camera shake from blasts (local). */
 	void AddTrauma(float Amount) { Trauma = FMath::Min(Trauma + Amount, 1.5f); }
+	/** R17: hit shake channel (unit hits), capped and rate-limited by FDCCameraTuning; never stacks onto blast shake. */
+	float HitTrauma = 0.f;
+	float LastHitShakeTime = -100.f;
+	int32 ShakeLogHits = 0;
+	int32 ShakeLogFlinches = 0;
+	float ShakeLogMax = 0.f;
+	float ShakeLogNext = 0.f;
+
+	/** Local: run every release (Completed) handler of the input table once, so no held flag (sprint, fire, aim,
+	 *  crouch, interact) outlives disabled input such as the ESC menu (advisor a-56). */
+	void ReleaseHeldInput();
 
 private:
+	/** The input table's Completed handlers, collected while binding (one owner: the table). */
+	TArray<void (ADCCharacter::*)(const FInputActionInstance&)> ReleaseFns;
 	// Input handlers (bound by action name from the input table).
 	void OnMove(const FInputActionInstance& I);
 	void OnLook(const FInputActionInstance& I);
@@ -116,6 +153,14 @@ private:
 	void PrimaryCamera();
 
 	void SelectSlot(EDCSlot NewSlot);
+	// R8 weapons (DCWeapons.cpp): per-weapon magazines, the switch, the forge model on the gun prop.
+	void InitWeapons();
+	void SelectWeapon(int32 Index);
+	void NextWeapon();
+	void NextStratagem();
+	void ApplyWeaponModel();
+	UFUNCTION(Server, Reliable) void ServerSetWeapon(uint8 Index);
+	UFUNCTION() void OnRep_Weapon();
 	void FireRifleOnce();
 	void DoReload();
 	void PlayRifleFx(const FVector& Start, const FVector& End);
@@ -137,18 +182,35 @@ private:
 
 	UFUNCTION(Server, Reliable) void ServerSetSlot(EDCSlot NewSlot);
 	UFUNCTION(Server, Reliable) void ServerSetCameraRaised(bool bRaised);
+	UFUNCTION(Server, Reliable) void ServerSetRifleAim(bool bAim);
+	UFUNCTION(Server, Unreliable) void ServerAimPitch(float Pitch);
+	void SetRifleAim(bool bAim);
+	float SentAimPitch = 0.f;
+	float NextAimPitchSend = 0.f;
+	float AimBlend = 0.f;
+	/** R16: how far the held rifle points at the aim point instead of along the hand (every machine, cosmetic). */
+	float GunAimBlend = 0.f;
+	float GunShotUntil = 0.f;
+	/** R19 fall net (host). */
+	void UpdateFallNet();
+	FVector LastSafeSpot = FVector::ZeroVector;
+	bool bHasSafeSpot = false;
+	float NextSafeSample = 0.f;
 	UFUNCTION(Server, Reliable) void ServerSetSprint(bool bSprint);
 	UFUNCTION(Server, Unreliable) void ServerFire(FVector_NetQuantize Start, FVector_NetQuantizeNormal Dir);
 	UFUNCTION(Server, Reliable) void ServerReload();
 	UFUNCTION(Server, Reliable) void ServerCallStrike(FName StratagemId, FVector_NetQuantize Target);
 	UFUNCTION(Server, Reliable) void ServerSubmitPhoto(int32 PhotoId, FVector_NetQuantize10 CamLoc, FRotator CamRot, float FOV, float ShotTime);
+	/** Host grade of an accepted shot at its own shot time; waits a frame at a time while a voxel op is still on the
+	 *  worker (until GiveUpAt, real time), so a shutter right after a strike sees the towers it felled (C3.1). */
+	void HostGradeShot(int32 PhotoId, FVector CamLoc, FRotator CamRot, float FOV, float When, bool bLast, double GiveUpAt);
 	UFUNCTION(Server, Reliable) void ServerSetReviving(bool bHolding);
 	UFUNCTION(Client, Reliable) void ClientHitConfirm(bool bKill);
 	UFUNCTION(Client, Reliable) void ClientHurt(FVector_NetQuantize From);
 	UFUNCTION(Client, Reliable) void ClientPhotoGraded(int32 PhotoId, FDCPhotoGrade Grade);
 	UFUNCTION(Client, Reliable) void ClientToast(const FString& Text);
 	UFUNCTION(Client, Reliable) void ClientCue(FName Cue);
-	UFUNCTION(Client, Reliable) void ClientSyncAmmo(int32 NewAmmo, int32 NewReserve);
+	UFUNCTION(Client, Reliable) void ClientSyncAmmo(int32 NewAmmo, int32 NewReserve, uint8 ForWeapon);
 	UFUNCTION(NetMulticast, Unreliable) void MulticastRifleFx(FVector_NetQuantize Start, FVector_NetQuantize End);
 	UFUNCTION(NetMulticast, Unreliable) void MulticastShutterFx();
 	UFUNCTION() void OnRep_Slot();
@@ -160,17 +222,56 @@ private:
 	UPROPERTY(VisibleAnywhere) TObjectPtr<USceneCaptureComponent2D> Capture;
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UStaticMeshComponent> RifleMesh;
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UStaticMeshComponent> PhotoCamMesh;
+	/** The forge-made press camera on the chest (voxel model), hidden while the camera is in hand. */
+	UPROPERTY() TObjectPtr<class UProceduralMeshComponent> ChestCam;
+	/** R23: the worn outfit parts, rebuilt when the player state's share code changes. */
+	UPROPERTY() TArray<TObjectPtr<class UProceduralMeshComponent>> OutfitMeshes;
+	FString AppliedOutfit;
+	bool bOutfitApplied = false;
+	void TickOutfit();
+	void HideBodyFromOwner(bool bHide);
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UStaticMeshComponent> BeaconMesh;
-	UPROPERTY(VisibleAnywhere) TObjectPtr<UStaticMeshComponent> StrikeMarker;
+	UPROPERTY(VisibleAnywhere) TObjectPtr<class UPointLightComponent> RimLight;
+	UPROPERTY(VisibleAnywhere) TObjectPtr<class UInstancedStaticMeshComponent> StrikeMarker;
+	float StrikeMarkerRadius = -1.f;
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UStaticMeshComponent> Tracer;
+	UPROPERTY(VisibleAnywhere) TObjectPtr<UStaticMeshComponent> MuzzleFlash;
+	/** R10 rifle locomotion (cosmetic, every machine): clips preloaded at BeginPlay, the one playing now, and the end of
+	 *  the draw motion it waits for. */
+	UPROPERTY() TArray<TObjectPtr<UAnimSequenceBase>> RifleJogLoaded;
+	UPROPERTY() TArray<TObjectPtr<UAnimSequenceBase>> RifleWalkLoaded;
+	UPROPERTY() TObjectPtr<UAnimSequenceBase> RifleIdleLoaded;
+	UPROPERTY() TObjectPtr<UAnimSequenceBase> LocoClip;
+	float LocoBlockedUntil = 0.f;
+	void UpdateRifleLoco();
 
 	UPROPERTY(ReplicatedUsing = OnRep_Slot) EDCSlot Slot = EDCSlot::Rifle;
+	/** R8: the weapon in the gun slot, replicated so everyone sees its model and tracer. */
+	UPROPERTY(ReplicatedUsing = OnRep_Weapon) uint8 WeaponIndex = 0;
+	/** The host's own copy of the owner's weapon (a listen host's local switch must not move the host counters). */
+	uint8 HostWeapon = 0;
+	/** Magazine (X) and reserve (Y) of every weapon not in hand: owner-local and host copies. */
+	TArray<FIntPoint> WeaponStash;
+	TArray<FIntPoint> HostWeaponStash;
+	/** The forge model of the weapon in hand, riding on RifleMesh. */
+	UPROPERTY() TObjectPtr<class UProceduralMeshComponent> GunVox;
 	/** The slot whose draw motion last played on this machine. */
 	EDCSlot DrawnSlot = EDCSlot::Rifle;
 	UPROPERTY(Replicated) bool bCameraRaised = false;
+	UPROPERTY(Replicated) bool bRifleAim = false;
+	UPROPERTY(Replicated) float AimPitch = 0.f;
 	UPROPERTY(Replicated) bool bSprinting = false;
 	UPROPERTY(Replicated) float Health = 100.f;
+	/** Host clock of the last damage taken (health regen waits RegenDelaySeconds after it). */
+	float HostHurtAt = -100.f;
 	UPROPERTY(ReplicatedUsing = OnRep_Downed) bool bDowned = false;
+	/** Last Frame (R21): a downed player keeps one shutter, spent or lost on revive. */
+	UPROPERTY(Replicated) bool bLastFrameReady = false;
+	/** Enemies hidden from one Last Frame capture (at the lens), shown again right after it. */
+	TArray<TWeakObjectPtr<AActor>> LensHidden;
+	/** Landing spring (local camera feel): offset in cm and its velocity. */
+	float LandDip = 0.f;
+	float LandDipVel = 0.f;
 	UPROPERTY(Replicated) float SpotlitUntil = -10.f;
 	UPROPERTY(Replicated) float ReviveProgress = 0.f;
 	UPROPERTY(Replicated) int32 SelfRevivesLeft = 1;
@@ -195,6 +296,7 @@ private:
 	float StepDistance = 0.f;
 	float LastLowAmmoCue = -10.f;
 	float TracerHideTime = 0.f;
+	float MuzzleHideTime = 0.f;
 	bool bTriggerHeld = false;
 	bool bAimHeld = false;
 	bool bInteractHeld = false;

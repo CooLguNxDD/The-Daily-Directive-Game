@@ -1,0 +1,21 @@
+# Hive nest (R3): a low chitin mound split by violet glowing vents with glowing pods, burst up through the street.
+# Original design.
+name nest
+grid 10
+size 36 36 14
+slot shell Chitin
+slot glow HiveViolet
+slot rubble Rubble
+ellipsoid 18 18 0 17 17 9 rubble
+ellipsoid 18 18 2 13 13 10 shell
+cone 18 18 8 14 6 2 shell
+carve box 16 4 5 20 32 14
+carve box 4 16 5 32 20 14
+paint box 15 3 4 21 33 14 glow
+paint box 3 15 4 33 21 14 glow
+sphere 10 10 8 2.5 glow
+sphere 26 11 7 2 glow
+sphere 11 26 7 2 glow
+sphere 25 25 8 2.5 glow
+noise 0.2 11 rubble
+pivot 18 18 0

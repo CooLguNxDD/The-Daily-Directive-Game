@@ -1,0 +1,22 @@
+# Spotlight unit: tall and sharp, a lamp head whose cone blinds photographers.
+grid 5
+size 24 24 64
+slot body Ink
+slot trim Steel
+slot lamp Lamp
+slot eye Danger
+# three thin legs
+beam 12 12 30 2 2 0 1.6 body
+beam 12 12 30 22 2 0 1.6 body
+beam 12 12 30 12 23 0 1.6 body
+# mast and angular torso
+cyl 12 12 28 46 2.5 trim
+cone 12 12 36 50 7 3 body
+# lamp head: a box with a big lamp face toward +x
+box 6 6 48 20 18 58 body
+box 19 8 50 22 16 57 lamp
+box 8 8 58 16 16 62 trim
+box 6 10 54 8 14 56 eye
+# R20 segments: the lamp head scans about the top of the mast, the tripod legs dangle from the hub under the torso
+part Head 6 6 48 23 19 63 12 12 48
+part Legs 0 0 0 24 24 30 12 12 30

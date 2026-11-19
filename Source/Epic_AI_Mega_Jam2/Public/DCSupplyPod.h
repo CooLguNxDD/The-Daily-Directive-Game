@@ -21,6 +21,9 @@ public:
 	virtual void Tick(float DeltaSeconds) override;
 
 	static ADCSupplyPod* Drop(UWorld* World, const FVector& Where);
+	/** R7 supply drop: a pod with its own load that refills every standing player within CrewRadiusCm of it once the
+	 *  first one reaches it (host). FallDelay = seconds before it starts falling (the call's telegraph). */
+	static ADCSupplyPod* DropLoad(UWorld* World, const FVector& Where, int32 Film, int32 Ammo, float Health, float CrewRadiusCm, float FallDelay);
 	bool HasLanded() const { return bLanded; }
 
 private:
@@ -31,4 +34,7 @@ private:
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UStaticMeshComponent> Beam;
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UPointLightComponent> Light;
 	bool bLanded = false;
+	/** Host-only load (negative = the Run pod defaults; CrewRadiusCm 0 = only the player who reaches it). */
+	int32 LoadFilm = -1, LoadAmmo = -1;
+	float LoadHealth = -1.f, LoadCrewRadiusCm = 0.f;
 };

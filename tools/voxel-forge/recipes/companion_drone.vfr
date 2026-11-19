@@ -1,0 +1,22 @@
+# R22 card companion: the Press Escort Drone. A round ink body on four steel arms with cyan rotors, a cyan eye and a
+# short steel gun under the nose, both facing +x. Friendly, so rounded. Pivot at its centre: the actor flies there.
+name companion_drone
+grid 5
+size 14 14 7
+slot body Ink
+slot arm Steel
+slot rotor NeonCyan
+slot eye NeonCyan
+slot gun Steel
+slot stripe Signal
+beam 2 2 3.5 12 12 3.5 0.7 arm
+beam 2 12 3.5 12 2 3.5 0.7 arm
+ellipsoid 7 7 3.5 3.2 3.2 2.4 body
+cyl 2 2 4 5 1.8 rotor
+cyl 12 2 4 5 1.8 rotor
+cyl 2 12 4 5 1.8 rotor
+cyl 12 12 4 5 1.8 rotor
+box 9 6 3 11 8 5 eye
+beam 8 7 1.5 13 7 1.5 0.6 gun
+paint box 4 4 5 10 10 6 stripe
+pivot 7 7 3

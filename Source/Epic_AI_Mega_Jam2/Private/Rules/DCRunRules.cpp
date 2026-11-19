@@ -32,6 +32,51 @@ namespace DCRunRules
 		return Offer;
 	}
 
+	TArray<FName> DraftHand(int32 Seed, const TArray<FDCUpgradeDef>& Upgrades, const TArray<FDCCardRarity>& Rarities, const TArray<FName>& Taken, int32 HandSize, FName MaxRarity)
+	{
+		// MaxRarity caps the hand by the rarity table's order (human 16:28: a missed quota deals Common only); None = all.
+		const int32 Cap = MaxRarity.IsNone() ? Rarities.Num() : Rarities.IndexOfByPredicate([MaxRarity](const FDCCardRarity& Row) { return Row.Id == MaxRarity; });
+		TArray<FName> Open;
+		TArray<float> Weights;
+		for (const FDCUpgradeDef& U : Upgrades)
+		{
+			const int32 Rank = Rarities.IndexOfByPredicate([&U](const FDCCardRarity& Row) { return Row.Id == U.Rarity; });
+			if (Taken.Contains(U.Id) || Rank > Cap)
+			{
+				continue;
+			}
+			const FDCCardRarity* R = Rarities.FindByPredicate([&U](const FDCCardRarity& Row) { return Row.Id == U.Rarity; });
+			Open.Add(U.Id);
+			Weights.Add(FMath::Max(R ? R->Weight : 1.f, 0.f));
+		}
+		FRandomStream Rng(Seed);
+		TArray<FName> Hand;
+		while (Hand.Num() < HandSize && Open.Num() > 0)
+		{
+			float Total = 0.f;
+			for (const float W : Weights)
+			{
+				Total += W;
+			}
+			int32 Pick = Open.Num() - 1;
+			float Roll = Rng.FRand() * Total;
+			for (int32 i = 0; i < Open.Num() && Total > 0.f; ++i)
+			{
+				Roll -= Weights[i];
+				if (Roll < 0.f)
+				{
+					Pick = i;
+					break;
+				}
+			}
+			Pick = Total > 0.f ? Pick : Rng.RandRange(0, Open.Num() - 1); // all weights zero: plain uniform
+			Hand.Add(Open[Pick]);
+			Open.RemoveAt(Pick);
+			Weights.RemoveAt(Pick);
+		}
+		return Hand;
+	}
+
 	bool ScoopMet(const FDCScoopDef& Scoop, const FDCPhotoInputs& In, const FDCPhotoGrade& Grade)
 	{
 		if (!Scoop.Timing.IsNone() && Grade.TimingLabel != Scoop.Timing)
@@ -108,6 +153,51 @@ namespace DCRunRules
 			Best = (Best < 0 || Picks[i].PageScore > Picks[Best].PageScore) ? i : Best;
 		}
 		return Best;
+	}
+
+	FString PickHeadline(int32 Seed, const TArray<FDCHeadlineRow>& Rows, const TArray<FName>& Categories, const FString& Player,
+		const FString& Sector, const FString& CoStar, TSet<FString>& Used)
+	{
+		const FDCHeadlineRow* Row = nullptr;
+		for (const FName& C : Categories)
+		{
+			Row = Rows.FindByPredicate([C](const FDCHeadlineRow& R) { return R.Category == C && R.Lines.Num() > 0; });
+			if (Row)
+			{
+				break;
+			}
+		}
+		Row = Row ? Row : Rows.FindByPredicate([](const FDCHeadlineRow& R) { return R.Category == TEXT("ANY") && R.Lines.Num() > 0; });
+		if (!Row)
+		{
+			return FString::Printf(TEXT("VICTORY IN %s"), *Sector.ToUpper());
+		}
+		TArray<int32> Fresh;
+		for (int32 i = 0; i < Row->Lines.Num(); ++i)
+		{
+			if (!Used.Contains(Row->Lines[i]))
+			{
+				Fresh.Add(i);
+			}
+		}
+		if (Fresh.Num() == 0)
+		{
+			for (const FString& L : Row->Lines)
+			{
+				Used.Remove(L); // every line of this category printed: the next edition starts over
+			}
+			for (int32 i = 0; i < Row->Lines.Num(); ++i)
+			{
+				Fresh.Add(i);
+			}
+		}
+		const FString& Raw = Row->Lines[Fresh[static_cast<int32>(static_cast<uint32>(HashCombine(GetTypeHash(Seed), 0x4EAD1u)) % static_cast<uint32>(Fresh.Num()))]];
+		Used.Add(Raw);
+		FString Line = Raw;
+		Line.ReplaceInline(TEXT("{PLAYER}"), *Player.ToUpper());
+		Line.ReplaceInline(TEXT("{SECTOR}"), *Sector.ToUpper());
+		Line.ReplaceInline(TEXT("{COSTAR}"), CoStar.IsEmpty() ? TEXT("A COMRADE") : *CoStar.ToUpper());
+		return Line;
 	}
 
 	FString MakeHeadline(int32 Seed, const TArray<FString>& Templates, const TMap<FName, FString>& Subjects,

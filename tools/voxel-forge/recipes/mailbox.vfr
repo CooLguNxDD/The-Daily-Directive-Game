@@ -1,0 +1,17 @@
+# Post drop box (R23 street): rounded-top ink box on short legs, cream slot plate, faces +x.
+grid 5
+size 12 14 26
+slot body InkBlue
+slot trim Trim
+slot plate Paper
+box 2 2 0 4 4 4 trim
+box 8 2 0 10 4 4 trim
+box 2 10 0 4 12 4 trim
+box 8 10 0 10 12 4 trim
+box 1 1 4 11 13 20 body
+ellipsoid 6 7 20 5 6 4 body
+carve box 0 0 14 12 14 26
+box 1 1 14 11 13 20 body
+cyl 6 7 20 23 5 body
+paint box 10 3 15 11 11 17 plate
+paint box 10 4 15 11 10 16 trim

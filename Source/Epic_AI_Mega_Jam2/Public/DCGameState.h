@@ -3,9 +3,12 @@
 #include "CoreMinimal.h"
 #include "GameFramework/GameStateBase.h"
 #include "DCTypes.h"
+#include "Voxel/DCVoxelTypes.h"
+#include "Rules/DCFactionRules.h"
 #include "DCGameState.generated.h"
 
 class ADCEnvironment;
+class ADCVoxelCity;
 
 UCLASS()
 class EPIC_AI_MEGA_JAM2_API ADCGameState : public AGameStateBase
@@ -29,19 +32,53 @@ public:
 	float Now() const { return static_cast<float>(GetServerWorldTimeSeconds()); }
 
 	ADCEnvironment* GetEnvironment() const { return Environment; }
+	ADCVoxelCity* GetVoxelCity() const { return VoxelCity; }
+
+	/** Host: appends a voxel op for the current city build (Seq and Build filled in) and returns it. */
+	/** Appends a voxel op (host). ApplyTime: when every city commits it (a strike's detonation); default now. */
+	FDCVoxelOp& AddVoxelOp(const FDCVoxelOp& Op, float ApplyTime = -1.f);
+
+	/** Voxel city (R1-R3): which sector is built (-1 = none) and the build serial; every machine crafts from these. */
+	UPROPERTY(Replicated) int32 CitySector = -1;
+	UPROPERTY(Replicated) int32 CityBuildId = 0;
+	/** The host's voxel ops for the whole run, applied in Seq order by every machine (and replayed by the reel). */
+	UPROPERTY(Replicated) TArray<FDCVoxelOp> VoxelOps;
 
 	UPROPERTY(Replicated) TArray<FDCBlastRecord> Blasts;
 	UPROPERTY(Replicated) EDCRunPhase Phase = EDCRunPhase::Lobby;
 	UPROPERTY(Replicated) int32 SectorIndex = 0;
+	/** R3: this map's factions (rolled by the host from the run seed at sector start). */
+	UPROPERTY(ReplicatedUsing = OnRep_FactionMix) FDCFactionMix FactionMix;
+	UFUNCTION() void OnRep_FactionMix();
+	/** R3 territory: owner faction per zone (ZonesPerSide^2, row-major over the map). */
+	UPROPERTY(Replicated) TArray<FName> Zones;
+	UPROPERTY(Replicated) float ZoneHalfExtent = 0.f;
+	/** R4: per sector played, 1 = extracted, 0 = objective failed (front page subhead). */
+	UPROPERTY(Replicated) TArray<uint8> ObjectiveResults;
 	UPROPERTY(Replicated) float SectorEndTime = 0.f;
+	/** Server time the sector began: with the run seed it drives the weather arc on every machine (R18). */
+	UPROPERTY(Replicated) float SectorStartTime = 0.f;
 	UPROPERTY(Replicated) int32 RunSeed = 0;
+	/** Host-decided weather profile held over sector 1 (first-ever run, human 17:37); None = the seeded roll. */
+	UPROPERTY(Replicated) FName FirstSectorWeather;
 	/** Server time the current timed phase (draft, final cut, vote) ends. */
 	UPROPERTY(Replicated) float PhaseEndTime = 0.f;
 	UPROPERTY(Replicated) bool bRunFailed = false;
+	/** R9: lives the crew has left this run (HUD). */
+	UPROPERTY(Replicated) int32 CrewLives = 0;
 	/** Photo score filed by the whole crew this sector, against the sector quota. */
 	UPROPERTY(Replicated) int32 SectorPhotoPoints = 0;
 	/** One entry per finished sector: was the quota met. */
 	UPROPERTY(Replicated) TArray<bool> QuotaResults;
+	/** Building HP (human 16:32): health left per lot (0..1, index = lot) for the HUD bars; host-written. */
+	UPROPERTY(Replicated) TArray<float> TowerHealthLeft;
+	/** The city build TowerHealthLeft belongs to: a new sector's towers read full until its first strike. */
+	UPROPERTY(Replicated) int32 TowerHealthBuild = -1;
+	/** Host: a strike of Damage at Center (world) with BlastRadius: adds its structural damage to every standing tower
+	 *  in reach and returns the standing lots still under their health (the op's HoldLots). */
+	TArray<int32> HostStrikeTowers(const FVector& Center, float BlastRadius, float Damage);
+	/** Host: the tower's structural damage reached its health (weapon chips may then bring it down). */
+	bool HostTowerSpent(int32 Lot) const;
 	UPROPERTY(Replicated) TArray<FDCCollapseRecord> Collapses;
 	UPROPERTY(Replicated) FDCScoopState Scoop;
 	/** City Mutators drafted this run (apply to everyone). */
@@ -54,6 +91,9 @@ public:
 	UPROPERTY(Replicated) uint8 ReelStage = 0;
 	/** Server time when the current clip started playing. */
 	UPROPERTY(Replicated) float ReelClipStart = 0.f;
+	/** False while the host holds the clip clock for its restage (review CP34): ReelClipStart is then only the
+	 *  fallback cap; the host's reel director sets the real start and this flag once its city is in. */
+	UPROPERTY(Replicated) bool bReelClipLive = true;
 
 	// Front page (R15).
 	UPROPERTY(Replicated) TArray<FDCPagePick> PagePicks;
@@ -67,9 +107,17 @@ public:
 	bool HasMutator(FName Id) const { return Mutators.Contains(Id); }
 	/** The active mutators' definitions (data drives their effects; code never names a mutator). */
 	TArray<const struct FDCUpgradeDef*> ActiveMutators() const;
-	void AddCollapse(int32 Sector, int32 Lot, const FVector& Epicenter);
+	void AddCollapse(int32 Sector, int32 Lot, const FVector& Epicenter, float Time = -1.f);
+	/** Host: the next voxel op Seq, for an op merged into the last VoxelOps entry (R24 chips) instead of appended. */
+	int32 TakeVoxelSeq() { return NextVoxelSeq++; }
 
 private:
 	UPROPERTY() TObjectPtr<ADCEnvironment> Environment;
+	UPROPERTY() TObjectPtr<ADCVoxelCity> VoxelCity;
+	int32 NextVoxelSeq = 1;
+	/** Host building-HP ledger (structural damage per lot) and the city build it belongs to. */
+	TArray<float> HostTowerDamage;
+	TArray<float> HostTowerHealth;
+	int32 HostTowerBuild = -1;
 	int32 NextBlastId = 1;
 };

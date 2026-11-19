@@ -1,0 +1,10 @@
+# Satellite dish on a short post, tilted up toward +x.
+grid 10
+size 14 14 14
+slot post Steel
+slot dish Trim
+box 4 4 0 10 10 1 post
+cyl 7 7 1 6 0.9 post
+ellipsoid 8 7 9 2.2 5.5 5 dish
+carve ellipsoid 9.5 7 9.5 2 4.6 4.2
+beam 8 7 9 12 7 11 0.4 post

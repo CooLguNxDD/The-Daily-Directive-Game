@@ -1,0 +1,21 @@
+# R22 card companion: the Tripod Sentry. Three steel legs, an ink drum body, a steel barrel with a yellow (Signal:
+# the player's own kit) muzzle band facing +x, a cyan sight lamp. Pivot bottom centre: it stands on the ground.
+name companion_sentry
+grid 5
+size 22 18 22
+slot leg Steel
+slot body Ink
+slot trim Steel
+slot barrel Steel
+slot tip Signal
+slot lamp NeonCyan
+beam 9 9 12 2 9 0 0.8 leg
+beam 9 9 12 13 2 0 0.8 leg
+beam 9 9 12 13 16 0 0.8 leg
+cyl 9 9 11 13 2.5 trim
+cyl 9 9 13 19 3.6 body
+box 6 6 19 12 12 20 trim
+beam 11 9 16 21 9 16 1.2 barrel
+beam 19 9 16 21.5 9 16 1.5 tip
+box 8 12 18 11 14 21 lamp
+pivot 9 9 0

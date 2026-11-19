@@ -1,0 +1,22 @@
+# Balcony (R23 wall mount): a small steel slab with a railing, a potted plant and a dim warm lamp by the door.
+grid 10
+size 9 24 14
+slot slab Trim
+slot rail Steel
+slot pot InkBrown
+slot plant Olive
+slot lamp WindowDim
+pivot 0 12 0
+box 0 0 0 9 24 1 slab
+box 8 0 1 9 24 2 rail
+box 8 0 7 9 24 8 rail
+box 8 0 1 9 1 8 rail
+box 8 23 1 9 24 8 rail
+box 8 6 1 9 7 8 rail
+box 8 12 1 9 13 8 rail
+box 8 18 1 9 19 8 rail
+box 0 0 1 9 1 8 rail
+box 0 23 1 9 24 8 rail
+box 3 2 1 6 5 4 pot
+ellipsoid 4.5 3.5 6 2.5 2.5 2.5 plant
+box 0 20 9 1 22 11 lamp

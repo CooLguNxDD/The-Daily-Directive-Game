@@ -1,0 +1,22 @@
+# Outfit camera (R18): a chunky instant camera in the accent colour with the classic wedge profile (the top slopes
+# back from a tall front), a glowing stripe running down the face, a big round steel lens standing proud, a
+# signal-yellow flash (a thing the player uses) and a fresh print poking out of the slot at the bottom front.
+name outfit_instantcam
+grid 5
+size 7 8 8
+slot body SwatchAccent
+slot stripe SwatchGlow
+slot lens Steel
+slot flash Signal
+slot print Paint
+slot dark Ink
+poly 0 7 body 0,1 0,7 4,7 4,1
+carve box 0 0 5 1 8 7
+carve box 1 0 6 2 8 7
+paint box 3 3 0 4 4 7 stripe
+beam 4 4.5 3.5 5.6 4.5 3.5 1.8 lens
+carve beam 5.2 4.5 3.5 5.6 4.5 3.5 0.9
+box 2 1 6 4 3 7 flash
+box 4 2 0 6 6 1 print
+box 3 1 0 4 7 1 dark
+pivot 2 4 0

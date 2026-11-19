@@ -1,4 +1,10 @@
 #include "DCPhotoProbe.h"
+#include "DCFrameScopes.h"
+#include "DCUnits.h"
+#include "Rules/DCFactionRules.h"
+
+#include "DCCharacter.h"
+#include "GameFramework/PlayerState.h"
 
 #include "Algo/Find.h"
 #include "DCBuilding.h"
@@ -6,6 +12,7 @@
 #include "DCGameState.h"
 #include "DCOrbitalStrike.h"
 #include "DCTuning.h"
+#include "DCVoxelCity.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
 
@@ -15,6 +22,8 @@ namespace
 	const FName MDebris(TEXT("Debris"));
 	const FName MEnemies(TEXT("Enemies"));
 	const FName MWalkers(TEXT("Walkers"));
+	/** R3: distinct factions with a live unit in frame (a CLASH when two or more fight in one shot). */
+	const FName MFactions(TEXT("Factions"));
 	const FName MBlasts(TEXT("Blasts"));
 	const FName MDanger(TEXT("DangerMeters"));
 	const FName MBlastMeters(TEXT("BlastMeters"));
@@ -24,11 +33,21 @@ namespace
 	constexpr float CollapseAirborneSeconds = 3.f;
 	constexpr float FireballHeightCm = 600.f;
 
-	float VisibleFraction(UWorld* World, const FVector& From, const TArray<FVector>& Points, const AActor* Ignore)
+	float VisibleFraction(UWorld* World, const FVector& From, const TArray<FVector>& Points, const AActor* Ignore, const TArray<int32>& SubjectLots = {})
 	{
 		if (Points.Num() == 0)
 		{
 			return 0.f;
+		}
+		if (const ADCVoxelCity* City = ADCVoxelCity::Get(World))
+		{
+			// Voxel city: sight marches the voxels (the subject's own lots never hide it), not physics collision.
+			int32 Clear = 0;
+			for (const FVector& P : Points)
+			{
+				Clear += City->IsSightBlocked(From, P, SubjectLots) ? 0 : 1;
+			}
+			return static_cast<float>(Clear) / Points.Num();
 		}
 		FCollisionQueryParams Params(SCENE_QUERY_STAT(DCPhotoOcclusion), false, Ignore);
 		int32 Seen = 0;
@@ -48,6 +67,11 @@ namespace
 		const FVector C = B.Location + FVector(0, 0, FireballHeightCm);
 		const float R = FMath::Max(B.Radius * 0.25f, 150.f);
 		Out = {C, C + FVector(R, 0, 0), C - FVector(R, 0, 0), C + FVector(0, R, 0), C - FVector(0, R, 0), C + FVector(0, 0, R)};
+		// The beam column up to tower height: the strike reads from the street even when its fireball sits in a shell.
+		for (const float Z : {600.f, 1500.f, 3000.f})
+		{
+			Out.Add(B.Location + FVector(0, 0, Z));
+		}
 	}
 }
 
@@ -74,6 +98,7 @@ namespace DCPhotoProbe
 
 	FDCPhotoInputs Measure(UWorld* World, const FDCShotView& View, float ShotTime, const AActor* Photographer, bool bSpotlit, int32& OutBlastId)
 	{
+		DC_FRAME_SCOPE("PhotoProbe");
 		FDCPhotoInputs In;
 		In.bSpotlit = bSpotlit;
 		OutBlastId = 0;
@@ -101,13 +126,26 @@ namespace DCPhotoProbe
 			const float Dist = FVector::Dist(View.Location, B.Location);
 			Danger = FMath::Min(Danger, Dist);
 			NearestBlast = FMath::Min(NearestBlast, Dist);
+			// In frame when the fireball centre or any of its samples (the beam, the upper blast) projects inside (CP7:
+			// framing the visible upper blast without the centre lost its timing bonus).
+			BlastSamples(B, Samples);
+			auto InFrame = [&View](const FVector& P, FVector2D& Out) { return ProjectToFrame(View, P, Out) && FMath::Abs(Out.X) <= 1.1f && FMath::Abs(Out.Y) <= 1.1f; };
 			FVector2D Ndc;
-			if (!ProjectToFrame(View, C, Ndc) || FMath::Abs(Ndc.X) > 1.1f || FMath::Abs(Ndc.Y) > 1.1f)
+			bool bInFrame = InFrame(C, Ndc);
+			for (int32 i = 0; i < Samples.Num() && !bInFrame; ++i)
+			{
+				bInFrame = InFrame(Samples[i], Ndc);
+			}
+			if (!bInFrame)
 			{
 				continue;
 			}
-			BlastSamples(B, Samples);
-			const float Vis = VisibleFraction(World, View.Location, Samples, Photographer);
+			TArray<int32> Struck;
+			if (const ADCVoxelCity* City = ADCVoxelCity::Get(World))
+			{
+				City->LotsNear(B.Location, B.Radius, Struck); // the towers this blast strikes are its subject, never its cover
+			}
+			const float Vis = VisibleFraction(World, View.Location, Samples, Photographer, Struck);
 			if (Vis <= 0.f)
 			{
 				continue;
@@ -156,7 +194,7 @@ namespace DCPhotoProbe
 					Samples.Add(P);
 				}
 			}
-			if (!bFramed || VisibleFraction(World, View.Location, Samples, Photographer) <= 0.f)
+			if (!bFramed || VisibleFraction(World, View.Location, Samples, Photographer, {Building->GetLotIndex()}) <= 0.f)
 			{
 				continue;
 			}
@@ -174,6 +212,7 @@ namespace DCPhotoProbe
 		// Enemies in frame and in reach.
 		int32 Enemies = 0;
 		int32 Walkers = 0;
+		TSet<FName> Factions;
 		for (ADCEnemy* Enemy : TActorRange<ADCEnemy>(World))
 		{
 			if (!Enemy->IsAlive())
@@ -195,6 +234,7 @@ namespace DCPhotoProbe
 			}
 			++Enemies;
 			Walkers += Enemy->IsWalker() ? 1 : 0;
+			Factions.Add(Enemy->GetFaction());
 		}
 
 		// Strikes still telegraphing count as danger (standing under a beam is dramatic).
@@ -211,10 +251,45 @@ namespace DCPhotoProbe
 		In.Metrics.Add(MDebris, Debris);
 		In.Metrics.Add(MEnemies, static_cast<float>(Enemies));
 		In.Metrics.Add(MWalkers, static_cast<float>(Walkers));
+		In.Metrics.Add(MFactions, static_cast<float>(Factions.Num()));
 		In.Metrics.Add(MBlasts, static_cast<float>(BlastsInFrame));
 		In.Metrics.Add(MDanger, In.DangerMeters);
 		In.Metrics.Add(MBlastMeters, NearestBlast == TNumericLimits<float>::Max() ? 1000.f : NearestBlast / 100.f);
 		In.Metrics.Add(MCentering, In.Centering);
+		// Co-star (R20): the teammate who pays most (frame fill, then survival) near the framed blast, unoccluded.
+		const FDCBlastRecord* Subject = OutBlastId != 0 ? GS->FindBlast(OutBlastId) : nullptr;
+		const FDCPhotoTuning& PT = UDCTuning::Get().Photo;
+		for (ADCCharacter* Mate : TActorRange<ADCCharacter>(World))
+		{
+			if (!Subject || Mate == Photographer || FVector::Dist(Mate->GetActorLocation(), Subject->Location) > PT.CoStarBlastMeters * 100.f)
+			{
+				continue;
+			}
+			FVector2D Head, Feet;
+			const FVector Mid = Mate->GetActorLocation();
+			if (!ProjectToFrame(View, Mid + FVector(0, 0, 90.f), Head) || !ProjectToFrame(View, Mid - FVector(0, 0, 90.f), Feet) || !InFrame(View, Mid, 1.f))
+			{
+				continue;
+			}
+			FHitResult Hit;
+			FCollisionQueryParams Q(TEXT("DCCoStar"), false);
+			Q.AddIgnoredActor(Photographer);
+			Q.AddIgnoredActor(Mate);
+			if (World->LineTraceSingleByChannel(Hit, View.Location, Mid, ECC_Visibility, Q))
+			{
+				continue; // hidden behind something: no co-star
+			}
+			const float Fill = FMath::Abs(Head.Y - Feet.Y) * 0.5f; // fraction of the frame height
+			const bool bDown = Mate->IsDowned();
+			if (DCPhotoRules::CoStarMultiplier(Fill, PT, bDown) > DCPhotoRules::CoStarMultiplier(In.CoStarFill, PT, In.bCoStarDowned))
+			{
+				In.CoStarFill = Fill;
+				In.bCoStarDowned = bDown;
+				const APlayerState* MatePS = Mate->GetPlayerState();
+				In.CoStarName = MatePS ? MatePS->GetPlayerName() : FString();
+				In.CoStarPlayerId = MatePS ? MatePS->GetPlayerId() : -1;
+			}
+		}
 		return In;
 	}
 
@@ -263,7 +338,11 @@ namespace DCPhotoProbe
 				using FTagRule = TPair<bool (*)(const ADCEnemy&, float), const TCHAR*>;
 				static const FTagRule Rules[] = {
 					{[](const ADCEnemy& En, float T) { return En.IsStunned(T); }, TEXT("STUNNED")},
+					// R3: the friendly army reads as friendly in the viewfinder (advisor a-7).
+					{[](const ADCEnemy& En, float) { return !En.GetFaction().IsNone() && !DCFactionRules::FightsCrew(UDCTuning::Get().Factions, En.GetFaction()); }, TEXT("ALLY")},
 					{[](const ADCEnemy& En, float) { return En.IsWalker(); }, TEXT("WAR MACHINE")},
+					// R3: a hostile faction's unit close by (any machine can tell: factions and positions replicate).
+					{[](const ADCEnemy& En, float) { const UDCUnits* Units = UDCUnits::Get(&En); return Units && Units->InClash(En) != nullptr; }, TEXT("CLASH")},
 					{[](const ADCEnemy&, float) { return true; }, TEXT("BRUTALITY")},
 				};
 				const FTagRule* Rule = Algo::FindByPredicate(Rules, [Enemy, Now](const FTagRule& R) { return R.Key(*Enemy, Now); });

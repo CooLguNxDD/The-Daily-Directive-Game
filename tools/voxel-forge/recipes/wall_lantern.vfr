@@ -1,0 +1,12 @@
+# Wall lantern (R23 wall mount): a paper lantern on a short iron bracket, dim magenta paper with a warm core.
+grid 5
+size 10 8 16
+slot iron Ink
+slot paper Paper
+slot core WindowDim
+pivot 0 4 0
+box 0 3 13 7 5 14 iron
+ellipsoid 6 4 7 3.5 3.5 4.5 paper
+paint ellipsoid 6 4 7 1.5 1.5 3 core
+box 5 3 12 7 5 13 iron
+box 5 3 1 7 5 2 iron

@@ -1,0 +1,10 @@
+# Crosswalk (R23 ground cover): worn street-paint stripes, one voxel high, across the lane (stripes along +x).
+grid 5
+size 60 70 1
+slot paint Paint
+box 0 0 0 60 8 1 paint
+box 0 14 0 60 22 1 paint
+box 0 28 0 60 36 1 paint
+box 0 42 0 60 50 1 paint
+box 0 56 0 60 64 1 paint
+noise 0.22 11 paint

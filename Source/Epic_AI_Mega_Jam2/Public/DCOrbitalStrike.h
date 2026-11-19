@@ -44,13 +44,22 @@ private:
 	UPROPERTY(Replicated) float DetonateTime = 0.f;
 
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UStaticMeshComponent> Beam;
-	UPROPERTY(VisibleAnywhere) TObjectPtr<UStaticMeshComponent> Ring;
+	UPROPERTY(VisibleAnywhere) TObjectPtr<class UInstancedStaticMeshComponent> Ring;
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UStaticMeshComponent> Beacon;
+	/** Where the beam meets the street: a pulsing white-orange flare disc (V4.5), gone at detonation. */
+	UPROPERTY(VisibleAnywhere) TObjectPtr<UStaticMeshComponent> ImpactFlare;
+	UPROPERTY() TObjectPtr<class UMaterialInstanceDynamic> FlareMat;
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UStaticMeshComponent> Fireball;
+	/** Voxel blast core (R4): seeded chunky cubes with gaps between them, so a tower stays readable behind the peak. */
+	UPROPERTY(VisibleAnywhere) TObjectPtr<class UInstancedStaticMeshComponent> FireCubes;
+	/** Per cube: direction * reach (0..1 of the fireball) in XYZ, size (0..1 of the fireball) in W. */
+	TArray<FVector4f> CubeSeeds;
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UStaticMeshComponent> Shock;
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UPointLightComponent> Light;
+	UPROPERTY(VisibleAnywhere) TObjectPtr<UPointLightComponent> FillLight;
 	UPROPERTY() TObjectPtr<UMaterialInstanceDynamic> BeamMat;
 	UPROPERTY() TObjectPtr<UMaterialInstanceDynamic> FireMat;
+	UPROPERTY() TObjectPtr<UMaterialInstanceDynamic> CoreMat;
 	UPROPERTY() TObjectPtr<UMaterialInstanceDynamic> ShockMat;
 	UPROPERTY() TObjectPtr<AController> InstigatorController;
 
@@ -59,6 +68,9 @@ private:
 
 	bool bRestage = false;
 	bool bLocalDetonated = false;
+	/** Host: the strike's voxel op is appended (PlanLeadSeconds before detonation, so it is planned by then). */
+	bool bOpQueued = false;
+	void QueueVoxelOp(const struct FDCStratagemDef& Def);
 	bool bChargePlayed = false;
 	float NextBeepTime = 0.f;
 };

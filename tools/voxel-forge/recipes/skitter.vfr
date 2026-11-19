@@ -1,0 +1,29 @@
+# Skitter (R3, the Hive): low six-legged crawler, chitin shell, violet glow sac and eyes (its light cue).
+# Original design: a burrowing swarm of our own, no shapes from other games. The Brood row wears it scaled up.
+name skitter
+grid 5
+size 22 18 10
+slot shell Chitin
+slot glow HiveViolet
+ellipsoid 11 9 5 8 5 3 shell
+ellipsoid 19 9 5 3 3.5 2.5 shell
+box 20 7 6 22 8 7 glow
+box 20 10 6 22 11 7 glow
+ellipsoid 6 9 7 3 2.5 1.5 glow
+beam 9 5 4 6 0 0 0.8 shell
+beam 12 5 4 12 0 0 0.8 shell
+beam 15 5 4 18 0 0 0.8 shell
+beam 9 13 4 6 17 0 0.8 shell
+beam 12 13 4 12 17 0 0.8 shell
+beam 15 13 4 18 17 0 0.8 shell
+pivot 11 9 0
+# R20 animation segments: the legs swing fore and aft (yaw) about the body wall. The right side is mirrored, so one
+# yaw moves its feet the other way: LegL (front and back pairs) and LegR (middle pair) make the two tripods
+# (front-left, back-left, mid-right step together). The head bites.
+part LegL 14 0 0 22 4 10 15 5 4
+part LegL 0 0 0 11 4 10 9 5 4
+part LegL 14 14 0 22 18 10 15 13 4
+part LegL 0 14 0 11 18 10 9 13 4
+part LegR 11 0 0 14 4 10 12 5 4
+part LegR 11 14 0 14 18 10 12 13 4
+part Head 17 4 0 22 14 10 17 9 5

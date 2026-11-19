@@ -38,6 +38,7 @@ namespace DCHudScreens
 			{TEXT("Stratagem"), TEXT("CINEMA STRATAGEM")},
 			{TEXT("Gear"), TEXT("CAMERA GEAR")},
 			{TEXT("Mutator"), TEXT("CITY MUTATOR")},
+			{TEXT("Support"), TEXT("FIELD SUPPORT")},
 		};
 		const FString* Found = Labels.Find(Pool);
 		return Found ? *Found : Pool.ToString().ToUpper();
@@ -54,9 +55,13 @@ using namespace DCHudScreens;
 
 bool ADCHUD::Button(const FString& Label, FName Id, float X, float Y, float W, float H, bool bEnabled, bool bSelected)
 {
-	const FLinearColor Fill = !bEnabled ? FLinearColor(0.3f, 0.3f, 0.3f, 0.8f) : (bSelected ? Gold : Red);
-	Box(X, Y, W, H, Fill);
-	Text(Label, X + W * 0.5f, Y + H * 0.5f - Sx(14.f), bSelected ? Ink : Paper, 0.7f, true);
+	// Dark-glass buttons (R25, V9.1: no solid yellow plates): usable ones carry a signal-lime edge and lime type,
+	// picked ones a light edge, disabled ones a faint edge and dim type (red stays for danger, R6).
+	const FLinearColor Edge = !bEnabled ? FLinearColor(Ink.R, Ink.G, Ink.B, 0.35f) : (bSelected ? Ink : Gold);
+	Box(X, Y, W, H, FLinearColor(Paper.R, Paper.G, Paper.B, 0.92f));
+	Box(X, Y, W, H, FLinearColor(Edge.R, Edge.G, Edge.B, bEnabled && !bSelected ? 0.12f : 0.f)); // lit glass
+	Frame(X, Y, W, H, Sx(bEnabled ? 3.f : 2.f), Edge);
+	Text(Label, X + W * 0.5f, Y + H * 0.5f - Sx(14.f), bEnabled ? Edge : FLinearColor(Ink.R, Ink.G, Ink.B, 0.6f), 0.7f, true);
 	if (bEnabled)
 	{
 		AddHitBox(FVector2D(X, Y), FVector2D(W, H), Id, true);
@@ -101,7 +106,7 @@ void ADCHUD::DrawLobby(ADCGameState& GS, ADCCharacter* Me)
 	Text(FString::Printf(TEXT("CREW %d/4"), GS.PlayerArray.Num()), X, Y - Sx(44.f), Gold, 0.7f);
 	for (int32 i = 0; i < GS.PlayerArray.Num(); ++i)
 	{
-		Text(GS.PlayerArray[i] ? GS.PlayerArray[i]->GetPlayerName() : TEXT("?"), X, Y + i * Sx(36.f), Paper, 0.7f);
+		Text(CrewName(GS.PlayerArray[i]), X, Y + i * Sx(36.f), Ink, 0.7f);
 	}
 }
 
@@ -114,60 +119,75 @@ void ADCHUD::DrawDraft(ADCGameState& GS, ADCCharacter* Me)
 	const ADCPlayerState* PS = PlayerOwner ? PlayerOwner->GetPlayerState<ADCPlayerState>() : nullptr;
 	Box(0, 0, W, H, Dim);
 	Text(FString::Printf(TEXT("SECTOR %d SECURED"), GS.SectorIndex + 1), W * 0.5f, Sx(70.f), Gold, 1.f, true);
-	Text(TEXT("HQ REQUISITION: DRAFT ONE UPGRADE"), W * 0.5f, Sx(120.f), Paper, 1.4f, true);
+	const bool bMissed = GS.QuotaResults.Num() > 0 && !GS.QuotaResults.Last();
+	Text(bMissed ? T.Run.DraftHeaderMissed : T.Run.DraftHeader, W * 0.5f, Sx(120.f), bMissed ? Red : Ink, 1.4f, true);
 	Text(Clock(GS.PhaseEndTime - GS.Now()), W * 0.5f, Sx(190.f), FLinearColor::White, 0.9f, true);
 	if (!PS)
 	{
 		return;
 	}
-	// Three columns, one per pool; each column lists that pool's open options.
-	TArray<FName> Pools;
+	// R21: one column per dealt card (pool on the header), framed by its rarity row: rarer cards wear a wider, brighter
+	// frame, a glow wash and their rarity label.
+	TArray<const FDCUpgradeDef*> Hand;
 	for (const FName& Id : PS->DraftOffer)
 	{
 		if (const FDCUpgradeDef* Def = T.FindUpgrade(Id))
 		{
-			Pools.AddUnique(Def->Pool);
+			Hand.Add(Def);
 		}
 	}
-	const float ColW = Sx(560.f), Gap = Sx(30.f), CardH = Sx(150.f);
-	const float X0 = W * 0.5f - (Pools.Num() * ColW + (Pools.Num() - 1) * Gap) * 0.5f;
-	for (int32 Col = 0; Col < Pools.Num(); ++Col)
+	const float ColW = Sx(500.f), Gap = Sx(36.f), CardH = Sx(470.f);
+	const float X0 = W * 0.5f - (Hand.Num() * ColW + FMath::Max(Hand.Num() - 1, 0) * Gap) * 0.5f;
+	for (int32 Col = 0; Col < Hand.Num(); ++Col)
 	{
+		const FDCUpgradeDef* Def = Hand[Col];
+		const FDCCardRarity* Rar = T.FindRarity(Def->Rarity);
+		const FLinearColor RarColor = Rar ? Rar->Color : Cyan;
 		const float X = X0 + Col * (ColW + Gap);
-		Box(X, Sx(230.f), ColW, Sx(44.f), Red);
-		Text(PoolLabel(Pools[Col]), X + ColW * 0.5f, Sx(236.f), Paper, 0.7f, true);
-		int32 Row = 0;
-		for (const FName& Id : PS->DraftOffer)
+		Box(X, Sx(230.f), ColW, Sx(44.f), FLinearColor(Paper.R, Paper.G, Paper.B, 0.92f));
+		Box(X, Sx(270.f), ColW, Sx(3.f), RarColor);
+		Text(PoolLabel(Def->Pool) + (Rar ? TEXT("  /  ") + Rar->Label.ToString() : FString()), X + ColW * 0.5f, Sx(236.f), RarColor, 0.7f, true);
+		const bool bPicked = PS->Upgrades.Contains(Def->Id);
+		const float Y = Sx(290.f);
+		Box(X, Y, ColW, CardH, Paper);
+		if (Rar && Rar->Glow > 0.f)
 		{
-			const FDCUpgradeDef* Def = T.FindUpgrade(Id);
-			if (!Def || Def->Pool != Pools[Col])
+			Box(X, Y, ColW, CardH, FLinearColor(RarColor.R, RarColor.G, RarColor.B, Rar->Glow));
+		}
+		Frame(X, Y, ColW, CardH, Sx(Rar ? Rar->FramePx : 3.f), bPicked ? Gold : RarColor);
+		if (bPicked)
+		{
+			Box(X, Y, ColW, CardH, FLinearColor(Gold.R, Gold.G, Gold.B, 0.12f)); // picked: lime-lit glass, lime edge
+		}
+		// Card art (R11) as a square on top, the words under it.
+		float Ty = Y + Sx(16.f);
+		if (const TObjectPtr<UTexture2D>* Icon = CardIcons.Find(Def->Id))
+		{
+			const float S = Sx(220.f);
+			DrawTexture(*Icon, X + (ColW - S) * 0.5f, Y + Sx(14.f), S, S, 0.f, 0.f, 1.f, 1.f, FLinearColor::White, BLEND_Opaque);
+			Ty = Y + S + Sx(26.f);
+		}
+		Text(Def->DisplayName.ToString().ToUpper(), X + ColW * 0.5f, Ty, bPicked ? Gold : Ink, 0.7f, true);
+		// Description wrapped by words into short lines.
+		TArray<FString> Words;
+		Def->Description.ToString().ParseIntoArray(Words, TEXT(" "));
+		FString Line;
+		float Ly = Ty + Sx(44.f);
+		const int32 Wrap = 44;
+		for (const FString& Word : Words)
+		{
+			if (Line.Len() + Word.Len() > Wrap)
 			{
-				continue;
+				Text(Line, X + ColW * 0.5f, Ly, Ink, 0.5f, true);
+				Ly += Sx(26.f);
+				Line.Reset();
 			}
-			const bool bPicked = PS->Upgrades.Contains(Def->Id);
-			const float Y = Sx(290.f) + Row++ * (CardH + Sx(14.f));
-			Box(X, Y, ColW, CardH, bPicked ? Gold : Paper);
-			Text(Def->DisplayName.ToString().ToUpper(), X + Sx(16.f), Y + Sx(10.f), Ink, 0.7f);
-			// Description wrapped by words into short lines.
-			TArray<FString> Words;
-			Def->Description.ToString().ParseIntoArray(Words, TEXT(" "));
-			FString Line;
-			float Ly = Y + Sx(52.f);
-			for (const FString& Word : Words)
-			{
-				if (Line.Len() + Word.Len() > 52)
-				{
-					Text(Line, X + Sx(16.f), Ly, Ink, 0.5f);
-					Ly += Sx(26.f);
-					Line.Reset();
-				}
-				Line += (Line.IsEmpty() ? TEXT("") : TEXT(" ")) + Word;
-			}
-			Text(Line, X + Sx(16.f), Ly, Ink, 0.5f);
-			if (!PS->bDraftDone)
-			{
-				AddHitBox(FVector2D(X, Y), FVector2D(ColW, CardH), FName(*FString::Printf(TEXT("pick|%s"), *Def->Id.ToString())), true);
-			}
+			Line += (Line.IsEmpty() ? TEXT("") : TEXT(" ")) + Word;
+		}
+		Text(Line, X + ColW * 0.5f, Ly, Ink, 0.5f, true);
+		if (!PS->bDraftDone)
+		{
+			AddHitBox(FVector2D(X, Y), FVector2D(ColW, CardH), FName(*FString::Printf(TEXT("pick|%s"), *Def->Id.ToString())), true);
 		}
 	}
 	int32 Done = 0;
@@ -177,7 +197,7 @@ void ADCHUD::DrawDraft(ADCGameState& GS, ADCCharacter* Me)
 		Done += D && D->bDraftDone ? 1 : 0;
 	}
 	Text(PS->bDraftDone ? FString::Printf(TEXT("WAITING FOR THE CREW  %d/%d"), Done, GS.PlayerArray.Num()) : FString(TEXT("CLICK ONE CARD. EACH UPGRADE CHANGES HOW YOU PLAY.")),
-		W * 0.5f, Sx(830.f), Paper, 0.75f, true);
+		W * 0.5f, Sx(830.f), Ink, 0.75f, true);
 	FString Owned;
 	for (const FName& Id : PS->Upgrades)
 	{
@@ -196,10 +216,7 @@ void ADCHUD::DrawReel(ADCGameState& GS, ADCCharacter* Me)
 {
 	ON_SCOPE_EXIT
 	{
-		if (Me)
-		{
-			DrawToast(*Me); // e.g. the last sector's quota verdict, said as the reel starts
-		}
+		// No toast here: the last sector's verdict crossed the clip (review CP26); the front page lists quotas met.
 		if (ADCPlayerController* StampPC = Cast<ADCPlayerController>(PlayerOwner))
 		{
 			DrawStamp(*StampPC); // a second take's stamp slides in like any photo
@@ -209,17 +226,28 @@ void ADCHUD::DrawReel(ADCGameState& GS, ADCCharacter* Me)
 	ADCPlayerController* PC = Cast<ADCPlayerController>(PlayerOwner);
 	if (!GS.ReelClips.IsValidIndex(GS.ReelIndex) || !PC)
 	{
-		Box(0, 0, W, H, Ink);
-		Text(TEXT("DEVELOPING THE REEL..."), W * 0.5f, H * 0.5f, Paper, 1.f, true);
+		PaperSheet(0, 0, W, H);
+		Text(TEXT("DEVELOPING THE REEL..."), W * 0.5f, H * 0.5f, Ink, 1.f, true);
+		return;
+	}
+	if (const ADCReelDirector* Slating = PC->GetReelDirector(); Slating && Slating->IsSlating())
+	{
+		// The cut between clips: a dark slate while the next clip's city is rebuilt.
+		PaperSheet(0, 0, W, H);
+		Box(W * 0.3f, H * 0.5f - Sx(30.f), W * 0.4f, Sx(2.f), Cyan);
+		Text(FString::Printf(TEXT("REWINDING TAPE  -  CLIP %d / %d"), GS.ReelIndex + 1, GS.ReelClips.Num()), W * 0.5f, H * 0.5f - Sx(10.f), Ink, 0.9f, true);
 		return;
 	}
 	const FDCReelClip& Clip = GS.ReelClips[GS.ReelIndex];
 	const UDCTuning& T = UDCTuning::Get();
 	const FString Sector = T.Sectors.IsValidIndex(Clip.Photo.Sector) ? T.Sectors[Clip.Photo.Sector].Name.ToString().ToUpper() : TEXT("");
 	const float Bar = H * 0.11f;
-	Box(0, 0, W, Bar, Ink);
-	Box(0, H - Bar, W, Bar, Ink);
-	Text(FString::Printf(TEXT("BEHIND THE SCENES  |  %s  |  %s"), *Clip.PlayerName.ToUpper(), *Sector), W * 0.5f, Bar * 0.3f, Paper, 0.85f, true);
+	// Letterbox bars in dark glass with a thin cyan rule on their inner edge (they were light plates, V9.1).
+	Box(0, 0, W, Bar, Paper);
+	Box(0, H - Bar, W, Bar, Paper);
+	Box(0, Bar - Sx(2.f), W, Sx(2.f), Cyan);
+	Box(0, H - Bar, W, Sx(2.f), Cyan);
+	Text(FString::Printf(TEXT("BEHIND THE SCENES  |  %s  |  %s"), *Clip.PlayerName.ToUpper(), *Sector), W * 0.5f, Bar * 0.3f, Ink, 0.85f, true);
 	Text(FString::Printf(TEXT("CLIP %d / %d"), GS.ReelIndex + 1, GS.ReelClips.Num()), Sx(40.f), H - Bar * 0.7f, Gold, 0.7f);
 	if (GS.bRunFailed)
 	{
@@ -267,13 +295,14 @@ void ADCHUD::DrawReel(ADCGameState& GS, ADCCharacter* Me)
 	if (GS.ReelStage == 1)
 	{
 		// Frozen at the shutter: the white flash builds.
-		Box(0, 0, W, H, FLinearColor(1.f, 1.f, 1.f, FMath::Clamp(Age / FMath::Max(T.Run.ReelFreezeSeconds, 0.05f), 0.f, 1.f) * 0.95f));
+		const FLinearColor& Freeze = T.Look.ReelFreezeFlash; // a cool tint, never a white sheet
+		Box(0, 0, W, H, FLinearColor(Freeze.R, Freeze.G, Freeze.B, Freeze.A * FMath::Clamp(Age / FMath::Max(T.Run.ReelFreezeSeconds, 0.05f), 0.f, 1.f)));
 		Text(TEXT("SNAP"), W * 0.5f, H * 0.5f, Ink, 2.f, true);
 		return;
 	}
 	Box(0, 0, W, H, FLinearColor(1.f, 1.f, 1.f, FMath::Clamp(1.f - Age / 0.4f, 0.f, 1.f)));
 	const float CardW = W * 0.6f;
-	DrawPhotoCard(PC->GetPhotoImage(Clip.Photo.PhotoId), Clip.Photo.Grade, (W - CardW) * 0.5f, Bar + Sx(30.f), CardW, Age / 0.18f, true);
+	DrawPhotoCard(PC->GetPhotoImage(Clip.Photo.PhotoId), Clip.Photo.Grade, (W - CardW) * 0.5f, Bar + Sx(30.f), CardW, Age / 0.18f, true, FeedStamp(Clip.Photo.PhotoId, Clip.Photo.ShotTime));
 }
 
 // ---------------------------------------------------------------- final cut (R14)
@@ -284,17 +313,19 @@ void ADCHUD::DrawFinalCut(ADCGameState& GS, ADCCharacter* Me)
 	const UDCTuning& T = UDCTuning::Get();
 	ADCPlayerController* PC = Cast<ADCPlayerController>(PlayerOwner);
 	const ADCPlayerState* PS = PC ? PC->GetPlayerState<ADCPlayerState>() : nullptr;
-	Box(0, 0, W, H, Ink);
-	Text(TEXT("FINAL CUT"), W * 0.5f, Sx(30.f), Gold, 1.4f, true);
+	// The editor's desk in cream and ink (R6): picks are marked in signal yellow, nothing else is coloured.
+	PaperSheet(0, 0, W, H);
+	Box(Sx(40.f), Sx(86.f), W - Sx(80.f), Sx(3.f), Ink);
+	Text(TEXT("FINAL CUT"), W * 0.5f, Sx(24.f), Ink, 1.4f, true);
 	Text(FString::Printf(TEXT("PICK %d SHOTS FOR THE FRONT PAGE. THE CRITIC RANKED THEM; OVERRULE AT WILL.   %s"), T.Run.FinalCutPicks, *Clock(GS.PhaseEndTime - GS.Now())),
-		W * 0.5f, Sx(100.f), Paper, 0.7f, true);
+		W * 0.5f, Sx(100.f), Ink, 0.7f, true);
 	if (!PS || !PC)
 	{
 		return;
 	}
 	if (PS->FinalCutChoices.Num() == 0)
 	{
-		Text(TEXT("NO PHOTOS FILED. HQ IS DISAPPOINTED."), W * 0.5f, H * 0.5f, Red, 1.f, true);
+		Text(TEXT("NO PHOTOS FILED. HQ IS DISAPPOINTED."), W * 0.5f, H * 0.5f, Ink, 1.f, true);
 		return;
 	}
 	const TArray<int32>& Picks = PS->bFinalCutDone ? PS->FinalCut : PC->GetLocalPicks();
@@ -313,12 +344,13 @@ void ADCHUD::DrawFinalCut(ADCGameState& GS, ADCCharacter* Me)
 		const float X = X0 + (i % Cols) * (CardW + Gap);
 		const float Y = Sx(180.f) + (i / Cols) * (CardW * 9.f / 16.f + Sx(105.f));
 		const int32 Order = Picks.IndexOfByKey(Id);
-		DrawPhotoCard(PC->GetPhotoImage(Id), Photo->Grade, X, Y, CardW, 1.f, true);
+		DrawPhotoCard(PC->GetPhotoImage(Id), Photo->Grade, X, Y, CardW, 1.f, true, FeedStamp(Photo->PhotoId, Photo->ShotTime));
 		Text(FString::Printf(TEXT("CRITIC #%d"), i + 1), X, Y + CardW * 9.f / 16.f + Sx(2.f), Ink, 0.6f);
 		if (Order != INDEX_NONE)
 		{
 			Frame(X - Sx(10.f), Y - Sx(10.f), CardW + Sx(20.f), CardW * 9.f / 16.f + Sx(50.f), Sx(8.f), Gold);
-			Text(FString::Printf(TEXT("PICK %d"), Order + 1), X + CardW - Sx(90.f), Y + CardW * 9.f / 16.f + Sx(2.f), Red, 0.6f);
+			Box(X + CardW - Sx(96.f), Y + CardW * 9.f / 16.f + Sx(2.f), Sx(92.f), Sx(26.f), Gold);
+			Text(FString::Printf(TEXT("PICK %d"), Order + 1), X + CardW - Sx(90.f), Y + CardW * 9.f / 16.f + Sx(2.f), Night, 0.6f);
 		}
 		if (!PS->bFinalCutDone)
 		{
@@ -341,9 +373,9 @@ void ADCHUD::DrawVote(ADCGameState& GS, ADCCharacter* Me)
 	const float W = Canvas->ClipX, H = Canvas->ClipY;
 	ADCPlayerController* PC = Cast<ADCPlayerController>(PlayerOwner);
 	const ADCPlayerState* Mine = PC ? PC->GetPlayerState<ADCPlayerState>() : nullptr;
-	Box(0, 0, W, H, Ink);
+	PaperSheet(0, 0, W, H);
 	Text(TEXT("EDITORIAL VOTE"), W * 0.5f, Sx(30.f), Gold, 1.4f, true);
-	Text(FString::Printf(TEXT("ONE VOTE FOR A SHOT THAT IS NOT YOURS. VOTES PUT IT ON THE HEADLINE.   %s"), *Clock(GS.PhaseEndTime - GS.Now())), W * 0.5f, Sx(100.f), Paper, 0.7f, true);
+	Text(FString::Printf(TEXT("ONE VOTE FOR A SHOT THAT IS NOT YOURS. VOTES PUT IT ON THE HEADLINE.   %s"), *Clock(GS.PhaseEndTime - GS.Now())), W * 0.5f, Sx(100.f), Ink, 0.7f, true);
 	if (!PC || !Mine)
 	{
 		return;
@@ -372,7 +404,7 @@ void ADCHUD::DrawVote(ADCGameState& GS, ADCCharacter* Me)
 		}
 		const float X = X0 + (i % Cols) * (CardW + Gap);
 		const float Y = Sx(170.f) + (i / Cols) * Sx(300.f);
-		DrawPhotoCard(PC->GetPhotoImage(Photo->PhotoId), Photo->Grade, X, Y, CardW, 1.f, true);
+		DrawPhotoCard(PC->GetPhotoImage(Photo->PhotoId), Photo->Grade, X, Y, CardW, 1.f, true, FeedStamp(Photo->PhotoId, Photo->ShotTime));
 		Text(Shots[i].Key->GetPlayerName().ToUpper(), X, Y + CardW * 9.f / 16.f + Sx(2.f), Ink, 0.6f);
 		if (Mine->VotedFor == Photo->PhotoId)
 		{
@@ -397,60 +429,163 @@ void ADCHUD::DrawFrontPage(ADCGameState& GS, ADCCharacter* Me)
 		bPressPlayed = true;
 		DCAudio::Play2D(this, TEXT("Press"), 1.f); // the printing press rolls
 	}
-	Box(0, 0, W, H, Paper);
-	Text(TEXT("THE DAILY DIRECTIVE"), W * 0.5f, Sx(18.f), Ink, 2.6f, true);
+	PaperSheet(0, 0, W, H);
+	const float M = Sx(28.f); // page margin: a dense broadsheet, not a poster on a wall
+	const float Bottom = H - Sx(110.f);
+	// Body copy: real sentences from data (FrontPageCopy), word-wrapped in small body type, ragged right; the seed
+	// picks where each column starts so columns read differently. Greeked bars only when no copy shipped.
+	const TArray<FString>& Copy = UDCTuning::Get().FrontPageCopy;
+	const FString Who = GS.PlayerArray.Num() > 0 && GS.PlayerArray[0] ? GS.PlayerArray[0]->GetPlayerName().ToUpper() : FString(TEXT("OUR CORRESPONDENT"));
+	// R28: one seeded deck per page: every column draws the next unused sentence, so no sentence repeats on the page; a
+	// column that runs out of sentences ends early (the pool is data: +FrontPageCopy).
+	const TArray<int32> Deck = DCNewsprint::CopyDeck(Copy.Num(), GS.RunSeed);
+	int32 Drawn = 0;
+	auto Greek = [this, &Copy, &Who, &Deck, &Drawn](float X, float Y, float ColW, float ColH, uint32 /*Seed: the page deck orders the copy*/)
+	{
+		const float Line = Sx(15.f);
+		const float Scale = 0.42f;
+		int32 Row = 0;
+		FString Cur;
+		auto Flush = [&]()
+		{
+			if ((Row + 1) * Line <= ColH && !Cur.IsEmpty())
+			{
+				Text(Cur, X, Y + Row * Line, FLinearColor(Ink.R, Ink.G, Ink.B, 0.85f), Scale, false, SmallFont);
+			}
+			++Row;
+			Cur.Reset();
+		};
+		if (Copy.IsEmpty())
+		{
+			for (int32 i = 0; (i + 1) * Line <= ColH; ++i)
+			{
+				Box(X, Y + i * Line, ColW * 0.9f, Sx(5.f), FLinearColor(Ink.R, Ink.G, Ink.B, 0.42f));
+			}
+			return;
+		}
+		for (int32 n = 0; (Row + 1) * Line <= ColH && Drawn < Deck.Num(); ++n)
+		{
+			FString Sentence = Copy[Deck[Drawn++]].Replace(TEXT("{PLAYER}"), *Who);
+			TArray<FString> Words;
+			Sentence.ParseIntoArray(Words, TEXT(" "));
+			for (const FString& Word : Words)
+			{
+				const FString Try = Cur.IsEmpty() ? Word : Cur + TEXT(" ") + Word;
+				float Tw = 0.f, Th = 0.f;
+				TextSize(SmallFont, Try, Scale * TextBoost * UiScale, Tw, Th);
+				if (Tw > ColW && !Cur.IsEmpty())
+				{
+					Flush();
+					Cur = Word;
+				}
+				else
+				{
+					Cur = Try;
+				}
+			}
+			if (n % 3 == 2)
+			{
+				Flush(); // a paragraph break now and then
+			}
+		}
+		Flush();
+	};
+	Text(TEXT("The Daily Directive"), W * 0.5f, Sx(10.f), Ink, 2.4f, true, MastFont); // descenders clear the rule
+	// Ears either side of the masthead.
+	Box(M, Sx(30.f), Sx(250.f), Sx(70.f), FLinearColor(Ink.R, Ink.G, Ink.B, 0.08f));
+	Text(FString::Printf(TEXT("VOL. 1  NO. %d"), GS.RunSeed), M + Sx(12.f), Sx(38.f), Ink, 0.55f);
+	Text(TEXT("PRINTED UNDER ORBIT"), M + Sx(12.f), Sx(66.f), Ink, 0.45f);
 	Box(Sx(40.f), Sx(120.f), W - Sx(80.f), Sx(4.f), Ink);
 	Text(TEXT("SPECIAL REEL EDITION  |  PRICE: ONE PHOTO  |  ALL NEWS IS GOOD NEWS"), W * 0.5f, Sx(130.f), Ink, 0.55f, true);
 	Box(Sx(40.f), Sx(162.f), W - Sx(80.f), Sx(2.f), Ink);
 
-	// Headline: scaled down until it fits the page width.
-	float Scale = 2.f, Tw = 0.f, Th = 0.f;
+	// Headline: paper type on one solid red band (the page's single accent), scaled down until it fits.
+	float Scale = 1.8f, Tw = 0.f, Th = 0.f;
 	for (; Scale > 0.7f; Scale -= 0.1f)
 	{
-		Canvas->TextSize(BigFont, GS.Headline, Tw, Th, Scale * TextBoost * UiScale, Scale * TextBoost * UiScale);
-		if (Tw < W - Sx(100.f))
+		TextSize(HeadFont, GS.Headline, Scale * TextBoost * UiScale, Tw, Th);
+		if (Tw < W - Sx(120.f))
 		{
 			break;
 		}
 	}
-	Text(GS.Headline, W * 0.5f, Sx(176.f), Red, Scale, true);
+	// The headline band: magenta-lit dark glass with a neon edge (a solid magenta slab outshone the hero photo).
+	Box(M, Sx(172.f), W - 2.f * M, Sx(84.f), Paper);
+	Box(M, Sx(172.f), W - 2.f * M, Sx(84.f), FLinearColor(Magenta.R, Magenta.G, Magenta.B, 0.28f));
+	Frame(M, Sx(172.f), W - 2.f * M, Sx(84.f), Sx(3.f), Magenta);
+	Text(GS.Headline, W * 0.5f, Sx(172.f) + (Sx(84.f) - Th) * 0.5f, Ink, Scale, true, HeadFont);
 
 	if (PC && GS.PagePicks.IsValidIndex(GS.HeadlineIndex))
 	{
 		const FDCPagePick& Top = GS.PagePicks[GS.HeadlineIndex];
-		const float BigW = W * 0.56f;
-		const float Y = Sx(290.f);
-		DrawPhotoCard(PC->GetPhotoImage(Top.Photo.PhotoId), Top.Photo.Grade, Sx(60.f), Y, BigW, 1.f, true);
-		Text(FString::Printf(TEXT("PHOTO: %s  |  CRITIC %s  |  %d VOTE%s  |  PAGE SCORE %s"), *Top.PlayerName.ToUpper(), *FText::AsNumber(Top.Photo.Grade.Score).ToString(),
-			Top.Votes, Top.Votes == 1 ? TEXT("") : TEXT("S"), *FText::AsNumber(Top.PageScore).ToString()), Sx(60.f), Y + BigW * 9.f / 16.f + Sx(6.f), Ink, 0.55f);
-
-		// The other picks, smaller, down the right column.
-		const float SideX = Sx(60.f) + BigW + Sx(50.f);
-		const float SideW = W - SideX - Sx(60.f);
-		// Up to four side picks: one column for two, two columns beyond, so the last card stays above the footer.
-		const int32 Sides = FMath::Min(4, FMath::Max(0, GS.PagePicks.Num() - (GS.HeadlineIndex >= 0 ? 1 : 0)));
-		const int32 Cols = Sides > 2 ? 2 : 1;
-		const float ColGap = Sx(16.f);
-		const float CardW = FMath::Min((SideW - (Cols - 1) * ColGap) / Cols, Sx(360.f));
-		int32 Shown = 0;
-		for (int32 i = 0; i < GS.PagePicks.Num() && Shown < 4; ++i)
+		const float BigW = W * 0.58f;
+		const float Y = Sx(272.f);
+		DrawPhotoCard(PC->GetPhotoImage(Top.Photo.PhotoId), Top.Photo.Grade, M, Y, BigW, 1.f, true, FeedStamp(Top.Photo.PhotoId, Top.Photo.ShotTime));
+		const float CapY = Y + BigW * 9.f / 16.f + Sx(4.f);
+		Text(FString::Printf(TEXT("PHOTO: %s  |  CRITIC %s  |  %d VOTE%s  |  PAGE SCORE %s"), *(Top.Photo.CoStar.IsEmpty() ? Top.PlayerName.ToUpper() : Top.PlayerName.ToUpper() + TEXT(" WITH ") + Top.Photo.CoStar.ToUpper()), *FText::AsNumber(Top.Photo.Grade.Score).ToString(),
+			Top.Votes, Top.Votes == 1 ? TEXT("") : TEXT("S"), *FText::AsNumber(Top.PageScore).ToString()), M, CapY, Ink, 0.55f);
+		// Three columns of copy under the lead photo, split by hairline rules.
+		const float CopyY = CapY + Sx(30.f);
+		const float ColGap = Sx(18.f);
+		const float ColW = (BigW - 2.f * ColGap) / 3.f;
+		for (int32 c = 0; c < 3; ++c)
 		{
-			if (i == GS.HeadlineIndex)
+			const float Cx = M + c * (ColW + ColGap);
+			Greek(Cx, CopyY, ColW, Bottom - CopyY - Sx(8.f), 977u * (c + 1) + static_cast<uint32>(GS.RunSeed));
+			if (c > 0)
 			{
-				continue;
+				Box(Cx - ColGap * 0.5f, CopyY, Sx(1.f), Bottom - CopyY - Sx(8.f), FLinearColor(Ink.R, Ink.G, Ink.B, 0.5f));
 			}
-			const FDCPagePick& P = GS.PagePicks[i];
-			const float Cy = Sx(290.f) + (Shown / Cols) * (CardW * 9.f / 16.f + Sx(64.f));
-			const float Cx = SideX + (Shown % Cols) * (CardW + ColGap);
-			DrawPhotoCard(PC->GetPhotoImage(P.Photo.PhotoId), P.Photo.Grade, Cx, Cy, CardW, 1.f, false);
-			// Name on one line, the numbers on the next: a narrow two-column card cannot hold both.
-			const FString Scores = FString::Printf(TEXT("CRITIC %s  |  %d VOTE%s  |  PAGE %s"), *FText::AsNumber(P.Photo.Grade.Score).ToString(), P.Votes,
-				P.Votes == 1 ? TEXT("") : TEXT("S"), *FText::AsNumber(P.PageScore).ToString());
-			Text(P.PlayerName.ToUpper(), Cx, Cy + CardW * 9.f / 16.f + Sx(4.f), Ink, 0.5f);
-			Text(Scores, Cx, Cy + CardW * 9.f / 16.f + Sx(24.f), Ink, 0.45f);
-			++Shown;
+		}
+
+		// Full edition (R22): up to two runner-up columns down the right, each under its own satirical headline.
+		const float SideX = M + BigW + Sx(30.f);
+		const float SideW = W - SideX - M;
+		Box(SideX - Sx(15.f), Y - Sx(8.f), Sx(2.f), Bottom - Y, Ink);
+		TArray<int32> Runners;
+		for (int32 i = 0; i < GS.PagePicks.Num(); ++i)
+		{
+			if (i != GS.HeadlineIndex && !GS.PagePicks[i].Headline.IsEmpty())
+			{
+				Runners.Add(i);
+			}
+		}
+		Runners.StableSort([&GS](int32 A, int32 B) { return GS.PagePicks[A].PageScore > GS.PagePicks[B].PageScore; });
+		Runners.SetNum(FMath::Min(Runners.Num(), 2));
+		const float ColumnH = (Bottom - Y) / 2.f;
+		const float CardW = FMath::Min(SideW * 0.62f, (ColumnH - Sx(96.f)) * 16.f / 9.f);
+		for (int32 k = 0; k < Runners.Num(); ++k)
+		{
+			const FDCPagePick& P = GS.PagePicks[Runners[k]];
+			const float Cy = Y + k * ColumnH;
+			Box(SideX, Cy - Sx(8.f), SideW, Sx(2.f), Ink);
+			// The column headline shrinks until it fits the column.
+			float HeadScale = 0.9f, Hw = 0.f, Hh = 0.f;
+			for (; HeadScale > 0.42f; HeadScale -= 0.04f)
+			{
+				TextSize(HeadFont, P.Headline, HeadScale * TextBoost * UiScale, Hw, Hh);
+				if (Hw < SideW)
+				{
+					break;
+				}
+			}
+			Text(P.Headline, SideX, Cy, Ink, HeadScale, false, HeadFont);
+			const float PhotoY = Cy + Hh + Sx(8.f);
+			DrawPhotoCard(PC->GetPhotoImage(P.Photo.PhotoId), P.Photo.Grade, SideX, PhotoY, CardW, 1.f, false);
+			const FString Byline = P.Photo.CoStar.IsEmpty() ? P.PlayerName.ToUpper() : P.PlayerName.ToUpper() + TEXT(" WITH ") + P.Photo.CoStar.ToUpper();
+			Text(FString::Printf(TEXT("PHOTO: %s  |  CRITIC %s  |  %d VOTE%s"), *Byline, *FText::AsNumber(P.Photo.Grade.Score).ToString(), P.Votes, P.Votes == 1 ? TEXT("") : TEXT("S")),
+				SideX, PhotoY + CardW * 9.f / 16.f + Sx(4.f), Ink, 0.45f);
+			// Copy wraps beside the photo and runs on under it.
+			const float BesideX = SideX + CardW + Sx(14.f);
+			Greek(BesideX, PhotoY, SideX + SideW - BesideX, CardW * 9.f / 16.f, 31u * (k + 7) + static_cast<uint32>(GS.RunSeed));
+			const float UnderY = PhotoY + CardW * 9.f / 16.f + Sx(26.f);
+			Greek(SideX, UnderY, SideW, Cy + ColumnH - UnderY - Sx(14.f), 57u * (k + 3) + static_cast<uint32>(GS.RunSeed));
 		}
 	}
+	// The other ear: the edition, stamped in ink (a failed run prints the mock-heroic correction edition).
+	Box(W - M - Sx(250.f), Sx(30.f), Sx(250.f), Sx(70.f), GS.bRunFailed ? Magenta : FLinearColor(Ink.R, Ink.G, Ink.B, 0.08f));
+	Text(GS.bRunFailed ? TEXT("CORRECTION") : TEXT("LATE FINAL"), W - M - Sx(125.f), Sx(36.f), Ink, 0.7f, true);
+	Text(TEXT("EDITION"), W - M - Sx(125.f), Sx(68.f), Ink, 0.45f, true);
 	Box(Sx(40.f), H - Sx(110.f), W - Sx(80.f), Sx(2.f), Ink);
 	Text(GS.Subhead, W * 0.5f, H - Sx(100.f), Ink, 0.55f, true);
 	if (GetNetMode() != NM_Client)

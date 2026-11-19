@@ -1,0 +1,23 @@
+# Rooftop billboard, cyan: a wide news-ticker panel with dark column glyphs and a hot cyan edge. Faces +x.
+grid 10
+size 8 72 40
+slot steel Steel
+slot frame Ink
+slot face NeonCyan
+slot edge NeonCyanEdge
+beam 3 8 0 3 8 12 0.8 steel
+beam 3 36 0 3 36 12 0.8 steel
+beam 3 64 0 3 64 12 0.8 steel
+beam 3 8 6 3 64 6 0.5 steel
+box 1 2 12 5 70 40 frame
+box 5 3 13 6 69 39 edge
+box 5 4 14 6 68 38 face
+paint box 5 8 30 6 64 32 frame
+paint box 5 10 18 6 12 28 frame
+paint box 5 16 22 6 18 28 frame
+paint box 5 22 18 6 24 28 frame
+paint box 5 30 24 6 32 28 frame
+paint box 5 36 18 6 38 28 frame
+paint box 5 44 20 6 46 28 frame
+paint box 5 52 18 6 54 28 frame
+paint box 5 58 24 6 60 28 frame

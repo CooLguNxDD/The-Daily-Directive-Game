@@ -1,10 +1,17 @@
 #include "DCOrbitalStrike.h"
+#include "DCFrameScopes.h"
 
+#include "Camera/PlayerCameraManager.h"
+#include "Engine/Engine.h"
+#include "Components/InstancedStaticMeshComponent.h"
 #include "Components/PointLightComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "DCAssets.h"
 #include "DCAudio.h"
 #include "DCBuilding.h"
+#include "DCVoxelCity.h"
+#include "Voxel/DCVoxelGrid.h"
+#include "Voxel/DCVoxelSettings.h"
 #include "DCCharacter.h"
 #include "DCEnemy.h"
 #include "DCEnvironment.h"
@@ -44,9 +51,19 @@ ADCOrbitalStrike::ADCOrbitalStrike()
 
 	RootComponent = CreateDefaultSubobject<USceneComponent>(TEXT("Root"));
 	Beam = MakeFx(this, TEXT("Beam"), RootComponent);
-	Ring = MakeFx(this, TEXT("Ring"), RootComponent);
+	Ring = CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("Ring"));
+	Ring->SetupAttachment(RootComponent);
+	Ring->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	Ring->SetCastShadow(false);
+	Ring->SetMobility(EComponentMobility::Movable);
 	Beacon = MakeFx(this, TEXT("Beacon"), RootComponent);
+	ImpactFlare = MakeFx(this, TEXT("ImpactFlare"), RootComponent);
 	Fireball = MakeFx(this, TEXT("Fireball"), RootComponent);
+	FireCubes = CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("FireCubes"));
+	FireCubes->SetupAttachment(RootComponent);
+	FireCubes->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	FireCubes->SetCastShadow(false);
+	FireCubes->SetMobility(EComponentMobility::Movable);
 	Shock = MakeFx(this, TEXT("Shock"), RootComponent);
 	Light = CreateDefaultSubobject<UPointLightComponent>(TEXT("Light"));
 	Light->SetupAttachment(RootComponent);
@@ -54,6 +71,10 @@ ADCOrbitalStrike::ADCOrbitalStrike()
 	Light->SetIntensity(0.f);
 	Light->SetAttenuationRadius(9000.f);
 	Light->SetCastShadows(false);
+	FillLight = CreateDefaultSubobject<UPointLightComponent>(TEXT("FillLight"));
+	FillLight->SetupAttachment(RootComponent);
+	FillLight->SetIntensity(0.f);
+	FillLight->SetCastShadows(false);
 }
 
 void ADCOrbitalStrike::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -95,24 +116,48 @@ void ADCOrbitalStrike::BeginPlay()
 	const float Radius = Def ? Def->BlastRadius : 1000.f;
 
 	Beam->SetStaticMesh(DCAssets::Cylinder());
-	BeamMat = DCAssets::MakeFlat(this, BeamColor, 4.f);
+	BeamMat = DCAssets::MakeFlatUnlit(this, BeamColor, 1.f);
 	Beam->SetMaterial(0, BeamMat);
 	Beam->SetRelativeLocation(FVector(0, 0, BeamHeightCm * 0.5f));
 
-	Ring->SetStaticMesh(DCAssets::Cylinder());
-	Ring->SetMaterial(0, DCAssets::MakeFlat(this, BeamColor * 0.35f, 1.5f));
+	// The danger zone: a thin unlit band of propaganda red on the ground (a filled lit disc washed to salmon).
+	const FDCLookTuning& Look = UDCTuning::Get().Look;
+	DCAssets::BuildRing(Ring, Radius);
+	Ring->SetMaterial(0, DCAssets::MakeFlatUnlit(this, Look.Accent, Look.DangerRingGlow));
 	Ring->SetRelativeLocation(FVector(0, 0, 3.f));
-	Ring->SetRelativeScale3D(FVector(Radius * 2.f / 100.f, Radius * 2.f / 100.f, 0.02f));
 
+	ImpactFlare->SetStaticMesh(DCAssets::Cylinder());
+	FlareMat = DCAssets::MakeFlatUnlit(this, UDCTuning::Get().Look.ImpactFlareColor, 1.f);
+	ImpactFlare->SetMaterial(0, FlareMat);
+	ImpactFlare->SetRelativeLocation(FVector(0, 0, 6.f));
 	Beacon->SetStaticMesh(DCAssets::Cone());
 	Beacon->SetMaterial(0, DCAssets::MakeFlat(this, BeamColor, 30.f));
 	Beacon->SetRelativeLocation(FVector(0, 0, 60.f));
 	Beacon->SetRelativeScale3D(FVector(0.5f, 0.5f, 1.2f));
 
 	Fireball->SetStaticMesh(DCAssets::Sphere());
-	FireMat = DCAssets::MakeFlat(this, UDCTuning::Get().Look.Fire, 80.f);
-	Fireball->SetMaterial(0, FireMat);
+	FireMat = UDCTuning::Get().Look.bFireCubesUnlit ? DCAssets::MakeFlatUnlit(this, UDCTuning::Get().Look.Fire, 1.f) : DCAssets::MakeFlat(this, UDCTuning::Get().Look.Fire, 80.f);
+	CoreMat = DCAssets::MakeFlatUnlit(this, UDCTuning::Get().Look.BlastHotColor, UDCTuning::Get().Look.CoreFlareGlow);
+	Fireball->SetMaterial(0, CoreMat); // the hot core flare (TickBlast)
+	Fireball->SetCastShadow(false);
 	Fireball->SetVisibility(false);
+	// The core's cubes, seeded from where the strike landed: every machine sees the same burst.
+	FireCubes->SetStaticMesh(DCAssets::Cube());
+	FireCubes->SetMaterial(0, FireMat);
+	FRandomStream CubeRng(GetTypeHash(FIntVector(GetActorLocation() / 10.f)));
+	const int32 NumCubes = FMath::Max(UDCTuning::Get().Look.FireballCubes, 1);
+	CubeSeeds.Reset();
+	TArray<FTransform> Hidden;
+	for (int32 i = 0; i < NumCubes; ++i)
+	{
+		const FVector Dir = CubeRng.VRand() * FVector(1.f, 1.f, 0.7f);
+		const FVector2D CubeSize = UDCTuning::Get().Look.FireballCubeSize;
+		CubeSeeds.Add(FVector4f(FVector3f(Dir * CubeRng.FRandRange(0.25f, 1.f)), CubeRng.FRandRange(CubeSize.X, CubeSize.Y)));
+		Hidden.Add(FTransform(FQuat::Identity, FVector::ZeroVector, FVector::ZeroVector));
+	}
+	FireCubes->ClearInstances();
+	FireCubes->AddInstances(Hidden, false);
+	FireCubes->SetVisibility(false);
 
 	Shock->SetStaticMesh(DCAssets::Cylinder());
 	ShockMat = DCAssets::MakeFlat(this, FLinearColor(1.f, 0.9f, 0.7f), 40.f);
@@ -125,6 +170,7 @@ void ADCOrbitalStrike::BeginPlay()
 
 void ADCOrbitalStrike::Tick(float DeltaSeconds)
 {
+	DC_FRAME_SCOPE("Strikes");
 	Super::Tick(DeltaSeconds);
 	const ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>();
 	const FDCStratagemDef* Def = GetDef();
@@ -136,6 +182,10 @@ void ADCOrbitalStrike::Tick(float DeltaSeconds)
 	if (Now < DetonateTime)
 	{
 		TickTelegraph(Now, *Def);
+		if (HasAuthority() && !bRestage && !bOpQueued && Now >= DetonateTime - UDCVoxelSettings::Get().Tuning.PlanLeadSeconds)
+		{
+			QueueVoxelOp(*Def);
+		}
 		if (HasAuthority() && !bRestage)
 		{
 			const float U = 1.f - (DetonateTime - Now) / FMath::Max(Def->TelegraphSeconds, 0.01f);
@@ -162,30 +212,60 @@ void ADCOrbitalStrike::TickTelegraph(float Now, const FDCStratagemDef& Def)
 {
 	const float Start = DetonateTime - Def.TelegraphSeconds;
 	const float U = FMath::Clamp((Now - Start) / FMath::Max(Def.TelegraphSeconds, 0.01f), 0.f, 1.f);
-	// The laser converges: wide and faint to a thin, white-hot line.
-	const float Width = FMath::Lerp(7.f, 0.35f, FMath::Pow(U, 0.7f));
+	// The beam narrows from a broad sighting column to a thin lance as it charges (art bible: thin red beams).
+	const FDCLookTuning& BeamLook = UDCTuning::Get().Look;
+	const float Width = FMath::Lerp(BeamLook.BeamWidthStartCm, BeamLook.BeamWidthEndCm, FMath::Pow(U, 0.7f)) / 100.f * Def.BeamWidthScale;
 	const float Pulse = 0.5f + 0.5f * FMath::Sin(Now * FMath::Lerp(6.f, 40.f, U));
 	Beam->SetRelativeScale3D(FVector(Width, Width, BeamHeightCm / 100.f));
-	DCAssets::SetFlat(BeamMat, Def.BeamColor, FMath::Lerp(2.f, 60.f, U * U) * (0.7f + 0.3f * Pulse));
+	DCAssets::SetFlat(BeamMat, Def.BeamColor, FMath::Lerp(1.f, UDCTuning::Get().Look.BeamGlowPeak, U * U) * (0.7f + 0.3f * Pulse)); // red, not blown to pink
 	Beacon->SetVisibility(Pulse > 0.3f || U > 0.8f);
+	// The flare where the beam lands: wider than the beam, hotter as it charges, pulsing with it.
+	const FDCLookTuning& FlareLook = UDCTuning::Get().Look;
+	const float FlareD = Width * FlareLook.ImpactFlareWidthScale * (0.85f + 0.3f * Pulse);
+	ImpactFlare->SetRelativeScale3D(FVector(FlareD, FlareD, 0.02f));
+	DCAssets::SetFlat(FlareMat, FlareLook.ImpactFlareColor, FMath::Lerp(0.6f, FlareLook.ImpactFlareGlow, U) * (0.6f + 0.4f * Pulse));
+	// The beam lights the street and facades around its target (red contact light, rising with the charge).
+	Light->SetRelativeLocation(FVector(0, 0, 150.f));
+	Light->SetLightColor(Def.BeamColor);
+	Light->SetAttenuationRadius(FMath::Max(Def.BlastRadius * FlareLook.BeamContactReach, 600.f));
+	Light->SetIntensity(FlareLook.BeamContactLight * U * U * (0.7f + 0.3f * Pulse));
 
 	if (!bChargePlayed && U > 0.f && Def.TelegraphSeconds - (Now - Start) <= 3.2f)
 	{
 		bChargePlayed = true;
-		DCAudio::PlayAt(this, TEXT("LaserCharge"), GetActorLocation(), 1.f, 3.2f / FMath::Max(DetonateTime - Now, 0.5f));
+		DCAudio::PlayAt(this, Def.ChargeSound, GetActorLocation(), 1.f, 3.2f / FMath::Max(DetonateTime - Now, 0.5f));
 	}
 	if (Now >= NextBeepTime)
 	{
-		DCAudio::PlayAt(this, TEXT("Telegraph"), GetActorLocation(), 0.8f, 1.f + U * 0.5f);
+		DCAudio::PlayAt(this, Def.BeepSound, GetActorLocation(), 0.8f, 1.f + U * 0.5f);
 		NextBeepTime = Now + FMath::Lerp(0.5f, 0.07f, FMath::Pow(U, 1.5f));
 	}
 }
 
 void ADCOrbitalStrike::DetonateLocal(const FDCStratagemDef& Def)
 {
+	// The blast light takes over from the beam's contact light: fire colour. It rims the target from behind (seen from
+	// this machine's camera) rather than flooding the facade the camera looks at.
+	const FDCLookTuning& BlastLook = UDCTuning::Get().Look;
 	const FVector Here = GetActorLocation();
+	FVector Away = FVector::ZeroVector;
+	if (const APlayerController* ViewPC = GEngine->GetFirstLocalPlayerController(GetWorld()))
+	{
+		FVector Eye;
+		FRotator EyeRot;
+		ViewPC->GetPlayerViewPoint(Eye, EyeRot);
+		Away = FVector(Here.X - Eye.X, Here.Y - Eye.Y, 0.f).GetSafeNormal();
+	}
+	Light->SetRelativeLocation(Away * Def.BlastRadius * BlastLook.BlastLightBehind + FVector(0, 0, BlastLook.BlastLightHeightCm));
+	Light->SetLightColor(BlastLook.Fire);
+	Light->SetAttenuationRadius(BlastLook.BlastLightRadiusScale > 0.f ? Def.BlastRadius * BlastLook.BlastLightRadiusScale : BlastLook.BlastLightRadiusCm);
+	// Camera-side fill (advisor CP22 GrokBot, review CP29: the peak target read black): a weak warm light between the
+	// blast and this machine's camera lights the facade the lens sees; the core behind keeps the rim and the halo.
+	FillLight->SetRelativeLocation(-Away * Def.BlastRadius * BlastLook.BlastFillOffset + FVector(0, 0, BlastLook.BlastLightHeightCm));
+	FillLight->SetLightColor(BlastLook.Fire);
+	FillLight->SetAttenuationRadius(FMath::Max(Def.BlastRadius * (BlastLook.BlastFillOffset + 1.5f), 1500.f));
 	float Proximity = 0.4f;
-	if (APlayerController* PC = UGameplayStatics::GetPlayerController(this, 0))
+	if (APlayerController* PC = GEngine->GetFirstLocalPlayerController(GetWorld()))
 	{
 		FVector ViewLoc;
 		FRotator ViewRot;
@@ -203,12 +283,13 @@ void ADCOrbitalStrike::DetonateLocal(const FDCStratagemDef& Def)
 			Env->Flash(Def.BloomPeak * Proximity, 3.f * Proximity);
 		}
 	}
-	DCAudio::PlayAt(this, TEXT("Detonation"), Here, 1.f, FMath::FRandRange(0.9f, 1.05f));
-	DCAudio::Play2D(this, TEXT("Detonation"), 0.35f * Proximity, 0.8f);
-	Fireball->SetVisibility(true);
-	Shock->SetVisibility(true);
+	DCAudio::PlayAt(this, Def.BlastSound, Here, 1.f, Def.BlastPitch * FMath::FRandRange(0.9f, 1.05f));
+	DCAudio::Play2D(this, Def.BlastSound, 0.35f * Proximity, 0.8f * Def.BlastPitch);
+	FireCubes->SetVisibility(true);
+	Shock->SetVisibility(false); // the filled shock disc read as a white bar edge-on (critic); the voxel core carries the peak
 	Ring->SetVisibility(false);
 	Beacon->SetVisibility(false);
+	ImpactFlare->SetVisibility(false);
 }
 
 void ADCOrbitalStrike::TickBlast(float Now, const FDCStratagemDef& Def)
@@ -217,22 +298,72 @@ void ADCOrbitalStrike::TickBlast(float Now, const FDCStratagemDef& Def)
 	const float Grow = FMath::Clamp(T / FireballGrowSeconds, 0.f, 1.f);
 	const float Fade = FMath::Clamp(1.f - (T - FireballGrowSeconds) / FireballLifeSeconds, 0.f, 1.f);
 	const float Scale = Def.FireballScale * FMath::Sqrt(Grow) * (0.6f + 0.4f * Fade);
-	Fireball->SetRelativeScale3D(FVector(Scale));
-	Fireball->SetRelativeLocation(FVector(0, 0, Scale * 35.f + T * 300.f));
-	DCAssets::SetFlat(FireMat, FMath::Lerp(FLinearColor(0.25f, 0.05f, 0.02f), FLinearColor(1.f, 0.85f, 0.6f), Fade * Fade), 2.f + UDCTuning::Get().Look.FireballGlow * Fade * Fade);
-	Fireball->SetVisibility(Fade > 0.02f);
+	// Voxel burst: cubes fly out from the core, rise with the heat and shrink as the fire cools; the gaps between
+	// them keep the target readable at the peak (the smooth sphere hid it).
+	const FVector Core(0, 0, Scale * 35.f + T * 300.f);
+	const FDCLookTuning& Look = UDCTuning::Get().Look;
+	// Cubes against the lens shrink away (a big hot cube near the camera washes the frame at the peak).
+	FVector Eye = FVector(1e9f);
+	if (const APlayerController* PC = GetWorld()->GetFirstPlayerController())
+	{
+		if (PC->PlayerCameraManager)
+		{
+			Eye = PC->PlayerCameraManager->GetCameraLocation();
+		}
+	}
+	const FTransform& ToWorld = FireCubes->GetComponentTransform();
+	const float NearSpan = FMath::Max(Look.FireCubeNearFadeCm - Look.FireCubeNearHideCm, 1.f);
+	TArray<FTransform> Xf;
+	Xf.Reserve(CubeSeeds.Num());
+	for (int32 i = 0; i < CubeSeeds.Num(); ++i)
+	{
+		const FVector4f& C = CubeSeeds[i];
+		const float Out = 0.35f + 0.65f * FMath::Sqrt(Grow) + 0.25f * (1.f - Fade);
+		const FVector Pos = Core + FVector(C.X, C.Y, C.Z) * Scale * 50.f * Out + FVector(0, 0, T * 120.f * (1.f + C.W));
+		const float Near = FMath::Clamp((FVector::Dist(ToWorld.TransformPosition(Pos), Eye) - Look.FireCubeNearHideCm) / NearSpan, 0.f, 1.f);
+		const float Size = Scale * C.W * FMath::Max(Fade, 0.f) * (0.6f + 0.4f * Grow) * Near;
+		Xf.Add(FTransform(FRotator(i * 37.f + T * 90.f, i * 53.f, i * 11.f), Pos, FVector(Size)));
+	}
+	FireCubes->BatchUpdateInstancesTransforms(0, Xf, false, true, true);
+	// The hot core: white-gold, far over the bloom threshold (a halo), shrinking away within CoreFlareSeconds.
+	{
+		const float CoreU = FMath::Clamp(T / FMath::Max(Look.CoreFlareSeconds, 0.01f), 0.f, 1.f);
+		// Near the lens the core shrinks (a 1.8 m sphere a few metres away read as a flat white dome: critic V20.2).
+		float Near = 1.f;
+		if (const APlayerController* ViewPC = GEngine->GetFirstLocalPlayerController(GetWorld()))
+		{
+			FVector CoreEye;
+			FRotator CoreEyeRot;
+			ViewPC->GetPlayerViewPoint(CoreEye, CoreEyeRot);
+			Near = FMath::Clamp(FVector::Dist(CoreEye, GetActorLocation()) / FMath::Max(Look.CoreFlareNearCm, 1.f), 0.15f, 1.f);
+		}
+		const float CoreD = Look.CoreFlareMeters * Near * (1.f - CoreU * CoreU) * FMath::Clamp(T / 0.04f, 0.2f, 1.f);
+		Fireball->SetRelativeLocation(FVector(0, 0, Look.CoreFlareHeightCm));
+		Fireball->SetRelativeScale3D(FVector(CoreD));
+		DCAssets::SetFlat(CoreMat, Look.BlastHotColor, Look.CoreFlareGlow * (1.f - CoreU));
+		Fireball->SetVisibility(CoreU < 1.f && CoreD > 0.05f);
+	}
+	// Blast white-orange only at the first instant, then orange to ember red: the peak reads as fire, not a white dome.
+	const FLinearColor Hot = FMath::Lerp(Look.BlastFireColor, Look.BlastHotColor, FMath::Clamp(1.f - T / 0.25f, 0.f, 1.f));
+	DCAssets::SetFlat(FireMat, FMath::Lerp(Look.BlastEmberColor, Hot, Fade * Fade), 1.f + Look.FireballGlow * Fade * Fade * Fade);
+	FireCubes->SetVisibility(Fade > 0.02f);
 
 	const float ShockR = Def.BlastRadius * 2.4f * FMath::Clamp(T / 0.6f, 0.f, 1.f) / 100.f;
 	Shock->SetRelativeScale3D(FVector(ShockR, ShockR, 0.04f));
 	Shock->SetRelativeLocation(FVector(0, 0, 40.f));
 	DCAssets::SetFlat(ShockMat, FLinearColor(1.f, 0.85f, 0.6f), UDCTuning::Get().Look.ShockGlow * FMath::Clamp(1.f - T / 0.6f, 0.f, 1.f));
-	Shock->SetVisibility(T < 0.6f);
+	Shock->SetVisibility(false);
 
 	const float BeamFade = FMath::Clamp(1.f - T / 0.35f, 0.f, 1.f);
-	Beam->SetRelativeScale3D(FVector(3.f * BeamFade + 0.01f, 3.f * BeamFade + 0.01f, BeamHeightCm / 100.f));
-	DCAssets::SetFlat(BeamMat, FLinearColor::White, 200.f * BeamFade);
+	const float FlashWidth = Look.BeamFlashWidthCm / 100.f * BeamFade + 0.01f; // a lance flash, not a pillar filling the lens
+	Beam->SetRelativeScale3D(FVector(FlashWidth, FlashWidth, BeamHeightCm / 100.f));
+	DCAssets::SetFlat(BeamMat, FMath::Lerp(Def.BeamColor, Look.BeamFlashColor, 0.5f), Look.BeamFlashGlow * BeamFade); // a short orange flash, then gone
 	Beam->SetVisibility(BeamFade > 0.f);
-	Light->SetIntensity(UDCTuning::Get().Look.BlastLightIntensity * Fade * Fade);
+	// The blast light: a hard fall from the peak, then a small warm tail that lights the rubble through the decay.
+	const float LightFade = FMath::Clamp(1.f - (T - FireballGrowSeconds) / FMath::Max(Look.BlastLightSeconds, 0.1f), 0.f, 1.f);
+	const float Tail = FMath::Clamp(Look.BlastLightTailFraction, 0.f, 1.f);
+	Light->SetIntensity(Look.BlastLightIntensity * (LightFade * LightFade * LightFade * (1.f - Tail) + Tail * FMath::Sqrt(LightFade)));
+	FillLight->SetIntensity(Look.BlastLightIntensity * Look.BlastFillScale * LightFade * LightFade);
 }
 
 void ADCOrbitalStrike::TickBehaviour(const FDCStratagemDef& Def, float U, float DeltaSeconds)
@@ -259,15 +390,69 @@ void ADCOrbitalStrike::TickBehaviour(const FDCStratagemDef& Def, float U, float 
 	}
 }
 
+void ADCOrbitalStrike::QueueVoxelOp(const FDCStratagemDef& Def)
+{
+	bOpQueued = true;
+	ADCGameState* GS = GetWorld()->GetGameState<ADCGameState>();
+	ADCVoxelCity* City = GS && ADCVoxelCity::IsEnabled() ? GS->GetVoxelCity() : nullptr;
+	if (!City)
+	{
+		return;
+	}
+	// Voxel city (R3): the strike is one op every machine applies; the structure pass decides which towers fall, and
+	// those become the usual collapse records (scoring, domino, reel). Two-phase (C3.1): appended PlanLeadSeconds
+	// before detonation, planned on the worker, committed by every city at the detonation time, so the crater, the
+	// falls and the host's collapse records land in the detonation frame.
+	const FVector Here = GetActorLocation();
+	FDCVoxelOp Op;
+	Op.Kind = TEXT("Strike");
+	Op.Stratagem = Def.Id;
+	Op.CenterCm = DCVoxelMath::ToCm(FVector(Here.X, Here.Y, 0.f));
+	Op.BlastRadiusCm = FMath::RoundToInt32(Def.BlastRadius);
+	Op.HoldLots = GS->HostStrikeTowers(Here, Def.BlastRadius, Def.Damage); // building HP: under-health towers keep their base
+	const int32 Seq = GS->AddVoxelOp(Op, FMath::Max(DetonateTime, GS->Now())).Seq;
+	TWeakObjectPtr<ADCGameState> WeakGS(GS);
+	const FVector Epicenter = Here;
+	const float OpTime = GS->VoxelOps.Last().Time;
+	City->ApplyOpAsync(GS->VoxelOps.Last(), true, [WeakGS, Seq, Epicenter, OpTime](const FDCVoxelOpResult& Result, uint32 Hash)
+	{
+		ADCGameState* State = WeakGS.Get();
+		if (!State)
+		{
+			return;
+		}
+		if (FDCVoxelOp* Rec = State->VoxelOps.FindByPredicate([Seq](const FDCVoxelOp& O) { return O.Seq == Seq; }))
+		{
+			Rec->ResultHash = Hash;
+		}
+		ADCGameMode* GM = State->GetWorld()->GetAuthGameMode<ADCGameMode>();
+		for (ADCBuilding* Building : TActorRange<ADCBuilding>(State->GetWorld()))
+		{
+			if (GM && Result.FallenLots.Contains(Building->GetLotIndex()))
+			{
+				GM->ScheduleCollapse(Building, Epicenter, TEXT("Strike"), 0.f, OpTime); // at the blast, not when the worker finished
+			}
+		}
+	});
+}
+
 void ADCOrbitalStrike::DetonateHost(const FDCStratagemDef& Def)
 {
 	UWorld* World = GetWorld();
 	ADCGameState* GS = World->GetGameState<ADCGameState>();
 	const FVector Here = GetActorLocation();
 	GS->AddBlast(Here, Def.BlastRadius, Def.Id);
+	if (!bOpQueued)
+	{
+		QueueVoxelOp(Def); // a telegraph shorter than the plan lead: plan now, commit as soon as it is ready
+	}
 
 	for (ADCBuilding* Building : TActorRange<ADCBuilding>(World))
 	{
+		if (ADCVoxelCity::IsEnabled())
+		{
+			break; // block city only: every tower near the blast collapses whole
+		}
 		const FDCBuildingSpec& Spec = Building->GetSpec();
 		const float HalfFootprint = FMath::Max(Spec.SizeX, Spec.SizeY) * Spec.BlockSize * 0.5f;
 		if (FVector::Dist2D(Building->GetActorLocation(), Here) <= Def.BlastRadius + HalfFootprint)

@@ -1,0 +1,10 @@
+dcvox 1
+name outfit_helmet
+grid_cm 5
+size 7 7 4
+pivot 3 3 0
+slots SwatchMain SwatchAccent Paper
+solid 90
+rle
+6*2 1*0 6*2 1*0 6*2 1*0 6*2 1*0 6*2 1*0 6*2 8*0 6*2 1*0 6*2 1*0 5*2 2*3 5*2 2*3 6*2 1*0 6*2 17*0
+2*1 4*0 4*1 2*3 1*0 4*1 2*3 2*0 2*1 66*0

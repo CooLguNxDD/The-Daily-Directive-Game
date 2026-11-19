@@ -1,0 +1,20 @@
+# Outfit gear (R18): a tripod slung across the back (the part row rolls it): three steel legs meeting at an ink head
+# and spreading wide apart at the feet (a clear A of legs, not a rod), an accent spreader brace, rubber feet, a long
+# pan handle and a glowing bubble level.
+name outfit_tripod
+grid 5
+size 6 9 21
+slot leg Steel
+slot head Ink
+slot strap SwatchAccent
+slot level SwatchGlow
+beam 3 4.5 17 0.6 0.6 0.6 0.8 leg
+beam 3 4.5 17 0.6 8.4 0.6 0.8 leg
+beam 3 4.5 17 5.4 4.5 0.6 0.8 leg
+beam 1.6 2.6 7 1.6 6.4 7 0.5 strap
+beam 1.6 2.6 7 4.2 4.5 7 0.5 strap
+box 2 3 16 5 6 19 head
+beam 3.5 4.5 18 3.5 8.6 20.5 0.6 head
+box 3 4 19 4 5 20 level
+paint box 0 0 0 6 9 1 strap
+pivot 3 4 10

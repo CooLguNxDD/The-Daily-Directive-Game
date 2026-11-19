@@ -1,0 +1,15 @@
+# Rooftop antenna mast: guyed steel mast, cross bars, a small dish, a warm tip light (never red: red is danger).
+grid 10
+size 14 14 64
+slot mast Steel
+slot base Trim
+slot tip Lamp
+box 4 4 0 10 10 2 base
+cyl 7 7 2 60 0.8 mast
+beam 3 7 30 11 7 30 0.5 mast
+beam 4 7 44 10 7 44 0.5 mast
+beam 7 3 52 7 11 52 0.5 mast
+beam 1 1 0 7 7 40 0.4 mast
+beam 13 13 0 7 7 40 0.4 mast
+ellipsoid 10 7 22 1.2 3.5 3.5 base
+box 6 6 60 8 8 62 tip

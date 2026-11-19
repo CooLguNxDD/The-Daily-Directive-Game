@@ -8,6 +8,11 @@
 			"Name": "Epic_AI_Mega_Jam2",
 			"Type": "Runtime",
 			"LoadingPhase": "Default"
+		},
+		{
+			"Name": "DCOnlineEos",
+			"Type": "Runtime",
+			"LoadingPhase": "None"
 		}
 	],
 	"Plugins": [
@@ -39,6 +44,18 @@
 			"TargetAllowList": [
 				"Editor"
 			]
+		},
+		{
+			"Name": "ProceduralMeshComponent",
+			"Enabled": true
+		},
+		{
+			"Name": "EOSShared",
+			"Enabled": true
+		},
+		{
+			"Name": "SocketSubsystemEOS",
+			"Enabled": true
 		}
 	]
 }

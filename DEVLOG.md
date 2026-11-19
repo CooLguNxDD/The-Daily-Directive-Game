@@ -63,7 +63,59 @@ is kept from the run records (Glass Box modifier): what was decided, why, and wh
 - The gate's full tier now launches the packaged exe (-dcsmoke: start a run, drop a laser on a tower, check the
   collapse) instead of only packaging it.
 
+## 2026-11-13/14: Director's Cut polish (voxel engine, neon noir, real physics)
+- A small C++ voxel engine: chunked grids with the voxel size as data per object (10 cm towers, 50 cm ground and
+  rubble, 5 cm props and characters), greedy meshing on worker threads into procedural mesh cells uploaded under a
+  millisecond budget, one palette table in ini.
+- The city is crafted from data: building recipes, district rules, a seeded PCG rule table (weights, ranges,
+  adjacency, symmetry, palette slots) and a city builder that also runs as a commandlet writing plan and aerial images.
+- Strikes are host ops replayed on every machine: carve, bite, structure pass (the weakest layer breaks and the top
+  topples away from the blast), rubble settled into the terrain grid; op hashes match on host and client. Ops are
+  planned 1.2 s ahead and committed in the detonation frame.
+- voxel-forge (repo skill + generator) turns short text recipes into the rifle, press camera, outfits and props.
+- Weather is a pure forecast from seed, sector and server clock; post layers stack by priority and weight; photos get
+  a CPU print treatment on the readback (blendables do not run in one-shot captures).
+- Co-star, Last Frame and the Full edition front page; a voxel character builder with share codes; versioned saves.
+- Art direction moved to restrained neon noir on 2026-11-13 ~23:30: night sky, slate voxels, warm dim windows, rare
+  magenta and cyan signs whose pooled rect lights pool on the wet street, dark-glass UI.
+- Real voxel physics: the biggest pieces of each strike fall as one and break into Chaos box bodies at the impact,
+  then swap to the host op's rubble when they rest.
+
+## 2026-11-14 (night): true voxel break-up, host-owned rubble, neon noir sweep
+- Strikes now shatter: carved voxels fly as shard bodies (single voxels near the blast, small clusters further out),
+  the toppling top breaks into chunk bodies mid-fall and a hard hit shatters a chunk into leaf bodies. Bodies come from
+  a pool prewarmed at sector build and freeze one by one.
+- The host owns where the rubble lies: its bodies' rest poses go out as a replicated Rest op and every machine
+  re-settles that piece's rubble there; host and client op hashes match on every strike and rest.
+- A look-sweep helper ran in its own worktree: night building form (palette albedo floor, low moon, violet sky fill),
+  dark-glass UI everywhere, holographic stamp, feed timestamp and chroma split, a bloom threshold, a stop-down at the
+  peak and a rim blast light. Signs got a neon tube edge; rubble piles burn with a flickering firelight.
+- Frame time: shard clustering and fragment trees moved to the op worker; R13 on the packaged build with 4 players:
+  99 fps steady, 83 fps average during collapses.
+- The packaged solo run now goes menu to a real front page through all three sectors in about 13 minutes.
+
+## 2026-11-14 (evening): city props pass (R2)
+- The city builder places props as data: prop layer rows (lamps, sidewalk furniture, parked cars and wrecks in the
+  lanes, plaza and rubble dressing, shop frontage, roof clutter, rooftop billboards at the parapet, awnings, wall signs
+  and AC boxes, pipes, string-light cables across the streets) and per-district densities in the prop rule sets: the
+  Old Town is a dense market, Ministry Row is orderly, the Capitol is a wreck yard.
+- 28 new voxel-forge models; the rooftop and wall ones are crafted into the tower's own voxels, so they fall and
+  shatter with the building. Three sign artworks came from local ComfyUI and were quantized into neon voxels by a new
+  forge `image` op.
+- Frame time with props (editor -game, 1600x900, seed 7, demo pilot through sector 0 into 1, night): median 8.23 ms,
+  p95 9.22 ms before the art signs and 8.32 / 9.37 ms after, against 7.95 / 8.97 ms without props; sector craft on the
+  worker goes from about 0.9 s to 1.2-1.3 s at sector load. Well inside 16.67 ms.
+- Packaged build (full gate tier: package and DCSMOKE pass): all three districts shot by day and night with the new
+  models staged; host and editor craft the same sector hashes. On the merged tree with the faction armies, a packaged
+  run measured median 12.9 ms, p95 15.4 ms while other lanes' game instances shared the machine; side by side under
+  the same load, props cost about 1.4 ms of median frame time.
+- Every op used to rehash the whole sector on the op worker (about 85 ms with the props); chunks now keep their hash
+  until a voxel changes, so an op costs about 1 ms of hashing.
+
 ## Problems met
+- Git Bash rewrote `/Game/...` map arguments into `C:/Program Files/Git/Game/...`; `export MSYS_NO_PATHCONV=1` fixed it,
+  but the same export broke `taskkill //F` in the co-op script and left a fleet job hanging.
+- A pile of touching physics bodies is one Chaos island and never sleeps as a group; bodies now freeze one by one.
 - The engine is shared with an editor that has Live Coding on: UnrealBuildTool refuses to build. Fixed with
   `-NoHotReloadFromIDE`, and the packaging step now builds the game target itself.
 - The gate script had a comment with a stray newline that broke tier B; fixed.
@@ -81,3 +133,65 @@ is kept from the run records (Glass Box modifier): what was decided, why, and wh
 - Every rifle-only test showed swarmers idling 40-60 m away. A per-enemy trace showed them frozen against towers:
   an inside corner or a window ledge blocked the one escape move they had. They now try several and take the first
   that moves.
+
+## 2026-11-14 directors-cut-final (lead)
+- Collapses throw single-voxel crumbs (one instanced cube per colour bucket, ballistic, local only); the host Rest op
+  still owns the rubble that stays. Fragment and body budgets raised as data so tops break into more, smaller chunks.
+- Factions: each map rolls a main faction and two invaders from the run seed; a friendly army acts on its own. Ground
+  infantry walks on voxel column tops (no physics sweeps), retargets at about 4 Hz, and fires tracers. Faction
+  destruction goes through the same strike path as the crew's (rate-limited by the host), so it carves, replicates and
+  grades like any blast. Two factions in one frame earn a CLASH.
+- Objectives: Retrieve (a package deep in the main faction's ground) or Destroy (three marked towers), then a lit
+  beacon; reaching it ends the sector early. Time up fails the objective but the run goes on to the reel.
+- The builder exports a shareable ID card PNG from its own turntable capture.
+- First editor play of Retrieve (obj4): package picked up, beacon lit, extracted, the sector ended at 74 s. The second
+  sector wiped after the beacon lit; the reel and a CORRECTION front page still played. Both packages had landed at
+  the same corner (farthest street point on a same-size grid); the spot is now a seeded pick among the farthest quarter.
+- First Destroy run (obj5): the strike felled the marked tower in the voxel city, but the gameplay building never
+  reported a collapse, so the pilot kept striking an empty lot. Targets now also count the voxel city's committed fall.
+- Lit props (signs, kiosks, billboards, awnings, lamps) now get pooled coloured lights, because the night frames measured
+  94 % dark with 0.5 % neon accent against the art bible's ~70-80 % and ~10 %.
+- A mix of small faction touches: an opening clash a few seconds into each sector, crowds dropped bigger but weighted
+  lighter against the pressure cap, Scavengers kite and loot rubble, the Dead groan, units burst into voxel crumbs.
+- First packaged run with factions (1601df6): menu to front page works, but the pilot was downed 20 s into the first
+  sector and wiped at 26 s. Units moved with unswept location sets and walked into the player's capsule, the opening
+  clash squads could turn on the crew at 4 s, and Skitters outran a sprint. Now ground units stop at a contact ring
+  around a standing player (melee still reaches across it), the first 20 s of a sector are a crew grace (units only
+  fight the crew in self-defence range), each sector row lists which factions may own it (the Hive never owns the
+  first), and Skitters run below sprint speed. All of it is data in `Config/DefaultGame.ini`.
+- Hive nests, a 40-unit cap across every spawn source, friendly-army kills that pay nothing (HQ calls it out), onboarding
+  steps as data rows, per-machine effect scale by hardware tier, a darker ID card, and a faction lineup frame for
+  evidence (`-dclineup`).
+- Evening (2026-11-14): the review judged factions, objectives and the ID card met and asked for packaged proof and a
+  firmer frame budget. Packaged runs now export the card into the game's own Saved folder and complete a Retrieve at
+  normal damage. Collapse frames got lighter: flying leaf pieces stopped casting shadows, the op after a strike starts a
+  frame later and reads street heights chunk by chunk, shard and landing debris spawn at most 28 a frame, shards live
+  4.5 s and fallen groups rest sooner. A solo host now holds 109 fps through collapses at 1080p; four game instances
+  on one PC hold 86 fps on average with some slow seconds from sharing the CPU.
+- Solo play: a player is attacked by at most a few units at once (attack slots by crew size), the others turn on rival
+  factions; unit damage to one player is budgeted per second by crew size (7 solo, uncapped at four players), and a
+  solo player refills health after 4 quiet seconds. All of it is data in `Config/DefaultGame.ini` (human calls).
+- Army and Scavenger units got a glowing chest band in their cue colour so every faction reads in the dark street.
+
+## 2026-11-14 directors-cut-final: weapons and content enrichment (h-content lane, R8 + R12)
+- Four player weapons in the gun slot, each a `+Weapons` row (stats, pellets, sound, forge model, tracer): Service Rifle,
+  Riot Scattergun (8 pellets), Press Marksman (one heavy round, wild on the move), Flash SMG. Every weapon keeps its own
+  magazine on the owner and on the host; Q or the wheel switch while the gun is drawn (1 only draws it, because the
+  pilot and players press 1 to get the gun back). Proven through injected input: `-dcweapontour` logs and frames each.
+- Sound cues can be data now (`+SoundRecipes`, layers of tones and filtered noise through the same synth), used by the
+  weapons and the new strikes.
+- Three new strikes in the draft: Strafing Run (seven small blasts walked along the line of fire), Cluster Shells (a ring
+  of seven), Bunker Buster (a deep shaft that topples a tower). Blast layouts are a registry (`Rules/DCStrikePattern.h`);
+  each row names its charge, beep and blast sounds and beam width. Card art from local ComfyUI. Framed with
+  `-dcstrikereel=GunRun,ClusterShells,BunkerBuster -dccollapsecam=<dir>`.
+- More of the city: 10 street and rooftop props per district, five neon signs from new ComfyUI line art, puddles with
+  dim neon glints, manholes, litter and scorch marks on a ground prop layer, airships drifting past mega-spires and radio
+  masts beyond the skyline (`+SkyProps`), and ground weather per profile (rain splashes, dark street steam).
+- Frame time A/B (editor -game, 1600x900, seed 7, demo pilot, back to back): median 13.4 / 13.5 ms with the ground layer
+  and sky props, 14.0 ms without; p95 about 15.6 ms both ways; the render thread dominates either way.
+- Packaged build of this lane (full gate tier: package and DCSMOKE pass): the packaged exe runs the weapon tour (each
+  weapon switched with Q and fired) and the three new strikes, and builds the sky props (DCSKY meshes=14). Its frame
+  time (median 34.7 ms) was measured while two other lanes' packaged games shared the machine, so it is not a budget
+  number; the editor A/B above is the like-for-like check. One packaged run with both `-dcshots` and
+  `-dccollapsecam` crashed in the RHI thread copying an 8x8 back buffer into a screenshot; without `-dccollapsecam`
+  the same run finished.

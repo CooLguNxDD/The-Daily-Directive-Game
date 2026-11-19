@@ -1,0 +1,15 @@
+# Bare street tree (R23 park/ruins): a leafless ink trunk with forked branches, on a kerb-grey grate.
+grid 10
+size 30 30 60
+slot trunk InkBrown
+slot grate Kerb
+box 9 9 0 21 21 1 grate
+beam 15 15 0 15 15 30 1.6 trunk
+beam 15 15 28 6 8 46 1 trunk
+beam 15 15 28 25 12 50 1 trunk
+beam 15 15 30 16 25 54 1 trunk
+beam 6 8 46 3 4 56 0.8 trunk
+beam 6 8 46 9 2 54 0.8 trunk
+beam 25 12 50 28 18 58 0.8 trunk
+beam 16 25 54 12 28 59 0.8 trunk
+beam 15 15 30 15 15 52 1 trunk

@@ -1,0 +1,14 @@
+# Pine (R23 park/hab courts): stacked olive-ink cones on a short trunk, hollow.
+grid 10
+size 26 26 64
+slot trunk InkBrown
+slot needle Olive
+slot grate Kerb
+box 8 8 0 18 18 1 grate
+cyl 13 13 0 14 1.6 trunk
+cone 13 13 12 30 12 5 needle
+cone 13 13 26 44 10 4 needle
+cone 13 13 40 62 8 0.5 needle
+carve cone 13 13 12 28 10 3
+carve cone 13 13 26 42 8 2
+noise 0.15 6 needle

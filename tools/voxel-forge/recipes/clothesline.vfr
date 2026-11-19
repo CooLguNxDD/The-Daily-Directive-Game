@@ -1,0 +1,16 @@
+# Clothesline (R23 wall mount): two steel arms with a sagging line of hung cloth in dark tones and one cream sheet.
+grid 10
+size 8 30 12
+slot arm Steel
+slot cloth InkBlue
+slot cloth2 InkBrown
+slot sheet Paint
+pivot 0 15 0
+box 0 1 10 8 2 11 arm
+box 0 28 10 8 29 11 arm
+beam 7 1 10 7 15 9 0.6 arm
+beam 7 15 9 7 29 10 0.6 arm
+box 6 4 4 8 8 9 cloth
+box 6 10 5 8 13 9 cloth2
+box 6 16 3 8 21 9 sheet
+box 6 23 5 8 26 9 cloth

@@ -1,0 +1,11 @@
+# Outfit head: soft beret tilted to one side with an accent stalk (R23).
+# Regridded to 5 cm voxels (R1 floor, CP7).
+name outfit_beret
+grid 5
+size 7 7 3
+slot felt SwatchMain
+slot stalk SwatchAccent
+ellipsoid 3 4 1 3 3 1 felt
+carve box 0 0 0 6 6 0
+box 2 3 1 4 4 3 stalk
+pivot 3 3 0

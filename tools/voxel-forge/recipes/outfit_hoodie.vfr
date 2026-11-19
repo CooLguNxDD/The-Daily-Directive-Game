@@ -1,0 +1,25 @@
+# Outfit body (R18): a long, loose hoodie: straight sides down over the hips, the big hood folded down behind the neck
+# and standing up past the shoulders (seen from the front), its rim round the collar, kangaroo pocket standing off the
+# belly in the accent, glowing drawstrings, accent cuff at the hem. Longer and straighter than the bomber.
+# Torso frame as outfit_vest shifted 2 in x and 2 in z (torso inside x 3..9, y 1..9; pivot 6 5 2 on spine_03).
+name outfit_hoodie
+grid 5
+size 11 10 17
+slot cloth SwatchMain
+slot pocket SwatchAccent
+slot string SwatchGlow
+shell 2 0 0 10 10 13 1 cloth
+carve box 3 1 0 9 9 12
+carve box 4 3 12 8 7 13
+ellipsoid 2.4 5 13.4 2.4 4.6 3.4 cloth
+carve ellipsoid 3.6 5 14.2 1.4 3 2.4
+box 4 2 13 9 3 14 cloth
+box 4 7 13 9 8 14 cloth
+box 8 3 13 9 7 14 pocket
+paint box 0 0 15 3 10 17 pocket
+box 10 2 3 11 8 7 pocket
+carve box 10 3 4 11 7 6
+box 10 3 8 11 4 12 string
+box 10 6 8 11 7 12 string
+paint box 2 0 0 11 10 1 pocket
+pivot 6 5 2
