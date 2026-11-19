@@ -1,6 +1,9 @@
-# Director's Cut: Front Page
+﻿# Director's Cut: Front Page
 
 > Epic AI MegaJam 2026 · theme **DIRECTOR'S CUT** · Unreal Engine 5.9 (C++)
+
+[![Director's Cut: Front Page gameplay video](https://img.youtube.com/vi/xV4vN-_Von8/maxresdefault.jpg)](https://youtu.be/xV4vN-_Von8)
+*Watch the gameplay video on YouTube.*
 
 A co-op photo roguelike shooter. Call in an orbital strike, run toward it, and photograph the collapse at peak bloom. Photos pay for bigger bombs. The run ends with a re-staged highlight reel, a final cut, a vote, and a war-newspaper front page.
 
