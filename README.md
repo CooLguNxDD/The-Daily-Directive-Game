@@ -6,6 +6,8 @@ A co-op photo roguelike shooter. Call in an orbital strike, run toward it, and p
 
 The game was built by an AI lead agent (Cat Fleet) working under a human director. [`DEVLOG.md`](./DEVLOG.md) records what was decided, why, and what broke.
 
+https://youtu.be/xV4vN-_Von8
+
 ## Pillars
 
 - **The shot is the weapon.** Playing safe with the rifle loses upgrades.
