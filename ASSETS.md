@@ -1,4 +1,4 @@
-# Assets used in Director's Cut: Front Page
+﻿# Assets used in The Daily Directive
 
 Every asset in the build, where it comes from and its licence. Nothing from other games (names, logos, characters or
 art) is in the game.
